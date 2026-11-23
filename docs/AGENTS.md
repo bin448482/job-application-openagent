@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-存放本项目的公开文档，主题是“BOSS直聘手机客户端操作与求职自动化”：一份按 ID 组织的静态分析终稿、一份对照当前客户端的实机验证偏差清单、一份简化架构设计说明、一份实施计划、一份多应用扩展与分层说明、一份公开仓库与策略包说明、一份新环境自动化部署方案、一份场景测试方案及其三轮自审记录、一份 M0/M1 操作手册，供后续实现业务 CLI、运行时记忆、设备执行器与部署入口时对照。
+存放本项目的公开文档，主题是“BOSS直聘手机客户端操作与求职自动化”：一份按 ID 组织的静态分析终稿、一份对照当前客户端的实机验证偏差清单、一份简化架构设计说明、一份实施计划、一份多应用扩展与分层说明、一份公开仓库与策略包说明、一份新环境自动化部署方案、一份场景测试方案及其三轮自审记录、一份 M0–M2 操作手册，供后续实现业务 CLI、运行时记忆、设备执行器与部署入口时对照。
 
 终稿中的结论全部来自对旧项目 `scripts/` 的**静态阅读**，未运行代码、未连接设备；实机验证文档的记录来自一台真机的 UI 层级读取与经使用者逐轮确认的受控操作。两者都不构成对真实手机的执行授权，也不代表当前仓库已有对应实现。
 
@@ -17,7 +17,7 @@
 - `求职自动化_新环境自动化部署方案_20261123.md`：新环境部署设计。含公开现状的 file:line 证据、依赖矩阵、Windows 11 x64 / Windows PowerShell 5.1 首批建议、拟议 Detect/Plan/Apply/Verify、无运行时与包管理器引导、锁文件复现、配置保留、失败恢复、权限与模型边界、ADB 工具准备、手机连接/系统/应用/读屏检查及 A01–A08 独立验收、实施阶段及干净 VM/Sandbox/CI 验收矩阵；原官方核对日期为 2026-11-23，Android 补充核对为 2026-11-24，当前未实现安装器/检查器或完成干净机器及手机验证。
 - `BOSS直聘_求职自动化_场景测试方案_20261123.md`：依据 M0–M8 的场景规程，区分现有 npm 自检与未来离线/受控/机会观察/写入门槛，包含随机未读分支、独立判据、事件重放、预算、证据、指标与发布补测；只设计，不执行设备或实现夹具。
 - `BOSS直聘_场景测试方案_三轮自审记录_20261123.md`：场景方案的三轮作者文档自审，记录发现、修订、复核与阶段提交证据，不代表实机验证或独立测试人员验收。
-- `operator.md`：当前已实现的 M0/M1 操作手册。说明 fixture 模式、最小配置、显式真实设备模式、设备确认要求、JSON 字段、退出码、夹具规则、M1 `store init` 的路径/幂等/schema/租约/错误码、本机过程日志路径/stage/降级标记/关联 ID 复核方法及未实现范围；不代表 M2+ 已交付。
+- `operator.md`：当前已实现的 M0/M1/M2 操作手册。说明 fixture 命令、最小配置、显式真实设备模式、设备确认要求、JSON 字段、退出码、夹具规则、M1 `store init` 的路径/幂等/schema/租约/错误码、M2 `sense` 的 manifest/profile/XML/四源/分页/停因/落库规则、本机过程日志路径/stage/降级标记/关联 ID 复核方法及未实现范围；不代表 M3+ 已交付。
 - `AGENTS.md`：本文件，目录索引与维护要求。
 - `CLAUDE.md`：只包含 `@AGENTS.md`，与其他目录的双指南写法一致。
 
@@ -44,8 +44,8 @@
 - 终稿不验证真实机型、分辨率、动画时序与 BOSS 版本差异；第 8 节列出的阈值、硬编码次数与字段缺失均需在实现时重新核对。
 - 终稿不是业务配置或授权来源；`config.json` 仍是被忽略的本机文件，不因本文档而获得任何授权。
 - 实机验证文档基于 BOSS 14.200、Android 15、1080×2400 的单台设备与单个会话，含 7 条偏差和 5 条待确认；只记录 UI 结构与状态，不含聊天正文、联系人、公司或联系方式，也不构成执行授权。
-- 简化架构设计说明中的旧日志材料只保留定性失败类别与来源说明；公开材料不记录精确行数、分类计数或衍生比例，也未读取业务内容；其架构结论是设计建议，不代表当前仓库已实现，待确认项不得当作既定事实。§6 StorePort 第 3 项为“blocked 的设备行处置”的唯一契约；修改时同步核对该节跨表不变量、claim/recover、实施计划 M1 断言与扩展说明 §6 的引用。
-- 实施计划的 M0 已实现：`app/` 分层骨架、`python -m app doctor`、本机白名单过程日志（写入失败由 `degraded` 与固定 stderr 标记暴露）、`tests/test_doctor.py` 与 `tests/fixtures/doctor/ready.json` 存在，并有 `docs/operator.md`。M1 也已实现：`python -m app store init --db <项目内相对路径>`、设计说明 §6 的五表 v1/约束/索引、`StorePort` 的 upsert/claim/start/renew/finish/recover/查询、全局 primary 设备租约与 blocked 隔离，测试为 `tests/test_store.py`、`tests/test_migrations.py` 与 `tests/m1_helpers.py`。过程日志每次运行写被忽略的独立 `data/logs/m0-process-<运行 UUID>.jsonl`（并发隔离由 `tests/test_process_log_concurrency.py` 覆盖），数据库写在被忽略的 `data/runtime/`；这不代表 M2+ 传感器、真实设备循环或审计保证。`prompts/`、M2+ 的目录/命令仍为计划项；实现时必须同步创建对应目录指南。
+- 简化架构设计说明中的旧日志材料只保留定性失败类别与来源说明；公开材料不记录精确行数、分类计数或衍生比例，也未读取业务内容；未读筛选条目已收敛为纯文字背景，不保留统计数值、数字示例或私人日志定位，也不承载当前约束。其架构结论是设计建议，不代表当前仓库已实现，待确认项不得当作既定事实。§6 StorePort 第 3 项为“blocked 的设备行处置”的唯一契约；修改时同步核对该节跨表不变量、claim/recover、实施计划 M1 断言与扩展说明 §6 的引用。
+- 实施计划的 M0 已实现：`app/` 分层骨架、`python -m app doctor`、本机白名单过程日志（写入失败由 `degraded` 与固定 stderr 标记暴露）、`tests/test_doctor.py` 与 `tests/fixtures/doctor/ready.json` 存在，并有 `docs/operator.md`。M1 也已实现：`python -m app store init --db <项目内相对路径>`、设计说明 §6 的五表 v1/约束/索引、`StorePort` 的 upsert/claim/start/renew/finish/recover/查询、全局 primary 设备租约与 blocked 隔离，测试为 `tests/test_store.py`、`tests/test_migrations.py` 与 `tests/m1_helpers.py`。M2 合成传感器也已实现：`python -m app sense --fixture tests/fixtures/sensor/positive.json --db <项目内相对路径>`、`tests/test_sensor.py`、`tests/test_sensor_store.py` 与 `tests/fixtures/sensor/`；只读合成 manifest/profile/XML，不 claim/start/finish、不推进已读基线、不连设备。过程日志每次运行写被忽略的独立 `data/logs/m0-process-<运行 UUID>.jsonl`（并发隔离由 `tests/test_process_log_concurrency.py` 覆盖），数据库写在被忽略的 `data/runtime/`；这不代表 M3+ 读取阶梯、真实设备循环或审计保证。`prompts/`、M3+ 的目录/命令仍为计划项；实现时必须同步创建对应目录指南。
 - 多应用扩展与分层文档中的端口名、模块路径与优先级数值均为设计建议；猎聘是否具备消息/职位能力、版本门禁方式仍待确认。
 - 公开仓库与策略包文档中的 `policy init/validate/preview/eval` 命令、TOML 字段与分层目录均为设计建议；当前仓库尚未实现，也未创建 `prompts/base`、`prompts/examples`、`prompts/local` 或 `evals/private`。`.gitignore` 已预留私有策略包与私有留出集的忽略规则。调度伪代码区分未读未知与可处理候选；严格未读优先可能使职位等待，达到抢占上限则暂停；`waited_ms` 从首次观察起算，不证明消息实际到达后的延迟。文档修改后检查 §3、§4.2、§10、§12 的调度口径一致，并核对 Markdown 引用；这些检查不验证设备执行或运行时调度。
 - P1/P2/P3 策略复审同步约束：改包格式/词表/摘要须核对策略包说明 §2–8、架构 §5–6、实施计划 M4/§5/§7 和扩展说明 §3/§5–8.1；只调整合法分档的使用者不得被要求改代码。snapshot/restore 与纯合成 preview 同属 M4；独立 profile 业务库外，固定 OS 应用数据位置的共享 SQLite 设备门禁库是唯一全局占用方案，不按 worktree 或包路径拆锁。P3 按 v1 缺独立前置判据固定 C 的分支判定 M4 编辑与验证无设计阻塞；A 档实际发送须另行定稿判据并验收，不要求实现者现场发明。事实确认入口、共享门禁实现/迁移、provider 帮助与留出维护者等前置及负责人类型见策略包说明 §12。静态自查不代表接口已实现或获得运行授权，不改终稿 209 个定义、48 条不确定项或历史证据。

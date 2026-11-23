@@ -1,17 +1,18 @@
-# M0 只读探针与 M1 状态库操作手册
+# M0 只读探针、M1 状态库与 M2 合成传感器操作手册
 
-> 文件用途：说明当前已实现的 M0 `doctor` 与 M1 `store init` 能做什么、怎么运行、如何解读 JSON，以及在执行真实设备探针前必须完成的确认与边界；M2 及以后的能力尚未实现。
+> 文件用途：说明当前已实现的 M0 `doctor`、M1 `store init` 与 M2 `sense` 能做什么、怎么运行、如何解读 JSON，以及在执行真实设备探针前必须完成的确认与边界；M3 及以后的能力尚未实现。
 
 ## 一、当前可用范围
 
-已实现两条离线入口：
+已实现三条离线入口：
 
 - `doctor`：一次独立的只读探针，读取 ADB 设备清单或合成 fixture，并输出设备数量、所选逻辑别名、解锁状态和前台应用类别。
 - `store init`：创建或核验设计说明 §6 的本机 SQLite v1 状态库（五表、约束、索引与用户版本 1），不导入旧库。
+- `sense`：读取合成 sensor manifest/profile/XML，按 M2 四源规则解析、合并、落库候选并输出有序停止原因。
 
-M0/M1 都不切换应用、不 dump 聊天、不截图、不点击、不发送、不调用网络或模型。`fixture` 模式只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite。每次 `doctor`/`store init` 运行创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl` 本机过程日志（见第八节），运行之间不共享追加。
+M0–M2 都不切换应用、不 dump 真实聊天、不截图、不点击、不发送、不调用网络或模型。`doctor --fixture` 只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite；`sense` 只读合成 manifest/profile/XML，可写项目内合成 SQLite，仍不连接设备。每次 `doctor`/`store init`/`sense` 运行创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl` 本机过程日志（见第九节），运行之间不共享追加。
 
-M1 的仓储 API 已实现候选入库、任务租约、三态收敛与过期恢复，但 M1 **没有** `sense`、业务循环、设备动作或调度子命令；当前只通过单元测试使用合成 ReadResult/Evidence。
+M1 的仓储 API 已实现候选入库、任务租约、三态收敛与过期恢复；M2 `sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，**不** claim/start/finish、不消耗发现、不推进已读基线、不打开会话。M3+ 的读取阶梯、决策、动作与调度仍未实现。
 
 ## 二、离线 fixture 模式（默认推荐）
 
@@ -100,7 +101,35 @@ v1 结构摘要（以设计说明 §6 为准）：
 
 `data/runtime/` 是自动生成的本机产物目录，被 Git 忽略；不要提交数据库、事件或日志。
 
-## 五、显式真实设备模式
+## 五、M2 合成传感器（`sense`）
+
+运行验收正例：
+
+```powershell
+python -m app sense --fixture tests/fixtures/sensor/positive.json --db data/runtime/m2-acceptance.sqlite3
+```
+
+退出 `0`，stdout 只有一个 JSON，外层固定为 `schema_version/result/stop_reason`；`result` 是完整 `ReadResult`（`status/value/reason_code/snapshot_id/observed_at/source/confidence`），`value` 是 `app/profile_id/coverage/signals/rows/candidates/unread_state`。正例中 `status=ok`、`value.unread_state=present`、`stop_reason=null`、唯一候选 `kind=unread`；连续执行第二次仍退出 `0`，`hr_discoveries` 总数保持 `1` 且不追加事件。
+
+规则：
+
+- 必须提供 `--fixture <项目内相对文件>`，不接受 `--device`/`--serial`；`--db` 省略为 `data/runtime/runtime.sqlite3`，只接受项目内相对路径。
+- manifest 固定 `{profile_path,xml_paths,app_version,observed_at,baseline_rows,coverage_proof}`；profile 固定 M2 最小字段。所有键必填、拒绝额外键；路径相对 manifest 目录，且必须是同一夹具目录内现有文件，拒绝绝对路径、`..`、符号链接/junction 与越界。`badge_region` 元素先按类型与 0–1 范围校验，再对浮点判有限性；巨大整数不得溢出，非法区域为 `invalid_fixture`。
+- 一个 manifest 的 `xml_paths` 去重且非空；`coverage_proof.kind=viewport` 时只能一页。多页共用同一个规范 UUID `snapshot_id` 与 `observed_at`。`baseline_rows` 的会话键必须带 `boss:conv:` 前缀，`preview_hash` 为 SHA-256 小写十六进制摘要或 `null`，`time_hint` 为字符串或 `null`；非法摘要、重复键或额外键均 `invalid_fixture`，不得把无比较基线当作未变化。
+- XML 用标准库 ElementTree，只接受唯一 `hierarchy` 根，根内只允许 `node` 元素（嵌套 `hierarchy` 也拒绝）；`DOCTYPE`/`ENTITY`、损坏 XML、非法 Unicode/编码、其它元素为 `failed/invalid_xml`；夹具 XML 文件 UTF-8 解码失败也映射 `invalid_xml`。唯一列表缺失为 `failed/wrong_page`，多列表或嵌套行为 `undetermined/incomplete_snapshot`。
+- 行身份只接受行内唯一节点的原样非空文本；`identity_hash=H([姓名,公司,职位])`，会话键为 `boss:conv:<identity_hash>`。身份缺失或重复不产生候选。
+- 行角标只认完全落在 profile 比例区域内的 `android.widget.TextView` 唯一 ASCII 十进制整数；行字段（正文/时间）节点不参与角标识别。任一候选数字节点几何不可读时优先判为 `uncalibrated_region`，不能被同行的合法计数掩盖；超大行坐标导致的区域换算溢出也回到该未知语义。null 区域或非法 bounds 为 `uncalibrated_region`，多个合法整数节点为 `ambiguous_signal`，无节点为 `missing_signal`。
+- 新招呼与底部 tab 只按标签精确文本与直接父容器唯一计数节点解析；正值 present，`0+` 为歧义；未验证语义的新招呼 0 与未验证的 tab 0 为 `unverified_semantics`。`not_applicable_sources` 只能由已验证合成 profile 声明，全部不适用仍为 unknown。
+- 单页 coverage 恒为 `viewport`；只有完整遍历首尾证明均真或已标定全局零信号可声明 `all`。全局零只提供 coverage，不把未完整遍历的行角标或缺基线预览改为 absent。
+- 分页只合并相邻页连续、整行字段完全一致的最长重叠段；其它重复身份保留 `identity_hash` 但会话键为 `null`。合并后重算四源信号、指纹与候选，不按页拼接。成功页必须共享同一规范 UUID `snapshot_id`；多个 `null` 成功页不是同次采集，返回 `failed/invalid_fixture`。M1 已失败/未决页面的 `snapshot_id=null` 契约不变。
+- `observed_at` 距 `now` 不在 0–5 秒或早于 `now`（未来快照）为 `undetermined/stale_snapshot`；`calibrated=false` 或 `app_version` 不等于 `profile.version` 为 `undetermined/uncalibrated_profile`。失败/未决时 `result.value=null`、不写库。
+- 只有输入全部有效且合并 `status=ok` 后才初始化/打开 `--db`；先 `upsert_snapshot`，再查询 `unresolved_conversations`，调用领域 `aggregate_unread`，最后按顺序得出 `stop_reason`。
+- `stop_reason=null` 退出 `0`；`unread_unverified` 或 `needs_targeted_verification` 退出 `2`。读取本身失败/未决时 `stop_reason=result.reason_code` 并退出 `2`，不写库。仓储错误只输出三键安全对象，不伪造成功的 ReadResult。
+- `sense` 不 claim/start/finish、不消耗发现、不打开会话、不推进已读基线；后续动作和定向核对属于 M3+。
+
+夹具布局为 `tests/fixtures/sensor/positive.json`（manifest）、`profile.json`、`positive.xml` 与仅供测试读取的 `expected.json`。解析器不读取 `expected.json`；其它正反例由测试在临时目录生成。合成 profile 不是已验证真实版本。
+
+## 六、显式真实设备模式
 
 只有同时给出 `--device` 与 `--serial` 才启用真实探针：
 
@@ -116,9 +145,9 @@ python -m app doctor --device --serial <serial>
 4. 不切换应用、不读取聊天、不截图、不写入业务库；
 5. 序列号只在本机内存中精确匹配，不写入输出；输出中的逻辑别名固定为 `primary`。
 
-按计划 M0–M2 没有业务设备循环；当前仅 M0 探针与 M1 本机状态库已实现，真实探针只是一次独立调用。M3 开始前必须把真实探针纳入设备用例的全局占用，未接入时不得与设备循环并用。当前仓库尚未对任何真实设备执行过该模式。
+按计划 M0–M2 没有业务设备循环；当前已实现 M0 探针、M1 本机状态库与 M2 合成传感器，真实探针只是一次独立调用。M3 开始前必须把真实探针纳入设备用例的全局占用，未接入时不得与设备循环并用。当前仓库尚未对任何真实设备执行过该模式，M2 合成 profile 也不代表真实版本已标定。
 
-## 六、输出与退出码
+## 七、输出与退出码
 
 `doctor` 业务结果固定包含以下七个键：
 
@@ -143,7 +172,9 @@ python -m app doctor --device --serial <serial>
 | `device_locked` | 锁定或解锁状态未知 |
 | `wrong_page` | 前台不是 BOSS 或无法判定 |
 
-参数、配置、夹具或 M1 仓储错误不输出业务字段，而是输出三键安全对象：
+`sense` 成功或业务停止时输出 `{schema_version:1,result:<ReadResult>,stop_reason:<原因或 null>}`；`result` 的所有键必填、拒绝额外键，`stop_reason` 只取 `null/unread_unverified/needs_targeted_verification` 或读取失败/未决原因。`stop_reason=null` 退出 `0`，其它退出 `2`。参数、配置、夹具读取或仓储错误不输出业务字段，而是输出三键安全对象（解析器已构造的 ReadResult 失败/未决除外，它们保留完整结果且不写库）。
+
+参数、配置、夹具或 M1/M2 仓储错误不输出业务字段，而是输出三键安全对象：
 
 ```json
 {"schema_version":1,"status":"failed","reason_code":"invalid_input"}
@@ -153,7 +184,7 @@ python -m app doctor --device --serial <serial>
 
 若业务 JSON 的 stdout 写入失败（`UnicodeError`/`OSError`），程序安全退出 `2`，不回显 traceback，也不要求再次写 JSON；日志会记录 `output=failed` 并以 `internal` 收尾。`--help` 仍由 argparse 直接处理、正常退出 `0`，不套用业务 JSON 契约。本机日志降级不是业务失败，退出码仍按业务结果；stderr 只多一行固定 `m0_process_log_degraded`。
 
-## 七、fixture 输入规则
+## 八、fixture 输入规则
 
 `--fixture` 指向的合成 JSON 必须恰好包含：
 
@@ -174,18 +205,18 @@ python -m app doctor --device --serial <serial>
 - 任何额外键、重复别名、不存在的选择、非法类型或读取失败都输出 `invalid_fixture`。
 - 配置与夹具在共享 JSON 输入边界拒绝顶层或嵌套对象的重复键；夹具还拒绝不可 UTF-8 编码的 `alias`/`selected_alias`（例如孤立代理字符），按 `invalid_fixture` 安全退出且不回显键值。
 
-M1 的 ReadResult/Evidence 只由测试或后续 `sense` 构造；当前没有 CLI 文件入口，不要把 M0 fixture 形状当作 M1 快照输入。
+M2 `sense` 的合成输入另用 `tests/fixtures/sensor/` 的 manifest/profile/XML 契约，不复用 M0 doctor 夹具。manifest 引用只能指向同夹具目录内的既有 `profile.json`/XML；解析器不读取仅供测试的 `expected.json`。M1 的 ReadResult/Evidence 由测试或 M2 构造，M1 没有 CLI 文件入口，不要把 M0 fixture 形状当作 M1/M2 快照输入。
 
-## 八、本机过程日志与复核
+## 九、本机过程日志与复核
 
-每次 `python -m app doctor` 或 `python -m app store init` 运行都会创建一个独立的 `data/logs/m0-process-<运行 UUID>.jsonl` JSON Lines 过程日志；不同进程/命令不共享同一个追加文件，避免并发丢行或互相覆盖。该目录被根 `.gitignore` 的 `/data/**` 覆盖，不提交 Git；不调用网络、不启动后台任务，也不写远程日志。旧的共享 `m0-process.jsonl` 若存在仅为历史文件，当前代码不再写入。
+每次 `python -m app doctor`、`python -m app store init` 或 `python -m app sense` 运行都会创建一个独立的 `data/logs/m0-process-<运行 UUID>.jsonl` JSON Lines 过程日志；不同进程/命令不共享同一个追加文件，避免并发丢行或互相覆盖。该目录被根 `.gitignore` 的 `/data/**` 覆盖，不提交 Git；不调用网络、不启动后台任务，也不写远程日志。旧的共享 `m0-process.jsonl` 若存在仅为历史文件，当前代码不再写入。
 
 日志器对显式 `ProcessLog(path=...)` 同样采用隔离语义：传入路径只作为同目录命名基础（目录或文件均可），实际文件名由唯一日志器追加运行 UUID 后决定；不会退回共享追加。需要读取时使用日志器给出的实际路径，而不是假定等于传入路径。
 
 每行固定包含 `schema_version/ts/correlation_id/stage/operation/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`：
 
-- `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、两条 ADB 命令、业务判定、store 初始化/核验、输出和出口。
-- `operation` 仅在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，其它阶段为 `null`；公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时，不记 PID/host/nonce/键/正文/SQL/异常。
+- `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/sense/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、两条 ADB 命令、sense 解析、业务判定、store 初始化/核验与 upsert/unresolved、输出和出口。
+- `operation` 仅在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，`sense` 阶段取 `parse/aggregate/stop_reason`，其它阶段为 `null`；公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时；`sense/parse` 按 `ReadResult.status` 记 `ok`（未决保留固定 reason）或 `failed`，`aggregate/stop_reason` 内部异常记 `failed/error_category=internal` 后继续公共安全出口；不记 PID/host/nonce/键/正文/XML/SQL/异常。
 - `result` 固定为 `started/ok/failed`；`reason_code` 沿用计划词表，不新增业务原因；`error_category` 固定为 `argument/config/fixture/probe/business/store/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
 - `command` 只写 `adb_devices` 或 `adb_window`；每次命令先记 `started`，完成后再记 `ok` 或固定失败类别。
 - `store` 阶段先记 `started`，再记 `ok` 或带固定仓储原因与 `error_category=store` 的 `failed`；非预期异常只把失败事件记为 `reason_code=null`/`error_category=internal`，业务 stdout 仍为 `store_io_error`/退出 `2`，最终 exit 分类与失败事件分类分别记录、互不替代。不写数据库路径。
@@ -198,7 +229,7 @@ M1 的 ReadResult/Evidence 只由测试或后续 `sense` 构造；当前没有 C
 ```powershell
 $log = Get-ChildItem data/logs/m0-process-*.jsonl | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 Get-Content $log.FullName
-git check-ignore data/logs/m0-process.jsonl data/runtime/m1-acceptance.sqlite3
+git check-ignore data/logs/m0-process.jsonl data/runtime/m1-acceptance.sqlite3 data/runtime/m2-acceptance.sqlite3
 ```
 
 已知某次 `correlation_id` 时可跨文件过滤：
@@ -209,15 +240,15 @@ Select-String -Path data/logs/m0-process-*.jsonl -Pattern '"correlation_id":"<UU
 
 stdout 不包含 `correlation_id`。按单次运行核对时，优先读取该次独立的 `start`→`exit` 文件；同一 `correlation_id` 不应跨两个运行文件。fixture 模式仍保持零设备、零网络、零子进程和零业务库；`store init` 只写项目内本机 SQLite。日志按运行累积且没有自动轮转/保留期，需要时由使用者在本机清理旧文件。
 
-## 九、尚未实现
+## 十、尚未实现
 
-M2 的传感器与未读聚合、M3 的读取阶梯、M4 的决策契约、M5 的动作护栏以及 M6–M8 的调度、清理和灰度都尚未实现。M1 的仓储 API 也尚未接入业务 CLI 或设备循环。不要用 M0 的 fixture 结果或 M1 的合成库推断真实设备支持范围，也不要把合成 `can_send`、探针成功或 `store init` 成功当作发送授权。
+M2 合成传感器已实现；M3 的读取阶梯、M4 的决策契约、M5 的动作护栏以及 M6–M8 的调度、清理和灰度都尚未实现。M1 的完整任务租约 API 已实现，但 M2 `sense` 只调用 upsert 与未关闭会话查询，未接入 claim/start/finish、设备循环或定向核对。不要用 M0 的 fixture 结果、M1 的合成库或 M2 的合成 profile 推断真实设备支持范围，也不要把合成候选、探针成功或 `store init` 成功当作发送授权或真实版本已标定。
 
-## 十、安全与隐私
+## 十一、安全与隐私
 
 - fixture 只用合成别名与状态，不放真实序列号、聊天、联系人、公司、截图或绝对路径。
 - 真实模式输出不含真实序列号、窗口原文或异常命令参数。
-- M1 只保存摘要、键、状态与白名单事件，不保存聊天正文；数据库、事件、日志与截图只在本机保存，不提交 Git。
+- M1 只保存摘要、键、状态与白名单事件，不保存聊天正文；M2 只解析合成 XML，日志不写 XML、身份键或正文。数据库、事件、日志与截图只在本机保存，不提交 Git。
 - 不读取根 `config.json`、环境文件、凭据或个人事实。
 - 设备、日志、截图和评测产物只在本机保存，不提交 Git。
 - 发现疑似敏感信息时按根 `AGENTS.md` 的“开源项目敏感信息告知”处理，不在对话或公开材料中复述原值。

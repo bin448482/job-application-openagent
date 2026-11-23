@@ -6,15 +6,20 @@ import argparse
 import json
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import NoReturn
 
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
+from app.adapters.boss.list import load_and_parse_snapshot
+from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
 from app.ports.device import ProbeSnapshot
 from app.ports.store import StoreError
+from app.domain.json_input import load_json_object as _load_json_object
 from app.process_log import ProcessLog, elapsed_ms
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
+from app.usecases.sense import build_sense_payload, persist_and_aggregate
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = "data/runtime/runtime.sqlite3"
@@ -92,7 +97,10 @@ def _build_parser() -> argparse.ArgumentParser:
     """构造只含全局 --config、doctor 与 store init 的严格解析器。"""
     parser = _StrictArgumentParser(
         prog="python -m app",
-        description="M0 只读 doctor 探针与 M1 store init；默认不连接设备、不调用网络。",
+        description=(
+            "M0 只读 doctor、M1 store init 与 M2 sense 合成传感器；"
+            "默认不连接设备、不调用网络。"
+        ),
         allow_abbrev=False,
     )
     parser.add_argument(
@@ -154,6 +162,25 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="<项目内相对文件>",
         help=f"本机 SQLite 路径；省略为 {DEFAULT_DB_PATH}。",
     )
+    sense = subparsers.add_parser(
+        "sense",
+        allow_abbrev=False,
+        help="解析 M2 合成未读快照并按需落库。",
+        description="必须提供合成 fixture；不连接设备、不调用模型或网络。",
+    )
+    sense.add_argument(
+        "--fixture",
+        action=_UniqueStore,
+        required=True,
+        metavar="<相对文件>",
+        help="读取 sensor manifest 及其同目录 profile/XML。",
+    )
+    sense.add_argument(
+        "--db",
+        action=_UniqueStore,
+        metavar="<项目内相对文件>",
+        help=f"本机 SQLite 路径；省略为 {DEFAULT_DB_PATH}。",
+    )
     return parser
 
 
@@ -173,21 +200,6 @@ def _resolve_project_path(value: str) -> Path:
     if not resolved.is_relative_to(PROJECT_ROOT):
         raise ValueError("path escapes project root")
     return resolved
-
-
-def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    """把 JSON 对象转为字典，并在任意层级遇到重复键时拒绝。"""
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate key")
-        result[key] = value
-    return result
-
-
-def _load_json_object(text: str) -> object:
-    """在共享输入边界解析 JSON，并拒绝顶层或嵌套对象的重复键。"""
-    return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
 
 
 def _validate_config(value: str | None) -> None:
@@ -355,6 +367,202 @@ def _run_store_init(log: ProcessLog, started: float, args: argparse.Namespace) -
     return _finalize_output(log, started, _store_success_payload(), 0, None, None)
 
 
+def _run_sense(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
+    """解析 M2 合成夹具，只有全部有效且合并 ok 后才初始化/打开本机库。"""
+    try:
+        fixture_path = _resolve_project_path(args.fixture)
+    except ValueError:
+        log.record(
+            stage="sense",
+            operation="parse",
+            result="failed",
+            reason_code="invalid_input",
+            error_category="argument",
+        )
+        return _finalize_output(
+            log, started, _error_payload("invalid_input"), 2, "invalid_input", "argument"
+        )
+
+    parse_started = time.perf_counter()
+    log.record(stage="sense", operation="parse", result="started")
+    snapshot_id = str(uuid.uuid4())
+    try:
+        result = load_and_parse_snapshot(fixture_path, snapshot_id)
+    except (OSError, UnicodeError, ValueError):
+        log.record(
+            stage="sense",
+            operation="parse",
+            result="failed",
+            reason_code="invalid_fixture",
+            error_category="fixture",
+            duration_ms=elapsed_ms(parse_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_fixture"),
+            2,
+            "invalid_fixture",
+            "fixture",
+        )
+    except Exception:
+        log.record(
+            stage="sense",
+            operation="parse",
+            result="failed",
+            error_category="internal",
+            duration_ms=elapsed_ms(parse_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_fixture"),
+            2,
+            "invalid_fixture",
+            "internal",
+        )
+    log.record(
+        stage="sense",
+        operation="parse",
+        result="failed" if result.status == "failed" else "ok",
+        reason_code=result.reason_code,
+        error_category="sense" if result.status == "failed" else None,
+        duration_ms=elapsed_ms(parse_started),
+    )
+
+    if result.status != "ok":
+        reason_code = result.reason_code
+        log.record(
+            stage="decision",
+            result="failed",
+            reason_code=reason_code,
+            error_category="sense",
+        )
+        return _finalize_output(
+            log,
+            started,
+            build_sense_payload(result, reason_code),
+            2,
+            reason_code,
+            "sense",
+        )
+
+    db_value = args.db if args.db is not None else DEFAULT_DB_PATH
+    try:
+        db_path = _resolve_project_path(db_value)
+    except ValueError:
+        log.record(
+            stage="store",
+            operation="init",
+            result="failed",
+            reason_code="invalid_input",
+            error_category="store",
+        )
+        return _finalize_output(
+            log, started, _error_payload("invalid_input"), 2, "invalid_input", "store"
+        )
+
+    init_started = time.perf_counter()
+    log.record(stage="store", operation="init", result="started")
+    try:
+        initialize_database(db_path)
+    except StoreError as error:
+        log.record(
+            stage="store",
+            operation="init",
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="store",
+            duration_ms=elapsed_ms(init_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "store",
+        )
+    except Exception:
+        log.record(
+            stage="store",
+            operation="init",
+            result="failed",
+            error_category="internal",
+            duration_ms=elapsed_ms(init_started),
+        )
+        return _finalize_output(
+            log, started, _error_payload("store_io_error"), 2, "store_io_error", "store"
+        )
+    log.record(
+        stage="store",
+        operation="init",
+        result="ok",
+        duration_ms=elapsed_ms(init_started),
+    )
+
+    try:
+        store = SqliteStore(db_path, process_log=log)
+    except StoreError as error:
+        return _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "store",
+        )
+    except Exception:
+        return _finalize_output(
+            log, started, _error_payload("store_io_error"), 2, "store_io_error", "store"
+        )
+
+    try:
+        try:
+            aggregated, stop_reason = persist_and_aggregate(store, result, log)
+        except StoreError as error:
+            return _finalize_output(
+                log,
+                started,
+                _error_payload(error.reason_code),
+                2,
+                error.reason_code,
+                "store",
+            )
+        except Exception:
+            return _finalize_output(
+                log,
+                started,
+                _error_payload("store_io_error"),
+                2,
+                "store_io_error",
+                "internal",
+            )
+    finally:
+        try:
+            store.close()
+        except Exception:
+            pass
+
+    exit_code = 0 if stop_reason is None else 2
+    error_category = None if stop_reason is None else "business"
+    log.record(
+        stage="decision",
+        result="ok",
+        reason_code=stop_reason,
+        error_category=error_category,
+    )
+    return _finalize_output(
+        log,
+        started,
+        build_sense_payload(aggregated, stop_reason),
+        exit_code,
+        stop_reason,
+        error_category,
+    )
+
+
+
 def _finish_output_failure(log: ProcessLog, started: float) -> int:
     """输出通道不可用时记录 output=failed，并安全完成 exit。"""
     log.record(
@@ -476,6 +684,8 @@ def main(
 
     if args.command == "store":
         return _run_store_init(log, started, args)
+    if args.command == "sense":
+        return _run_sense(log, started, args)
 
     mode = _requested_mode(args)
     if not _mode_is_valid(args):
