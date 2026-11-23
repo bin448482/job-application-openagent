@@ -47,7 +47,7 @@ python -m app doctor --device --serial <serial>
 创建或核验本机 SQLite v1 库：
 
 ```powershell
-python -m unittest tests.test_store tests.test_migrations
+python -m unittest tests.test_store tests.test_migrations tests.test_process_log_concurrency
 python -m app store init --db data/runtime/m1-acceptance.sqlite3
 ```
 

@@ -25,6 +25,7 @@ from app.domain.models import (
     identity_hash_for,
     parse_utc,
 )
+from app.process_log import ProcessLog
 
 BASE_TIME = "2026-11-24T00:00:00.000Z"
 SIGNAL_KEYS = ("row_badge", "new_greeting", "tab_badge", "preview_delta")
@@ -63,17 +64,24 @@ def open_store(
     local_host: str = HOST_A,
     stop_checker: object | None = None,
     fault_hook: object | None = None,
+    process_log: ProcessLog | None = None,
 ) -> tuple[Path, SqliteStore, FakeClock]:
     """在临时目录初始化 v1 库并返回路径、仓储与可控时钟。"""
     path = Path(directory) / "runtime.sqlite3"
     initialize_database(path)
     active_clock = clock if clock is not None else FakeClock()
+    active_log = (
+        process_log
+        if process_log is not None
+        else ProcessLog(path=Path(directory) / "store-process.jsonl")
+    )
     store = SqliteStore(
         path,
         local_host=local_host,
         monotonic=active_clock.monotonic,
         stop_checker=stop_checker if stop_checker is not None else lambda pid: "stopped",
         fault_hook=fault_hook,
+        process_log=active_log,
     )
     return path, store, active_clock
 

@@ -8,7 +8,7 @@
 
 - `__init__.py`：声明 SQLite 适配器包。
 - `schema.py`：五张 STRICT 表与五个索引的确定性 DDL；`initialize_database` 在单个 `BEGIN IMMEDIATE` 事务内建库或核验，任一步失败回滚；`connect_database` 打开现有 v1 库并设置 `foreign_keys=ON`、`busy_timeout=5000`；`verify_v1` 比较 `user_version`、对象集合与规范化 SQL，缺失、额外或篡改均报 `db_version_unsupported`。
-- `repo.py`：`SqliteStore` 实现 upsert/claim/start/renew/finish/recover/unresolved_conversations；默认本机 host 为 `H(platform.node())`，owner.id 必须是规范 UUID、owner.host 必须是 64 位小写十六进制本机摘要，租约 key 必须是当前 app 的 discovery 键。默认 Windows 停止检查器用 ctypes `OpenProcess`（同时请求查询权限与 `SYNCHRONIZE`）/`WaitForSingleObject`，显式声明 x64 HANDLE/DWORD/BOOL 签名；非 Windows 用 `os.kill(pid, 0)`。支持注入单调时钟、停止检查器与仅测试使用的故障点回调。
+- `repo.py`：`SqliteStore` 实现 upsert/claim/start/renew/finish/recover/unresolved_conversations；默认创建并可注入唯一 `ProcessLog`，打开库及公开操作以 `operation` 记录 started/ok/failed、固定原因码与耗时，不记 PID/host/nonce/键/正文/SQL/异常，业务事务与幂等不受影响。默认本机 host 为 `H(platform.node())`，owner.id 必须是规范 UUID、owner.host 必须是 64 位小写十六进制本机摘要，租约 key 必须是当前 app 的 discovery 键。默认 Windows 停止检查器用 ctypes `OpenProcess`（同时请求查询权限与 `SYNCHRONIZE`）/`WaitForSingleObject`，显式声明 x64 HANDLE/DWORD/BOOL 签名；非 Windows 用 `os.kill(pid, 0)`。支持注入单调时钟、停止检查器与仅测试使用的故障点回调。
 
 ## 三、库结构与事务契约
 
@@ -17,6 +17,7 @@
 - 唯一约束/索引：会话 `(app,identity_hash)`；发现活跃会话唯一（queued/leased/running/blocked）、nonce 唯一（非空）；领取索引按 `priority DESC,created_at,key`；事件审计 `(app,subject_key,event_id)`。
 - 空库初始化只在 `user_version=0` 且无用户对象时建表并设版本 1；已有完整 v1 只核验、不改业务行；未知版本、非空无版本或结构篡改拒绝，绝不覆盖重建。初始化/打开遇到另一连接持写锁且等待耗尽时映射 `store_busy`，非 SQLite/IO 才是 `store_io_error`。
 - 会话键必须精确等于 `app:conv:identity_hash`；仓储入口拒绝伪造会话键与不匹配的发现键，整批回滚且不留下事务。
+- 只读 `unresolved_conversations` 不写事务；遇到另一连接独占写锁且等待耗尽时同样映射 `store_busy`，释放锁后正常返回且业务行不变。
 - 写入口均 `BEGIN IMMEDIATE`，失败整体回滚。`claim` 见任一 primary 设备行（含过期或 quarantined）即 `lease_busy`；任务与设备共享同一 owner/pid/host/nonce/截止时间。`finish` 与 running 的 `recover` 进入 blocked 时清任务租约，但保留设备原身份并只置 `quarantined`；TTL 到期不释放占用。
 - 事件只写 `snapshot_upserted/candidate_superseded/candidate_deferred/task_claimed/task_started/lease_renewed/task_finished/lease_recovered`，payload 固定 `from_state/to_state/nonce/candidate_count`，不写正文。
 - 所有入口严格校验类型、枚举、UUID、摘要与 UTC；bool 不冒充整数；跨 app 键与非 discovery 租约键拒绝；枚举集合校验前先做类型检查，不把 `TypeError` 当成合法输入错误。仓储错误只抛 `StoreError` 固定原因码，不输出 SQL 参数或原始异常。

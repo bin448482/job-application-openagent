@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import functools
 import json
 import os
 import platform
@@ -14,7 +15,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Iterator
 
-from app.adapters.sqlite.schema import connect_database, map_locked_error
+from app.adapters.sqlite.schema import (
+    connect_database,
+    map_locked_error,
+    rollback_quietly,
+)
 from app.domain.models import (
     APP,
     CLOCK_TOLERANCE_SECONDS,
@@ -44,9 +49,41 @@ from app.domain.models import (
     validate_read_result,
 )
 from app.ports.store import StoreError
+from app.process_log import ProcessLog, elapsed_ms
 
 StopChecker = Callable[[int], str]
 FaultHook = Callable[[str, sqlite3.Connection], None]
+
+_DECORATED_OPERATIONS = frozenset(
+    {
+        "upsert_snapshot",
+        "claim",
+        "start",
+        "renew",
+        "finish",
+        "recover",
+        "unresolved_conversations",
+    }
+)
+
+
+def _store_operation(name: str):
+    """把公开仓储方法包在唯一 started/ok/failed 操作日志边界内。"""
+    if name not in _DECORATED_OPERATIONS:
+        raise ValueError("store operation is invalid")
+
+    def decorate(method: Callable[..., object]) -> Callable[..., object]:
+        """返回保留原 docstring 与签名的包装方法。"""
+
+        @functools.wraps(method)
+        def wrapped(self: "SqliteStore", *args: object, **kwargs: object) -> object:
+            """在调用前后记录固定操作名、结果、原因码与耗时。"""
+            with self._operation(name):
+                return method(self, *args, **kwargs)
+
+        return wrapped
+
+    return decorate
 
 
 def default_local_host() -> str:
@@ -115,16 +152,48 @@ class SqliteStore:
         monotonic: Callable[[], float] = time.monotonic,
         stop_checker: StopChecker | None = None,
         fault_hook: FaultHook | None = None,
+        process_log: ProcessLog | None = None,
     ) -> None:
-        """打开并核验 v1 库，保存本机主机摘要、时钟与可注入停止检查器。"""
+        """打开并核验 v1 库，保存本机主机摘要、时钟、停止检查器与可选日志器。"""
         self._local_host = local_host if local_host is not None else default_local_host()
         if not is_hash(self._local_host):
             raise StoreError("invalid_input")
         self._monotonic = monotonic
         self._stop_checker = stop_checker if stop_checker is not None else default_stop_checker
         self._fault_hook = fault_hook
+        self.process_log = process_log if process_log is not None else ProcessLog()
         self._clock_mark: tuple[float, datetime] | None = None
-        self._connection = connect_database(path)
+        opened = time.perf_counter()
+        self.process_log.record(
+            stage="store", operation="open_store", result="started"
+        )
+        try:
+            self._connection = connect_database(path)
+        except StoreError as error:
+            self.process_log.record(
+                stage="store",
+                operation="open_store",
+                result="failed",
+                reason_code=error.reason_code,
+                error_category="store",
+                duration_ms=elapsed_ms(opened),
+            )
+            raise
+        except Exception:
+            self.process_log.record(
+                stage="store",
+                operation="open_store",
+                result="failed",
+                error_category="internal",
+                duration_ms=elapsed_ms(opened),
+            )
+            raise
+        self.process_log.record(
+            stage="store",
+            operation="open_store",
+            result="ok",
+            duration_ms=elapsed_ms(opened),
+        )
 
     def close(self) -> None:
         """关闭本机数据库连接；重复关闭保持无害。"""
@@ -138,6 +207,7 @@ class SqliteStore:
         """退出 with 时关闭连接。"""
         self.close()
 
+    @_store_operation("upsert_snapshot")
     def upsert_snapshot(self, result: ReadResult) -> list[str]:
         """保存完整未读快照；未知行不落库，返回写后仍 queued 的发现键。"""
         observed_at, snapshot_id, records = _prepare_upsert(result)
@@ -226,6 +296,7 @@ class SqliteStore:
                 )
         return sorted(queued)
 
+    @_store_operation("claim")
     def claim(
         self, app: str, kind: str, owner: Owner, now: str
     ) -> Lease | None:
@@ -282,6 +353,7 @@ class SqliteStore:
             )
         return Lease(app=app, key=key, owner=owner, nonce=nonce, expires_at=expires_at)
 
+    @_store_operation("start")
     def start(self, lease: Lease, now: str) -> Lease:
         """提交 leased→running，且不延长任务或设备截止时间。"""
         now_dt = self._prepare_now(now)
@@ -307,6 +379,7 @@ class SqliteStore:
             )
         return lease
 
+    @_store_operation("renew")
     def renew(self, lease: Lease, now: str) -> Lease:
         """把任务与设备截止时间一起延至 max(原值, now+60 秒)。"""
         now_dt = self._prepare_now(now)
@@ -351,6 +424,7 @@ class SqliteStore:
             expires_at=expires_at,
         )
 
+    @_store_operation("finish")
     def finish(
         self,
         lease: Lease,
@@ -438,6 +512,7 @@ class SqliteStore:
             )
         return "updated"
 
+    @_store_operation("recover")
     def recover(
         self, lease: Lease, confirm_stopped: bool, now: str
     ) -> dict[str, str]:
@@ -503,17 +578,57 @@ class SqliteStore:
             )
         return {"status": "recovered", "task_state": to_state}
 
+    @_store_operation("unresolved_conversations")
     def unresolved_conversations(self, app: str) -> list[str]:
         """只读返回 queued/leased/running/blocked 的去重会话键。"""
         if app != APP:
             raise StoreError("invalid_input")
-        rows = self._connection.execute(
-            "SELECT DISTINCT conversation_key FROM hr_discoveries "
-            "WHERE app = ? AND state IN ('queued', 'leased', 'running', 'blocked') "
-            "ORDER BY conversation_key",
-            (app,),
-        ).fetchall()
+        try:
+            rows = self._connection.execute(
+                "SELECT DISTINCT conversation_key FROM hr_discoveries "
+                "WHERE app = ? AND state IN ('queued', 'leased', 'running', 'blocked') "
+                "ORDER BY conversation_key",
+                (app,),
+            ).fetchall()
+        except sqlite3.OperationalError as error:
+            raise map_locked_error(error) from None
+        except sqlite3.Error:
+            raise StoreError("store_io_error") from None
         return [str(row["conversation_key"]) for row in rows]
+
+    @contextmanager
+    def _operation(self, name: str) -> Iterator[None]:
+        """记录公开操作的 started/ok/failed；日志失败只降级，不影响业务结果。"""
+        started = time.perf_counter()
+        self.process_log.record(stage="store", operation=name, result="started")
+        try:
+            yield
+        except StoreError as error:
+            self.process_log.record(
+                stage="store",
+                operation=name,
+                result="failed",
+                reason_code=error.reason_code,
+                error_category="store",
+                duration_ms=elapsed_ms(started),
+            )
+            raise
+        except Exception:
+            self.process_log.record(
+                stage="store",
+                operation=name,
+                result="failed",
+                error_category="internal",
+                duration_ms=elapsed_ms(started),
+            )
+            raise
+        else:
+            self.process_log.record(
+                stage="store",
+                operation=name,
+                result="ok",
+                duration_ms=elapsed_ms(started),
+            )
 
     @contextmanager
     def _write(self) -> Iterator[None]:
@@ -528,19 +643,19 @@ class SqliteStore:
             yield
             self._connection.execute("COMMIT")
         except StoreError:
-            _safe_rollback(self._connection)
+            rollback_quietly(self._connection)
             raise
         except ValueError:
-            _safe_rollback(self._connection)
+            rollback_quietly(self._connection)
             raise StoreError("invalid_input") from None
         except sqlite3.IntegrityError:
-            _safe_rollback(self._connection)
+            rollback_quietly(self._connection)
             raise StoreError("invalid_input") from None
         except sqlite3.OperationalError as error:
-            _safe_rollback(self._connection)
+            rollback_quietly(self._connection)
             raise map_locked_error(error) from None
         except (sqlite3.Error, OSError, RuntimeError):
-            _safe_rollback(self._connection)
+            rollback_quietly(self._connection)
             raise StoreError("store_io_error") from None
 
     def _prepare_now(self, now: object) -> datetime:
@@ -649,14 +764,12 @@ class SqliteStore:
         return True
 
     def _ensure_conversation(self, key: str, identity_hash: str) -> None:
-        """插入缺少的会话行；已有行的身份摘要必须一致。"""
+        """插入缺少的会话行；键绑定 identity_hash 后已有行直接复用。"""
         row = self._connection.execute(
             "SELECT identity_hash FROM hr_conversations WHERE app = ? AND \"key\" = ?",
             (APP, key),
         ).fetchone()
         if row is not None:
-            if row["identity_hash"] != identity_hash:
-                raise StoreError("invalid_input")
             return
         self._connection.execute(
             "INSERT INTO hr_conversations (app, \"key\", identity_hash) VALUES (?, ?, ?)",
@@ -752,16 +865,9 @@ def _prepare_upsert(
                 continue
             if row.identity_hash is None:
                 raise ValueError("row identity is missing")
-            previous = rows.get(row.conversation_key)
-            if previous is not None and previous.identity_hash != row.identity_hash:
-                raise ValueError("conversation identity is ambiguous")
             rows[row.conversation_key] = row
         records: list[_CandidateRecord] = []
-        seen: set[str] = set()
         for candidate in snapshot.candidates:
-            if candidate.candidate_key in seen:
-                raise ValueError("candidate key is duplicated")
-            seen.add(candidate.candidate_key)
             row = rows.get(candidate.conversation_key)
             if row is None:
                 raise ValueError("candidate conversation is unknown")
@@ -868,11 +974,3 @@ def _require_time_order(observed_at: str, existing_updated_at: str) -> None:
     """拒绝用更早的观察时间倒写已有发现。"""
     if parse_utc(observed_at) < parse_utc(existing_updated_at):
         raise StoreError("invalid_input")
-
-
-def _safe_rollback(connection: sqlite3.Connection) -> None:
-    """尽力回滚；失败不再覆盖原始安全错误。"""
-    try:
-        connection.execute("ROLLBACK")
-    except sqlite3.Error:
-        return

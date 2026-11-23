@@ -185,13 +185,13 @@ def _initialize_in_transaction(
         version = int(connection.execute("PRAGMA user_version").fetchone()[0])
         names = _user_object_names(connection)
     except sqlite3.OperationalError as error:
-        _rollback(connection)
+        rollback_quietly(connection)
         raise map_locked_error(error) from None
     except sqlite3.DatabaseError:
-        _rollback(connection)
+        rollback_quietly(connection)
         raise StoreError("store_io_error") from None
     except sqlite3.Error:
-        _rollback(connection)
+        rollback_quietly(connection)
         raise StoreError("store_io_error") from None
 
     try:
@@ -214,10 +214,10 @@ def _initialize_in_transaction(
         verify_v1(connection)
         connection.execute("COMMIT")
     except StoreError:
-        _rollback(connection)
+        rollback_quietly(connection)
         raise
     except (sqlite3.Error, OSError, RuntimeError):
-        _rollback(connection)
+        rollback_quietly(connection)
         raise StoreError("migration_failed") from None
 
 
@@ -261,8 +261,8 @@ def _normalize_sql(sql: str) -> str:
     return " ".join(sql.strip().rstrip(";").split())
 
 
-def _rollback(connection: sqlite3.Connection) -> None:
-    """尽力回滚当前事务；不回显底层异常。"""
+def rollback_quietly(connection: sqlite3.Connection) -> None:
+    """尽力回滚事务；失败不再覆盖原始安全错误，供 schema 与仓储复用。"""
     try:
         connection.execute("ROLLBACK")
     except sqlite3.Error:

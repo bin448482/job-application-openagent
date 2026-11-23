@@ -6,6 +6,7 @@ import json
 import multiprocessing
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 from app.process_log import ProcessLog
@@ -50,12 +51,9 @@ def _read_events(path: Path) -> list[dict[str, object]]:
     ]
 
 
-def _remove_new_default_logs(before: set[Path]) -> None:
-    """删除本次并发测试新建的默认日志文件，不触碰历史文件。"""
-    logs_dir = ROOT / "data" / "logs"
-    if not logs_dir.is_dir():
-        return
-    for path in set(logs_dir.glob("m0-process-*.jsonl")) - before:
+def _remove_owned_logs(paths: list[Path]) -> None:
+    """只删除子进程明确返回的本次日志路径，不按目录差集推断文件所有权。"""
+    for path in paths:
         path.unlink(missing_ok=True)
 
 
@@ -136,12 +134,17 @@ class ProcessLogConcurrencyTests(unittest.TestCase):
         self.assertFalse(any(path.name == "m0-process.jsonl" for path in paths))
 
     def test_default_path_runs_are_isolated(self) -> None:
-        """默认生产目录下两个并发运行各写独立 UUID 文件，不共享追加。"""
+        """默认生产目录两并发运行各写独立 UUID 文件，清理只删明确返回路径。"""
         logs_dir = ROOT / "data" / "logs"
-        before = set(logs_dir.glob("m0-process-*.jsonl")) if logs_dir.is_dir() else set()
-        self.addCleanup(_remove_new_default_logs, before)
         results = self._run_pair((None, None))
         self._assert_isolated(results, logs_dir, "m0-process-")
+        paths = [Path(str(result["path"])) for result in results]
+        sentinel = logs_dir / f"m0-process-{uuid.uuid4()}.jsonl"
+        sentinel.write_text("foreign-sentinel\n", encoding="utf-8")
+        self.addCleanup(sentinel.unlink, missing_ok=True)
+        _remove_owned_logs(paths)
+        self.assertTrue(all(not path.exists() for path in paths))
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "foreign-sentinel\n")
 
     def test_explicit_path_runs_are_isolated(self) -> None:
         """显式基础路径也只作为命名基础，两个并发运行仍写独立文件。"""

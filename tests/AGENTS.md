@@ -7,10 +7,10 @@
 ## 二、当前文件与子目录
 
 - `__init__.py`：声明测试包，支持按模块运行。
-- `test_doctor.py`：M0 CLI 正反例、配置/夹具校验、重复 JSON 键与孤立代理字符、业务状态映射、keyguard token、`mCurrentFocus` 字段边界/整条 focus 完整 Window/单 Window 多组件/前后附加内容解析、设备失败七键映射、stdout 写失败与 `output=failed`、正常帮助 output/exit、过程日志白名单/降级故障注入、ADB `started→ok/failed` 与中断仅留 started、调用协议与 fixture 零子进程断言。
-- `test_store.py`：M1 合成 ReadResult/Evidence 入库、未知行跳过、同指纹重放静默、queued 取消/延迟、kind 升级、优先级与 kind 过滤、竞争与 TTL、start/renew/finish/recover、blocked 设备原身份隔离、旧 nonce/截止时间、clock_changed、三类事务故障注入、伪造会话键原子回滚、严格输入与 Windows ctypes 停止判定 mock。
-- `test_migrations.py`：v1 STRICT 五表/索引、幂等不改行、建表中途与版本写入后回滚、未知版本/非空无版本/结构篡改拒绝、损坏文件、schema 约束、初始化写锁 `store_busy`/释放后幂等、`store init` 固定 JSON/默认路径/路径越界/损坏与篡改库/失败日志。
-- `test_process_log_concurrency.py`：两个独立 spawn 进程与 Barrier 同时写默认生产目录与显式基础路径，断言各自独立 UUID 文件、按 correlation_id 的完整事件序列、JSON 有效、互不覆盖，并清理本次生成的默认日志。
+- `test_doctor.py`：M0 CLI 正反例、配置/夹具校验、重复 JSON 键与孤立代理字符、业务状态映射、keyguard token、`mCurrentFocus` 字段边界/整条 focus 完整 Window/单 Window 多组件/前后附加内容解析、设备失败七键映射、stdout 写失败与 `output=failed`、正常帮助 output/exit、过程日志白名单/降级故障注入、CLI 运行窗口同期日志哨兵不被清理、ADB `started→ok/failed` 与中断仅留 started、调用协议与 fixture 零子进程断言。
+- `test_store.py`：M1 合成 ReadResult/Evidence 入库、未知行跳过、同指纹重放静默、queued 取消/延迟、kind 升级、优先级与 kind 过滤、竞争与 TTL、start/renew/finish/recover、blocked 设备原身份隔离、旧 nonce/截止时间、clock_changed、三类事务故障注入、伪造会话键原子回滚、只读查询写锁 `store_busy`、仓储打开/操作日志 started/ok/failed 与不回显非白名单元数据、严格输入与 Windows ctypes 停止判定 mock。
+- `test_migrations.py`：v1 STRICT 五表/索引、幂等不改行、建表中途与版本写入后回滚、未知版本/非空无版本/结构篡改拒绝、损坏文件、schema 约束、初始化/打开写锁 `store_busy` 与释放后幂等、`store init` 固定 JSON/默认路径/路径越界/损坏与篡改库/失败日志。
+- `test_process_log_concurrency.py`：两个独立 spawn 进程与 Barrier 同时写默认生产目录与显式基础路径，断言各自独立 UUID 文件、按 correlation_id 的完整事件序列、JSON 有效、互不覆盖；清理只删子进程明确返回的路径，并以合成哨兵断言不误删同期文件。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。
 - `fixtures/`：M0 纯合成输入夹具；见 `fixtures/AGENTS.md`。
 
@@ -20,7 +20,7 @@
 - 负例由测试进程捕获预期退出码；验收命令本身必须退出 `0`。
 - 真实适配器只在测试中 mock `subprocess.run` 与 ctypes；不得实际运行 ADB 或检查真实 PID。
 - 测试不把被测输出反推成预期，也不使用真实姓名、序列号、聊天、数据库或绝对路径。
-- 日志测试覆盖正常追加、白名单拒绝、IO 故障注入与 CLI 固定 `m0_process_log_degraded` 标记；fixture 模式只允许写被忽略日志，M1 只写临时库。每次运行日志必须独立，显式路径也不得退回共享追加。
+- 日志测试覆盖正常追加、白名单拒绝、IO 故障注入与 CLI 固定 `m0_process_log_degraded` 标记；fixture 模式只允许写被忽略日志，M1 只写临时库。每次运行日志必须独立，显式路径也不得退回共享追加；CLI 默认生产日志保留在被忽略目录，测试不得按目录差集删除文件。
 - M1 反例必须显式断言失败原因与“任务/设备/事件全部回滚”，不能只断言抛出异常。
 
 ## 四、运行方式

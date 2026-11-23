@@ -68,11 +68,25 @@ ERROR_CATEGORIES = frozenset(
 COMMANDS = frozenset({"adb_devices", "adb_window"})
 MODES = frozenset({"fixture", "device"})
 CONFIG_SOURCES = frozenset({"default", "file"})
+OPERATIONS = frozenset(
+    {
+        "init",
+        "open_store",
+        "upsert_snapshot",
+        "claim",
+        "start",
+        "renew",
+        "finish",
+        "recover",
+        "unresolved_conversations",
+    }
+)
 EVENT_KEYS = (
     "schema_version",
     "ts",
     "correlation_id",
     "stage",
+    "operation",
     "result",
     "reason_code",
     "error_category",
@@ -105,6 +119,7 @@ class ProcessLog:
         *,
         stage: str,
         result: str,
+        operation: str | None = None,
         reason_code: str | None = None,
         error_category: str | None = None,
         duration_ms: int = 0,
@@ -119,6 +134,7 @@ class ProcessLog:
             if not _valid_event(
                 stage=stage,
                 result=result,
+                operation=operation,
                 reason_code=reason_code,
                 error_category=error_category,
                 duration_ms=duration_ms,
@@ -136,6 +152,7 @@ class ProcessLog:
                 "ts": _utc_now(),
                 "correlation_id": self.correlation_id,
                 "stage": stage,
+                "operation": operation,
                 "result": result,
                 "reason_code": reason_code,
                 "error_category": error_category,
@@ -187,6 +204,7 @@ def _valid_event(
     *,
     stage: str,
     result: str,
+    operation: str | None,
     reason_code: str | None,
     error_category: str | None,
     duration_ms: int,
@@ -196,8 +214,12 @@ def _valid_event(
     config_source: str | None,
     device_count: int | None,
 ) -> bool:
-    """检查事件只含固定阶段、结果、原因码和可选元数据。"""
+    """检查事件只含固定阶段、操作名、结果、原因码和可选元数据。"""
     if stage not in STAGES or result not in RESULTS:
+        return False
+    if operation is not None and (
+        not isinstance(operation, str) or operation not in OPERATIONS
+    ):
         return False
     if reason_code is not None and reason_code not in REASON_CODES:
         return False

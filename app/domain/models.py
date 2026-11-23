@@ -12,10 +12,6 @@ from datetime import datetime, timedelta, timezone
 APP = "boss"
 APPS = frozenset({APP})
 
-TASK_STATES = frozenset(
-    {"queued", "leased", "running", "done", "not_sent", "failed", "blocked", "cancelled"}
-)
-ACTIVE_TASK_STATES = frozenset({"queued", "leased", "running", "blocked"})
 TERMINAL_TASK_STATES = frozenset({"done", "not_sent", "failed", "cancelled"})
 LEASED_TASK_STATES = frozenset({"leased", "running"})
 
@@ -65,18 +61,6 @@ EVIDENCE_UNKNOWN_REASONS = frozenset(
     {"device_disconnected", "result_unverified", "executor_interrupted"}
 )
 
-EVENT_NAMES = frozenset(
-    {
-        "snapshot_upserted",
-        "candidate_superseded",
-        "candidate_deferred",
-        "task_claimed",
-        "task_started",
-        "lease_renewed",
-        "task_finished",
-        "lease_recovered",
-    }
-)
 TASK_REASON_CODES = (
     READ_FAILED_REASONS
     | READ_UNDETERMINED_REASONS
@@ -310,7 +294,11 @@ def validate_owner(owner: object) -> None:
         raise ValueError("owner is invalid")
     if not is_uuid(owner.id):
         raise ValueError("owner id is invalid")
-    if not is_int(owner.pid) or owner.pid <= 0:
+    if (
+        not is_int(owner.pid)
+        or owner.pid <= 0
+        or owner.pid > 9223372036854775807
+    ):
         raise ValueError("owner pid is invalid")
     if not is_hash(owner.host):
         raise ValueError("owner host is invalid")

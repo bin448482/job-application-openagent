@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -48,10 +49,8 @@ READY_OUTPUT = {
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
-    """在项目根运行一次 python -m app，并清理本次新建的默认过程日志。"""
-    logs_dir = ROOT / "data" / "logs"
-    before = set(logs_dir.glob("m0-process-*.jsonl")) if logs_dir.is_dir() else set()
-    completed = subprocess.run(
+    """在项目根运行一次 python -m app；默认生产日志保留在被忽略目录，不按差集清理。"""
+    return subprocess.run(
         [sys.executable, "-m", "app", *args],
         cwd=ROOT,
         capture_output=True,
@@ -60,10 +59,6 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         timeout=60,
         check=False,
     )
-    after = set(logs_dir.glob("m0-process-*.jsonl")) if logs_dir.is_dir() else set()
-    for created in after - before:
-        created.unlink(missing_ok=True)
-    return completed
 
 
 def _write_text(directory: Path, name: str, content: str) -> str:
@@ -127,7 +122,7 @@ class DoctorCliTests(unittest.TestCase):
     """覆盖验收命令、配置与参数负例、业务失败和设备状态映射。"""
 
     def test_ready_fixture_contract(self) -> None:
-        """ready 夹具必须退出 0、只输出一个完整 JSON，且不新增业务库。"""
+        """ready 夹具退出 0、只输出一个完整 JSON、不新增业务库且不清理同期日志。"""
         before = _sqlite_files()
         completed = _run_cli("doctor", "--fixture", READY_FIXTURE)
         after = _sqlite_files()
@@ -138,6 +133,26 @@ class DoctorCliTests(unittest.TestCase):
         self.assertEqual(payload, READY_OUTPUT)
         self.assertEqual(list(payload), OUTPUT_KEYS)
         self.assertEqual(before, after)
+
+        sentinel = ROOT / "data" / "logs" / f"m0-process-{uuid.uuid4()}.jsonl"
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text("sentinel-before\n", encoding="utf-8")
+        self.addCleanup(sentinel.unlink, missing_ok=True)
+
+        def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            """在 CLI 运行窗口内改写同期日志哨兵，模拟另一独立进程。"""
+            sentinel.write_text("sentinel-after\n", encoding="utf-8")
+            return subprocess.CompletedProcess(
+                args=args[0] if args else [],
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
+
+        with patch("tests.test_doctor.subprocess.run", side_effect=fake_run):
+            fake_completed = _run_cli("--help")
+        self.assertEqual(fake_completed.returncode, 0)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "sentinel-after\n")
 
     def test_help_exits_zero_without_stderr(self) -> None:
         """帮助路径退出 0，且不向 stderr 写内容。"""
@@ -1046,6 +1061,11 @@ class ProcessLogTests(unittest.TestCase):
             cases = {
                 "stage": {"stage": "raw", "result": "ok"},
                 "result": {"stage": "start", "result": "done"},
+                "operation": {
+                    "stage": "store",
+                    "result": "started",
+                    "operation": "raw",
+                },
                 "reason": {
                     "stage": "start",
                     "result": "ok",

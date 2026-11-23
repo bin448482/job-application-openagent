@@ -182,9 +182,10 @@ M1 的 ReadResult/Evidence 只由测试或后续 `sense` 构造；当前没有 C
 
 日志器对显式 `ProcessLog(path=...)` 同样采用隔离语义：传入路径只作为同目录命名基础（目录或文件均可），实际文件名由唯一日志器追加运行 UUID 后决定；不会退回共享追加。需要读取时使用日志器给出的实际路径，而不是假定等于传入路径。
 
-每行固定包含 `schema_version/ts/correlation_id/stage/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`：
+每行固定包含 `schema_version/ts/correlation_id/stage/operation/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`：
 
 - `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、两条 ADB 命令、业务判定、store 初始化/核验、输出和出口。
+- `operation` 仅在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，其它阶段为 `null`；公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时，不记 PID/host/nonce/键/正文/SQL/异常。
 - `result` 固定为 `started/ok/failed`；`reason_code` 沿用计划词表，不新增业务原因；`error_category` 固定为 `argument/config/fixture/probe/business/store/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
 - `command` 只写 `adb_devices` 或 `adb_window`；每次命令先记 `started`，完成后再记 `ok` 或固定失败类别。
 - `store` 阶段先记 `started`，再记 `ok` 或带固定仓储原因与 `error_category=store` 的 `failed`；不写数据库路径。

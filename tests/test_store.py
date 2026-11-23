@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import sqlite3
 import tempfile
 import unittest
 import uuid
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 from app.adapters.sqlite import repo as repo_module
@@ -21,6 +24,7 @@ from app.domain.models import (
     discovery_key_for,
 )
 from app.ports.store import StoreError
+from app.process_log import EVENT_KEYS, ProcessLog
 
 from tests.m1_helpers import (
     HOST_A,
@@ -40,14 +44,25 @@ from tests.m1_helpers import (
 OWNER = Owner(OWNER_ID, 4242, HOST_A)
 
 
+def _log_events(path: Path) -> list[dict[str, object]]:
+    """读取仓储操作日志的 JSON Lines 事件。"""
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
+
+
 class StoreTests(unittest.TestCase):
     """覆盖合成快照入库、竞争、TTL、恢复与失败整体回滚。"""
 
     def setUp(self) -> None:
-        """为每个测试创建独立临时 v1 库与可控时钟。"""
+        """为每个测试创建独立临时 v1 库、操作日志与可控时钟。"""
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        self.path, self.store, self.clock = open_store(self._tmp.name)
+        self.log = ProcessLog(path=Path(self._tmp.name) / "process.jsonl")
+        self.path, self.store, self.clock = open_store(
+            self._tmp.name, process_log=self.log
+        )
         self.addCleanup(self.store.close)
 
     def _seed(self, **kwargs: object) -> tuple[ReadResult, list[str]]:
@@ -98,6 +113,23 @@ class StoreTests(unittest.TestCase):
             '{"from_state":null,"to_state":"queued","nonce":null,"candidate_count":1}',
         )
         self.assertIsNone(fetch_one(self.path, "SELECT * FROM device_lease"))
+        log_events = _log_events(self.log.path)
+        upsert_events = [
+            event
+            for event in log_events
+            if event["operation"] == "upsert_snapshot"
+        ]
+        self.assertEqual(
+            [(event["operation"], event["result"]) for event in upsert_events],
+            [("upsert_snapshot", "started"), ("upsert_snapshot", "ok")],
+        )
+        self.assertTrue(all(event["stage"] == "store" for event in log_events))
+        self.assertEqual(list(log_events[0]), list(EVENT_KEYS))
+        self.assertEqual(len({event["correlation_id"] for event in log_events}), 1)
+        self.assertEqual(
+            [event["result"] for event in log_events if event["operation"] == "open_store"],
+            ["started", "ok"],
+        )
 
     def test_upsert_same_fingerprint_replay_is_silent(self) -> None:
         """同指纹重放即使快照 ID 不同也不改行、不追加事件。"""
@@ -108,6 +140,15 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(self.store.upsert_snapshot(replay), first)
         self.assertEqual(fetch_one(self.path, "SELECT * FROM hr_discoveries"), before)
         self.assertEqual(event_count(self.path), seen)
+        replay_events = [
+            event
+            for event in _log_events(self.log.path)
+            if event["operation"] == "upsert_snapshot"
+        ]
+        self.assertEqual(
+            [event["result"] for event in replay_events],
+            ["started", "ok", "started", "ok"],
+        )
 
     def test_upsert_ignores_rows_without_locatable_identity(self) -> None:
         """未知行不入库，但不妨碍同一快照中的明确候选落库。"""
@@ -142,6 +183,23 @@ class StoreTests(unittest.TestCase):
                     self.store.upsert_snapshot(result)
                 self.assertEqual(context.exception.reason_code, "invalid_input")
         self.assertEqual(fetch_all(self.path, "SELECT * FROM hr_discoveries"), [])
+        log_events = [
+            event
+            for event in _log_events(self.log.path)
+            if event["operation"] == "upsert_snapshot"
+        ]
+        self.assertEqual(len(log_events), 6)
+        self.assertEqual(
+            [event["result"] for event in log_events],
+            ["started", "failed"] * 3,
+        )
+        self.assertTrue(
+            all(
+                event["reason_code"] == "invalid_input"
+                for event in log_events
+                if event["result"] == "failed"
+            )
+        )
 
     def test_upsert_rejects_tampered_keys_sources_and_time_order(self) -> None:
         """篡改指纹/键、重复候选、非法来源、bool 计数与倒写时间都回滚。"""
@@ -300,7 +358,12 @@ class StoreTests(unittest.TestCase):
         _, second = self._seed(contact="合成联系人乙")
         self.assertEqual(self.store.claim("boss", "new_message", OWNER, self.clock.now()), None)
         self.store.close()
-        connection = SqliteStore(self.path, local_host=HOST_A, monotonic=self.clock.monotonic)
+        connection = SqliteStore(
+            self.path,
+            local_host=HOST_A,
+            monotonic=self.clock.monotonic,
+            process_log=self.log,
+        )
         self.addCleanup(connection.close)
         connection._connection.execute(
             "UPDATE hr_discoveries SET priority = 5 WHERE \"key\" = ?", (second[0],)
@@ -329,6 +392,15 @@ class StoreTests(unittest.TestCase):
         empty_lease = self.store.claim("boss", "unread", OWNER, self.clock.now())
         self.assertIsNone(empty_lease)
         self.assertEqual(event_count(self.path), 0)
+        empty_claim_events = [
+            event
+            for event in _log_events(self.log.path)
+            if event["operation"] == "claim"
+        ]
+        self.assertEqual(
+            [event["result"] for event in empty_claim_events],
+            ["started", "ok"],
+        )
         _, keys = self._seed()
         first = self.store.claim("boss", "unread", OWNER, self.clock.now())
         self.assertIsNotNone(first)
@@ -398,6 +470,15 @@ class StoreTests(unittest.TestCase):
             (
                 "zero-pid",
                 dict(app="boss", kind="unread", owner=Owner(OWNER_ID, 0, HOST_A), now=self.clock.now()),
+            ),
+            (
+                "overflow-pid",
+                dict(
+                    app="boss",
+                    kind="unread",
+                    owner=Owner(OWNER_ID, 2**63, HOST_A),
+                    now=self.clock.now(),
+                ),
             ),
             ("time", dict(app="boss", kind="unread", owner=OWNER, now="2026-11-24T00:00:00Z")),
         )
@@ -476,6 +557,17 @@ class StoreTests(unittest.TestCase):
             + lease.nonce
             + '","candidate_count":null}',
         )
+        log_events = _log_events(self.log.path)
+        finish_events = [
+            item for item in log_events if item["operation"] == "finish"
+        ]
+        self.assertEqual(
+            [item["result"] for item in finish_events], ["started", "ok"]
+        )
+        log_text = self.log.path.read_text(encoding="utf-8")
+        for secret in (lease.key, lease.nonce, OWNER.id, HOST_A):
+            self.assertNotIn(secret, log_text)
+        self.assertTrue(all(list(item) == list(EVENT_KEYS) for item in log_events))
 
     def test_finish_done_with_performed_evidence(self) -> None:
         """Evidence.performed 可把任务收敛为 done，并要求两个不同快照。"""
@@ -762,7 +854,10 @@ class StoreTests(unittest.TestCase):
         """关闭基础连接并以同一时钟和故障注入重开仓储。"""
         self.store.close()
         self.path, self.store, self.clock = open_store(
-            self._tmp.name, clock=self.clock, fault_hook=hook
+            self._tmp.name,
+            clock=self.clock,
+            fault_hook=hook,
+            process_log=self.log,
         )
         self.addCleanup(self.store.close)
 
@@ -855,9 +950,17 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(fetch_one(self.path, "SELECT * FROM hr_discoveries"), task_before)
         self.assertEqual(fetch_one(self.path, "SELECT * FROM device_lease"), device_before)
         self.assertEqual(event_count(self.path), events_before)
+        finish_events = [
+            event
+            for event in _log_events(self.log.path)
+            if event["operation"] == "finish"
+        ]
+        self.assertEqual(finish_events[-1]["result"], "failed")
+        self.assertEqual(finish_events[-1]["reason_code"], "store_io_error")
+        self.assertEqual(finish_events[-1]["error_category"], "store")
 
     def test_unresolved_conversations_returns_only_active_sorted(self) -> None:
-        """只读查询返回 queued/leased/running/blocked 的去重会话键并排序。"""
+        """只读查询过滤终态/排序，并在线锁等待耗尽时安全报 store_busy。"""
         done_result, _ = self._seed(contact="合成联系人甲")
         done_lease = self._claim_and_start()
         self.store.finish(done_lease, self.clock.now(), "done", None, done_result)
@@ -873,14 +976,40 @@ class StoreTests(unittest.TestCase):
             done_conversation,
             running_conversation,
         )
-        self.assertEqual(
-            self.store.unresolved_conversations("boss"),
-            sorted([running_conversation, queued_conversation]),
-        )
+        expected = sorted([running_conversation, queued_conversation])
+        self.assertEqual(self.store.unresolved_conversations("boss"), expected)
         self.assertNotIn(done_conversation, self.store.unresolved_conversations("boss"))
         with self.assertRaises(StoreError) as context:
             self.store.unresolved_conversations("liepin")
         self.assertEqual(context.exception.reason_code, "invalid_input")
+
+        before = database_dump(self.path)
+        holder = sqlite3.connect(str(self.path))
+        holder.execute("BEGIN EXCLUSIVE")
+        try:
+            self.store._connection.execute("PRAGMA busy_timeout = 1")
+            with self.assertRaises(StoreError) as context:
+                self.store.unresolved_conversations("boss")
+            self.assertEqual(context.exception.reason_code, "store_busy")
+        finally:
+            holder.rollback()
+            holder.close()
+            self.store._connection.execute("PRAGMA busy_timeout = 5000")
+        self.assertEqual(self.store.unresolved_conversations("boss"), expected)
+        self.assertEqual(database_dump(self.path), before)
+        query_events = [
+            event
+            for event in _log_events(self.log.path)
+            if event["operation"] == "unresolved_conversations"
+        ]
+        self.assertTrue(
+            any(
+                event["result"] == "failed"
+                and event["reason_code"] == "store_busy"
+                for event in query_events
+            )
+        )
+        self.assertEqual(query_events[-1]["result"], "ok")
 
     def test_cross_app_and_bool_snapshot_values_are_rejected(self) -> None:
         """M1 不放宽 app=boss，也不让 bool 冒充整数计数。"""

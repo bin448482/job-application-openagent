@@ -13,7 +13,7 @@
 ## 三、期望结果
 
 `python -m app doctor --fixture tests/fixtures/doctor/ready.json` 必须退出 `0`，正常日志可用时 stderr 为空，输出
-`{"schema_version":1,"status":"ok","reason_code":null,"device_count":1,"selected_alias":"primary","unlocked":true,"foreground_app":"boss"}`，且不新增业务库。该命令只追加被忽略的 `data/logs/m0-process.jsonl`；日志写入失败时 stdout/退出码不变，stderr 仅出现固定 `m0_process_log_degraded` 标记。
+`{"schema_version":1,"status":"ok","reason_code":null,"device_count":1,"selected_alias":"primary","unlocked":true,"foreground_app":"boss"}`，且不新增业务库。该命令只创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl`；日志写入失败时 stdout/退出码不变，stderr 仅出现固定 `m0_process_log_degraded` 标记。
 
 ## 四、维护要求
 

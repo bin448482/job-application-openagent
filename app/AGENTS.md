@@ -13,7 +13,7 @@
 - `ports/`：能力端口与领域快照/租约类型；见 `ports/AGENTS.md`。
 - `usecases/`：单次用例的校验、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。
-- `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值。阶段已扩展到 `store`，仍复用唯一日志器。
+- `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值。阶段已扩展到 `store`，并以 `operation` 记录 init/open/upsert/claim/start/renew/finish/recover/query，仍复用唯一日志器。
 
 ## 三、依赖与边界
 

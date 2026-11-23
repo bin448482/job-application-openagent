@@ -191,7 +191,11 @@ class MigrationTests(unittest.TestCase):
         for operation in (
             lambda: initialize_database(path),
             lambda: connect_database(path),
-            lambda: SqliteStore(path, local_host=HOST_A),
+            lambda: SqliteStore(
+                path,
+                local_host=HOST_A,
+                process_log=ProcessLog(path=self._path("open-process.jsonl")),
+            ),
         ):
             with self.subTest(operation=operation):
                 with self.assertRaises(StoreError) as context:
@@ -497,3 +501,20 @@ class StoreCliTests(unittest.TestCase):
         self.assertEqual(store_events[-1]["result"], "failed")
         self.assertEqual(store_events[-1]["reason_code"], "invalid_input")
         self.assertEqual(store_events[-1]["error_category"], "store")
+
+        with patch("app.cli.main.initialize_database", side_effect=TypeError("mock")):
+            code, stdout, stderr = self._run(
+                "store", "init", "--db", "data/runtime/internal.sqlite3"
+            )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(
+            json.loads(stdout)["reason_code"], "store_io_error"
+        )
+        internal = [
+            event
+            for event in self._all_events()
+            if event["stage"] == "store" and event["result"] == "failed"
+        ][-1]
+        self.assertEqual(internal["operation"], "init")
+        self.assertIsNone(internal["reason_code"])
+        self.assertEqual(internal["error_category"], "internal")

@@ -311,12 +311,13 @@ def _run_store_init(log: ProcessLog, started: float, args: argparse.Namespace) -
     """解析项目内 --db 并幂等初始化或核验，最多输出一个安全 JSON。"""
     db_value = args.db if args.db is not None else DEFAULT_DB_PATH
     stage_started = time.perf_counter()
-    log.record(stage="store", result="started")
+    log.record(stage="store", operation="init", result="started")
     try:
         path = _resolve_project_path(db_value)
     except ValueError:
         log.record(
             stage="store",
+            operation="init",
             result="failed",
             reason_code="invalid_input",
             error_category="store",
@@ -330,6 +331,7 @@ def _run_store_init(log: ProcessLog, started: float, args: argparse.Namespace) -
     except StoreError as error:
         log.record(
             stage="store",
+            operation="init",
             result="failed",
             reason_code=error.reason_code,
             error_category="store",
@@ -346,9 +348,9 @@ def _run_store_init(log: ProcessLog, started: float, args: argparse.Namespace) -
     except Exception:
         log.record(
             stage="store",
+            operation="init",
             result="failed",
-            reason_code="store_io_error",
-            error_category="store",
+            error_category="internal",
             duration_ms=elapsed_ms(stage_started),
         )
         return _finalize_output(
@@ -356,6 +358,7 @@ def _run_store_init(log: ProcessLog, started: float, args: argparse.Namespace) -
         )
     log.record(
         stage="store",
+        operation="init",
         result="ok",
         duration_ms=elapsed_ms(stage_started),
     )
