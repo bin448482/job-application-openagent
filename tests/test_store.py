@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import io
 import json
 import sqlite3
 import tempfile
 import unittest
 import uuid
+from contextlib import redirect_stderr
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
 from app.adapters.sqlite import repo as repo_module
 from app.adapters.sqlite.repo import SqliteStore
+from app.adapters.sqlite.schema import initialize_database
 from app.adapters.sqlite.schema import initialize_database
 from app.domain.models import (
     Evidence,
@@ -31,6 +34,7 @@ from tests.m1_helpers import (
     HOST_B,
     OWNER_ID,
     OWNER_ID_2,
+    FakeClock,
     database_dump,
     event_count,
     fetch_all,
@@ -1171,3 +1175,130 @@ class WindowsStopCheckerTests(unittest.TestCase):
                     self.assertEqual(kernel32.CloseHandle.calls[0][0], high_handle)
                 else:
                     self.assertEqual(kernel32.CloseHandle.calls, [])
+
+class ProcessLogDegradationTests(unittest.TestCase):
+    """覆盖默认/注入日志降级的可观察出口与业务结果隔离。"""
+
+    def setUp(self) -> None:
+        """创建独立临时目录、v1 库与存储日志目录。"""
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.directory = Path(self._tmp.name)
+        self.path = self.directory / "runtime.sqlite3"
+        initialize_database(self.path)
+        self.clock = FakeClock()
+        self.owner = Owner(OWNER_ID, 4242, HOST_A)
+
+    def test_default_log_open_success_and_invalid_host_are_isolated(self) -> None:
+        """默认日志器每次运行独立文件，非法 host 走注入日志失败且不改库。"""
+        with patch("app.process_log.DEFAULT_LOG_DIR", self.directory):
+            store = SqliteStore(
+                self.path,
+                local_host=HOST_A,
+                monotonic=self.clock.monotonic,
+            )
+            self.addCleanup(store.close)
+            self.assertEqual(store.unresolved_conversations("boss"), [])
+            success_path = store.process_log.path
+            self.assertTrue(success_path.is_file())
+
+            second = SqliteStore(
+                self.path,
+                local_host=HOST_A,
+                monotonic=self.clock.monotonic,
+            )
+            self.addCleanup(second.close)
+            self.assertEqual(second.unresolved_conversations("boss"), [])
+            second_path = second.process_log.path
+            self.assertNotEqual(success_path, second_path)
+
+            before = database_dump(self.path)
+            invalid_log = ProcessLog(
+                path=self.directory / "injected-invalid.jsonl"
+            )
+            with self.assertRaises(StoreError) as context:
+                SqliteStore(
+                    self.path,
+                    local_host="invalid",
+                    process_log=invalid_log,
+                )
+            self.assertEqual(context.exception.reason_code, "invalid_input")
+            self.assertEqual(database_dump(self.path), before)
+        files = sorted(self.directory.glob("m0-process-*.jsonl"))
+        self.assertEqual(files, sorted([success_path, second_path]))
+        for path in files:
+            events = _log_events(path)
+            self.assertEqual(len({event["correlation_id"] for event in events}), 1)
+            self.assertEqual(
+                [event["operation"] for event in events],
+                [
+                    "open_store",
+                    "open_store",
+                    "unresolved_conversations",
+                    "unresolved_conversations",
+                ],
+            )
+        invalid_events = _log_events(invalid_log.path)
+        self.assertEqual(
+            [(event["operation"], event["result"]) for event in invalid_events],
+            [("open_store", "started"), ("open_store", "failed")],
+        )
+        self.assertEqual(invalid_events[-1]["reason_code"], "invalid_input")
+
+    def test_default_constructor_failure_emits_fixed_warning_once(self) -> None:
+        """默认日志写入失败且 host 非法时，无实例仍输出一次固定降级标记。"""
+        target = self.directory / "missing" / "new.sqlite3"
+        stderr = io.StringIO()
+        with patch("app.process_log.DEFAULT_LOG_DIR", self.directory), patch.object(
+            ProcessLog, "_append", side_effect=OSError("secret path")
+        ), redirect_stderr(stderr):
+            with self.assertRaises(StoreError) as context:
+                SqliteStore(target, local_host="invalid")
+        self.assertEqual(context.exception.reason_code, "invalid_input")
+        self.assertFalse(target.exists())
+        self.assertEqual(stderr.getvalue(), "m0_process_log_degraded\n")
+        self.assertNotIn("secret", stderr.getvalue())
+
+    def test_injected_degradation_keeps_business_and_warns_once(self) -> None:
+        """注入日志写入失败时 claim/start 业务成功且同运行只告警一次。"""
+        log = ProcessLog(path=self.directory / "injected.jsonl")
+        store = SqliteStore(
+            self.path,
+            local_host=HOST_A,
+            monotonic=self.clock.monotonic,
+            process_log=log,
+        )
+        self.addCleanup(store.close)
+        result = make_result(observed_at=self.clock.now())
+        store.upsert_snapshot(result)
+        stderr = io.StringIO()
+        with patch.object(log, "_append", side_effect=OSError("secret")), redirect_stderr(
+            stderr
+        ):
+            lease = store.claim("boss", "unread", self.owner, self.clock.now())
+            self.assertIsNotNone(lease)
+            store.start(lease, self.clock.now())
+        task = fetch_one(
+            self.path, "SELECT state FROM hr_discoveries WHERE \"key\" = ?", (lease.key,)
+        )
+        self.assertEqual(task["state"], "running")
+        self.assertTrue(log.degraded)
+        self.assertEqual(stderr.getvalue(), "m0_process_log_degraded\n")
+        for secret in (lease.key, lease.nonce, self.owner.id, HOST_A):
+            self.assertNotIn(secret, stderr.getvalue())
+
+    def test_broken_warning_outlet_does_not_mask_business(self) -> None:
+        """固定告警出口写入失败也不改变只读业务结果或抛出。"""
+        log = ProcessLog(path=self.directory / "broken.jsonl")
+        store = SqliteStore(
+            self.path,
+            local_host=HOST_A,
+            monotonic=self.clock.monotonic,
+            process_log=log,
+        )
+        self.addCleanup(store.close)
+        with patch.object(log, "_append", side_effect=OSError("secret")), patch(
+            "app.process_log.sys.stderr.write", side_effect=OSError("secret")
+        ):
+            self.assertEqual(store.unresolved_conversations("boss"), [])
+        self.assertTrue(log.degraded)

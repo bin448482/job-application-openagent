@@ -20,7 +20,7 @@
 7. fixture 模式不得实例化或调用 ADB 适配器，不得启动子进程；CLI 导入适配器模块本身必须零副作用。`store init` 只调用 SQLite 初始化/核验，不启动子进程、不调用网络。
 8. JSON 输出统一经过 `_finalize_output`：安全 `emit`、记录 `output` 成功/失败、再记录 `exit`；输出失败时安全退出 `2`、不打印 traceback，日志明确为 `output=failed`，不能假称 JSON 已输出。成功或业务停止正常时 stderr 为空；日志写入失败时 stdout/退出码不变，stderr 仅写固定 `m0_process_log_degraded`。`--help` 保持 argparse 直接输出并退出 `0`，只记录其 output/exit 路径，不伪造业务 JSON。其余失败退出 `2`，不使用退出 `1`。
 9. `store init` 成功只输出 `{"schema_version":1,"status":"ok","reason_code":null}`；失败原因取 `invalid_input/store_busy/store_io_error/db_version_unsupported/migration_failed` 等仓储词表，不新增业务成功字段。
-10. 过程日志阶段覆盖 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/output/exit`；store 调用先记 `started` 再记 `ok/failed`，`operation=init`，error_category 固定为 `store`；只写固定原因码/耗时，不写原值或数据库路径。每次运行由 `ProcessLog` 生成独立 UUID 文件，显式路径也只作命名基础；stdout 不包含 `correlation_id`。
+10. 过程日志阶段覆盖 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/output/exit`；store 调用先记 `started` 再记 `ok/failed`，`operation=init`，已知 `StoreError` 的失败事件使用固定仓储原因与 `error_category=store`，非预期异常只写失败事件 `reason_code=null`/`error_category=internal`；对应业务 stdout 仍为 `store_io_error` 和退出 `2`，最终 exit 的公共错误分类与失败事件分类分别记录、互不替代。只写固定原因码/耗时，不写原值或数据库路径。每次运行由 `ProcessLog` 生成独立 UUID 文件，显式路径也只作命名基础；日志降级时由唯一 `emit_degraded_warning` 写一次固定 stderr 标记，CLI 与仓储 API 不双报；stdout 不包含 `correlation_id`。
 
 ## 四、测试
 

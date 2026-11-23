@@ -263,18 +263,8 @@ def _finish(
         duration_ms=elapsed_ms(started),
         exit_code=exit_code,
     )
-    if getattr(log, "degraded", False):
-        _emit_log_degraded()
+    log.emit_degraded_warning()
     return exit_code
-
-
-def _emit_log_degraded() -> None:
-    """在不改变 stdout JSON 与退出码的前提下，提示本机日志不完整。"""
-    try:
-        sys.stderr.write("m0_process_log_degraded\n")
-        sys.stderr.flush()
-    except Exception:
-        return
 
 
 def _emit(payload: dict[str, object]) -> bool:

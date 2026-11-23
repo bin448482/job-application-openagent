@@ -54,23 +54,9 @@ from app.process_log import ProcessLog, elapsed_ms
 StopChecker = Callable[[int], str]
 FaultHook = Callable[[str, sqlite3.Connection], None]
 
-_DECORATED_OPERATIONS = frozenset(
-    {
-        "upsert_snapshot",
-        "claim",
-        "start",
-        "renew",
-        "finish",
-        "recover",
-        "unresolved_conversations",
-    }
-)
-
 
 def _store_operation(name: str):
     """把公开仓储方法包在唯一 started/ok/failed 操作日志边界内。"""
-    if name not in _DECORATED_OPERATIONS:
-        raise ValueError("store operation is invalid")
 
     def decorate(method: Callable[..., object]) -> Callable[..., object]:
         """返回保留原 docstring 与签名的包装方法。"""
@@ -575,33 +561,36 @@ class SqliteStore:
         started = time.perf_counter()
         self.process_log.record(stage="store", operation=name, result="started")
         try:
-            yield
-        except StoreError as error:
-            self.process_log.record(
-                stage="store",
-                operation=name,
-                result="failed",
-                reason_code=error.reason_code,
-                error_category="store",
-                duration_ms=elapsed_ms(started),
-            )
-            raise
-        except Exception:
-            self.process_log.record(
-                stage="store",
-                operation=name,
-                result="failed",
-                error_category="internal",
-                duration_ms=elapsed_ms(started),
-            )
-            raise
-        else:
-            self.process_log.record(
-                stage="store",
-                operation=name,
-                result="ok",
-                duration_ms=elapsed_ms(started),
-            )
+            try:
+                yield
+            except StoreError as error:
+                self.process_log.record(
+                    stage="store",
+                    operation=name,
+                    result="failed",
+                    reason_code=error.reason_code,
+                    error_category="store",
+                    duration_ms=elapsed_ms(started),
+                )
+                raise
+            except Exception:
+                self.process_log.record(
+                    stage="store",
+                    operation=name,
+                    result="failed",
+                    error_category="internal",
+                    duration_ms=elapsed_ms(started),
+                )
+                raise
+            else:
+                self.process_log.record(
+                    stage="store",
+                    operation=name,
+                    result="ok",
+                    duration_ms=elapsed_ms(started),
+                )
+        finally:
+            self.process_log.emit_degraded_warning()
 
     @contextmanager
     def _write(self) -> Iterator[None]:

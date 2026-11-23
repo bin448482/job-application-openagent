@@ -188,10 +188,10 @@ M1 的 ReadResult/Evidence 只由测试或后续 `sense` 构造；当前没有 C
 - `operation` 仅在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，其它阶段为 `null`；公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时，不记 PID/host/nonce/键/正文/SQL/异常。
 - `result` 固定为 `started/ok/failed`；`reason_code` 沿用计划词表，不新增业务原因；`error_category` 固定为 `argument/config/fixture/probe/business/store/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
 - `command` 只写 `adb_devices` 或 `adb_window`；每次命令先记 `started`，完成后再记 `ok` 或固定失败类别。
-- `store` 阶段先记 `started`，再记 `ok` 或带固定仓储原因与 `error_category=store` 的 `failed`；不写数据库路径。
+- `store` 阶段先记 `started`，再记 `ok` 或带固定仓储原因与 `error_category=store` 的 `failed`；非预期异常只把失败事件记为 `reason_code=null`/`error_category=internal`，业务 stdout 仍为 `store_io_error`/退出 `2`，最终 exit 分类与失败事件分类分别记录、互不替代。不写数据库路径。
 - `output` 只为 JSON 收尾：写出成功记 `ok`，写出失败记 `failed`（`error_category=internal`）并安全退出 `2`；不能据此假称 JSON 已输出。
 - 不写参数原值、serial、窗口原文、数据库路径、SQL 参数、异常消息、绝对路径或个人事实。
-- 日志是尽力而为的辅助产物：调用端忽略单次 `record` 的 `False`，写入失败时设置内部 `degraded` 标记；CLI 在出口向 stderr 写固定 `m0_process_log_degraded`，stdout JSON 与退出码不变，也不伪造成功行。没有日志行不等于命令成功；该标记表示该次日志不完整，不能声称磁盘失败时完整日志已保存。
+- 日志是尽力而为的辅助产物：调用端忽略单次 `record` 的 `False`，写入失败时设置内部 `degraded` 标记；唯一 `emit_degraded_warning` 每次运行最多向 stderr 写一次固定 `m0_process_log_degraded`，CLI 与仓储 API 共用、不双报，stdout JSON 与退出码不变，也不伪造成功行。告警出口自身失败也不改变业务结果。没有日志行不等于命令成功；该标记表示该次日志不完整，不能声称磁盘失败时完整日志已保存。
 
 复核方式（按修改时间取最近一次运行；每次运行只有一个完整文件）：
 

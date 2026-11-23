@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from pathlib import Path
 SCHEMA_VERSION = 1
 DEFAULT_LOG_DIR = Path(__file__).resolve().parents[1] / "data" / "logs"
 DEFAULT_LOG_NAME = "m0-process.jsonl"
+DEGRADED_MARKER = "m0_process_log_degraded"
 
 STAGES = frozenset(
     {
@@ -113,6 +115,7 @@ class ProcessLog:
         self.path = _run_log_path(path)
         self.degraded = False
         self._created = False
+        self._warning_emitted = False
 
     def record(
         self,
@@ -178,6 +181,18 @@ class ProcessLog:
             self._created = True
             handle.write(line)
             handle.flush()
+
+    def emit_degraded_warning(self) -> bool:
+        """日志已降级时向 stderr 写一次固定标记；写失败不抛出、不遮蔽业务结果。"""
+        if not self.degraded or self._warning_emitted:
+            return False
+        self._warning_emitted = True
+        try:
+            sys.stderr.write(DEGRADED_MARKER + "\n")
+            sys.stderr.flush()
+        except Exception:
+            return False
+        return True
 
 
 def _run_log_path(path: Path | None) -> Path:
