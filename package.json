@@ -1,0 +1,17 @@
+{
+  "name": "job-application-openagent-evals",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synthetic promptfoo regression cases for job-agent memory and authorization decisions.",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "test": "node --test evals/assertions.test.cjs",
+    "eval:smoke": "node evals/run.cjs smoke",
+    "eval:model": "node evals/run.cjs model"
+  },
+  "devDependencies": {
+    "promptfoo": "0.126.0"
+  }
+}

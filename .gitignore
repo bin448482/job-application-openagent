@@ -28,3 +28,5 @@ opencode.json
 !.env.example
 /docs/AI回复事实清单.md
 node_modules/
+# Local promptfoo state and exported evaluation evidence
+.promptfoo/

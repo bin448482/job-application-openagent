@@ -2,47 +2,66 @@
 
 ## 一、项目基本信息
 
-正式名称为 `job-application-openagent`，依据 `README.md` 与 `pyproject.toml` 的 `project.name`。项目根目录为本文件所在目录；本次工作位置为 `D:/0-development/works/job-application-openagent`，该绝对路径不是运行前提。
+正式名称为 `job-application-openagent`，依据 `README.md` 与 `pyproject.toml` 的 `project.name`。根目录为本指南所在目录，运行路径相对于项目根目录解析。
 
-项目用途是面向开源维护的 Android 求职助手，通过 ADB 支持手机端工作流。当前处于重新设计阶段：README 已明确旧业务源码、Skills 和离线测试已清理，仓库仅保留项目骨架。新业务范围、模块、CLI 入口、配置结构、安装与验证流程待设计，不根据旧实现补建目录或恢复代码。
+本项目面向开源维护的 Android 求职辅助工作流，目前处于重新设计阶段。旧业务源码、Skills 与业务测试已清理，不恢复旧实现或个人授权。当前已有独立的 promptfoo 合成黄金集，检查记忆与授权决策；业务 CLI、SQLite 运行时记忆、设备执行器和完整业务范围仍待设计。
 
-本仓库自身：项目元数据要求 Python >=3.13，`dependencies=[]`，`requirements.txt` 声明无第三方 Python 依赖；默认优先使用标准库。当前没有自有业务源代码、构建入口或测试脚本。本机 `.venv/` 可以保留，但不是已经完成安装或验证的证明。
+本仓库自身：业务项目要求 Python >=3.13，Python 依赖保持为空；评测开发工具另需 Node.js >=22.22.0、npm 和固定版本 promptfoo 0.126.0。评测使用 CommonJS、Node 内置测试和 JSON 配置，npm 依赖通过 package-lock.json 锁定。引入 promptfoo 是当前明确的评测需求，不改变 Python 标准库优先约束。
 
-文档所描述的消费方：README 约定未来真机功能需要 Android SDK Platform-Tools 中的 `adb`、Android USB 调试和使用者确认；离线测试不得连接设备。目前没有可执行的手机工作流或 Skill，不推定具体宿主、手机型号、包名、发送策略和已获授权。
+文档所描述的消费方：评测可接受 promptfoo provider ID 连接模型或自定义端点，认证由使用者按 provider 类型配置，不提供默认真实模型。README 约定未来设备功能需要 Android SDK Platform-Tools 的 adb、USB 调试及使用者确认；当前没有业务 Skill 或设备工作流，不推定宿主、机型、包名或发送授权。
 
-主要入口与文档关系：`README.md` 可独立阅读，用于了解当前范围与环境；本指南是项目事实、全局工作规则、根索引与验证状态的入口；每个目录的 `CLAUDE.md` 仅通过 `@AGENTS.md` 引用同目录指南，不能独立承载另一套规则。`.agents/` 与 `.claude/` 仅为工作流入口占位，内容待设计。`pyproject.toml` 是元数据，不是已实现的 CLI 或发行包。
+主要入口与模块关系：README 提供使用概览；package.json 的 npm scripts 调用 evals 的断言测试或评测入口，promptfooconfig.json 加载提示词、24 个案例和 JavaScript 断言。smoke 仅回放参考输出，model 才使用显式 provider；case metadata 不渲染进模型提示词。评测产物仅保存到 data/evals。pyproject.toml 为业务元数据，不是已实现的 CLI 或发行包。每个目录的 CLAUDE.md 仅引用同目录 AGENTS.md，全局规则只在根指南保存。
 
 项目特有约束与已知限制：
 
-- 默认用标准库，仅在真实需要时添加依赖。源代码文件顶部说明用途，函数和方法写 docstring；修改模块时同步目录指南。本次仅初始化指导文档，不补建业务代码或测试。
-- 源码在当前独立项目内维护，不依赖原项目的虚拟环境、数据库或仓库外业务规则母本。旧业务与 Skills 已按 README 清理，本次不恢复，不进行个人策略通用化改造。
-- 不扩展自动发送授权，不继承旧个人工作地点、简历事实或联系方式授权；未来工作流须根据当前使用者已确认的范围设计。
-- 数据库、日志、契约、截图、凭据和个人事实只在本机保存。不得读取或记录密钥、令牌、密码等敏感值；本次不读取本机 `config.json` 的内容。
-- 操作手机前说明具体动作、预计占用时长和是否独占，获得使用者本轮确认。未确认不得连接设备或运行任何 ADB 命令；离线测试不连接设备。
-- `config.example.json` 当前实际内容为 `{}`，正式 schema、字段、默认值、配置读取路径及覆盖规则待设计；不能沿用旧批次大小、每日上限或 HR 间隔。根目录 `config.json` 是被 Git 忽略的本机文件，不作为示例或授权来源。
-- `.gitignore` 排除 `.venv/`、Python 缓存/构建产物、`config.json`、环境文件、数据库、日志、锁、设备证据与私有事实；`data/` 和 `screenshots/` 仅为双指导文档保留提交例外。`opencode.json`、`.env`、`.env.*`、`docs/AI回复事实清单.md` 等只是忽略约定，不表示文件当前存在或已配置相应运行环境。
-- Skills 后续变更须保持 `skills/`、`.agents/skills/`、`.claude/skills/` 语义一致；当前三处均不存在，按规则不创建空目录。
-- 全局规则原文母本为用户本次指定的 `D:/0-development/projects/global_prompts/项目初始化提示词.md` 规则区。修改规则须同时更新母本及所有已生成项目的对应规则区；这项文档同步关系不构成业务运行时依赖。全局规则只在根指南保存，子目录只索引和补充本目录约束。
+- 默认使用标准库，仅在真实需要时添加依赖；评测依赖按 npm 开发依赖管理。源代码顶部说明用途，函数和方法写 docstring/JSDoc；修改模块时同步目录指南。
+- 源码、环境与数据库只依赖当前独立项目，不依赖原项目虚拟环境、数据库或仓库外业务规则母本；当前不进行旧个人策略通用化，不恢复已清理业务代码与 Skills。
+- 不扩展真实自动发送授权，不继承旧工作地点、简历事实或联系方式授权。黄金集中的城市、薪资、记忆、授权与 HR 消息均为合成输入；can_send=true 只是拟执行测试决策，不触发真实发送、记忆写入或手机动作。
+- 数据库、日志、契约、截图、凭据和个人事实只在本机保存。不读取或记录密钥、令牌、密码等敏感值；不读取根 config.json 或私人事实来填充测试集。新增故障案例须先脱敏并确定独立判据，不直接把模型输出当正确答案。
+- 操作手机前说明具体动作、预计占用时长和是否独占，并取得本轮确认；未确认不得连接设备或运行 ADB。npm 自检和黄金集评测均不操作设备。
+- config.example.json 当前为 `{}`，业务 schema、字段和默认值仍待设计。config.json 是被忽略的本机文件，不作为示例或授权来源，不沿用旧批次大小、每日额度或 HR 间隔。
+- promptfooconfig.json 的默认 provider 为 echo 占位，sharing=false、并发上限 1；通过 `npm run eval:smoke` 才回放参考 provider。`npm run eval:model -- "<provider-id>"` 必须指定 provider，拒绝 echo 和内置参考 provider；真实评测将合成输入发往所选服务，认证与计费按该 provider 配置。
+- evals/run.cjs 设置 PROMPTFOO_DISABLE_TELEMETRY=1、PROMPTFOO_DISABLE_UPDATE=1，配置 PROMPTFOO_CONFIG_DIR 为本项目 data/evals/promptfoo、PROMPTFOO_CACHE_PATH 为 data/evals/cache；通过 --no-share、--no-cache、--no-write 关闭分享、缓存和评测数据库保存。逐次 results.json 写入 data/evals/smoke-UUID 或 model-UUID。直接使用裸 promptfoo 命令不会自动继承本入口的环境设置。
+- 黄金集当前只评测给定记忆的单次决策，未验证 SQLite 持久化、跨会话检索或动作执行。自由文本只做关键词约束，不证明全部语义正确；smoke 的参考回放通过率不代表真实模型能力。
+- .gitignore 排除 .venv、node_modules、.promptfoo、Python 缓存/构建产物、本机配置、凭据、数据库/日志/锁和设备证据；data 与 screenshots 仅为指导文档保留提交例外。opencode.json、环境文件和旧私有事实路径只是忽略约定，不表示这些文件存在或服务已配置。
+- Skills 后续变更须保持 skills/、.agents/skills/、.claude/skills/ 语义一致，当前均不存在，按规则不创建空目录。
+- 全局规则原文唯一母本为使用者提供的《项目初始化提示词.md》规则区。母本位于仓库外，实际位置由使用者在本机提供，公开文档不记录其绝对路径。改规则须同步母本和所有已生成项目的对应内容；该文档同步关系不构成业务运行时依赖。
+
+### 开源项目敏感信息告知
+
+本项目面向公开开源。开发、排查、编写文档、构造测试或准备提交时，发现实际或疑似敏感信息，必须主动在当前对话中告知使用者，不能只依赖忽略规则或静默跳过。
+
+- 告知范围包括密钥、令牌、密码、Cookie、认证请求头、带凭据的 URL；真实姓名、联系方式、简历、身份信息、薪资和个人偏好；HR/公司与聊天内容的关联；数据库、契约、日志、截图、UI 层级及评测报告中的真实业务数据。
+- 本机用户名、绝对路径、内网地址、私有服务地址、设备序列号和私有仓库信息也按可能暴露环境或身份的信息处理。公开示例优先使用相对路径、占位符和合成值，不把测试中的合成事实当作使用者事实。
+- 通知只说明文件位置（必要时行号）、信息类别、可能的暴露途径和建议处理方式，不在对话、差异摘要、提交说明或报告中复述敏感原值。疑似凭据无需读取完整值即可通知，也不为检查而主动打开无关的本机私密配置。
+- 能在当前任务范围内安全处理时，使用脱敏或合成内容替换公开材料，将真实数据留在被忽略的本机文件，并告知处理结果；不能确定公开范围或替换含义时，先告知并请使用者明确。只暂停涉及该信息的提交或外发步骤，其他独立工作可继续。
+- 提交、推送、发布、上传附件或调用外部模型/服务前，核对实际待提交或待发送的内容；`.gitignore` 不代表已跟踪文件或 Git 历史已脱敏。未处理的凭据不进入仓库或外部请求；未经明确公开授权的个人或真实业务信息不公开，评测继续只用合成数据。
+- 若发现敏感信息已经进入提交、历史或外部服务，立即告知暴露位置与已知范围；不得声称删除工作区文件就已消除历史暴露，也不擅自重写 Git 历史或操作账户凭据。需要使用者处理的撤销、更换或历史清理事项应明确列出。
 
 ## 二、根目录索引
 
-- `README.md`：项目重新设计状态、已清理范围、当前骨架、Python/ADB 前提和本机数据边界；安装、入口及验证待设计，不能当作已有业务使用指南。
+- `README.md`：当前范围、业务和评测环境、npm 安装/自检/模型评测命令、数据边界与未实现部分；可独立阅读的使用概览，不是全局规则母本。
 - `LICENSE`：MIT 许可证，2026 年项目贡献者署名。
-- `pyproject.toml`：正式名称、版本 0.1.0、项目用途、Python >=3.13、MIT 与空依赖声明；注释明确入口待重新设计。
-- `requirements.txt`：标准库与无第三方依赖声明，提及离线测试不代表当前存在测试目录或测试命令。
-- `config.example.json`：可提交的空对象示例，正式配置结构待设计，无已确认业务字段或默认值。
-- `config.json`：当前存在的本机配置，被 Git 忽略；README 允许自行保留或删除，本次保留且不读取内容。
-- `.gitignore`：本机环境、缓存、构建产物、设备数据、凭据和私有事实的忽略约定；为 data/screenshots 目录指南保留例外。
-- `.agents/`：Codex 工作流入口占位，当前仅有双指导文档，Skills 待设计。
-- `.claude/`：Claude 工作流入口占位，当前仅有双指导文档，Skills 待设计。
-- `data/`：本机运行产物预留位置，当前只含目录指南；不推定数据库文件、表结构或自动生成目录。
-- `screenshots/`：本机设备截图预留位置，当前只含目录指南；截图和设备证据不提交 Git。
-- `AGENTS.md`：本项目事实、完整根索引、母本规则原文及命令状态；README 提供概览，本文件集中维护全局规则，子目录指南引用本文件。
-- `CLAUDE.md`：仅含 `@AGENTS.md`，引用本指南。
-- `.git/`：当前存在，版本控制元数据，排除指导文档覆盖。
-- `.venv/`：当前存在，本机虚拟环境，排除指导文档覆盖且不提交；其内部文件不属于项目自有模块。
+- `pyproject.toml`：正式名称、版本 0.1.0、Python >=3.13、MIT 与空 Python 依赖；业务入口待设计。
+- `requirements.txt`：Python 标准库及无第三方依赖声明，不代表旧业务测试仍存在。
+- `package.json`：评测工具元数据、Node 版本要求、固定 promptfoo 开发依赖和 npm test/eval:smoke/eval:model 入口。
+- `package-lock.json`：npm 依赖完整锁文件，使用 npm ci 重现安装；依赖更新时同步维护。
+- `promptfooconfig.json`：根评测配置，引用 evals 提示词、案例和断言；echo 为占位，不当作真实模型，默认关闭分享、并发 1。
+- `evals/`：24 个合成黄金案例、单次决策提示词、断言、正反例自检、参考 provider 及 smoke/model 运行入口。
+- `config.example.json`：空对象业务配置示例，正式 schema 待设计。
+- `config.json`：当前存在、被忽略的本机配置，保留且不读取内容；不是评测配置。
+- `.gitignore`：依赖、缓存、运行产物、个人事实及凭据忽略约定，包含 data/screenshots 指导文档例外。
+- `.agents/`：Codex 工作流入口占位，当前只有双指导文档，Skills 待设计。
+- `.claude/`：Claude 工作流入口占位，当前只有双指导文档，Skills 待设计。
+- `data/`：本机产物目录，含自动生成的 evals 结果/状态子目录；运行产物排除文档覆盖且不提交 Git。
+- `screenshots/`：本机截图预留位置，当前只含双指导文档，截图不提交 Git。
+- `AGENTS.md`：项目事实、完整索引、母本规则原文及命令状态；子目录指南引用本文件。
+- `CLAUDE.md`：仅含 `@AGENTS.md`，必须与同目录指南配合使用，不能另存一套规则。
+- `.git/`：Git 元数据，排除指导文档覆盖。
+- `.venv/`：本机 Python 虚拟环境，被忽略且排除指导文档覆盖。
+- `node_modules/`：npm 自动安装的第三方评测依赖，被忽略且排除指导文档覆盖。
 
-`scripts/`、`tests/`、`docs/`、`skills/`、`.agents/skills/`、`.claude/skills/` 当前不存在，按规则不创建；旧索引及 `scripts/main.py`、unittest 的旧验证约定不适用于当前骨架。忽略规则提及的 `node_modules/`、`build/`、`dist/`、`.test-artifacts/`、`test-evidence/` 当前不存在，按规则不创建；将来产生的第三方依赖、缓存与自动生成产物也不添加指导文档。
+`scripts/`、`tests/`、`docs/`、`skills/`、`.agents/skills/`、`.claude/skills/` 当前不存在，按规则不创建；Node 回归测试实际放在 evals。旧 scripts/main.py 与业务 unittest 约定不适用当前仓库。`.promptfoo/`、`build/`、`dist/`、`.test-artifacts/`、`test-evidence/` 当前不存在，按规则不创建；未来产生的依赖、缓存和自动生成产物也不补指导文档。
 
 ## 三、全局工作规则与编码规范
 
@@ -157,10 +176,19 @@ function normalizeQuote(raw: QuoteRecord): NormalizedQuote {
 
 ## 四、命令与验证
 
-未发现已配置命令。README 明确在设计文档确定后再补充安装、入口和验证说明；当前没有业务脚本、测试目录、构建工具或 lint 配置，不能执行旧 `python scripts/main.py --help` 或旧 `python -m unittest discover -s tests -q` 并据此声称通过。
+以下均在项目根执行。评测需 Node.js >=22.22.0 与 npm，依赖以 package-lock.json 为准：
 
-本次初始化只做文档校验，不安装依赖、不启动服务、不读取本机配置、不连接手机。校验使用本机现有解释器与 PowerShell，从项目根目录执行；这是一轮文档维护检查，不作为项目已配置的测试体系。
+```powershell
+npm ci
+npm test
+npm run eval:smoke
+npm run eval:model -- "<provider-id>"
+```
 
-一次性校验依据为用户指定初始化提示词的“逐字校验”脚本，实际路径调整为该提示词路径和根 `AGENTS.md`。校验两个独占行规则标记各一次、8 个小节齐全且顺序一致、逐字原文以及 Python/TypeScript 各 2 个示例。另逐目录核对双指导文件、精确大小写、CLAUDE 单行引用、根及直接子项索引与排除依据。实际执行结果在本次任务报告中说明；不把未执行的环境或设备检查写成已验证。
+npm ci 安装锁定依赖；npm test 运行 Node 内置正反例检查，无需安装 promptfoo；smoke 需先安装依赖，仅回放合成参考答案，不请求模型。model 必须指定真实 provider 并按其类型配置认证，可能产生调用费用；本次未选择或调用实际模型。没有业务 Python CLI、业务测试或独立构建/lint 命令，不执行旧 scripts/main.py/unittest 命令。
 
-后续设计需要补充：业务范围与授权模型、代码和测试布局、真实入口及接口、配置 schema/默认值、安装/运行/验证命令、设备适配范围。确定后同步维护受影响指南，不因待确定信息提前创建模块目录。
+本次已执行 npm install --no-fund --no-audit 生成锁文件并安装评测依赖；npm test 的 52 项检查通过，npm run eval:smoke 的 24 个案例回放通过。它们只验证判据及评测链路，不代表真实模型、运行时记忆或设备验证。新增修改后须运行受影响检查，不能沿用该记录当作新版本验证。
+
+文档维护的一次性校验仍按初始化提示词：比较母本规则区两个标记与全文、8 小节顺序、Python/TypeScript 各 2 个示例，并检查自有目录的双指南、精确大小写、引用与直接子项索引；排除 Git、虚拟环境、node_modules 和 data/evals 等自动生成产物。此类校验不是业务测试。
+
+后续设计仍需补充业务范围与授权模型、运行时记忆和存储接口、业务配置 schema、设备适配及真实业务验证。确定后同步更新各受影响指南。

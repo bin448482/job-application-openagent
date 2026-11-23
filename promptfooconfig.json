@@ -1,0 +1,18 @@
+{
+  "description": "Synthetic memory and authorization golden set. Echo is an offline placeholder; use npm run eval:model with an explicit provider for model evaluation.",
+  "prompts": ["file://evals/decision-prompt.txt"],
+  "providers": ["echo"],
+  "tests": "file://evals/cases.json",
+  "defaultTest": {
+    "assert": [
+      {
+        "type": "javascript",
+        "value": "file://evals/assertions.cjs"
+      }
+    ]
+  },
+  "sharing": false,
+  "evaluateOptions": {
+    "maxConcurrency": 1
+  }
+}
