@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from app.adapters.boss.list import (
@@ -754,6 +755,54 @@ class SensorParseTests(unittest.TestCase):
             loaded = load_and_parse_snapshot(manifest, SNAPSHOT_ID)
         self.assertEqual(loaded.status, "failed")
         self.assertEqual(loaded.reason_code, "invalid_fixture")
+
+    def test_badge_region_huge_integer_fails_without_overflow(self) -> None:
+        """超大整数区域在范围检查前被安全拒绝，不得逃逸 OverflowError。"""
+        profile = base_profile()
+        profile["badge_region"] = [0, 0, 10**400, 1]
+        result = self._parse(positive_xml(), profile=profile)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.reason_code, "invalid_fixture")
+        self.assertIsNone(result.value)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = make_fixture(
+                Path(tmp), "huge-region", [positive_xml()], profile=profile
+            )
+            loaded = load_and_parse_snapshot(manifest, SNAPSHOT_ID)
+        self.assertEqual(loaded.status, "failed")
+        self.assertEqual(loaded.reason_code, "invalid_fixture")
+        self.assertIsNone(loaded.value)
+
+    def test_merge_rejects_null_snapshot_identity_but_keeps_failed_pages(self) -> None:
+        """同次采集的成功页必须为规范 UUID；M1 失败页的 null 身份保持原契约。"""
+        page = self._parse(positive_xml())
+        self.assertEqual(page.status, "ok")
+        null_page = replace(page, snapshot_id=None)
+        merged = self._merged([null_page])
+        self.assertEqual(merged.status, "failed")
+        self.assertEqual(merged.reason_code, "invalid_fixture")
+        self.assertIsNone(merged.snapshot_id)
+        self.assertIsNone(merged.value)
+
+        failed_page = parse_snapshot(
+            "<hierarchy>", base_profile(), [], BASE_TIME, SNAPSHOT_ID
+        )
+        self.assertEqual(failed_page.status, "failed")
+        failed_without_id = replace(failed_page, snapshot_id=None)
+        returned = self._merged([failed_without_id])
+        self.assertEqual(returned.status, "failed")
+        self.assertEqual(returned.reason_code, "invalid_xml")
+        self.assertIsNone(returned.snapshot_id)
+        self.assertIsNone(returned.value)
+
+    def test_invalid_unicode_xml_is_invalid_xml(self) -> None:
+        """含孤立代理字符的 XML 在解析边界映射为 invalid_xml，而非 invalid_fixture。"""
+        broken = positive_xml().replace("合成预览正文", "\ud800")
+        result = self._parse(broken)
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.reason_code, "invalid_xml")
+        self.assertIsNone(result.value)
 
     def test_badge_region_bounds_and_ambiguity(self) -> None:
         """空区域、非法行 bounds、多个整数节点与区域外数字按固定原因处理。"""

@@ -114,14 +114,14 @@ python -m app sense --fixture tests/fixtures/sensor/positive.json --db data/runt
 规则：
 
 - 必须提供 `--fixture <项目内相对文件>`，不接受 `--device`/`--serial`；`--db` 省略为 `data/runtime/runtime.sqlite3`，只接受项目内相对路径。
-- manifest 固定 `{profile_path,xml_paths,app_version,observed_at,baseline_rows,coverage_proof}`；profile 固定 M2 最小字段。所有键必填、拒绝额外键；路径相对 manifest 目录，且必须是同一夹具目录内现有文件，拒绝绝对路径、`..`、符号链接/junction 与越界。
-- 一个 manifest 的 `xml_paths` 去重且非空；`coverage_proof.kind=viewport` 时只能一页。多页共用同一个 `snapshot_id` 与 `observed_at`。`baseline_rows` 的会话键必须带 `boss:conv:` 前缀，`preview_hash` 为 SHA-256 小写十六进制摘要或 `null`，`time_hint` 为字符串或 `null`；非法摘要、重复键或额外键均 `invalid_fixture`，不得把无比较基线当作未变化。
-- XML 用标准库 ElementTree，只接受唯一 `hierarchy` 根，根内只允许 `node` 元素（嵌套 `hierarchy` 也拒绝）；`DOCTYPE`/`ENTITY`、损坏 XML、其它元素为 `failed/invalid_xml`。唯一列表缺失为 `failed/wrong_page`，多列表或嵌套行为 `undetermined/incomplete_snapshot`。
+- manifest 固定 `{profile_path,xml_paths,app_version,observed_at,baseline_rows,coverage_proof}`；profile 固定 M2 最小字段。所有键必填、拒绝额外键；路径相对 manifest 目录，且必须是同一夹具目录内现有文件，拒绝绝对路径、`..`、符号链接/junction 与越界。`badge_region` 元素先按类型与 0–1 范围校验，再对浮点判有限性；巨大整数不得溢出，非法区域为 `invalid_fixture`。
+- 一个 manifest 的 `xml_paths` 去重且非空；`coverage_proof.kind=viewport` 时只能一页。多页共用同一个规范 UUID `snapshot_id` 与 `observed_at`。`baseline_rows` 的会话键必须带 `boss:conv:` 前缀，`preview_hash` 为 SHA-256 小写十六进制摘要或 `null`，`time_hint` 为字符串或 `null`；非法摘要、重复键或额外键均 `invalid_fixture`，不得把无比较基线当作未变化。
+- XML 用标准库 ElementTree，只接受唯一 `hierarchy` 根，根内只允许 `node` 元素（嵌套 `hierarchy` 也拒绝）；`DOCTYPE`/`ENTITY`、损坏 XML、非法 Unicode/编码、其它元素为 `failed/invalid_xml`；夹具 XML 文件 UTF-8 解码失败也映射 `invalid_xml`。唯一列表缺失为 `failed/wrong_page`，多列表或嵌套行为 `undetermined/incomplete_snapshot`。
 - 行身份只接受行内唯一节点的原样非空文本；`identity_hash=H([姓名,公司,职位])`，会话键为 `boss:conv:<identity_hash>`。身份缺失或重复不产生候选。
 - 行角标只认完全落在 profile 比例区域内的 `android.widget.TextView` 唯一 ASCII 十进制整数；行字段（正文/时间）节点不参与角标识别。null 区域或非法 bounds 为 `uncalibrated_region`，多个整数节点为 `ambiguous_signal`，无节点为 `missing_signal`。
 - 新招呼与底部 tab 只按标签精确文本与直接父容器唯一计数节点解析；正值 present，`0+` 为歧义；未验证语义的新招呼 0 与未验证的 tab 0 为 `unverified_semantics`。`not_applicable_sources` 只能由已验证合成 profile 声明，全部不适用仍为 unknown。
 - 单页 coverage 恒为 `viewport`；只有完整遍历首尾证明均真或已标定全局零信号可声明 `all`。全局零只提供 coverage，不把未完整遍历的行角标或缺基线预览改为 absent。
-- 分页只合并相邻页连续、整行字段完全一致的最长重叠段；其它重复身份保留 `identity_hash` 但会话键为 `null`。合并后重算四源信号、指纹与候选，不按页拼接。
+- 分页只合并相邻页连续、整行字段完全一致的最长重叠段；其它重复身份保留 `identity_hash` 但会话键为 `null`。合并后重算四源信号、指纹与候选，不按页拼接。成功页必须共享同一规范 UUID `snapshot_id`；多个 `null` 成功页不是同次采集，返回 `failed/invalid_fixture`。M1 已失败/未决页面的 `snapshot_id=null` 契约不变。
 - `observed_at` 距 `now` 不在 0–5 秒或早于 `now`（未来快照）为 `undetermined/stale_snapshot`；`calibrated=false` 或 `app_version` 不等于 `profile.version` 为 `undetermined/uncalibrated_profile`。失败/未决时 `result.value=null`、不写库。
 - 只有输入全部有效且合并 `status=ok` 后才初始化/打开 `--db`；先 `upsert_snapshot`，再查询 `unresolved_conversations`，调用领域 `aggregate_unread`，最后按顺序得出 `stop_reason`。
 - `stop_reason=null` 退出 `0`；`unread_unverified` 或 `needs_targeted_verification` 退出 `2`。读取本身失败/未决时 `stop_reason=result.reason_code` 并退出 `2`，不写库。仓储错误只输出三键安全对象，不伪造成功的 ReadResult。

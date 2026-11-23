@@ -474,6 +474,22 @@ class SenseStoreTests(unittest.TestCase):
                 }
             ],
         )
+        huge_profile = base_profile()
+        huge_profile["badge_region"] = [0, 0, 10**400, 1]
+        huge_region = make_fixture(
+            directory / "huge-region",
+            "manifest",
+            [positive_xml()],
+            profile=huge_profile,
+        )
+        bad_unicode = make_fixture(
+            directory / "bad-unicode",
+            "manifest",
+            [positive_xml()],
+        )
+        (directory / "bad-unicode" / "manifest-0.xml").write_bytes(
+            b"\xff\xfe\x00\x00"
+        )
 
         cases = {
             "broken": (broken, "failed", "invalid_xml", "invalid_xml"),
@@ -489,6 +505,18 @@ class SenseStoreTests(unittest.TestCase):
                 "failed",
                 "invalid_fixture",
                 "invalid_fixture",
+            ),
+            "huge-region": (
+                huge_region,
+                "failed",
+                "invalid_fixture",
+                "invalid_fixture",
+            ),
+            "bad-unicode": (
+                bad_unicode,
+                "failed",
+                "invalid_xml",
+                "invalid_xml",
             ),
         }
         for name, (manifest, status, reason, stop_reason) in cases.items():

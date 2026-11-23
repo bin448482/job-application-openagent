@@ -86,6 +86,10 @@ class _XmlError(Exception):
     """表示受控 XML 形状错误，由调用方映射为 invalid_xml。"""
 
 
+class _FixtureXmlError(ValueError):
+    """表示夹具 XML 文件编码损坏，用于与 manifest/IO 错误区分。"""
+
+
 @dataclass(frozen=True)
 class SenseFixture:
     """保存已校验的合成夹具内容，供解析与合并阶段复用。"""
@@ -132,10 +136,7 @@ def load_sense_fixture(manifest_path: Path) -> SenseFixture:
     ]
     xml_texts: list[str] = []
     for path in xml_files:
-        try:
-            xml_texts.append(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError):
-            raise ValueError("xml file is unreadable") from None
+        xml_texts.append(_read_xml_text(path))
 
     return SenseFixture(
         profile=profile,
@@ -155,6 +156,8 @@ def load_and_parse_snapshot(
         raise ValueError("snapshot id is invalid")
     try:
         fixture = load_sense_fixture(fixture_path)
+    except _FixtureXmlError:
+        return _failed("invalid_xml", snapshot_id, EPOCH)
     except (OSError, UnicodeError, ValueError):
         return _failed("invalid_fixture", snapshot_id, EPOCH)
     profile = fixture.profile
@@ -324,6 +327,8 @@ def merge_snapshots(
     snapshot_id = first.snapshot_id
     observed_at = first.observed_at
     profile_id = str(profile["profile_id"])
+    if not is_uuid(snapshot_id):
+        return _failed("invalid_fixture", None, observed_at)
     for page in pages:
         if (
             page.snapshot_id != snapshot_id
@@ -437,12 +442,13 @@ def validate_profile(profile: object) -> None:
         if not isinstance(region, list) or len(region) != 4:
             raise ValueError("badge region is invalid")
         for value in region:
-            if (
-                type(value) not in (int, float)
-                or not math.isfinite(value)
-                or value < 0
-                or value > 1
-            ):
+            if type(value) is int:
+                if value < 0 or value > 1:
+                    raise ValueError("badge region is invalid")
+            elif type(value) is float:
+                if not math.isfinite(value) or value < 0 or value > 1:
+                    raise ValueError("badge region is invalid")
+            else:
                 raise ValueError("badge region is invalid")
         if region[0] >= region[2] or region[1] >= region[3]:
             raise ValueError("badge region is invalid")
@@ -526,13 +532,17 @@ def _validate_page(page: ReadResult) -> None:
 
 
 def _parse_xml_root(xml_text: str) -> ElementTree.Element:
-    """拒绝 DTD/ENTITY、非 hierarchy 根和非 node 元素后解析 XML。"""
+    """拒绝损坏 Unicode、DTD/ENTITY、非 hierarchy 根和非 node 元素后解析 XML。"""
+    try:
+        xml_text.encode("utf-8")
+    except UnicodeError:
+        raise _XmlError from None
     upper = xml_text.upper()
     if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
         raise _XmlError
     try:
         root = ElementTree.fromstring(xml_text)
-    except ElementTree.ParseError:
+    except (ElementTree.ParseError, UnicodeError, ValueError):
         raise _XmlError from None
     if root.tag != "hierarchy":
         raise _XmlError
@@ -1009,6 +1019,18 @@ def _rid_matches(node: ElementTree.Element, suffix: str) -> bool:
 def _suffix(profile: dict, name: str) -> str:
     """返回列表或行的资源 ID 后缀。"""
     return str(profile["list_id_suffix"] if name == "list" else profile["row_id_suffix"])
+
+
+def _read_xml_text(path: Path) -> str:
+    """以严格 UTF-8 读取 XML；编码损坏映射为 invalid_xml 专用错误。"""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        raise ValueError("xml file is unreadable") from None
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise _FixtureXmlError("xml encoding is invalid") from None
 
 
 def _read_json_file(path: Path) -> object:

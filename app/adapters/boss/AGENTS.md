@@ -11,13 +11,13 @@
 
 ## 三、行为契约
 
-1. manifest 固定 `{profile_path,xml_paths,app_version,observed_at,baseline_rows,coverage_proof}`；profile 固定 M2 最小键。所有键必填、拒绝额外键；路径相对 manifest 目录且必须位于该夹具目录内，拒绝绝对路径、`..`、符号链接/junction 与缺失文件。
-2. XML 用标准库 ElementTree，只接受唯一 `hierarchy` 根，根内只允许 `node` 元素（嵌套 `hierarchy` 也拒绝）；`DOCTYPE`/`ENTITY`、损坏 XML、其它元素均为 `failed/invalid_xml`。唯一列表缺失为 `failed/wrong_page`，多列表或嵌套行为 `undetermined/incomplete_snapshot`。
+1. manifest 固定 `{profile_path,xml_paths,app_version,observed_at,baseline_rows,coverage_proof}`；profile 固定 M2 最小键。所有键必填、拒绝额外键；路径相对 manifest 目录且必须位于该夹具目录内，拒绝绝对路径、`..`、符号链接/junction 与缺失文件。`badge_region` 元素先按类型与 0–1 范围检查，再对浮点判有限性；巨大整数不得在 `math.isfinite` 前溢出，非法区域一律 `invalid_fixture`。
+2. XML 用标准库 ElementTree，只接受唯一 `hierarchy` 根，根内只允许 `node` 元素（嵌套 `hierarchy` 也拒绝）；`DOCTYPE`/`ENTITY`、损坏 XML、`UnicodeError`/非法编码、其它元素均为 `failed/invalid_xml`。夹具 XML 文件 UTF-8 解码失败也映射 `invalid_xml`，manifest/profile/文件 IO 错误才是 `invalid_fixture`。唯一列表缺失为 `failed/wrong_page`，多列表或嵌套行为 `undetermined/incomplete_snapshot`。
 3. 行字段只接受行内唯一节点的原样非空 `text`；缺字段或重复节点使对应字段未知。`identity_hash=H([姓名,公司,职位])`，只有全局唯一身份才重建 `app:conv:` 会话键；缺失或重复身份不产生候选。
 4. 区域内角标只认完全落在行矩形比例区域内的 `android.widget.TextView` 唯一 ASCII 十进制整数；行字段节点不参与角标识别。null 区域/非法 bounds 为 `uncalibrated_region`，多个整数节点为 `ambiguous_signal`，无匹配节点为 `missing_signal`。
 5. 新招呼与底部 tab 只按标签精确文本与直接父容器唯一计数节点解析；正值 present，`0+` 歧义，未验证语义的 0 为 unknown。`not_applicable_sources` 只由已验证版本 profile 声明，全部不适用仍为 unknown。
 6. 单页 coverage 恒为 `viewport`；只有完整遍历首尾证明均真或已标定全局零信号可声明 `all`。全局零只提供 coverage，不把未完整遍历的行角标或缺基线预览改为 absent。
-7. 分页只合并相邻页连续、整行字段完全一致的最长重叠段；其它重复身份保留 identity_hash 但会话键为 null。合并后按同一基线重算四源信号、指纹与候选，不按页拼接。
+7. 分页只合并相邻页连续、整行字段完全一致的最长重叠段；其它重复身份保留 identity_hash 但会话键为 null。合并后按同一基线重算四源信号、指纹与候选，不按页拼接。合并输入的成功页必须共享同一规范 UUID `snapshot_id` 与观察时间；多个 `null` 成功页不是同次采集，返回 `failed/invalid_fixture`。M1 已失败/未决页面的 `snapshot_id=null` 契约不变，合并直接返回该失败原因。
 8. 时间距 `now` 不在 0–5 秒（含未来快照）为 `undetermined/stale_snapshot`；`calibrated=false` 或版本不符为 `undetermined/uncalibrated_profile`。所有失败/未决结果 `value=null`，不保存部分候选。
 
 ## 四、依赖与边界
@@ -32,7 +32,7 @@
 python -m unittest tests.test_sensor tests.test_sensor_store
 ```
 
-`tests.test_sensor` 覆盖正例独立键算法、区域边界、四源正/零/未知冲突、全局标签语义、预览基线、身份重复、分页重叠、覆盖率、过期/未来、未标定、非法 XML、manifest 越界与停止原因；`tests.test_sensor_store` 覆盖 CLI 落库、重放、终态、仓储错误与零设备/网络/进程断言。
+`tests.test_sensor` 覆盖正例独立键算法、区域边界与巨大整数、四源正/零/未知冲突、全局标签语义、预览基线、身份重复、分页重叠、覆盖率、过期/未来、未标定、非法 XML/Unicode/嵌套 hierarchy、成功页 null snapshot、manifest 越界与停止原因；`tests.test_sensor_store` 覆盖 CLI 落库、重放、终态、仓储错误、三项输入边界零落库与零设备/网络/进程断言。
 
 ## 六、维护要求
 
