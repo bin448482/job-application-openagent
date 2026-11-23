@@ -744,19 +744,34 @@ class IsolationTripwireTests(unittest.TestCase):
 class P2M0BindingTests(unittest.TestCase):
     """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
 
-    def test_milestone_gate_blocks_unimplemented_m1(self) -> None:
-        """M1 虽 READY，但未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
+    def test_milestone_gate_blocks_unimplemented_m2(self) -> None:
+        """M2 虽 READY，但未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
         assets = load_assets()
-        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0"})
-        m1_scenario = next(item for item in assets.catalogue["scenarios"] if item["milestone"] == "M1")
-        m1_ready = next(
-            item for item in m1_scenario["variants"] if item["asset_status"] == "READY_FOR_APP"
+        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0", "M1"})
+        m2_scenario = next(item for item in assets.catalogue["scenarios"] if item["milestone"] == "M2")
+        m2_ready = next(
+            item for item in m2_scenario["variants"] if item["asset_status"] == "READY_FOR_APP"
         )
         target = SCENARIO_ROOT.parent.parent
         self.assertEqual(
-            runner._variant_status(m1_scenario, m1_ready, target),
+            runner._variant_status(m2_scenario, m2_ready, target),
             "BLOCKED_MILESTONE_UNIMPLEMENTED",
         )
+
+    def test_deferred_and_module_evidence_are_not_pass(self) -> None:
+        """DEFERRED 与 MODULE_EVIDENCE 不能被当 PASS 或普通入口阻塞。"""
+        assets = load_assets()
+        self.assertEqual(
+            assets.oracles["variants"]["SC-L06/abandon_task"]["deferred_to"], "M5"
+        )
+        self.assertIn(
+            "test_migrations",
+            assets.oracles["variants"]["SC-L07/invalid_lease_state"]["module_evidence"],
+        )
+        m1 = next(item for item in assets.catalogue["scenarios"] if item["id"] == "SC-L06")
+        deferred = next(item for item in m1["variants"] if item["id"] == "abandon_task")
+        target = SCENARIO_ROOT.parent.parent
+        self.assertEqual(runner._variant_status(m1, deferred, target), "DEFERRED")
 
     def test_m0_protocol_timeout_uses_device_boundary_only(self) -> None:
         """超时用例只替换 subprocess.run，返回同一原因码且不重试。"""

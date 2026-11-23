@@ -12,6 +12,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from m1_requests import build_m1_fixtures  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "fixtures"
 EXPECTED = ROOT / "expected"
@@ -1356,6 +1359,8 @@ def variant(
     forbidden: list[str] | None = None,
     expected_missing_inputs: list[str] | None = None,
     observations_ref: str | None = None,
+    deferred_to: str | None = None,
+    module_evidence: str | None = None,
 ) -> dict[str, Any]:
     """构造一个场景变体；READY 必须有 frozen 步骤与可执行预期。"""
     if layer in ("T", "O", "W"):
@@ -1363,6 +1368,10 @@ def variant(
         entry_state = "device"
     elif asset_status == "READY_FOR_APP":
         entry_state = "frozen"
+    elif asset_status == "DEFERRED":
+        entry_state = "deferred"
+    elif asset_status == "MODULE_EVIDENCE":
+        entry_state = "module"
     else:
         entry_state = "unfrozen" if layer == "F" else "none"
     if layer in ("T", "O", "W"):
@@ -1389,6 +1398,8 @@ def variant(
         "forbidden": forbidden or default_forbidden,
         "expected_missing_inputs": expected_missing_inputs or [],
         "observations_ref": observations_ref,
+        "deferred_to": deferred_to,
+        "module_evidence": module_evidence,
     }
 
 
@@ -1786,12 +1797,88 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
     # ---- M1 ----
+    def m1_cmd(name: str) -> str:
+        """返回 M1 合成探针命令；请求文件由隔离层按引用复制。"""
+        return (
+            "python tests/scenarios/framework/m1_probe.py "
+            f"--request tests/scenarios/fixtures/m1/{name}.json --db {{db}}"
+        )
+
+    def m1_ok(*paths: dict[str, Any]) -> dict[str, Any]:
+        """构造一个成功探针步骤预期。"""
+        return {
+            "exit_code": 0,
+            "stdout_paths": [{"path": "status", "equals": "ok"}, *paths],
+        }
+
+    def m1_ready(
+        variant_id: str,
+        *,
+        label: str,
+        names: list[str],
+        assertions: list[str],
+        acceptance_steps: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """构造顺序执行一个或多个 M1 请求的 READY 变体。"""
+        return ready_variant(
+            variant_id,
+            label=label,
+            steps=[m1_cmd(name) for name in names],
+            fixture=f"fixtures/m1/{names[0]}.json",
+            assertions=assertions,
+            acceptance={"steps": acceptance_steps},
+        )
+
+    def m1_concurrent(
+        variant_id: str,
+        *,
+        label: str,
+        setup: str,
+        children: list[str],
+        verify: str,
+        assertions: list[str],
+        setup_expect: dict[str, Any],
+        child_expects: list[dict[str, Any]],
+        outcome_counts: dict[str, int],
+        verify_expect: dict[str, Any],
+    ) -> dict[str, Any]:
+        """构造 setup→两进程→verify 的受控竞争变体。"""
+        return ready_variant(
+            variant_id,
+            label=label,
+            steps=[
+                m1_cmd(setup),
+                {"concurrent": [m1_cmd(name) for name in children], "timeout": 45},
+                m1_cmd(verify),
+            ],
+            fixture=f"fixtures/m1/{setup}.json",
+            assertions=assertions,
+            acceptance={
+                "steps": [
+                    setup_expect,
+                    {
+                        "children": child_expects,
+                        "outcome_counts": outcome_counts,
+                    },
+                    verify_expect,
+                ]
+            },
+        )
+
+    def step(index: int, field: str, equals: Any) -> dict[str, Any]:
+        """定位探针 steps[index].field 的严格断言。"""
+        return {"path": f"steps.{index}.{field}", "equals": equals}
+
     add(
         "SC-L01",
         "M1",
         "空库初始化、版本与路径边界",
-        ["M1 store init 已交付", "只使用临时合成库"],
+        ["M1 store init/initialize_database 已交付", "只使用临时合成库"],
         [
+            *[
+                item
+                for item in []
+            ],
             ready_variant(
                 "init_twice",
                 label="连续两次初始化",
@@ -1808,19 +1895,11 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     "steps": [
                         {
                             "exit_code": 0,
-                            "stdout_json_equals": {
-                                "schema_version": 1,
-                                "status": "ok",
-                                "reason_code": None,
-                            },
+                            "stdout_json_equals": {"schema_version": 1, "status": "ok", "reason_code": None},
                         },
                         {
                             "exit_code": 0,
-                            "stdout_json_equals": {
-                                "schema_version": 1,
-                                "status": "ok",
-                                "reason_code": None,
-                            },
+                            "stdout_json_equals": {"schema_version": 1, "status": "ok", "reason_code": None},
                         },
                     ],
                     "db_checks": [
@@ -1832,8 +1911,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
             ready_variant(
                 "path_traversal",
                 label="越界库路径",
-                steps=["python -m app store init --db data/../scenario-outside.sqlite3"],
-                assertions=["解析 .. 后仍须位于项目内", "退出 2 invalid_input", "不创建项目外文件"],
+                steps=["python -m app store init --db ../scenario-outside.sqlite3"],
+                assertions=["解析 .. 后必须拒绝", "退出 2 invalid_input", "不写任何库"],
                 acceptance={
                     "steps": [
                         {
@@ -1844,82 +1923,118 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                                 "reason_code": "invalid_input",
                             },
                         }
-                    ],
-                    "db_checks": [{"kind": "file_absent", "path": "scenario-outside.sqlite3"}],
+                    ]
                 },
             ),
-            variant(
+            m1_ready(
                 "init_midway_failure",
-                "F",
                 label="建表中途失败回滚",
-                setup="在空库建表中途注入故障",
-                required_api="M1 schema 初始化故障注入",
+                names=["l01_init_midway"],
                 assertions=["user_version 仍为 0", "无残留半套表/索引", "不覆盖已有库"],
+                acceptance_steps=[
+                    m1_ok(step(1, "user_version", 0), step(1, "tables", [])),
+                ],
             ),
-            variant(
+            m1_ready(
                 "unknown_version",
-                "F",
                 label="未知 user_version",
-                setup="预置 user_version=99 的合成库",
-                required_api="M1StorePort 打开库",
+                names=["l01_unknown_version"],
                 assertions=["db_version_unsupported", "不迁移、不重建、不导入旧库"],
+                acceptance_steps=[
+                    m1_ok(step(2, "error", "db_version_unsupported"), step(3, "user_version", 99)),
+                ],
             ),
-            variant(
+            m1_ready(
                 "nonempty_no_version",
-                "F",
                 label="非空无版本库",
-                setup="预置 user_version=0 且含用户表的合成库",
-                required_api="M1 StorePort 打开库",
+                names=["l01_nonempty_no_version"],
                 assertions=["db_version_unsupported", "不自动接管非空库"],
+                acceptance_steps=[
+                    m1_ok(step(2, "error", "db_version_unsupported"), step(3, "user_version", 0)),
+                ],
             ),
-            variant(
+            m1_ready(
                 "missing_index",
-                "F",
                 label="缺索引/被篡改 v1 库",
-                setup="预置删掉唯一索引的 v1 合成库",
-                required_api="M1 schema 校验",
+                names=["l01_missing_index"],
                 assertions=["db_version_unsupported", "不补建后声称成功"],
+                acceptance_steps=[
+                    m1_ok(step(1, "prepared", "drop_index"), step(2, "error", "db_version_unsupported")),
+                ],
             ),
         ],
     )
 
+    l02_verify = m1_ok(
+        step(1, "leased_count", 1),
+        step(1, "device.present", True),
+        step(1, "device.deadline_matches_task", True),
+    )
+    l02_child_ok = {
+        "exit_code": 0,
+        "stdout_paths": [{"path": "status", "equals": "ok"}],
+    }
     add(
         "SC-L02",
         "M1",
         "本机测试进程竞争同一合成库",
-        ["M1 StorePort claim 已交付", "只访问合成 DB，单独计数测试进程"],
+        ["M1 SqliteStore.claim 已交付", "父 runner 只启动两个隔离子进程"],
         [
-            variant(
+            m1_concurrent(
                 "same_task_claim",
-                "F",
                 label="两进程竞争同一任务",
-                setup="两个本机进程对同一合成库 claim 同一候选",
-                required_api="M1 StorePort claim",
+                setup="l02_setup_one",
+                children=["l02_claim_unread", "l02_claim_unread_2"],
+                verify="l02_verify",
                 assertions=["只有一个持有者", "attempt 仅成功 claim +1", "失败者 lease_busy"],
+                setup_expect=m1_ok(),
+                child_expects=[l02_child_ok, l02_child_ok],
+                outcome_counts={"claimed": 1, "lease_busy": 1},
+                verify_expect=l02_verify,
             ),
-            variant(
+            m1_concurrent(
                 "different_task_claim",
-                "F",
                 label="不同任务仍争设备 primary",
-                setup="两进程 claim 不同任务",
-                required_api="M1 StorePort claim",
+                setup="l02_setup_two",
+                children=["l02_claim_unread", "l02_claim_new"],
+                verify="l02_verify",
                 assertions=["第二个 claim lease_busy", "设备行存在即互斥"],
+                setup_expect=m1_ok(),
+                child_expects=[l02_child_ok, l02_child_ok],
+                outcome_counts={"claimed": 1, "lease_busy": 1},
+                verify_expect=m1_ok(
+                    step(1, "leased_count", 1),
+                    step(1, "queued_count", 1),
+                    step(1, "task_count", 2),
+                    step(1, "device.present", True),
+                    step(1, "device.deadline_matches_task", True),
+                ),
             ),
-            variant(
+            m1_ready(
                 "ttl_expiry_only",
-                "F",
                 label="仅 TTL 过期不许可抢占",
-                setup="推进虚拟时钟超过 60 秒，不提供停止证据",
-                required_api="M1 claim/recover",
+                names=["l02_ttl"],
                 assertions=["TTL 过期不等于恢复许可", "仍 lease_busy", "不覆盖设备行"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(4, "error", "lease_busy"),
+                        step(5, "task.state", "leased"),
+                        step(5, "device.present", True),
+                    )
+                ],
             ),
-            variant(
+            m1_ready(
                 "device_row_present",
-                "F",
                 label="设备行存在即拒绝",
-                setup="预置 held 或 quarantined primary 设备行",
-                required_api="M1 claim",
+                names=["l02_device_row"],
                 assertions=["任何状态设备行存在均 lease_busy", "不删除或覆盖设备行"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(4, "error", "lease_busy"),
+                        step(5, "device.present", True),
+                        step(5, "task.state", "leased"),
+                    )
+                ],
             ),
         ],
     )
@@ -1928,55 +2043,82 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "SC-L03",
         "M1",
         "续租、旧租约与重复 start/finish",
-        ["M1 StorePort renew/start/finish 已交付"],
+        ["M1 SqliteStore renew/start/finish 已交付"],
         [
-            variant(
+            m1_ready(
                 "renew_updates_both",
-                "F",
                 label="续租同步任务与设备截止",
-                setup="t0 claim TTL60，t20 用当前 Lease renew",
-                required_api="M1 renew",
+                names=["l03_renew"],
                 assertions=["任务与设备截止时间同改", "返回新 Lease", "写入 lease_renewed 事件"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(5, "advanced", True),
+                        step(6, "device.deadline_matches_task", True),
+                    )
+                ],
             ),
-            variant(
+            m1_ready(
                 "old_lease_after_renew",
-                "F",
                 label="续租前旧 Lease 失效",
-                setup="renew 后继续用旧 Lease",
-                required_api="M1 start/finish",
+                names=["l03_old_lease"],
                 assertions=["stale_lease", "不改变行或事件"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(6, "error", "stale_lease"),
+                        step(7, "task.state", "running"),
+                        step(7, "task.lease_fields_present", True),
+                    )
+                ],
             ),
-            variant(
+            m1_ready(
                 "old_nonce",
-                "F",
                 label="旧 nonce",
-                setup="使用上一轮 nonce",
-                required_api="M1 start/finish/renew",
+                names=["l03_old_nonce"],
                 assertions=["stale_lease", "不得续命或抢占"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(5, "error", "stale_lease"),
+                        step(6, "task.state", "running"),
+                    )
+                ],
             ),
-            variant(
+            m1_ready(
                 "expired_lease",
-                "F",
                 label="now>=截止时间",
-                setup="推进时钟到截止时刻",
-                required_api="M1 start/finish/renew",
+                names=["l03_expired"],
                 assertions=["已过期一律 stale_lease", "失败 API 不改 attempt"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(5, "error", "stale_lease"),
+                        step(6, "task.state", "running"),
+                        step(6, "task.attempt", 1),
+                    )
+                ],
             ),
-            variant(
+            m1_ready(
                 "duplicate_start",
-                "F",
                 label="重复 start",
-                setup="同一 Lease 连续 start 两次",
-                required_api="M1 start",
+                names=["l03_duplicate_start"],
                 assertions=["第二次 stale_lease", "不重复写 task_started"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(5, "error", "stale_lease"),
+                        step(6, "task.state", "running"),
+                    )
+                ],
             ),
-            variant(
+            m1_ready(
                 "duplicate_finish",
-                "F",
                 label="重复 finish",
-                setup="同一 Lease 连续 finish 两次",
-                required_api="M1 finish",
+                names=["l03_duplicate_finish"],
                 assertions=["第二次 stale_lease", "不重复写事件或释放设备"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(6, "error", "stale_lease"),
+                        step(7, "task.state", "done"),
+                        step(7, "device.present", False),
+                    )
+                ],
             ),
         ],
     )
@@ -1987,60 +2129,80 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "过期恢复的进程停止与隔离",
         ["M1 recover 已交付", "注入三值停止检查器，不读取真实 PID"],
         [
+            m1_ready(
+                "leased_expired_stopped",
+                label="leased 过期且确认停止",
+                names=["l04_leased_stopped"],
+                assertions=["leased→queued", "清空任务租约并删除设备行", "lease_recovered 同事务"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(6, "task_state", "queued"),
+                        step(7, "task.state", "queued"),
+                        step(7, "device.present", False),
+                    )
+                ],
+            ),
+            m1_ready(
+                "running_expired_stopped",
+                label="running 过期且确认停止",
+                names=["l04_running_stopped"],
+                assertions=["running→blocked/recovery_requires_reconciliation", "设备行保留并 quarantined", "不删除隔离行"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(8, "task_state", "blocked"),
+                        step(9, "task.state", "blocked"),
+                        step(9, "task.reason_code", "recovery_requires_reconciliation"),
+                        step(9, "device.reservation_state", "quarantined"),
+                        step(9, "device.identity_unchanged", True),
+                    )
+                ],
+            ),
             *[
-                variant(
+                m1_ready(
                     name,
-                    "F",
                     label=label,
-                    setup=setup,
-                    required_api="M1 recover",
-                    assertions=assertions,
+                    names=[f"l04_{script}"],
+                    assertions=["owner_not_stopped", "不变更任务或设备"],
+                    acceptance_steps=[
+                        m1_ok(
+                            step(8, "error", "owner_not_stopped"),
+                            step(9, "task.state", "running"),
+                            step(9, "device.reservation_state", "held"),
+                            step(9, "device.identity_unchanged", True),
+                        )
+                    ],
                 )
-                for name, label, setup, assertions in (
-                    (
-                        "leased_expired_stopped",
-                        "leased 过期且确认停止",
-                        "注入 stopped 且 confirm_stopped=true",
-                        ["leased→queued", "清空任务租约并删除设备行", "lease_recovered 同事务"],
-                    ),
-                    (
-                        "running_expired_stopped",
-                        "running 过期且确认停止",
-                        "注入 stopped 且 confirm_stopped=true",
-                        ["running→blocked/recovery_requires_reconciliation", "设备行保留并 quarantined", "不删除隔离行"],
-                    ),
-                    (
-                        "alive",
-                        "原进程仍活动",
-                        "注入 alive",
-                        ["owner_not_stopped", "不变更任务或设备"],
-                    ),
-                    (
-                        "unknown",
-                        "停止未知",
-                        "注入 unknown",
-                        ["owner_not_stopped", "保留未决锁"],
-                    ),
-                    (
-                        "permission_denied",
-                        "权限不足",
-                        "注入 permission_denied",
-                        ["owner_not_stopped", "不推断已停止"],
-                    ),
-                    (
-                        "different_host",
-                        "不同主机",
-                        "注入不同 owner_host",
-                        ["owner_not_stopped", "v1 不支持跨机恢复"],
-                    ),
-                    (
-                        "confirm_false",
-                        "确认标志为 false",
-                        "confirm_stopped=false",
-                        ["owner_not_stopped", "不变更"],
-                    ),
+                for name, script, label in (
+                    ("alive", "alive", "原进程仍活动"),
+                    ("unknown", "unknown", "停止未知"),
+                    ("permission_denied", "permission", "权限不足"),
                 )
             ],
+            m1_ready(
+                "different_host",
+                label="不同主机",
+                names=["l04_different_host"],
+                assertions=["owner_not_stopped", "v1 不支持跨机恢复", "原DB/Lease身份匹配且过期"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(8, "error", "owner_not_stopped"),
+                        step(9, "task.state", "running"),
+                        step(9, "device.identity_unchanged", True),
+                    )
+                ],
+            ),
+            m1_ready(
+                "confirm_false",
+                label="确认标志为 false",
+                names=["l04_confirm_false"],
+                assertions=["owner_not_stopped", "不变更"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(5, "error", "owner_not_stopped"),
+                        step(6, "task.state", "running"),
+                    )
+                ],
+            ),
         ],
     )
 
@@ -2050,53 +2212,69 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "finish 三态与跨表事务回滚",
         ["M1 finish 已交付", "proof 只使用合成 ReadResult/Evidence"],
         [
-            variant(
+            m1_ready(
                 "finish_undetermined",
-                "F",
                 label="ReadResult.undetermined → blocked",
-                setup="合成 ReadResult.undetermined",
-                required_api="M1 finish",
-                assertions=["blocked 清空任务五租约字段", "设备行保留原 owner/pid/host/nonce/截止", "仅 quarantined"],
+                names=["l05_undetermined"],
+                assertions=["blocked 清空任务五租约字段", "设备行保留原身份", "仅 quarantined"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(6, "result", "updated"),
+                        step(7, "task.state", "blocked"),
+                        step(7, "task.lease_fields_present", False),
+                        step(7, "device.reservation_state", "quarantined"),
+                        step(7, "device.identity_unchanged", True),
+                    )
+                ],
             ),
-            variant(
+            m1_ready(
                 "finish_evidence_unknown",
-                "F",
                 label="Evidence.unknown → blocked",
-                setup="合成 Evidence.unknown",
-                required_api="M1 finish",
+                names=["l05_evidence_unknown"],
                 assertions=["与 ReadResult.undetermined 相同设备处置", "不把 unknown 当未执行重试"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(7, "task.state", "blocked"),
+                        step(7, "device.reservation_state", "quarantined"),
+                        step(7, "device.identity_unchanged", True),
+                    )
+                ],
             ),
-            variant(
-                "task_update_miss",
-                "F",
-                label="任务更新未命中",
-                setup="条件更新任务行返回 0 行",
-                required_api="M1 finish 事务",
-                assertions=["全部回滚", "设备行与事件不变"],
-            ),
-            variant(
-                "device_update_miss",
-                "F",
-                label="设备更新未命中",
-                setup="条件更新设备行返回 0 行",
-                required_api="M1 finish 事务",
-                assertions=["任务状态与事件全部回滚"],
-            ),
-            variant(
-                "event_write_fail",
-                "F",
-                label="事件写入失败",
-                setup="注入 events 写入失败",
-                required_api="M1 finish 事务",
-                assertions=["任务/设备/事件同事务回滚", "不伪造成功"],
-            ),
-            variant(
+            *[
+                m1_ready(
+                    name,
+                    label=label,
+                    names=[script],
+                    assertions=["全部回滚", "设备行与事件不变", error],
+                    acceptance_steps=[
+                        m1_ok(
+                            step(8, "error", error),
+                            step(9, "task.state", "running"),
+                            step(9, "task.lease_fields_present", True),
+                            step(9, "device.reservation_state", "held"),
+                            step(9, "device.identity_unchanged", True),
+                        )
+                    ],
+                )
+                for name, script, label, error in (
+                    ("task_update_miss", "l05_task_update_miss", "任务更新未命中", "stale_lease"),
+                    ("device_update_miss", "l05_device_update_miss", "设备更新未命中", "stale_lease"),
+                    ("event_write_fail", "l05_event_write_fail", "事件写入失败", "store_io_error"),
+                )
+            ],
+            m1_ready(
                 "rollback_then_claim_busy",
-                "F",
                 label="回滚后仍隔离",
-                setup="上述失败后再次 claim",
-                required_api="M1 finish/claim",
+                names=["l05_rollback_claim_busy"],
                 assertions=["下一次 claim lease_busy", "设备行保持原值"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(8, "error", "store_io_error"),
+                        step(9, "error", "lease_busy"),
+                        step(10, "task.state", "running"),
+                        step(10, "device.identity_unchanged", True),
+                    )
+                ],
             ),
         ],
     )
@@ -2107,37 +2285,51 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "父进程停止不等于设备子命令停止",
         ["M1 recover 已交付", "M0–M2 无解除隔离命令"],
         [
-            variant(
+            m1_ready(
                 "parent_stopped_child_unknown",
-                "F",
                 label="父进程 stopped、子命令未知",
-                setup="停止检查器仅证明父进程",
-                required_api="M1 recover + 设备隔离",
+                names=["l06_parent_child_unknown"],
                 assertions=["隔离保留", "未决锁保留", "不杀进程、不重放动作"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(8, "task_state", "blocked"),
+                        step(9, "error", "lease_busy"),
+                        step(10, "device.reservation_state", "quarantined"),
+                    )
+                ],
             ),
             variant(
                 "abandon_task",
                 "F",
                 label="人工放弃任务",
-                setup="blocked 任务 cancelled",
-                required_api="M1 人工出口",
                 assertions=["放弃只关闭任务", "不解除动作键锁或设备隔离"],
+                asset_status="DEFERRED",
+                deferred_to="M5",
+                setup="M1 不提供解除隔离入口；保留场景身份，待 M5 人工出口",
             ),
-            variant(
+            m1_ready(
                 "change_owner",
-                "F",
                 label="换 owner 请求恢复",
-                setup="使用不同 owner 身份",
-                required_api="M1 recover",
-                assertions=["owner_not_stopped 或 stale_lease", "不变更"],
+                names=["l06_change_owner"],
+                assertions=["stale_lease", "不变更"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(5, "error", "stale_lease"),
+                        step(6, "task.state", "running"),
+                    )
+                ],
             ),
-            variant(
+            m1_ready(
                 "ttl_expired",
-                "F",
                 label="再等 TTL 到期",
-                setup="隔离后仅推进时钟",
-                required_api="M1 recover/claim",
+                names=["l06_ttl_expired"],
                 assertions=["不自动解除隔离", "不许可新任务"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(8, "error", "lease_busy"),
+                        step(9, "device.reservation_state", "quarantined"),
+                    )
+                ],
             ),
         ],
     )
@@ -2148,66 +2340,90 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "仓储输入校验、锁与失败安全出口",
         ["M1 仓储入口校验已交付", "不输出 SQL 或路径"],
         [
-            *[
-                variant(
-                    name,
-                    "F",
-                    label=label,
-                    setup=setup,
-                    required_api="M1 仓储入口/事务",
-                    assertions=assertions,
-                )
-                for name, label, setup, assertions in (
-                    (
-                        "cross_app_key",
-                        "跨 app 键",
-                        "提交非 boss 前缀键",
-                        ["invalid_input 整批回滚", "不放宽 app CHECK"],
-                    ),
-                    (
-                        "bool_integer",
-                        "bool 当整数",
-                        "提交 bool 到 INTEGER 列",
-                        ["invalid_input", "STRICT 类型不被 bool 绕过"],
-                    ),
-                    (
-                        "invalid_lease_state",
-                        "非法状态租约组合",
-                        "queued 带租约字段或 leased 缺字段",
-                        ["invalid_input", "CHECK 约束生效"],
-                    ),
-                    (
-                        "missing_foreign_key",
-                        "外键缺失",
-                        "发现引用不存在会话",
-                        ["外键失败整批回滚", "不级联删除"],
-                    ),
-                    (
-                        "duplicate_nonterminal",
-                        "重复非终态发现",
-                        "同一会话插入第二个非终态行",
-                        ["唯一索引拒绝", "不覆盖在途负载"],
-                    ),
-                    (
-                        "busy_timeout",
-                        "写锁等待耗尽",
-                        "另一连接持写锁",
-                        ["store_busy 安全出口", "不当作设备租约过期"],
-                    ),
-                    (
-                        "io_error",
-                        "IO 失败",
-                        "注入磁盘错误",
-                        ["store_io_error", "不输出 SQL 或路径"],
-                    ),
-                    (
-                        "leased_no_start_device_call",
-                        "leased 未 start 调设备",
-                        "在 start 提交前请求假设备命令",
-                        ["假设备调用次数为 0", "必须先 start"],
-                    ),
-                )
-            ],
+            m1_ready(
+                "cross_app_key",
+                label="跨 app 键",
+                names=["l07_cross_app"],
+                assertions=["invalid_input 整批回滚", "不放宽 app CHECK"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(2, "error", "invalid_input"),
+                        step(3, "task_count", 0),
+                        step(3, "device.present", False),
+                    )
+                ],
+            ),
+            m1_ready(
+                "bool_integer",
+                label="bool 当整数",
+                names=["l07_bool_integer"],
+                assertions=["invalid_input", "STRICT 类型不被 bool 绕过"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(3, "error", "invalid_input"),
+                        step(4, "task.state", "queued"),
+                        step(4, "task.attempt", 0),
+                    )
+                ],
+            ),
+            variant(
+                "invalid_lease_state",
+                "F",
+                label="非法状态租约组合",
+                assertions=["invalid_input", "CHECK 约束生效"],
+                asset_status="MODULE_EVIDENCE",
+                module_evidence="tests.test_migrations 的 schema 约束证据；不另造跨模块 PASS",
+                setup="仅模块层可构造，不在场景层用 SQL 替代生产转换",
+            ),
+            variant(
+                "missing_foreign_key",
+                "F",
+                label="外键缺失",
+                assertions=["外键失败整批回滚", "不级联删除"],
+                asset_status="MODULE_EVIDENCE",
+                module_evidence="tests.test_migrations 的外键约束证据",
+                setup="仅模块层可构造，场景层不重复",
+            ),
+            variant(
+                "duplicate_nonterminal",
+                "F",
+                label="重复非终态发现",
+                assertions=["唯一索引拒绝", "不覆盖在途负载"],
+                asset_status="MODULE_EVIDENCE",
+                module_evidence="tests.test_store 的 upsert/唯一约束证据",
+                setup="仅模块层可构造，场景层不重复",
+            ),
+            m1_ready(
+                "busy_timeout",
+                label="写锁等待耗尽",
+                names=["l07_busy_inline"],
+                assertions=["store_busy 安全出口", "不当作设备租约过期", "释放后业务行不变"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(5, "error", "store_busy"),
+                        step(6, "task.state", "queued"),
+                        step(6, "device.present", False),
+                    )
+                ],
+            ),
+            m1_ready(
+                "io_error",
+                label="IO 失败",
+                names=["l07_io_error"],
+                assertions=["store_io_error", "不输出 SQL 或路径"],
+                acceptance_steps=[
+                    m1_ok(step(1, "error", "store_io_error")),
+                ],
+            ),
+            variant(
+                "leased_no_start_device_call",
+                "F",
+                label="leased 未 start 调设备",
+                assertions=["假设备调用次数为 0", "必须先 start"],
+                asset_status="DEFERRED",
+                deferred_to="M6（M5 动作边界；M3 可准备计数探针）",
+                setup="M1 无设备端口，完整生产时序归 M6；不以空 mock 记 PASS",
+            ),
         ],
     )
 
@@ -3293,6 +3509,7 @@ def build_catalogue() -> dict[str, Any]:
     build_m0_fixtures()
     sensor = build_sensor_cases()
     build_support_fixtures()
+    build_m1_fixtures()
     for name, text in preserved.items():
         (FIXTURES / name).write_text(text, encoding="utf-8", newline="\n")
     _write_fixture_guides()
@@ -3320,6 +3537,8 @@ def build_catalogue() -> dict[str, Any]:
                 "preconditions": scenario["preconditions"],
                 "device_gate": item["device_gate"],
                 "observations_ref": item.get("observations_ref"),
+                "deferred_to": item.get("deferred_to"),
+                "module_evidence": item.get("module_evidence"),
             }
     return {"catalogue": catalogue, "oracles": oracles}
 

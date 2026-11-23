@@ -16,6 +16,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,7 +37,7 @@ EXIT_FAIL = 1
 EXIT_BLOCKED = 3
 RUN_ROOT = Path("data") / "evals" / "scenario-runs"
 # 只有已独立验收并进入稳定 main 的里程碑才允许执行；扩展前先更新指南。
-IMPLEMENTED_MILESTONES = {"M0"}
+IMPLEMENTED_MILESTONES = {"M0", "M1"}
 
 
 def _utc_stamp() -> str:
@@ -180,12 +181,24 @@ def _validate_source_tree(source: Path, stop: Path, label: str) -> None:
 
 FIXTURE_TOKEN = re.compile(r"tests/scenarios/fixtures/[A-Za-z0-9_./-]+")
 M0_PROBE_PATH = "tests/scenarios/framework/m0_protocol_probe.py"
+M1_PROBE_PATH = "tests/scenarios/framework/m1_probe.py"
 EXPECTED_FILE_NAMES = {"expected.json", "oracles.json"}
 
 
 def _is_expected_name(path: Path) -> bool:
     """识别不得进入 SUT 输入树的答案文件。"""
     return path.name in EXPECTED_FILE_NAMES or path.name.startswith("expected.")
+
+
+def _iter_command_strings(variant: dict[str, Any]):
+    """展开普通步骤与 concurrent 步骤中的命令字符串。"""
+    for step in variant.get("steps", []):
+        if isinstance(step, str):
+            yield step
+        elif isinstance(step, dict):
+            for command in step.get("concurrent", []):
+                if isinstance(command, str):
+                    yield command
 
 
 def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path]:
@@ -202,8 +215,8 @@ def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path
     }
     selected: list[Path] = []
     queue: list[Path] = []
-    for step in variant.get("steps", []):
-        for token in FIXTURE_TOKEN.findall(str(step)):
+    for command in _iter_command_strings(variant):
+        for token in FIXTURE_TOKEN.findall(command):
             queue.append(target / token.rstrip("/"))
     fixture = variant.get("fixture")
     if fixture:
@@ -265,7 +278,18 @@ def _prepare_isolation(
         shutil.rmtree(root)
     root.mkdir(parents=True)
     shutil.copytree(source_app, root / "app", symlinks=False)
-    if any(M0_PROBE_PATH in str(step) for step in variant.get("steps", [])):
+    if any(M1_PROBE_PATH in command for command in _iter_command_strings(variant)):
+        source_m1 = target / M1_PROBE_PATH
+        _reject_link_ancestors(source_m1, target, "m1_probe")
+        if source_m1.is_symlink():
+            raise IsolationError("M1 探针不得是符号链接")
+        resolved_m1 = source_m1.resolve()
+        if not _within(resolved_m1, target.resolve()) or not resolved_m1.is_file():
+            raise IsolationError("M1 探针路径越界或不存在")
+        destination_m1 = root / M1_PROBE_PATH
+        destination_m1.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(resolved_m1, destination_m1)
+    if any(M0_PROBE_PATH in command for command in _iter_command_strings(variant)):
         source_probe = target / M0_PROBE_PATH
         _reject_link_ancestors(source_probe, target, "m0_protocol_probe")
         if source_probe.is_symlink():
@@ -310,8 +334,8 @@ ENV_ALLOWLIST = (
 )
 
 
-def _isolation_env(root: Path) -> dict[str, str]:
-    """构造最小隔离环境：只保留运行必需变量，本地数据与 tripwire 全在根内。"""
+def _isolation_env(root: Path, suffix: str = "") -> dict[str, str]:
+    """构造最小隔离环境：并发子进程各自使用独立 tripwire 日志。"""
     env = {key: os.environ[key] for key in ENV_ALLOWLIST if key in os.environ}
     env.update(
         {
@@ -324,7 +348,7 @@ def _isolation_env(root: Path) -> dict[str, str]:
             "TEMP": str(root / "tmp"),
             "TMP": str(root / "tmp"),
             "PATH": str(root / "bin"),
-            "SCENARIO_TRIPWIRE_LOG": str(root / "tripwire.log"),
+            "SCENARIO_TRIPWIRE_LOG": str(root / f"tripwire{suffix}.log"),
         }
     )
     return env
@@ -430,19 +454,118 @@ def _db_check(root: Path, check: dict[str, Any]) -> str | None:
     return None
 
 
+def _substitute(command: str, substitutions: dict[str, str]) -> str:
+    """替换命令中的合成路径占位符，不执行 shell。"""
+    expanded = command
+    for token, value in substitutions.items():
+        expanded = expanded.replace(token, value)
+    return expanded
+
+
+def _run_concurrent(
+    commands: list[str],
+    root: Path,
+    run_id: str,
+    timeout: int = 30,
+) -> list[dict[str, Any]]:
+    """父 runner 只并发启动两个隔离探针；子进程 tripwire 仍禁设备/网络/孙进程。"""
+    if len(commands) != 2:
+        raise IsolationError("并发组只允许恰好两个子进程")
+    barrier = root / "barrier"
+    if barrier.exists():
+        shutil.rmtree(barrier)
+    barrier.mkdir()
+    processes = []
+    for index, command in enumerate(commands):
+        tokens = shlex.split(command, posix=True)
+        if not tokens or tokens[0] != "python":
+            raise IsolationError("并发子进程必须以 python 入口")
+        env = _isolation_env(root, f"-c{index}")
+        env.update({"M1_BARRIER_DIR": str(barrier), "M1_BARRIER_NAME": str(index)})
+        processes.append(
+            subprocess.Popen(
+                [sys.executable] + tokens[1:],
+                cwd=root,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                shell=False,
+            )
+        )
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if all((barrier / f"{index}.ready").is_file() for index in range(len(processes))):
+            break
+        if any(process.poll() is not None for process in processes):
+            break
+        time.sleep(0.02)
+    (barrier / "go").write_text("go", encoding="utf-8")
+    results: list[dict[str, Any]] = []
+    for index, process in enumerate(processes):
+        try:
+            stdout, stderr = process.communicate(timeout=max(1, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+            results.append(
+                {
+                    "command": commands[index],
+                    "exit_code": None,
+                    "stdout_json": None,
+                    "stdout_json_ok": False,
+                    "stdout_text": stdout,
+                    "stderr": stderr,
+                    "error": "TimeoutExpired",
+                }
+            )
+            continue
+        payload, ok = _parse_stdout(stdout)
+        results.append(
+            {
+                "command": commands[index],
+                "exit_code": process.returncode,
+                "stdout_json": payload,
+                "stdout_json_ok": ok,
+                "stdout_text": stdout,
+                "stderr": stderr,
+                "error": None,
+            }
+        )
+    for index in range(len(processes)):
+        tripwire = root / f"tripwire-c{index}.log"
+        if tripwire.is_file() and tripwire.read_text(encoding="utf-8").strip():
+            kinds = sorted(
+                {line.strip() for line in tripwire.read_text(encoding="utf-8").splitlines() if line.strip()}
+            )
+            results[index]["error"] = f"意外边界调用: {', '.join(kinds)}"
+    return results
+
+
 def _variant_status(scenario: dict[str, Any], variant: dict[str, Any], target: Path) -> str:
     """判定变体在当前目标仓库可达到的执行状态。"""
     if variant["layer"] in ("T", "O", "W"):
         return "DEVICE_GATE_UNVERIFIED"
+    if variant["asset_status"] == "DEFERRED":
+        return "DEFERRED"
+    if variant["asset_status"] == "MODULE_EVIDENCE":
+        return "NOT_COVERED_MODULE_ONLY"
     if variant["asset_status"] == "ASSET_ONLY" or variant["entry_state"] != "frozen":
         return "BLOCKED_ENTRY_UNFROZEN"
     if scenario["milestone"] not in IMPLEMENTED_MILESTONES:
         return "BLOCKED_MILESTONE_UNIMPLEMENTED"
     if not (target / "app" / "__main__.py").is_file():
         return "BLOCKED_MISSING_APP"
-    for step in variant.get("steps", []):
-        if not isinstance(step, str) or not (
-            step.startswith("python -m app ") or step.startswith(f"python {M0_PROBE_PATH} ")
+    commands = list(_iter_command_strings(variant))
+    if not commands:
+        return "BLOCKED_ENTRY_UNFROZEN"
+    for command in commands:
+        if not (
+            command.startswith("python -m app ")
+            or command.startswith(f"python {M0_PROBE_PATH} ")
+            or command.startswith(f"python {M1_PROBE_PATH} ")
         ):
             return "BLOCKED_ENTRY_UNFROZEN"
     return "READY"
@@ -472,15 +595,37 @@ def _execute_variant(
     steps = acceptance.get("steps")
     if not isinstance(steps, list) or len(steps) != len(variant.get("steps", [])):
         return {"ref": ref, "result": "FAIL", "errors": ["独立预期步骤数与清单不一致"]}
-    for command, step_expectation in zip(variant["steps"], steps):
-        expanded = command
-        for token, value in substitutions.items():
-            expanded = expanded.replace(token, value)
-        result = _run_step(expanded, isolation, run_id)
-        differences = compare_invocation(result, step_expectation)
-        result["differences"] = differences
-        step_results.append(result)
-        errors.extend(f"第{len(step_results)}步: {item}" for item in differences)
+    for variant_step, step_expectation in zip(variant["steps"], steps):
+        if isinstance(variant_step, str):
+            expanded = _substitute(variant_step, substitutions)
+            result = _run_step(expanded, isolation, run_id)
+            differences = compare_invocation(result, step_expectation)
+            result["differences"] = differences
+            step_results.append(result)
+            errors.extend(f"第{len(step_results)}步: {item}" for item in differences)
+            continue
+        if not isinstance(variant_step, dict) or not isinstance(variant_step.get("concurrent"), list):
+            errors.append(f"第{len(step_results) + 1}步: 未知步骤形状")
+            continue
+        commands = [_substitute(command, substitutions) for command in variant_step["concurrent"]]
+        child_results = _run_concurrent(commands, isolation, run_id, int(variant_step.get("timeout", 30)))
+        child_expectations = step_expectation.get("children", [])
+        if len(child_expectations) != len(child_results):
+            errors.append("并发子进程预期数量不一致")
+        for index, (child, child_expectation) in enumerate(zip(child_results, child_expectations)):
+            differences = compare_invocation(child, child_expectation)
+            child["differences"] = differences
+            errors.extend(f"并发子{index + 1}: {item}" for item in differences)
+        counts: dict[str, int] = {}
+        for child in child_results:
+            payload = child.get("stdout_json")
+            outcome = payload.get("outcome") if isinstance(payload, dict) else None
+            if isinstance(outcome, str):
+                counts[outcome] = counts.get(outcome, 0) + 1
+        expected_counts = step_expectation.get("outcome_counts")
+        if expected_counts is not None and counts != expected_counts:
+            errors.append(f"并发 outcome 计数不符: {counts} != {expected_counts}")
+        step_results.append({"concurrent": child_results, "outcomes": counts})
     for check in acceptance.get("db_checks", []):
         resolved = dict(check)
         resolved["path"] = resolved["path"].replace("{db}", db_relative)
@@ -531,6 +676,8 @@ def run_acceptance(
         "BLOCKED_MISSING_APP": 0,
         "BLOCKED_ENTRY_UNFROZEN": 0,
         "BLOCKED_MILESTONE_UNIMPLEMENTED": 0,
+        "DEFERRED": 0,
+        "NOT_COVERED_MODULE_ONLY": 0,
         "DEVICE_GATE_UNVERIFIED": 0,
         "SKIPPED_BY_FILTER": 0,
     }
@@ -547,7 +694,13 @@ def run_acceptance(
             outcome = {
                 "ref": ref,
                 "result": status,
-                "errors": [] if status == "DEVICE_GATE_UNVERIFIED" else [variant.get("required_api") or "入口未冻结"],
+                "errors": (
+                    []
+                    if status in ("DEVICE_GATE_UNVERIFIED", "DEFERRED", "NOT_COVERED_MODULE_ONLY")
+                    else [variant.get("required_api") or "入口未冻结"]
+                ),
+                "deferred_to": variant.get("deferred_to") if status == "DEFERRED" else None,
+                "module_evidence": variant.get("module_evidence") if status == "NOT_COVERED_MODULE_ONLY" else None,
             }
         counts[outcome["result"]] = counts.get(outcome["result"], 0) + 1
         results.append(outcome)
@@ -562,6 +715,8 @@ def run_acceptance(
         counts["BLOCKED_MISSING_APP"]
         + counts["BLOCKED_ENTRY_UNFROZEN"]
         + counts["BLOCKED_MILESTONE_UNIMPLEMENTED"]
+        + counts["DEFERRED"]
+        + counts["NOT_COVERED_MODULE_ONLY"]
     )
     if counts["FAIL"]:
         overall = "FAIL"
@@ -569,11 +724,12 @@ def run_acceptance(
         overall = "BLOCKED"
     else:
         overall = "OFFLINE_PASS"
-    product = (
-        "NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED"
-        if counts["DEVICE_GATE_UNVERIFIED"]
-        else "NOT_ACCEPTED"
-    )
+    if counts["DEVICE_GATE_UNVERIFIED"]:
+        product = "NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED"
+    elif counts["DEFERRED"] or counts["NOT_COVERED_MODULE_ONLY"]:
+        product = "NOT_ACCEPTED_DEFERRED_OR_MODULE_GAPS"
+    else:
+        product = "NOT_ACCEPTED"
     report = {
         "schema_version": 1,
         "mode": "acceptance",

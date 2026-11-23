@@ -1,0 +1,626 @@
+"""在隔离根内用纯合成输入驱动 M1 真实 initialize_database/SqliteStore。
+
+只构造领域输入、假时钟、固定 host/UUID/PID 与停止检查器；不复制业务实现，
+不执行 ADB/网络/模型，不读真实库或私有事实。SQL 仅用于合成初态、损坏注入或
+只读终态核验，不用 SQL 替代生产状态转换。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sqlite3
+import sys
+import time
+import uuid
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from app.adapters.sqlite.repo import SqliteStore
+from app.adapters.sqlite.schema import initialize_database
+from app.domain.models import (
+    Candidate,
+    Evidence,
+    Lease,
+    Owner,
+    ReadResult,
+    UnreadRow,
+    UnreadSignal,
+    UnreadSnapshot,
+    canonical_hash,
+    conversation_key_for,
+    discovery_key_for,
+    fingerprint_for,
+    identity_hash_for,
+    parse_utc,
+)
+from app.ports.store import StoreError
+from app.process_log import ProcessLog
+
+HOST_LOCAL = canonical_hash("synthetic-m1-host-local")
+HOST_OTHER = canonical_hash("synthetic-m1-host-other")
+OWNER_ID = "00000000-0000-4000-8000-000000000011"
+OWNER_ID_2 = "00000000-0000-4000-8000-000000000012"
+SNAPSHOT_ID = "00000000-0000-4000-8000-000000000099"
+BASE_TIME = "2026-11-24T00:00:00.000Z"
+
+
+class ProbeError(RuntimeError):
+    """表示脚本或合成输入不满足受控探针协议。"""
+
+
+class FakeClock:
+    """同时推进墙钟与单调时钟，避免合成 now 被误判 clock_changed。"""
+
+    def __init__(self, start: str = BASE_TIME) -> None:
+        """保存初始墙钟与单调起点。"""
+        self._wall = parse_utc(start)
+        self._mono = 100.0
+
+    def set_now(self, now: str) -> None:
+        """把墙钟设为给定 UTC；单调钟按同一差值推进。"""
+        target = parse_utc(now)
+        self._mono += (target - self._wall).total_seconds()
+        self._wall = target
+
+    def monotonic(self) -> float:
+        """返回当前单调秒，供仓储比较墙钟增量。"""
+        return self._mono
+
+
+def _owner(owner_id: str = OWNER_ID, pid: object = 4242) -> Owner:
+    """构造固定合成 owner；host 只使用本机合成摘要。"""
+    return Owner(id=owner_id, pid=pid, host=HOST_LOCAL)
+
+
+def _snapshot(now: str, kinds: list[str], count: int) -> ReadResult:
+    """构造一个合法合成未读快照，候选数量与 kind 由脚本指定。"""
+    signals = {
+        "row_badge": UnreadSignal("present", count, None),
+        "new_greeting": UnreadSignal("unknown", None, "missing_signal"),
+        "tab_badge": UnreadSignal("unknown", None, "missing_signal"),
+        "preview_delta": UnreadSignal("unknown", None, "no_baseline"),
+    }
+    rows: list[UnreadRow] = []
+    candidates: list[Candidate] = []
+    for index in range(count):
+        contact = f"合成联系人{index + 1}"
+        company = f"合成机构{index + 1}"
+        position = f"合成岗位{index + 1}"
+        identity = identity_hash_for(contact, company, position)
+        conversation = conversation_key_for("boss", contact, company, position)
+        preview_hash = canonical_hash(f"合成预览{index + 1}")
+        time_hint = "10:00"
+        unread_count = 1
+        kind = kinds[index % len(kinds)]
+        fingerprint = fingerprint_for(preview_hash, time_hint, unread_count)
+        rows.append(
+            UnreadRow(
+                conversation_key=conversation,
+                identity_hash=identity,
+                preview_hash=preview_hash,
+                time_hint=time_hint,
+                unread_count=unread_count,
+            )
+        )
+        candidates.append(
+            Candidate(
+                candidate_key=discovery_key_for("boss", conversation, fingerprint),
+                conversation_key=conversation,
+                kind=kind,
+                source_names=("row_badge",),
+                fingerprint=fingerprint,
+            )
+        )
+    snapshot = UnreadSnapshot(
+        app="boss",
+        profile_id="synthetic-m1",
+        coverage="viewport",
+        signals=signals,
+        rows=tuple(rows),
+        candidates=tuple(candidates),
+        unread_state="present",
+    )
+    return ReadResult(
+        status="ok",
+        value=snapshot,
+        reason_code=None,
+        snapshot_id=SNAPSHOT_ID,
+        observed_at=now,
+        source="fixture",
+        confidence="high",
+    )
+
+
+def _read_result(now: str, status: str, reason: str | None) -> ReadResult:
+    """构造读取三态 proof；ok 使用合法合成快照，其余 value 为空。"""
+    if status == "ok":
+        return _snapshot(now, ["unread"], 1)
+    return ReadResult(
+        status=status,
+        value=None,
+        reason_code=reason,
+        snapshot_id=None,
+        observed_at=now,
+        source="fixture",
+        confidence="low",
+    )
+
+
+def _evidence(now: str, outcome: str, reason: str | None) -> Evidence:
+    """构造动作证据 proof；不触发真实设备。"""
+    if outcome == "performed":
+        return Evidence(
+            action_key="conversation:synthetic:reply",
+            outcome="performed",
+            effect="sent",
+            reason_code=None,
+            before_snapshot_id="00000000-0000-4000-8000-0000000000a1",
+            after_snapshot_id="00000000-0000-4000-8000-0000000000a2",
+            observed_at=now,
+        )
+    return Evidence(
+        action_key="conversation:synthetic:reply",
+        outcome="unknown",
+        effect="none",
+        reason_code=reason or "result_unverified",
+        before_snapshot_id=None,
+        after_snapshot_id=None,
+        observed_at=now,
+    )
+
+
+def _lease_json(lease: Lease) -> dict:
+    """输出不含真实 nonce 值的租约关系摘要。"""
+    return {
+        "granted": True,
+        "key": lease.key,
+        "expires_at": lease.expires_at,
+        "nonce_present": bool(lease.nonce),
+        "owner_host_local": lease.owner.host == HOST_LOCAL,
+        "state": "leased",
+    }
+
+
+def _read_connection(db_path: Path) -> sqlite3.Connection:
+    """以只读模式打开合成库，供固定白名单 inspect 使用。"""
+    connection = sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def _inspect_raw(db_path: Path) -> dict:
+    """只读返回版本与对象名，供初始化失败后的终态核验。"""
+    connection = _read_connection(db_path)
+    try:
+        tables = [
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_schema WHERE type='table' "
+                "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            ).fetchall()
+        ]
+        return {
+            "user_version": connection.execute("PRAGMA user_version").fetchone()[0],
+            "tables": tables,
+        }
+    finally:
+        connection.close()
+
+
+def _device_digest(db_path: Path) -> str | None:
+    """读取设备行的固定身份摘要；不存在返回 null。"""
+    connection = _read_connection(db_path)
+    try:
+        row = connection.execute(
+            "SELECT lease_owner, owner_pid, owner_host, nonce, lease_expires_at "
+            "FROM device_lease WHERE device_key='primary'"
+        ).fetchone()
+        if row is None:
+            return None
+        return canonical_hash([row[0], row[1], row[2], row[3], row[4]])
+    finally:
+        connection.close()
+
+
+def _inspect(store: SqliteStore, db_path: Path, remembered_digest: str | None) -> dict:
+    """按固定只读白名单返回任务/设备/事件摘要，不接受任意 SQL。"""
+    connection = _read_connection(db_path)
+    try:
+        tasks = connection.execute(
+            "SELECT state, attempt, reason_code, lease_owner, owner_pid, owner_host, "
+            'nonce, lease_expires_at, conversation_key FROM hr_discoveries ORDER BY "key"'
+        ).fetchall()
+        device = connection.execute(
+            "SELECT reservation_state, lease_owner, owner_pid, owner_host, nonce, lease_expires_at "
+            "FROM device_lease WHERE device_key='primary'"
+        ).fetchone()
+        events = [
+            {"event": str(row[0]), "reason_code": row[1]}
+            for row in connection.execute(
+                "SELECT event, reason_code FROM events ORDER BY event_id"
+            ).fetchall()
+        ]
+        task_views = []
+        for task in tasks:
+            fields = [task[3], task[4], task[5], task[6], task[7]]
+            task_views.append(
+                {
+                    "state": task[0],
+                    "attempt": task[1],
+                    "reason_code": task[2],
+                    "lease_fields_present": all(value is not None for value in fields),
+                    "conversation_key_present": task[8] is not None,
+                }
+            )
+        device_view: dict = {"present": False}
+        if device is not None:
+            digest = canonical_hash([device[1], device[2], device[3], device[4], device[5]])
+            device_view = {
+                "present": True,
+                "reservation_state": device[0],
+                "identity_digest": digest,
+                "identity_unchanged": (
+                    None if remembered_digest is None else digest == remembered_digest
+                ),
+                "deadline_matches_task": any(
+                    task[6] is not None and str(task[7]) == str(device[5])
+                    for task in tasks
+                ),
+            }
+        unresolved = store.unresolved_conversations("boss")
+        return {
+            "user_version": connection.execute("PRAGMA user_version").fetchone()[0],
+            "task_count": len(task_views),
+            "queued_count": sum(1 for task in task_views if task["state"] == "queued"),
+            "leased_count": sum(1 for task in task_views if task["state"] == "leased"),
+            "task": task_views[0] if task_views else None,
+            "tasks": task_views,
+            "device": device_view,
+            "events": events,
+            "unresolved_count": len(unresolved),
+        }
+    finally:
+        connection.close()
+
+
+def _barrier_wait() -> None:
+    """写 ready 文件并等待父 runner 的 go 文件，超时则失败。"""
+    directory = Path(os.environ["M1_BARRIER_DIR"])
+    name = os.environ["M1_BARRIER_NAME"]
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{name}.ready").write_text("ready", encoding="utf-8")
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if (directory / "go").is_file():
+            return
+        time.sleep(0.02)
+    raise ProbeError("barrier timeout")
+
+
+def _hold_lock(db_path: Path) -> dict:
+    """直接持合成库写锁，供 busy_timeout 场景使用；不改业务行。"""
+    connection = sqlite3.connect(str(db_path), timeout=5)
+    try:
+        ready_peer = Path(os.environ["M1_BARRIER_DIR"]) / "1.ready"
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not ready_peer.is_file():
+            time.sleep(0.02)
+        connection.execute("BEGIN IMMEDIATE")
+        _barrier_wait()
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if (Path(os.environ["M1_BARRIER_DIR"]) / "release").is_file():
+                break
+            time.sleep(0.02)
+        connection.execute("ROLLBACK")
+    finally:
+        connection.close()
+    return {"lock": "held_then_released"}
+
+
+def _locked_claim(store: SqliteStore, db_path: Path, now: str) -> dict:
+    """用第二条连接持写锁后调用真实 claim，验证 store_busy 出口。"""
+    holder = sqlite3.connect(str(db_path), timeout=5)
+    try:
+        holder.execute("BEGIN IMMEDIATE")
+        try:
+            lease = store.claim("boss", "unread", _owner("00000000-0000-4000-8000-000000000028"), now)
+        except StoreError as error:
+            return {"claimed": False, "error": error.reason_code}
+        return {"claimed": True, "lease": _lease_json(lease) if lease else None}
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
+
+
+def _prepare(db_path: Path, mode: str, value: object) -> dict:
+    """执行限定枚举的合成初态/损坏注入，不接受任意 SQL。"""
+    connection = sqlite3.connect(str(db_path))
+    try:
+        if mode == "set_user_version":
+            if type(value) is not int:
+                raise ProbeError("version must be integer")
+            connection.execute(f"PRAGMA user_version = {value}")
+        elif mode == "add_user_table":
+            connection.execute("CREATE TABLE synthetic_extra (id INTEGER)")
+        elif mode == "drop_index":
+            row = connection.execute(
+                "SELECT name FROM sqlite_schema WHERE type='index' AND sql IS NOT NULL "
+                "ORDER BY name LIMIT 1"
+            ).fetchone()
+            if row is None:
+                raise ProbeError("no index to drop")
+            connection.execute(f'DROP INDEX "{row[0]}"')
+        else:
+            raise ProbeError("unknown prepare mode")
+        connection.commit()
+    finally:
+        connection.close()
+    return {"prepared": mode}
+
+
+def run_request(request: dict, db_path: Path) -> dict:
+    """按脚本顺序执行受控操作；预期 StoreError 作为数据返回。"""
+    db_path = db_path.resolve()
+    steps = request.get("steps")
+    if not isinstance(steps, list) or not steps:
+        raise ProbeError("steps must be non-empty")
+    log_path = Path(request.get("log_path") or f"{db_path}.probe-{uuid.uuid4().hex}.jsonl")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    clock = FakeClock(request.get("start_at", BASE_TIME))
+    store: SqliteStore | None = None
+    lease: Lease | None = None
+    previous_lease: Lease | None = None
+    remembered_digest: str | None = None
+    stop_mode = "stopped"
+    store_fault = None
+    results: list[dict] = []
+    last_outcome = "script_done"
+
+    def open_store(store_host: str) -> SqliteStore:
+        """按脚本 host 选项打开真实 SqliteStore，使用独立 ProcessLog。"""
+        local_host = HOST_LOCAL if store_host == "local" else HOST_OTHER
+        return SqliteStore(
+            db_path,
+            local_host=local_host,
+            monotonic=clock.monotonic,
+            stop_checker=lambda pid: stop_mode,
+            fault_hook=store_fault,
+            process_log=ProcessLog(path=log_path),
+        )
+
+    for step in steps:
+        if not isinstance(step, dict) or "op" not in step:
+            raise ProbeError("step must be an object with op")
+        op = step["op"]
+        now = step.get("now")
+        if isinstance(now, str):
+            clock.set_now(now)
+        try:
+            if op == "barrier":
+                _barrier_wait()
+                result = {"barrier": "passed"}
+                last_outcome = "barrier_passed"
+            elif op == "release":
+                (Path(os.environ["M1_BARRIER_DIR"]) / "release").write_text("release", encoding="utf-8")
+                result = {"released": True}
+                last_outcome = "released"
+            elif op == "init":
+                fault = step.get("fault_at")
+                hook = None
+                if isinstance(fault, int) and not isinstance(fault, bool):
+                    def hook(index: int, connection: sqlite3.Connection) -> None:
+                        """在合成建表序号达到阈值时注入失败。"""
+                        if index >= fault:
+                            raise RuntimeError("synthetic init failure")
+                initialize_database(db_path, fault_hook=hook)
+                result = {"initialized": True}
+                last_outcome = "initialized"
+            elif op == "prepare":
+                result = _prepare(db_path, str(step.get("mode")), step.get("value"))
+                last_outcome = "prepared"
+            elif op == "hold_lock":
+                result = _hold_lock(db_path)
+                last_outcome = "lock_held"
+            elif op == "open":
+                stop_mode = str(step.get("stop_mode", "stopped"))
+                if stop_mode == "permission_denied":
+                    stop_mode = "unknown"
+                store_fault = None
+                fault_name = step.get("fault")
+                if isinstance(fault_name, str):
+                    def hook(name: str, connection: sqlite3.Connection) -> None:
+                        """按脚本指定故障点篡改或抛错；只用于合成终态测试。"""
+                        if name != fault_name:
+                            return
+                        if name == "finish_before_task_update":
+                            connection.execute(
+                                'UPDATE hr_discoveries SET nonce = ? WHERE app="boss"',
+                                (str(uuid.uuid4()),),
+                            )
+                        elif name == "finish_before_device_update":
+                            connection.execute(
+                                "UPDATE device_lease SET nonce = ? WHERE device_key='primary'",
+                                (str(uuid.uuid4()),),
+                            )
+                        else:
+                            raise RuntimeError("synthetic finish failure")
+                    store_fault = hook
+                if store is not None:
+                    store.close()
+                store = open_store(str(step.get("store_host", "local")))
+                result = {"opened": True}
+                last_outcome = "opened"
+            elif op == "io_error_open":
+                original = sqlite3.connect
+
+                def fail_connect(*args, **kwargs):
+                    """在标准库 sqlite 依赖边界注入 OSError。"""
+                    raise OSError("synthetic io")
+
+                sqlite3.connect = fail_connect
+                try:
+                    try:
+                        open_store("local")
+                    except StoreError as error:
+                        result = {"opened": False, "error": error.reason_code}
+                        last_outcome = error.reason_code
+                    else:
+                        result = {"opened": True}
+                        last_outcome = "opened"
+                finally:
+                    sqlite3.connect = original
+            elif op == "upsert":
+                if store is None:
+                    raise ProbeError("store not open")
+                count = step.get("count", 1)
+                if type(count) is not int:
+                    raise ProbeError("count must be integer")
+                result = {"keys": store.upsert_snapshot(
+                    _snapshot(now or BASE_TIME, list(step.get("kinds", ["unread"])), count)
+                )}
+                last_outcome = "upserted"
+            elif op == "claim":
+                if store is None:
+                    raise ProbeError("store not open")
+                owner = _owner(str(step.get("owner_id", OWNER_ID)), step.get("owner_pid", 4242))
+                lease = store.claim("boss", str(step.get("kind", "unread")), owner, now or BASE_TIME)
+                result = {"lease": _lease_json(lease) if lease else None}
+                last_outcome = "claimed" if lease else "no_candidate"
+            elif op == "locked_claim":
+                if store is None:
+                    raise ProbeError("store not open")
+                result = _locked_claim(store, db_path, now or BASE_TIME)
+                last_outcome = result.get("error", "claimed")
+            elif op == "claim_other_app":
+                if store is None:
+                    raise ProbeError("store not open")
+                store.claim("other", "unread", _owner(), now or BASE_TIME)
+                result = {"claimed": True}
+                last_outcome = "claimed"
+            elif op == "start":
+                if store is None:
+                    raise ProbeError("lease not held")
+                active = previous_lease if step.get("lease_source") == "previous" else lease
+                if active is None:
+                    raise ProbeError("lease missing")
+                lease = store.start(active, now or BASE_TIME)
+                result = {"state": "running"}
+                last_outcome = "started"
+            elif op == "renew":
+                if store is None or lease is None:
+                    raise ProbeError("lease not held")
+                old = lease.expires_at
+                previous_lease = lease
+                lease = store.renew(lease, now or BASE_TIME)
+                result = {"expires_at": lease.expires_at, "advanced": lease.expires_at != old}
+                last_outcome = "renewed"
+            elif op == "finish":
+                if store is None or (lease is None and previous_lease is None):
+                    raise ProbeError("lease not held")
+                active = previous_lease if step.get("lease_source") == "previous" else lease
+                if active is None:
+                    raise ProbeError("previous lease missing")
+                if step.get("use_random_nonce"):
+                    active = Lease(
+                        app=active.app,
+                        key=active.key,
+                        owner=active.owner,
+                        nonce=str(uuid.uuid4()),
+                        expires_at=active.expires_at,
+                    )
+                state = str(step["state"])
+                reason = step.get("reason_code")
+                proof_name = str(step.get("proof"))
+                if proof_name == "read_undetermined":
+                    proof = _read_result(now or BASE_TIME, "undetermined", reason)
+                elif proof_name == "read_ok":
+                    proof = _read_result(now or BASE_TIME, "ok", None)
+                elif proof_name == "evidence_unknown":
+                    proof = _evidence(now or BASE_TIME, "unknown", reason)
+                else:
+                    raise ProbeError("unknown proof")
+                previous_lease = active
+                result = {"result": store.finish(active, now or BASE_TIME, state, reason, proof)}
+                lease = None
+                last_outcome = "finished"
+            elif op == "recover":
+                if store is None or lease is None:
+                    raise ProbeError("lease not held")
+                active = previous_lease if step.get("lease_source") == "previous" else lease
+                if active is None:
+                    raise ProbeError("previous lease missing")
+                if step.get("owner_mode") == "other":
+                    active = Lease(
+                        app=active.app,
+                        key=active.key,
+                        owner=Owner(id=OWNER_ID_2, pid=active.owner.pid, host=active.owner.host),
+                        nonce=active.nonce,
+                        expires_at=active.expires_at,
+                    )
+                result = store.recover(active, bool(step.get("confirm_stopped")), now or BASE_TIME)
+                last_outcome = result.get("task_state", "recovered")
+                lease = None
+            elif op == "inspect_raw":
+                result = _inspect_raw(db_path)
+                last_outcome = "inspected_raw"
+            elif op == "remember_device":
+                remembered_digest = _device_digest(db_path)
+                result = {"remembered": remembered_digest is not None}
+                last_outcome = "device_remembered"
+            elif op == "inspect":
+                if store is None:
+                    raise ProbeError("store not open")
+                result = _inspect(store, db_path, remembered_digest)
+                last_outcome = "inspected"
+            elif op == "close":
+                if store is not None:
+                    store.close()
+                    store = None
+                result = {"closed": True}
+                last_outcome = "closed"
+            else:
+                raise ProbeError("unknown op")
+        except StoreError as error:
+            result = {"op": op, "error": error.reason_code}
+            last_outcome = error.reason_code
+        results.append({"op": op, **result})
+    if store is not None:
+        store.close()
+    return {
+        "schema_version": 1,
+        "status": "ok",
+        "outcome": last_outcome,
+        "steps": results,
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    """读取 JSON 请求并输出单个 JSON 结果；不输出异常原文。"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--request", required=True)
+    parser.add_argument("--db", required=True)
+    args = parser.parse_args(argv)
+    try:
+        request = json.loads(Path(args.request).read_text(encoding="utf-8"))
+        result = run_request(request, Path(args.db))
+        code = 0
+    except Exception as exc:  # noqa: BLE001 - 探针边界不输出 traceback/路径
+        result = {
+            "schema_version": 1,
+            "status": "failed",
+            "outcome": type(exc).__name__,
+            "steps": [],
+        }
+        code = 2
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

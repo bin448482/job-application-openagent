@@ -8,6 +8,7 @@
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
         "独立 oracle 证明未点击任何写入控件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "not_performed+none",
       "forbidden": [
@@ -15,6 +16,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
@@ -35,6 +37,7 @@
         "不能凭无返回降为 not_sent",
         "人工核对"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "pending 残留保锁",
       "forbidden": [
@@ -42,6 +45,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
@@ -63,6 +67,7 @@
         "blocked+设备隔离",
         "执行次数最多 1，不重放"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "Evidence.unknown",
       "forbidden": [
@@ -70,6 +75,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
@@ -90,6 +96,7 @@
         "Toast/确认框/空返回不证明成功",
         "不换会话继续"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/result_unverified",
       "forbidden": [
@@ -97,6 +104,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
@@ -118,6 +126,7 @@
         "保留可对账 pending 锁",
         "不执行第二次，失败不得标 done"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "远端可能已执行",
       "forbidden": [
@@ -125,6 +134,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
@@ -145,6 +155,7 @@
         "先写 pending",
         "重复请求被动作键锁拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "本次前后证据充分才 performed+sent",
       "forbidden": [
@@ -152,6 +163,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
@@ -171,6 +183,7 @@
         "旧坐标失效",
         "唯一发送候选才点击"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "旧坐标失效",
       "forbidden": [
@@ -178,6 +191,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
@@ -197,6 +211,7 @@
         "点击前 not_performed",
         "不按坐标猜"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "点击前 not_performed",
       "forbidden": [
@@ -204,6 +219,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
@@ -224,6 +240,7 @@
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
         "独立 oracle 证明未点击任何写入控件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "not_performed+none",
       "forbidden": [
@@ -231,6 +248,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
@@ -251,6 +269,7 @@
         "不能凭无返回降为 not_sent",
         "人工核对"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "pending 残留保锁",
       "forbidden": [
@@ -258,6 +277,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
@@ -279,6 +299,7 @@
         "blocked+设备隔离",
         "执行次数最多 1，不重放"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "Evidence.unknown",
       "forbidden": [
@@ -286,6 +307,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
@@ -306,6 +328,7 @@
         "Toast/确认框/空返回不证明成功",
         "不换会话继续"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/result_unverified",
       "forbidden": [
@@ -313,6 +336,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
@@ -334,6 +358,7 @@
         "保留可对账 pending 锁",
         "不执行第二次，失败不得标 done"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "远端可能已执行",
       "forbidden": [
@@ -341,6 +366,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
@@ -361,6 +387,7 @@
         "先写 pending",
         "重复请求被动作键锁拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "本次前后证据充分才 performed+request_sent",
       "forbidden": [
@@ -368,6 +395,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
@@ -387,6 +415,7 @@
         "才可 performed+sent",
         "确认框/Toast 不算交付"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "才可 performed+sent",
       "forbidden": [
@@ -394,6 +423,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
@@ -413,6 +443,7 @@
         "performed+request_sent",
         "不得记 sent"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "performed+request_sent",
       "forbidden": [
@@ -420,6 +451,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
@@ -440,6 +472,7 @@
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
         "独立 oracle 证明未点击任何写入控件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "not_performed+none",
       "forbidden": [
@@ -447,6 +480,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -467,6 +501,7 @@
         "不能凭无返回降为 not_sent",
         "人工核对"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "pending 残留保锁",
       "forbidden": [
@@ -474,6 +509,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -495,6 +531,7 @@
         "blocked+设备隔离",
         "执行次数最多 1，不重放"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "Evidence.unknown",
       "forbidden": [
@@ -502,6 +539,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -522,6 +560,7 @@
         "Toast/确认框/空返回不证明成功",
         "不换会话继续"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/result_unverified",
       "forbidden": [
@@ -529,6 +568,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -550,6 +590,7 @@
         "保留可对账 pending 锁",
         "不执行第二次，失败不得标 done"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "远端可能已执行",
       "forbidden": [
@@ -557,6 +598,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -577,6 +619,7 @@
         "先写 pending",
         "重复请求被动作键锁拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "本次前后证据充分才 performed+request_sent",
       "forbidden": [
@@ -584,6 +627,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -603,6 +647,7 @@
         "确认前后都检查 pending",
         "只记 request_sent"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "确认前后都检查 pending",
       "forbidden": [
@@ -610,6 +655,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -629,6 +675,7 @@
         "无确认框不视为未发生",
         "动作键锁防重"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "无确认框不视为未发生",
       "forbidden": [
@@ -636,6 +683,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -656,6 +704,7 @@
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
         "独立 oracle 证明未点击任何写入控件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "not_performed+none",
       "forbidden": [
@@ -663,6 +712,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -683,6 +733,7 @@
         "不能凭无返回降为 not_sent",
         "人工核对"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "pending 残留保锁",
       "forbidden": [
@@ -690,6 +741,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -711,6 +763,7 @@
         "blocked+设备隔离",
         "执行次数最多 1，不重放"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "Evidence.unknown",
       "forbidden": [
@@ -718,6 +771,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -738,6 +792,7 @@
         "Toast/确认框/空返回不证明成功",
         "不换会话继续"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/result_unverified",
       "forbidden": [
@@ -745,6 +800,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -766,6 +822,7 @@
         "保留可对账 pending 锁",
         "不执行第二次，失败不得标 done"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "远端可能已执行",
       "forbidden": [
@@ -773,6 +830,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -793,6 +851,7 @@
         "先写 pending",
         "重复请求被动作键锁拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "本次前后证据充分才 performed+request_sent",
       "forbidden": [
@@ -800,6 +859,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -819,6 +879,7 @@
         "独立授权",
         "只记 request_sent"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "独立授权",
       "forbidden": [
@@ -826,6 +887,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -844,6 +906,7 @@
       "assertions": [
         "不能用微信槽位证明成功"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不能用微信槽位证明成功",
       "forbidden": [
@@ -851,6 +914,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
@@ -871,6 +935,7 @@
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
         "独立 oracle 证明未点击任何写入控件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "not_performed+none",
       "forbidden": [
@@ -878,6 +943,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
@@ -898,6 +964,7 @@
         "不能凭无返回降为 not_sent",
         "人工核对"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "pending 残留保锁",
       "forbidden": [
@@ -905,6 +972,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
@@ -926,6 +994,7 @@
         "blocked+设备隔离",
         "执行次数最多 1，不重放"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "Evidence.unknown",
       "forbidden": [
@@ -933,6 +1002,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
@@ -953,6 +1023,7 @@
         "Toast/确认框/空返回不证明成功",
         "不换会话继续"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/result_unverified",
       "forbidden": [
@@ -960,6 +1031,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
@@ -981,6 +1053,7 @@
         "保留可对账 pending 锁",
         "不执行第二次，失败不得标 done"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "远端可能已执行",
       "forbidden": [
@@ -988,6 +1061,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
@@ -1008,6 +1082,7 @@
         "先写 pending",
         "重复请求被动作键锁拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "本次前后证据充分才 performed+deleted",
       "forbidden": [
@@ -1015,6 +1090,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
@@ -1035,6 +1111,7 @@
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
         "独立 oracle 证明未点击任何写入控件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "not_performed+none",
       "forbidden": [
@@ -1042,6 +1119,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
@@ -1062,6 +1140,7 @@
         "不能凭无返回降为 not_sent",
         "人工核对"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "pending 残留保锁",
       "forbidden": [
@@ -1069,6 +1148,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
@@ -1090,6 +1170,7 @@
         "blocked+设备隔离",
         "执行次数最多 1，不重放"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "Evidence.unknown",
       "forbidden": [
@@ -1097,6 +1178,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
@@ -1117,6 +1199,7 @@
         "Toast/确认框/空返回不证明成功",
         "不换会话继续"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/result_unverified",
       "forbidden": [
@@ -1124,6 +1207,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
@@ -1145,6 +1229,7 @@
         "保留可对账 pending 锁",
         "不执行第二次，失败不得标 done"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "远端可能已执行",
       "forbidden": [
@@ -1152,6 +1237,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
@@ -1172,6 +1258,7 @@
         "先写 pending",
         "重复请求被动作键锁拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "本次前后证据充分才 performed+applied",
       "forbidden": [
@@ -1179,6 +1266,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
@@ -1198,6 +1286,7 @@
         "放弃不解锁动作键",
         "不解除设备隔离"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "放弃不解锁动作键",
       "forbidden": [
@@ -1205,6 +1294,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 人工核对卡",
@@ -1224,6 +1314,7 @@
         "可收敛 not_sent",
         "不自动重发"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "可收敛 not_sent",
       "forbidden": [
@@ -1231,6 +1322,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 人工核对卡",
@@ -1250,6 +1342,7 @@
         "只凭独立证据收敛",
         "关闭任务但保留动作证据"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "只凭独立证据收敛",
       "forbidden": [
@@ -1257,6 +1350,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 人工核对卡",
@@ -1276,6 +1370,7 @@
         "先核对锁屏/IME/身份/在途命令",
         "不自动续跑或重发"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "先核对锁屏/IME/身份/在途命令",
       "forbidden": [
@@ -1283,6 +1378,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 人工核对卡",
@@ -1301,6 +1397,7 @@
       "assertions": [
         "拒绝伪成功"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝伪成功",
       "forbidden": [
@@ -1308,6 +1405,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
@@ -1325,6 +1423,7 @@
       "assertions": [
         "拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝",
       "forbidden": [
@@ -1332,6 +1431,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
@@ -1349,6 +1449,7 @@
       "assertions": [
         "非法组合转 unknown"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "非法组合转 unknown",
       "forbidden": [
@@ -1356,6 +1457,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
@@ -1374,6 +1476,7 @@
         "不得 performed",
         "保锁"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不得 performed",
       "forbidden": [
@@ -1381,6 +1484,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
@@ -1399,6 +1503,7 @@
         "拒绝 performed",
         "转 unknown/result_unverified"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝 performed",
       "forbidden": [
@@ -1406,6 +1511,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
@@ -1423,6 +1529,7 @@
       "assertions": [
         "不构成动作证据"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不构成动作证据",
       "forbidden": [
@@ -1430,6 +1537,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
@@ -1464,6 +1572,7 @@
         "成功/失败字段完整且未知值保持 null/unknown",
         "不新增业务库，不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "按 M0 冻结契约输出 ambiguous 结果",
       "forbidden": [
@@ -1471,6 +1580,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1506,6 +1616,7 @@
         "成功/失败字段完整且未知值保持 null/unknown",
         "不新增业务库，不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "按 M0 冻结契约输出 foreground_other 结果",
       "forbidden": [
@@ -1513,6 +1624,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1548,6 +1660,7 @@
         "成功/失败字段完整且未知值保持 null/unknown",
         "不新增业务库，不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "按 M0 冻结契约输出 foreground_unknown 结果",
       "forbidden": [
@@ -1555,6 +1668,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1590,6 +1704,7 @@
         "成功/失败字段完整且未知值保持 null/unknown",
         "不新增业务库，不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "按 M0 冻结契约输出 locked_true 结果",
       "forbidden": [
@@ -1597,6 +1712,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1632,6 +1748,7 @@
         "成功/失败字段完整且未知值保持 null/unknown",
         "不新增业务库，不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "按 M0 冻结契约输出 locked_unknown 结果",
       "forbidden": [
@@ -1639,6 +1756,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1674,6 +1792,7 @@
         "成功/失败字段完整且未知值保持 null/unknown",
         "不新增业务库，不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "按 M0 冻结契约输出 no_device 结果",
       "forbidden": [
@@ -1681,6 +1800,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1716,6 +1836,7 @@
         "成功/失败字段完整且未知值保持 null/unknown",
         "不新增业务库，不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "按 M0 冻结契约输出 offline 结果",
       "forbidden": [
@@ -1723,6 +1844,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1758,6 +1880,7 @@
         "成功/失败字段完整且未知值保持 null/unknown",
         "不新增业务库，不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "按 M0 冻结契约输出 ready 结果",
       "forbidden": [
@@ -1765,6 +1888,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1784,6 +1908,7 @@
         "仅在 R01 授权后运行一次，最多 10 秒",
         "不属于离线验收，未执行保持未验收"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "仅在 R01 授权后运行一次，最多 10 秒",
       "forbidden": [
@@ -1791,6 +1916,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1826,6 +1952,7 @@
         "成功/失败字段完整且未知值保持 null/unknown",
         "不新增业务库，不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "按 M0 冻结契约输出 unauthorized 结果",
       "forbidden": [
@@ -1833,6 +1960,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1867,6 +1995,7 @@
         "启动子进程前退出 2",
         "reason_code=invalid_config"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "启动子进程前退出 2",
       "forbidden": [
@@ -1874,6 +2003,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1907,6 +2037,7 @@
       "assertions": [
         "{} 与省略配置结果相同"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "{} 与省略配置结果相同",
       "forbidden": [
@@ -1914,6 +2045,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1948,6 +2080,7 @@
         "启动子进程前退出 2",
         "reason_code=invalid_config"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "启动子进程前退出 2",
       "forbidden": [
@@ -1955,6 +2088,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -1989,6 +2123,7 @@
         "启动子进程前退出 2",
         "reason_code=invalid_config"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "启动子进程前退出 2",
       "forbidden": [
@@ -1996,6 +2131,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2030,6 +2166,7 @@
         "启动子进程前退出 2",
         "reason_code=invalid_config"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "启动子进程前退出 2",
       "forbidden": [
@@ -2037,6 +2174,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2071,6 +2209,7 @@
         "省略 --config 只取默认配置",
         "不自动读取根 config.json"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "省略 --config 只取默认配置",
       "forbidden": [
@@ -2078,6 +2217,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2108,6 +2248,7 @@
         "不运行真实设备命令",
         "退出 2 且 reason_code=invalid_input"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不运行真实设备命令",
       "forbidden": [
@@ -2115,6 +2256,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2145,6 +2287,7 @@
         "不运行真实设备命令",
         "退出 2 且 reason_code=invalid_input"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不运行真实设备命令",
       "forbidden": [
@@ -2152,6 +2295,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2179,6 +2323,7 @@
         "帮助退出 0",
         "帮助不是业务 JSON，不作为场景 PASS"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "帮助退出 0",
       "forbidden": [
@@ -2186,6 +2331,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2216,6 +2362,7 @@
         "不运行真实设备命令",
         "退出 2 且 reason_code=invalid_input"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不运行真实设备命令",
       "forbidden": [
@@ -2223,6 +2370,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2253,6 +2401,7 @@
         "不运行真实设备命令",
         "退出 2 且 reason_code=invalid_input"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不运行真实设备命令",
       "forbidden": [
@@ -2260,6 +2409,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2290,6 +2440,7 @@
         "不运行真实设备命令",
         "退出 2 且 reason_code=invalid_input"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不运行真实设备命令",
       "forbidden": [
@@ -2297,6 +2448,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2327,6 +2479,7 @@
         "fixture 校验失败统一 invalid_fixture",
         "不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "fixture 校验失败统一 invalid_fixture",
       "forbidden": [
@@ -2334,6 +2487,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2364,6 +2518,7 @@
         "fixture 校验失败统一 invalid_fixture",
         "不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "fixture 校验失败统一 invalid_fixture",
       "forbidden": [
@@ -2371,6 +2526,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2401,6 +2557,7 @@
         "fixture 校验失败统一 invalid_fixture",
         "不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "fixture 校验失败统一 invalid_fixture",
       "forbidden": [
@@ -2408,6 +2565,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2443,6 +2601,7 @@
         "隔离 tripwire 为空",
         "不以真实 ADB 存在与否改变结论"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "fixture 模式所有子进程启动次数为 0",
       "forbidden": [
@@ -2450,6 +2609,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2481,6 +2641,7 @@
         "不输出绝对路径或原始异常",
         "不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "读取失败归 invalid_fixture",
       "forbidden": [
@@ -2488,6 +2649,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2541,6 +2703,7 @@
         "不重放原命令",
         "不输出原始命令参数"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "注入非零退出，不运行实际命令",
       "forbidden": [
@@ -2548,6 +2711,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2601,6 +2765,7 @@
         "参数数组、shell=false",
         "超时归 device_disconnected"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "只替换 subprocess 设备边界，调用已交付 AdbDeviceProbe",
       "forbidden": [
@@ -2608,6 +2773,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2638,6 +2804,7 @@
         "fixture 校验失败统一 invalid_fixture",
         "不启动真实 ADB"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "fixture 校验失败统一 invalid_fixture",
       "forbidden": [
@@ -2645,6 +2812,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
@@ -2666,6 +2834,7 @@
         "memory_updates 不丢原断言",
         "不能映射的独立留旧套件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "answer 仅作 reply 候选",
       "forbidden": [
@@ -2673,6 +2842,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 Decision 契约",
@@ -2693,6 +2863,7 @@
         "未映射项显式列出",
         "不以 npm 通过替代 M4"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "未映射项显式列出",
       "forbidden": [
@@ -2700,6 +2871,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 Decision 契约",
@@ -2720,6 +2892,7 @@
         "拒绝",
         "不执行"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝",
       "forbidden": [
@@ -2727,6 +2900,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2746,6 +2920,7 @@
       "assertions": [
         "拒绝 bool 当整数"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝 bool 当整数",
       "forbidden": [
@@ -2753,6 +2928,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2772,6 +2948,7 @@
       "assertions": [
         "stale_evidence/blocked"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "stale_evidence/blocked",
       "forbidden": [
@@ -2779,6 +2956,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2799,6 +2977,7 @@
         "stale_decision",
         "从新租约重跑"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "stale_decision",
       "forbidden": [
@@ -2806,6 +2985,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2826,6 +3006,7 @@
         "拒绝额外键",
         "不执行"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝额外键",
       "forbidden": [
@@ -2833,6 +3014,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2853,6 +3035,7 @@
         "拒绝非单 JSON",
         "不执行"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝非单 JSON",
       "forbidden": [
@@ -2860,6 +3043,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2879,6 +3063,7 @@
       "assertions": [
         "不截断、记 invalid_decision"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不截断、记 invalid_decision",
       "forbidden": [
@@ -2886,6 +3071,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2906,6 +3092,7 @@
         "invalid_decision/blocked",
         "不执行"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "invalid_decision/blocked",
       "forbidden": [
@@ -2913,6 +3100,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2933,6 +3121,7 @@
         "校验通过但不自动授权",
         "回显三标识"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "校验通过但不自动授权",
       "forbidden": [
@@ -2940,6 +3129,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2959,6 +3149,7 @@
       "assertions": [
         "stale_decision/blocked"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "stale_decision/blocked",
       "forbidden": [
@@ -2966,6 +3157,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -2985,6 +3177,7 @@
       "assertions": [
         "stale_decision/blocked"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "stale_decision/blocked",
       "forbidden": [
@@ -2992,6 +3185,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -3011,6 +3205,7 @@
       "assertions": [
         "stale_decision/blocked"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "stale_decision/blocked",
       "forbidden": [
@@ -3018,6 +3213,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
@@ -3038,6 +3234,7 @@
         "超限 input_too_large 转待办",
         "不截断 inbound"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "超限 input_too_large 转待办",
       "forbidden": [
@@ -3045,6 +3242,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 桥超时契约",
@@ -3066,6 +3264,7 @@
         "不重复调用",
         "不推断模型处理结果"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "decision_timeout",
       "forbidden": [
@@ -3073,6 +3272,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 桥超时契约",
@@ -3093,6 +3293,7 @@
         "最多重试一次",
         "trace 记录提交/调用次数"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "最多重试一次",
       "forbidden": [
@@ -3100,6 +3301,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 桥超时契约",
@@ -3120,6 +3322,7 @@
         "不入请求",
         "转 ask_user 待办"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不入请求",
       "forbidden": [
@@ -3127,6 +3330,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
@@ -3147,6 +3351,7 @@
         "HR 不改变策略/档位/事实",
         "无工具"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "HR 不改变策略/档位/事实",
       "forbidden": [
@@ -3154,6 +3359,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
@@ -3174,6 +3380,7 @@
         "ask_user",
         "不改变硬下限"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "ask_user",
       "forbidden": [
@@ -3181,6 +3388,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
@@ -3201,6 +3409,7 @@
         "不得提升 A",
         "未授权动作次数 0"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不得提升 A",
       "forbidden": [
@@ -3208,6 +3417,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
@@ -3228,6 +3438,7 @@
         "必须 escalate=human_review",
         "C 待办，不发送"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "必须 escalate=human_review",
       "forbidden": [
@@ -3235,6 +3446,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
@@ -3255,6 +3467,7 @@
         "拒绝",
         "不编造事实"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝",
       "forbidden": [
@@ -3262,6 +3475,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
@@ -3281,6 +3495,7 @@
       "assertions": [
         "整数不接受 bool"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "整数不接受 bool",
       "forbidden": [
@@ -3288,6 +3503,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3308,6 +3524,7 @@
         "sensitive/conflict 拒绝",
         "不自动修正"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "sensitive/conflict 拒绝",
       "forbidden": [
@@ -3315,6 +3532,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3334,6 +3552,7 @@
       "assertions": [
         "拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝",
       "forbidden": [
@@ -3341,6 +3560,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3361,6 +3581,7 @@
         "encoding 诊断",
         "拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "encoding 诊断",
       "forbidden": [
@@ -3368,6 +3589,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3387,6 +3609,7 @@
       "assertions": [
         "拒绝额外键"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝额外键",
       "forbidden": [
@@ -3394,6 +3617,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3414,6 +3638,7 @@
         "invalid_policy",
         "启动前退出"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "invalid_policy",
       "forbidden": [
@@ -3421,6 +3646,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3440,6 +3666,7 @@
       "assertions": [
         "path 诊断，拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "path 诊断，拒绝",
       "forbidden": [
@@ -3447,6 +3674,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3467,6 +3695,7 @@
         "policy_changed 停新动作",
         "在途仍核实"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "policy_changed 停新动作",
       "forbidden": [
@@ -3474,6 +3703,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3493,6 +3723,7 @@
       "assertions": [
         "超限拒绝，不截断后称合法"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "超限拒绝，不截断后称合法",
       "forbidden": [
@@ -3500,6 +3731,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3520,6 +3752,7 @@
         "path 诊断",
         "不读取链接目标"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "path 诊断",
       "forbidden": [
@@ -3527,6 +3760,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3546,6 +3780,7 @@
       "assertions": [
         "拒绝漏项"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝漏项",
       "forbidden": [
@@ -3553,6 +3788,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3572,6 +3808,7 @@
       "assertions": [
         "拒绝冲突"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝冲突",
       "forbidden": [
@@ -3579,6 +3816,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3598,6 +3836,7 @@
       "assertions": [
         "safety_floor 拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "safety_floor 拒绝",
       "forbidden": [
@@ -3605,6 +3844,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3625,6 +3865,7 @@
         "validate 通过",
         "有效限制可计算"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "validate 通过",
       "forbidden": [
@@ -3632,6 +3873,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
@@ -3653,6 +3895,7 @@
         "preview 不调模型/设备",
         "诊断定位文件/字段/行"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "init 不覆盖已有目录",
       "forbidden": [
@@ -3660,6 +3903,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 policy 工具已交付"
@@ -3679,6 +3923,7 @@
         "直接建待办",
         "不从 HR 文本导入事实"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "直接建待办",
       "forbidden": [
@@ -3686,6 +3931,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 policy 工具已交付"
@@ -3705,6 +3951,7 @@
         "缺失记 BLOCKED",
         "不宣称可用"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "缺失记 BLOCKED",
       "forbidden": [
@@ -3712,6 +3959,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 policy 工具已交付"
@@ -3731,6 +3979,7 @@
         "schema 合法也不提升 C/事实/授权",
         "设备和事实写入 0"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "schema 合法也不提升 C/事实/授权",
       "forbidden": [
@@ -3738,6 +3987,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 桥固定 system/developer/user",
@@ -3759,6 +4009,7 @@
         "不支持分区拒绝",
         "无工具/无跨例历史"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "原文只在 user JSON 字符串",
       "forbidden": [
@@ -3766,6 +4017,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 桥固定 system/developer/user",
@@ -3786,6 +4038,7 @@
         "拒绝",
         "不调用桥"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝",
       "forbidden": [
@@ -3793,6 +4046,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 桥固定 system/developer/user",
@@ -3813,6 +4067,7 @@
         "目录不入摘要",
         "相同内容不要求不同 hash"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "目录不入摘要",
       "forbidden": [
@@ -3820,6 +4075,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
@@ -3840,6 +4096,7 @@
         "先 base/pack，再 prompt_hash，最后 input_hash",
         "无自引用"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "先 base/pack，再 prompt_hash，最后 input_hash",
       "forbidden": [
@@ -3847,6 +4104,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
@@ -3866,6 +4124,7 @@
       "assertions": [
         "prompt_hash 不变，input_hash 变"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "prompt_hash 不变，input_hash 变",
       "forbidden": [
@@ -3873,6 +4132,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
@@ -3892,6 +4152,7 @@
       "assertions": [
         "H(RenderedRequest) 不符拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "H(RenderedRequest) 不符拒绝",
       "forbidden": [
@@ -3899,6 +4160,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
@@ -3919,6 +4181,7 @@
         "限额不静默截断",
         "超限 input_too_large"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "限额不静默截断",
       "forbidden": [
@@ -3926,6 +4189,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
@@ -3946,6 +4210,7 @@
         "失败保留占用",
         "不补偿为空闲"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "失败保留占用",
       "forbidden": [
@@ -3953,6 +4218,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
@@ -3972,6 +4238,7 @@
         "保留隔离",
         "换 profile/重启不自动解除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "保留隔离",
       "forbidden": [
@@ -3979,6 +4246,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
@@ -3998,6 +4266,7 @@
         "仅当前 owner/nonce 条件删除",
         "先对账"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "仅当前 owner/nonce 条件删除",
       "forbidden": [
@@ -4005,6 +4274,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
@@ -4024,6 +4294,7 @@
         "整个 run 含 read_only 持有",
         "profile 库 primary 不能替代"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "整个 run 含 read_only 持有",
       "forbidden": [
@@ -4031,6 +4302,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
@@ -4050,6 +4322,7 @@
         "共享库唯一 primary 覆盖整个 run 含 read_only",
         "profile 库 primary 不能替代"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "共享库唯一 primary 覆盖整个 run 含 read_only",
       "forbidden": [
@@ -4057,6 +4330,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
@@ -4076,6 +4350,7 @@
         "TTL/PID 不存在/重启不自动解除",
         "跨 profile 不共享事实/额度"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "TTL/PID 不存在/重启不自动解除",
       "forbidden": [
@@ -4083,6 +4358,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
@@ -4102,6 +4378,7 @@
         "拒绝自动恢复",
         "要求匹配发布"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝自动恢复",
       "forbidden": [
@@ -4109,6 +4386,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
@@ -4129,6 +4407,7 @@
         "暂存包不可加载",
         "原包与快照保留"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "暂存包不可加载",
       "forbidden": [
@@ -4136,6 +4415,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
@@ -4156,6 +4436,7 @@
         "拒绝 restore",
         "不加载半包"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝 restore",
       "forbidden": [
@@ -4163,6 +4444,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
@@ -4183,6 +4465,7 @@
         "拒绝提升",
         "重新 validate/preview/eval"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝提升",
       "forbidden": [
@@ -4190,6 +4473,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
@@ -4210,6 +4494,7 @@
         "额度/冷却/动作证据保留",
         "不复用旧授权"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "额度/冷却/动作证据保留",
       "forbidden": [
@@ -4217,6 +4502,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
@@ -4237,6 +4523,7 @@
         "policy_exists",
         "保留错误版本"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "policy_exists",
       "forbidden": [
@@ -4244,6 +4531,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
@@ -4264,6 +4552,7 @@
         "pack_hash 三值相等且 base 匹配",
         "不覆盖原包"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "pack_hash 三值相等且 base 匹配",
       "forbidden": [
@@ -4271,6 +4560,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
@@ -4291,6 +4581,7 @@
         "查看调优即整批转回归",
         "重复访问不算新证据"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "查看调优即整批转回归",
       "forbidden": [
@@ -4298,6 +4589,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
@@ -4319,6 +4611,7 @@
         "不声称测得能力",
         "错误不外泄配置值"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "零样本 N/A",
       "forbidden": [
@@ -4326,6 +4619,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
@@ -4346,6 +4640,7 @@
         "固定无原值诊断",
         "不换模型或改用 smoke"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "固定无原值诊断",
       "forbidden": [
@@ -4353,6 +4648,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
@@ -4374,6 +4670,7 @@
         "metadata/expected 不入模型",
         "实际加载当前包"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "preview 不读黄金答案",
       "forbidden": [
@@ -4381,6 +4678,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
@@ -4401,6 +4699,7 @@
         "unknown_case/invalid_provider",
         "拒绝参考回放"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown_case/invalid_provider",
       "forbidden": [
@@ -4408,6 +4707,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
@@ -4428,6 +4728,7 @@
         "禁用过期清理",
         "0 删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "禁用过期清理",
       "forbidden": [
@@ -4435,6 +4736,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
@@ -4454,6 +4756,7 @@
         "保护优先",
         "0 删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "保护优先",
       "forbidden": [
@@ -4461,6 +4764,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
@@ -4480,6 +4784,7 @@
         "不删",
         "不猜时间"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不删",
       "forbidden": [
@@ -4487,6 +4792,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
@@ -4506,6 +4812,7 @@
         "模型不能直接触发删除",
         "0 删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "模型不能直接触发删除",
       "forbidden": [
@@ -4513,6 +4820,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
@@ -4532,6 +4840,7 @@
         "规则命中才候选",
         "模型只能给 rejected，不能直接删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "规则命中才候选",
       "forbidden": [
@@ -4539,6 +4848,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
@@ -4558,6 +4868,7 @@
         "新增入站取消该删除",
         "全局未读未核实整轮不清理"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "新增入站取消该删除",
       "forbidden": [
@@ -4565,6 +4876,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 保护项"
@@ -4582,6 +4894,7 @@
       "assertions": [
         "0 删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "0 删除",
       "forbidden": [
@@ -4589,6 +4902,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 保护项"
@@ -4606,6 +4920,7 @@
       "assertions": [
         "0 删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "0 删除",
       "forbidden": [
@@ -4613,6 +4928,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 保护项"
@@ -4630,6 +4946,7 @@
       "assertions": [
         "0 删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "0 删除",
       "forbidden": [
@@ -4637,6 +4954,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 保护项"
@@ -4654,6 +4972,7 @@
       "assertions": [
         "0 删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "0 删除",
       "forbidden": [
@@ -4661,6 +4980,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 保护项"
@@ -4679,6 +4999,7 @@
         "跳过不点首行",
         "保留人工出口"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "跳过不点首行",
       "forbidden": [
@@ -4686,6 +5007,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 双重身份核验"
@@ -4704,6 +5026,7 @@
         "不得点击",
         "失败不记成功"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不得点击",
       "forbidden": [
@@ -4711,6 +5034,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 双重身份核验"
@@ -4729,6 +5053,7 @@
         "删除前双重身份核验",
         "先写台账再点击"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "删除前双重身份核验",
       "forbidden": [
@@ -4736,6 +5061,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 双重身份核验"
@@ -4754,6 +5080,7 @@
         "不记 deleted",
         "转人工"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不记 deleted",
       "forbidden": [
@@ -4761,6 +5088,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
@@ -4780,6 +5108,7 @@
         "不重试",
         "保锁"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不记成功",
       "forbidden": [
@@ -4787,6 +5116,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
@@ -4804,6 +5134,7 @@
       "assertions": [
         "performed+deleted"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "performed+deleted",
       "forbidden": [
@@ -4811,6 +5142,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
@@ -4829,6 +5161,7 @@
         "不记 deleted",
         "unknown/result_unverified"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不记 deleted",
       "forbidden": [
@@ -4836,6 +5169,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
@@ -4854,6 +5188,7 @@
         "不点",
         "保锁"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不点",
       "forbidden": [
@@ -4861,6 +5196,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
@@ -4874,12 +5210,33 @@
       "variant_id": "wrong_confirm_target"
     },
     "SC-L01/init_midway_failure": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 0,
+                "path": "steps.1.user_version"
+              },
+              {
+                "equals": [],
+                "path": "steps.1.tables"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "user_version 仍为 0",
         "无残留半套表/索引",
         "不覆盖已有库"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "user_version 仍为 0",
       "forbidden": [
@@ -4887,9 +5244,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 store init 已交付",
+        "M1 store init/initialize_database 已交付",
         "只使用临时合成库"
       ],
       "scenario_id": "SC-L01",
@@ -4939,6 +5297,7 @@
         "第二次不改业务行",
         "user_version=1"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "两次均退出 0 且输出 {schema_version:1,status:ok,reason_code:null}",
       "forbidden": [
@@ -4946,9 +5305,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 store init 已交付",
+        "M1 store init/initialize_database 已交付",
         "只使用临时合成库"
       ],
       "scenario_id": "SC-L01",
@@ -4960,11 +5320,32 @@
       "variant_id": "init_twice"
     },
     "SC-L01/missing_index": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "drop_index",
+                "path": "steps.1.prepared"
+              },
+              {
+                "equals": "db_version_unsupported",
+                "path": "steps.2.error"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "db_version_unsupported",
         "不补建后声称成功"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "db_version_unsupported",
       "forbidden": [
@@ -4972,9 +5353,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 store init 已交付",
+        "M1 store init/initialize_database 已交付",
         "只使用临时合成库"
       ],
       "scenario_id": "SC-L01",
@@ -4986,11 +5368,32 @@
       "variant_id": "missing_index"
     },
     "SC-L01/nonempty_no_version": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "db_version_unsupported",
+                "path": "steps.2.error"
+              },
+              {
+                "equals": 0,
+                "path": "steps.3.user_version"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "db_version_unsupported",
         "不自动接管非空库"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "db_version_unsupported",
       "forbidden": [
@@ -4998,9 +5401,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 store init 已交付",
+        "M1 store init/initialize_database 已交付",
         "只使用临时合成库"
       ],
       "scenario_id": "SC-L01",
@@ -5013,12 +5417,6 @@
     },
     "SC-L01/path_traversal": {
       "acceptance": {
-        "db_checks": [
-          {
-            "kind": "file_absent",
-            "path": "scenario-outside.sqlite3"
-          }
-        ],
         "steps": [
           {
             "exit_code": 2,
@@ -5031,20 +5429,22 @@
         ]
       },
       "assertions": [
-        "解析 .. 后仍须位于项目内",
+        "解析 .. 后必须拒绝",
         "退出 2 invalid_input",
-        "不创建项目外文件"
+        "不写任何库"
       ],
+      "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "解析 .. 后仍须位于项目内",
+      "expected_summary": "解析 .. 后必须拒绝",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 store init 已交付",
+        "M1 store init/initialize_database 已交付",
         "只使用临时合成库"
       ],
       "scenario_id": "SC-L01",
@@ -5056,11 +5456,32 @@
       "variant_id": "path_traversal"
     },
     "SC-L01/unknown_version": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "db_version_unsupported",
+                "path": "steps.2.error"
+              },
+              {
+                "equals": 99,
+                "path": "steps.3.user_version"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "db_version_unsupported",
         "不迁移、不重建、不导入旧库"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "db_version_unsupported",
       "forbidden": [
@@ -5068,9 +5489,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 store init 已交付",
+        "M1 store init/initialize_database 已交付",
         "只使用临时合成库"
       ],
       "scenario_id": "SC-L01",
@@ -5082,11 +5504,36 @@
       "variant_id": "unknown_version"
     },
     "SC-L02/device_row_present": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "lease_busy",
+                "path": "steps.4.error"
+              },
+              {
+                "equals": true,
+                "path": "steps.5.device.present"
+              },
+              {
+                "equals": "leased",
+                "path": "steps.5.task.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "任何状态设备行存在均 lease_busy",
         "不删除或覆盖设备行"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "任何状态设备行存在均 lease_busy",
       "forbidden": [
@@ -5094,10 +5541,11 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort claim 已交付",
-        "只访问合成 DB，单独计数测试进程"
+        "M1 SqliteStore.claim 已交付",
+        "父 runner 只启动两个隔离子进程"
       ],
       "scenario_id": "SC-L02",
       "source": [
@@ -5108,11 +5556,79 @@
       "variant_id": "device_row_present"
     },
     "SC-L02/different_task_claim": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              }
+            ]
+          },
+          {
+            "children": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "equals": "ok",
+                    "path": "status"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "equals": "ok",
+                    "path": "status"
+                  }
+                ]
+              }
+            ],
+            "outcome_counts": {
+              "claimed": 1,
+              "lease_busy": 1
+            }
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 1,
+                "path": "steps.1.leased_count"
+              },
+              {
+                "equals": 1,
+                "path": "steps.1.queued_count"
+              },
+              {
+                "equals": 2,
+                "path": "steps.1.task_count"
+              },
+              {
+                "equals": true,
+                "path": "steps.1.device.present"
+              },
+              {
+                "equals": true,
+                "path": "steps.1.device.deadline_matches_task"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "第二个 claim lease_busy",
         "设备行存在即互斥"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "第二个 claim lease_busy",
       "forbidden": [
@@ -5120,10 +5636,11 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort claim 已交付",
-        "只访问合成 DB，单独计数测试进程"
+        "M1 SqliteStore.claim 已交付",
+        "父 runner 只启动两个隔离子进程"
       ],
       "scenario_id": "SC-L02",
       "source": [
@@ -5134,12 +5651,72 @@
       "variant_id": "different_task_claim"
     },
     "SC-L02/same_task_claim": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              }
+            ]
+          },
+          {
+            "children": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "equals": "ok",
+                    "path": "status"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "equals": "ok",
+                    "path": "status"
+                  }
+                ]
+              }
+            ],
+            "outcome_counts": {
+              "claimed": 1,
+              "lease_busy": 1
+            }
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 1,
+                "path": "steps.1.leased_count"
+              },
+              {
+                "equals": true,
+                "path": "steps.1.device.present"
+              },
+              {
+                "equals": true,
+                "path": "steps.1.device.deadline_matches_task"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "只有一个持有者",
         "attempt 仅成功 claim +1",
         "失败者 lease_busy"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "只有一个持有者",
       "forbidden": [
@@ -5147,10 +5724,11 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort claim 已交付",
-        "只访问合成 DB，单独计数测试进程"
+        "M1 SqliteStore.claim 已交付",
+        "父 runner 只启动两个隔离子进程"
       ],
       "scenario_id": "SC-L02",
       "source": [
@@ -5161,12 +5739,37 @@
       "variant_id": "same_task_claim"
     },
     "SC-L02/ttl_expiry_only": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "lease_busy",
+                "path": "steps.4.error"
+              },
+              {
+                "equals": "leased",
+                "path": "steps.5.task.state"
+              },
+              {
+                "equals": true,
+                "path": "steps.5.device.present"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "TTL 过期不等于恢复许可",
         "仍 lease_busy",
         "不覆盖设备行"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "TTL 过期不等于恢复许可",
       "forbidden": [
@@ -5174,10 +5777,11 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort claim 已交付",
-        "只访问合成 DB，单独计数测试进程"
+        "M1 SqliteStore.claim 已交付",
+        "父 runner 只启动两个隔离子进程"
       ],
       "scenario_id": "SC-L02",
       "source": [
@@ -5188,11 +5792,36 @@
       "variant_id": "ttl_expiry_only"
     },
     "SC-L03/duplicate_finish": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "steps.6.error"
+              },
+              {
+                "equals": "done",
+                "path": "steps.7.task.state"
+              },
+              {
+                "equals": false,
+                "path": "steps.7.device.present"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "第二次 stale_lease",
         "不重复写事件或释放设备"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "第二次 stale_lease",
       "forbidden": [
@@ -5200,9 +5829,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort renew/start/finish 已交付"
+        "M1 SqliteStore renew/start/finish 已交付"
       ],
       "scenario_id": "SC-L03",
       "source": [
@@ -5213,11 +5843,32 @@
       "variant_id": "duplicate_finish"
     },
     "SC-L03/duplicate_start": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "steps.5.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.6.task.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "第二次 stale_lease",
         "不重复写 task_started"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "第二次 stale_lease",
       "forbidden": [
@@ -5225,9 +5876,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort renew/start/finish 已交付"
+        "M1 SqliteStore renew/start/finish 已交付"
       ],
       "scenario_id": "SC-L03",
       "source": [
@@ -5238,11 +5890,36 @@
       "variant_id": "duplicate_start"
     },
     "SC-L03/expired_lease": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "steps.5.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.6.task.state"
+              },
+              {
+                "equals": 1,
+                "path": "steps.6.task.attempt"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "已过期一律 stale_lease",
         "失败 API 不改 attempt"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "已过期一律 stale_lease",
       "forbidden": [
@@ -5250,9 +5927,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort renew/start/finish 已交付"
+        "M1 SqliteStore renew/start/finish 已交付"
       ],
       "scenario_id": "SC-L03",
       "source": [
@@ -5263,11 +5941,36 @@
       "variant_id": "expired_lease"
     },
     "SC-L03/old_lease_after_renew": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "steps.6.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.7.task.state"
+              },
+              {
+                "equals": true,
+                "path": "steps.7.task.lease_fields_present"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "stale_lease",
         "不改变行或事件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "stale_lease",
       "forbidden": [
@@ -5275,9 +5978,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort renew/start/finish 已交付"
+        "M1 SqliteStore renew/start/finish 已交付"
       ],
       "scenario_id": "SC-L03",
       "source": [
@@ -5288,11 +5992,32 @@
       "variant_id": "old_lease_after_renew"
     },
     "SC-L03/old_nonce": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "steps.5.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.6.task.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "stale_lease",
         "不得续命或抢占"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "stale_lease",
       "forbidden": [
@@ -5300,9 +6025,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort renew/start/finish 已交付"
+        "M1 SqliteStore renew/start/finish 已交付"
       ],
       "scenario_id": "SC-L03",
       "source": [
@@ -5313,12 +6039,33 @@
       "variant_id": "old_nonce"
     },
     "SC-L03/renew_updates_both": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "steps.5.advanced"
+              },
+              {
+                "equals": true,
+                "path": "steps.6.device.deadline_matches_task"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "任务与设备截止时间同改",
         "返回新 Lease",
         "写入 lease_renewed 事件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "任务与设备截止时间同改",
       "forbidden": [
@@ -5326,9 +6073,10 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M1 StorePort renew/start/finish 已交付"
+        "M1 SqliteStore renew/start/finish 已交付"
       ],
       "scenario_id": "SC-L03",
       "source": [
@@ -5339,11 +6087,40 @@
       "variant_id": "renew_updates_both"
     },
     "SC-L04/alive": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "owner_not_stopped",
+                "path": "steps.8.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.9.task.state"
+              },
+              {
+                "equals": "held",
+                "path": "steps.9.device.reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "owner_not_stopped",
         "不变更任务或设备"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "owner_not_stopped",
       "forbidden": [
@@ -5351,6 +6128,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5365,11 +6143,32 @@
       "variant_id": "alive"
     },
     "SC-L04/confirm_false": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "owner_not_stopped",
+                "path": "steps.5.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.6.task.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "owner_not_stopped",
         "不变更"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "owner_not_stopped",
       "forbidden": [
@@ -5377,6 +6176,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5391,11 +6191,37 @@
       "variant_id": "confirm_false"
     },
     "SC-L04/different_host": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "owner_not_stopped",
+                "path": "steps.8.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.9.task.state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "owner_not_stopped",
-        "v1 不支持跨机恢复"
+        "v1 不支持跨机恢复",
+        "原DB/Lease身份匹配且过期"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "owner_not_stopped",
       "forbidden": [
@@ -5403,6 +6229,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5417,12 +6244,37 @@
       "variant_id": "different_host"
     },
     "SC-L04/leased_expired_stopped": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "queued",
+                "path": "steps.6.task_state"
+              },
+              {
+                "equals": "queued",
+                "path": "steps.7.task.state"
+              },
+              {
+                "equals": false,
+                "path": "steps.7.device.present"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "leased→queued",
         "清空任务租约并删除设备行",
         "lease_recovered 同事务"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "leased→queued",
       "forbidden": [
@@ -5430,6 +6282,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5444,11 +6297,40 @@
       "variant_id": "leased_expired_stopped"
     },
     "SC-L04/permission_denied": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "owner_not_stopped",
+                "path": "steps.8.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.9.task.state"
+              },
+              {
+                "equals": "held",
+                "path": "steps.9.device.reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "owner_not_stopped",
-        "不推断已停止"
+        "不变更任务或设备"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "owner_not_stopped",
       "forbidden": [
@@ -5456,6 +6338,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5470,12 +6353,45 @@
       "variant_id": "permission_denied"
     },
     "SC-L04/running_expired_stopped": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "blocked",
+                "path": "steps.8.task_state"
+              },
+              {
+                "equals": "blocked",
+                "path": "steps.9.task.state"
+              },
+              {
+                "equals": "recovery_requires_reconciliation",
+                "path": "steps.9.task.reason_code"
+              },
+              {
+                "equals": "quarantined",
+                "path": "steps.9.device.reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "running→blocked/recovery_requires_reconciliation",
         "设备行保留并 quarantined",
         "不删除隔离行"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "running→blocked/recovery_requires_reconciliation",
       "forbidden": [
@@ -5483,6 +6399,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5497,11 +6414,40 @@
       "variant_id": "running_expired_stopped"
     },
     "SC-L04/unknown": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "owner_not_stopped",
+                "path": "steps.8.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.9.task.state"
+              },
+              {
+                "equals": "held",
+                "path": "steps.9.device.reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "owner_not_stopped",
-        "保留未决锁"
+        "不变更任务或设备"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "owner_not_stopped",
       "forbidden": [
@@ -5509,6 +6455,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5523,17 +6470,53 @@
       "variant_id": "unknown"
     },
     "SC-L05/device_update_miss": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "steps.8.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.9.task.state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.task.lease_fields_present"
+              },
+              {
+                "equals": "held",
+                "path": "steps.9.device.reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "任务状态与事件全部回滚"
+        "全部回滚",
+        "设备行与事件不变",
+        "stale_lease"
       ],
+      "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "任务状态与事件全部回滚",
+      "expected_summary": "全部回滚",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
@@ -5548,18 +6531,53 @@
       "variant_id": "device_update_miss"
     },
     "SC-L05/event_write_fail": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "steps.8.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.9.task.state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.task.lease_fields_present"
+              },
+              {
+                "equals": "held",
+                "path": "steps.9.device.reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "任务/设备/事件同事务回滚",
-        "不伪造成功"
+        "全部回滚",
+        "设备行与事件不变",
+        "store_io_error"
       ],
+      "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "任务/设备/事件同事务回滚",
+      "expected_summary": "全部回滚",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
@@ -5574,11 +6592,36 @@
       "variant_id": "event_write_fail"
     },
     "SC-L05/finish_evidence_unknown": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "blocked",
+                "path": "steps.7.task.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "steps.7.device.reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "steps.7.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "与 ReadResult.undetermined 相同设备处置",
         "不把 unknown 当未执行重试"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "与 ReadResult.undetermined 相同设备处置",
       "forbidden": [
@@ -5586,6 +6629,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
@@ -5600,12 +6644,45 @@
       "variant_id": "finish_evidence_unknown"
     },
     "SC-L05/finish_undetermined": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "updated",
+                "path": "steps.6.result"
+              },
+              {
+                "equals": "blocked",
+                "path": "steps.7.task.state"
+              },
+              {
+                "equals": false,
+                "path": "steps.7.task.lease_fields_present"
+              },
+              {
+                "equals": "quarantined",
+                "path": "steps.7.device.reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "steps.7.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "blocked 清空任务五租约字段",
-        "设备行保留原 owner/pid/host/nonce/截止",
+        "设备行保留原身份",
         "仅 quarantined"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "blocked 清空任务五租约字段",
       "forbidden": [
@@ -5613,6 +6690,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
@@ -5627,11 +6705,40 @@
       "variant_id": "finish_undetermined"
     },
     "SC-L05/rollback_then_claim_busy": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "steps.8.error"
+              },
+              {
+                "equals": "lease_busy",
+                "path": "steps.9.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.10.task.state"
+              },
+              {
+                "equals": true,
+                "path": "steps.10.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "下一次 claim lease_busy",
         "设备行保持原值"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "下一次 claim lease_busy",
       "forbidden": [
@@ -5639,6 +6746,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
@@ -5653,11 +6761,45 @@
       "variant_id": "rollback_then_claim_busy"
     },
     "SC-L05/task_update_miss": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "steps.8.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.9.task.state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.task.lease_fields_present"
+              },
+              {
+                "equals": "held",
+                "path": "steps.9.device.reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "steps.9.device.identity_unchanged"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "全部回滚",
-        "设备行与事件不变"
+        "设备行与事件不变",
+        "stale_lease"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "全部回滚",
       "forbidden": [
@@ -5665,6 +6807,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
@@ -5684,6 +6827,7 @@
         "放弃只关闭任务",
         "不解除动作键锁或设备隔离"
       ],
+      "deferred_to": "M5",
       "device_gate": false,
       "expected_summary": "放弃只关闭任务",
       "forbidden": [
@@ -5691,6 +6835,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5705,18 +6850,40 @@
       "variant_id": "abandon_task"
     },
     "SC-L06/change_owner": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "steps.5.error"
+              },
+              {
+                "equals": "running",
+                "path": "steps.6.task.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "owner_not_stopped 或 stale_lease",
+        "stale_lease",
         "不变更"
       ],
+      "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "owner_not_stopped 或 stale_lease",
+      "expected_summary": "stale_lease",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5731,12 +6898,37 @@
       "variant_id": "change_owner"
     },
     "SC-L06/parent_stopped_child_unknown": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "blocked",
+                "path": "steps.8.task_state"
+              },
+              {
+                "equals": "lease_busy",
+                "path": "steps.9.error"
+              },
+              {
+                "equals": "quarantined",
+                "path": "steps.10.device.reservation_state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "隔离保留",
         "未决锁保留",
         "不杀进程、不重放动作"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "隔离保留",
       "forbidden": [
@@ -5744,6 +6936,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5758,11 +6951,32 @@
       "variant_id": "parent_stopped_child_unknown"
     },
     "SC-L06/ttl_expired": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "lease_busy",
+                "path": "steps.8.error"
+              },
+              {
+                "equals": "quarantined",
+                "path": "steps.9.device.reservation_state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "不自动解除隔离",
         "不许可新任务"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不自动解除隔离",
       "forbidden": [
@@ -5770,6 +6984,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
@@ -5784,11 +6999,36 @@
       "variant_id": "ttl_expired"
     },
     "SC-L07/bool_integer": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_input",
+                "path": "steps.3.error"
+              },
+              {
+                "equals": "queued",
+                "path": "steps.4.task.state"
+              },
+              {
+                "equals": 0,
+                "path": "steps.4.task.attempt"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "invalid_input",
         "STRICT 类型不被 bool 绕过"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "invalid_input",
       "forbidden": [
@@ -5796,6 +7036,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
@@ -5810,11 +7051,37 @@
       "variant_id": "bool_integer"
     },
     "SC-L07/busy_timeout": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "store_busy",
+                "path": "steps.5.error"
+              },
+              {
+                "equals": "queued",
+                "path": "steps.6.task.state"
+              },
+              {
+                "equals": false,
+                "path": "steps.6.device.present"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "store_busy 安全出口",
-        "不当作设备租约过期"
+        "不当作设备租约过期",
+        "释放后业务行不变"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "store_busy 安全出口",
       "forbidden": [
@@ -5822,6 +7089,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
@@ -5836,11 +7104,36 @@
       "variant_id": "busy_timeout"
     },
     "SC-L07/cross_app_key": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_input",
+                "path": "steps.2.error"
+              },
+              {
+                "equals": 0,
+                "path": "steps.3.task_count"
+              },
+              {
+                "equals": false,
+                "path": "steps.3.device.present"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "invalid_input 整批回滚",
         "不放宽 app CHECK"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "invalid_input 整批回滚",
       "forbidden": [
@@ -5848,6 +7141,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
@@ -5867,6 +7161,7 @@
         "唯一索引拒绝",
         "不覆盖在途负载"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "唯一索引拒绝",
       "forbidden": [
@@ -5874,6 +7169,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": "tests.test_store 的 upsert/唯一约束证据",
       "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
@@ -5893,6 +7189,7 @@
         "invalid_input",
         "CHECK 约束生效"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "invalid_input",
       "forbidden": [
@@ -5900,6 +7197,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": "tests.test_migrations 的 schema 约束证据；不另造跨模块 PASS",
       "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
@@ -5914,11 +7212,28 @@
       "variant_id": "invalid_lease_state"
     },
     "SC-L07/io_error": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "steps.1.error"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "store_io_error",
         "不输出 SQL 或路径"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "store_io_error",
       "forbidden": [
@@ -5926,6 +7241,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
@@ -5945,6 +7261,7 @@
         "假设备调用次数为 0",
         "必须先 start"
       ],
+      "deferred_to": "M6（M5 动作边界；M3 可准备计数探针）",
       "device_gate": false,
       "expected_summary": "假设备调用次数为 0",
       "forbidden": [
@@ -5952,6 +7269,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
@@ -5971,6 +7289,7 @@
         "外键失败整批回滚",
         "不级联删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "外键失败整批回滚",
       "forbidden": [
@@ -5978,6 +7297,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": "tests.test_migrations 的外键约束证据",
       "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
@@ -5997,6 +7317,7 @@
         "仅打开约定目标一次",
         "超范围重新申请"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "仅打开约定目标一次",
       "forbidden": [
@@ -6004,6 +7325,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
@@ -6023,6 +7345,7 @@
         "运行前停止",
         "不写未忽略证据"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "运行前停止",
       "forbidden": [
@@ -6030,6 +7353,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
@@ -6049,6 +7373,7 @@
         "不打开会话",
         "不消耗未读"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不打开会话",
       "forbidden": [
@@ -6056,6 +7381,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
@@ -6075,6 +7401,7 @@
         "实际设备调用 0",
         "结果 BLOCKED，不得记 PASS"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "实际设备调用 0",
       "forbidden": [
@@ -6082,6 +7409,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
@@ -6101,6 +7429,7 @@
         "按本轮确认逐项核对",
         "无确认不连接设备"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "按本轮确认逐项核对",
       "forbidden": [
@@ -6108,6 +7437,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
@@ -6128,6 +7458,7 @@
         "阳性识别 NOT_COVERED",
         "不声称零漏检"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "只记录窗口未观察到阳性",
       "forbidden": [
@@ -6135,6 +7466,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 真机只读",
@@ -6155,6 +7487,7 @@
         "不无限等待",
         "安全停止可 PASS 但阳性识别不 PASS"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "到限保存证据并结束",
       "forbidden": [
@@ -6162,6 +7495,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 真机只读",
@@ -6182,6 +7516,7 @@
         "unread_unverified",
         "停止整轮"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "一次且只一次核对",
       "forbidden": [
@@ -6189,6 +7524,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 定向核对",
@@ -6208,6 +7544,7 @@
         "unknown 不算检出",
         "缺导航授权记 BLOCKED"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "unknown 不算检出",
       "forbidden": [
@@ -6215,6 +7552,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 定向核对",
@@ -6235,6 +7573,7 @@
         "暂停 unread_unverified",
         "不把相等数量绑定任意行"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不造目标",
       "forbidden": [
@@ -6242,6 +7581,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 定向核对",
@@ -6261,6 +7601,7 @@
         "只读观察",
         "入补测队列"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "只读观察",
       "forbidden": [
@@ -6268,6 +7609,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 定向核对",
@@ -6288,6 +7630,7 @@
         "不宣告全局无未知",
         "不打开会话"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "即使其它源 unknown 也可登记明确目标",
       "forbidden": [
@@ -6295,6 +7638,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 列表读取",
@@ -6314,6 +7658,7 @@
         "人工先标注再比对",
         "无进入授权则进入分支 BLOCKED"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "人工先标注再比对",
       "forbidden": [
@@ -6321,6 +7666,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 列表读取",
@@ -6341,6 +7687,7 @@
         "不能因消失记 done/absent",
         "中断转人工核对"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "发现保留",
       "forbidden": [
@@ -6348,6 +7695,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 预保存发现",
@@ -6367,6 +7715,7 @@
         "角标消失不代表任务完成",
         "不反复进出"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "角标消失不代表任务完成",
       "forbidden": [
@@ -6374,6 +7723,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 预保存发现",
@@ -6394,6 +7744,7 @@
         "旧快照失效则重采",
         "新增入站不覆盖在途负载"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不合成一条事件",
       "forbidden": [
@@ -6401,6 +7752,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 实时采集",
@@ -6420,6 +7772,7 @@
         "无法区分旧/新时 INCONCLUSIVE",
         "不拼接前后现场"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "无法区分旧/新时 INCONCLUSIVE",
       "forbidden": [
@@ -6427,6 +7780,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 实时采集",
@@ -6446,6 +7800,7 @@
         "消失不视为无新消息",
         "记录竞争，不指挥复现"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "消失不视为无新消息",
       "forbidden": [
@@ -6453,6 +7808,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 独占观察"
@@ -6471,6 +7827,7 @@
         "标签时间不一致记 INCONCLUSIVE",
         "不把标未读当恢复"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "标签时间不一致记 INCONCLUSIVE",
       "forbidden": [
@@ -6478,6 +7835,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 独占观察"
@@ -6496,6 +7854,7 @@
         "仅保守触发核对",
         "不视为等价于未读"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "仅保守触发核对",
       "forbidden": [
@@ -6503,6 +7862,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 真机观察",
@@ -6522,6 +7882,7 @@
         "不独立证明无未读",
         "另一类型未触发记未覆盖"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "不独立证明无未读",
       "forbidden": [
@@ -6529,6 +7890,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 真机观察",
@@ -6548,6 +7910,7 @@
         "正值保守 present",
         "0 为 unknown"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "正值保守 present",
       "forbidden": [
@@ -6555,6 +7918,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 真机观察",
@@ -6575,6 +7939,7 @@
         "身份不唯一不点",
         "不丢其它正目标"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不把截断文本交模型补全",
       "forbidden": [
@@ -6582,6 +7947,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 完整读取",
@@ -6601,6 +7967,7 @@
         "停止受影响流程",
         "补完整读取证据"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "停止受影响流程",
       "forbidden": [
@@ -6608,6 +7975,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 完整读取",
@@ -6628,6 +7996,7 @@
         "不盲按返回",
         "旧发现仍按消息证据核对"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "页面判断才是返回成功",
       "forbidden": [
@@ -6635,6 +8004,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 导航",
@@ -6654,6 +8024,7 @@
         "不重开终态旧指纹",
         "重跑不复原已消耗未读"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "不重开终态旧指纹",
       "forbidden": [
@@ -6661,6 +8032,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 导航",
@@ -6680,6 +8052,7 @@
         "隔离该 profile 的设备门禁",
         "重新标定后另轮"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "隔离该 profile 的设备门禁",
       "forbidden": [
@@ -6687,6 +8060,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 profile 标定",
@@ -6706,6 +8080,7 @@
         "uncalibrated_profile",
         "禁止沿用旧坐标/阈值/发送控件"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "uncalibrated_profile",
       "forbidden": [
@@ -6713,6 +8088,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 profile 标定",
@@ -6733,6 +8109,7 @@
         "转人工",
         "视觉不能证据发送/删除"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "跨级冲突 undetermined",
       "forbidden": [
@@ -6740,6 +8117,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
@@ -6759,6 +8137,7 @@
         "不因高置信覆盖结构证据",
         "未获准不新采集"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "不因高置信覆盖结构证据",
       "forbidden": [
@@ -6766,6 +8145,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
@@ -6786,6 +8166,7 @@
         "未具备条件 BLOCKED",
         "不邀请真实 HR、不自造消息"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "先核实同意、资料与窗口",
       "forbidden": [
@@ -6793,6 +8174,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "仅在有真实 T 条件时建立"
@@ -6811,6 +8193,7 @@
         "下次正常检查观察后优先",
         "不伪造 first_observed"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "下次正常检查观察后优先",
       "forbidden": [
@@ -6818,6 +8201,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M1/M2/M5 离线门槛",
@@ -6840,6 +8224,7 @@
         "arrival 不冒充 first_observed",
         "开始处理才写 stage_preempted"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "刺激不含 first_observed/handling/pause 等产品结果",
       "forbidden": [
@@ -6847,6 +8232,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": "expected/m6-observations.json",
       "preconditions": [
         "M1/M2/M5 离线门槛",
@@ -6866,6 +8252,7 @@
         "只有全真才切换",
         "状态证据收敛后重跑"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "只有全真才切换",
       "forbidden": [
@@ -6873,6 +8260,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M6 安全点向量"
@@ -6891,6 +8279,7 @@
         "每个假条件均不切换",
         "pending/unknown 保留核对卡/隔离"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "每个假条件均不切换",
       "forbidden": [
@@ -6898,6 +8287,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M6 安全点向量"
@@ -6920,6 +8310,7 @@
         "未切换不伪造 stage_preempted",
         "不降低未读优先级"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "仅实际 job→unread 切换累加",
       "forbidden": [
@@ -6927,6 +8318,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": "expected/m6-observations.json",
       "preconditions": [
         "M6 抢占上限 5"
@@ -6945,6 +8337,7 @@
         "不继续职位/清理",
         "记录核对调用与耗时"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不继续职位/清理",
       "forbidden": [
@@ -6952,6 +8345,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M6 调度",
@@ -6972,6 +8366,7 @@
         "之后 unread_unverified",
         "明确行正目标另按 U01 处理"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "一次且只一次核对",
       "forbidden": [
@@ -6979,6 +8374,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M6 调度",
@@ -6998,6 +8394,7 @@
         "剩余预算不凭恢复重置",
         "不可逆沟通仍走 A06 护栏"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "剩余预算不凭恢复重置",
       "forbidden": [
@@ -7005,6 +8402,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M6 游标"
@@ -7024,6 +8422,7 @@
         "找不到跳过",
         "不按第 7 条点击"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "已访问不重复沟通",
       "forbidden": [
@@ -7031,6 +8430,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M6 游标"
@@ -7051,6 +8451,7 @@
         "在途核验并单列超支",
         "不强杀"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "达到上限前检查可启动性",
       "forbidden": [
@@ -7058,6 +8459,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": "expected/m6-observations.json",
       "preconditions": [
         "M6 预算判定",
@@ -7078,6 +8480,7 @@
         "waited_ms 仅单调差",
         "不用墙钟倒退延长授权"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "超过 1 秒 clock_changed 停新动作",
       "forbidden": [
@@ -7085,6 +8488,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M6 租约续租",
@@ -7105,6 +8509,7 @@
         "renew 在 finish 前",
         "终态后不 renew"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "使用最新 Lease",
       "forbidden": [
@@ -7112,6 +8517,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M6 租约续租",
@@ -7134,6 +8540,7 @@
         "最多一条职位事务再加检测/切页",
         "记录 arrival/observed 分离"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "刺激不含 first_observed",
       "forbidden": [
@@ -7141,6 +8548,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": "expected/m6-observations.json",
       "preconditions": [
         "M6 安全点/刷新顺序"
@@ -7293,6 +8701,7 @@
         "attempt 不增",
         "无第二条重放发现"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "发现数仍 1",
       "forbidden": [
@@ -7300,6 +8709,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -7395,6 +8805,7 @@
         "stop_reason=None，候选类型=['unread']",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "ok/present，唯一 unread 候选",
       "forbidden": [
@@ -7402,6 +8813,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -7493,6 +8905,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "uncalibrated_region",
       "forbidden": [
@@ -7500,6 +8913,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -7590,6 +9004,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "uncalibrated_region",
       "forbidden": [
@@ -7597,6 +9012,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -7687,6 +9103,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "区域外数字不改变 unread",
       "forbidden": [
@@ -7694,6 +9111,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -7784,6 +9202,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "ambiguous_signal",
       "forbidden": [
@@ -7791,6 +9210,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -7882,6 +9302,7 @@
         "stop_reason=needs_targeted_verification，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "present",
       "forbidden": [
@@ -7889,6 +9310,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -7979,6 +9401,7 @@
         "stop_reason=needs_targeted_verification，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "保守 present",
       "forbidden": [
@@ -7986,6 +9409,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8076,6 +9500,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/unverified_semantics",
       "forbidden": [
@@ -8083,6 +9508,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8173,6 +9599,7 @@
         "stop_reason=needs_targeted_verification，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "present，count=null",
       "forbidden": [
@@ -8180,6 +9607,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8270,6 +9698,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/ambiguous_signal",
       "forbidden": [
@@ -8277,6 +9706,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8367,6 +9797,7 @@
         "stop_reason=None，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "仅此时得 absent",
       "forbidden": [
@@ -8374,6 +9805,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8464,6 +9896,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/incomplete_coverage",
       "forbidden": [
@@ -8471,6 +9904,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8490,6 +9924,7 @@
         "全部不适用仍 unknown",
         "不得 absent"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "全部不适用仍 unknown",
       "forbidden": [
@@ -8497,6 +9932,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8516,6 +9952,7 @@
         "该行不可定位、不产生候选",
         "不连带其它明确正信号"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "该行不可定位、不产生候选",
       "forbidden": [
@@ -8523,6 +9960,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8613,6 +10051,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不得 absent",
       "forbidden": [
@@ -8620,6 +10059,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8639,6 +10079,7 @@
         "有未关闭发现不得 absent",
         "保留正信号"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "有未关闭发现不得 absent",
       "forbidden": [
@@ -8646,6 +10087,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8736,6 +10178,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/no_baseline",
       "forbidden": [
@@ -8743,6 +10186,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8838,6 +10282,7 @@
         "stop_reason=None，候选类型=['new_message']",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "preview_delta=present",
       "forbidden": [
@@ -8845,6 +10290,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8935,6 +10381,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown/no_baseline 或对应原因",
       "forbidden": [
@@ -8942,6 +10389,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -8962,6 +10410,7 @@
         "只有全部适用源 absent 才可 absent",
         "不能用 null==null 证明无变化"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "该行可判无变化",
       "forbidden": [
@@ -8969,6 +10418,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9063,6 +10513,7 @@
         "stop_reason=None，候选类型=['new_message']",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "可证明变化",
       "forbidden": [
@@ -9070,6 +10521,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9089,6 +10541,7 @@
         "新指纹按 §6 键规则处理",
         "终态旧键不重开"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "新指纹按 §6 键规则处理",
       "forbidden": [
@@ -9096,6 +10549,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9115,6 +10569,7 @@
         "不新增第二条发现",
         "不续租"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不新增第二条发现",
       "forbidden": [
@@ -9122,6 +10577,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9217,6 +10673,7 @@
         "stop_reason=None，候选类型=['unread']",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "合成一个 unread",
       "forbidden": [
@@ -9224,6 +10681,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9300,6 +10758,7 @@
         "stop_reason=invalid_xml，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "整体非 ok",
       "forbidden": [
@@ -9307,6 +10766,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9397,6 +10857,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "降为 viewport",
       "forbidden": [
@@ -9404,6 +10865,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9498,6 +10960,7 @@
         "stop_reason=None，候选类型=['unread']",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "只合并连续完全相同最长重叠",
       "forbidden": [
@@ -9505,6 +10968,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9595,6 +11059,7 @@
         "stop_reason=needs_targeted_verification，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不求和",
       "forbidden": [
@@ -9602,6 +11067,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9621,6 +11087,7 @@
         "恰 5 秒可接受",
         "5001ms 拒绝"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "恰 5 秒可接受",
       "forbidden": [
@@ -9628,6 +11095,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9704,6 +11172,7 @@
         "stop_reason=stale_snapshot，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "拒绝为 stale_snapshot",
       "forbidden": [
@@ -9711,6 +11180,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9787,6 +11257,7 @@
         "stop_reason=stale_snapshot，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "undetermined/stale_snapshot",
       "forbidden": [
@@ -9794,6 +11265,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9870,6 +11342,7 @@
         "stop_reason=invalid_xml，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "failed/invalid_xml",
       "forbidden": [
@@ -9877,6 +11350,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -9953,6 +11427,7 @@
         "stop_reason=incomplete_snapshot，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "undetermined/incomplete_snapshot",
       "forbidden": [
@@ -9960,6 +11435,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10036,6 +11512,7 @@
         "stop_reason=invalid_fixture，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "invalid_fixture",
       "forbidden": [
@@ -10043,6 +11520,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10119,6 +11597,7 @@
         "stop_reason=uncalibrated_profile，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "undetermined/uncalibrated_profile",
       "forbidden": [
@@ -10126,6 +11605,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10145,6 +11625,7 @@
         "undetermined/uncalibrated_profile",
         "不写候选"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "undetermined/uncalibrated_profile",
       "forbidden": [
@@ -10152,6 +11633,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10228,6 +11710,7 @@
         "stop_reason=wrong_page，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "failed/wrong_page",
       "forbidden": [
@@ -10235,6 +11718,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10325,6 +11809,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "行角标与预览 unknown",
       "forbidden": [
@@ -10332,6 +11817,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10351,6 +11837,7 @@
         "全局零只给 coverage",
         "不把未知 preview 改 absent"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "全局零只给 coverage",
       "forbidden": [
@@ -10358,6 +11845,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10449,6 +11937,7 @@
         "stop_reason=needs_targeted_verification，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "无候选",
       "forbidden": [
@@ -10456,6 +11945,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10559,6 +12049,7 @@
         "stop_reason=None，候选类型=['unread']",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "歧义行 conversation_key=null、无候选",
       "forbidden": [
@@ -10566,6 +12057,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10586,6 +12078,7 @@
         "不产生候选",
         "不按行号猜测"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "conversation_key=null",
       "forbidden": [
@@ -10593,6 +12086,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10613,6 +12107,7 @@
         "不取消其它 queued",
         "事件 candidate_superseded"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "旧 queued 可 superseded",
       "forbidden": [
@@ -10620,6 +12115,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 upsert 已交付",
@@ -10640,6 +12136,7 @@
         "不改在途输入/负载",
         "下一安全轮次重采"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "仅 deferred",
       "forbidden": [
@@ -10647,6 +12144,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 upsert 已交付",
@@ -10667,6 +12165,7 @@
         "只报 needs_targeted_verification",
         "不制造第二入站"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "终态不重开",
       "forbidden": [
@@ -10674,6 +12173,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 upsert 已交付",
@@ -10694,6 +12194,7 @@
         "不缓存空集合关闭发现",
         "不以消失宣称读全"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "聚合用 upsert 后 unresolved",
       "forbidden": [
@@ -10701,6 +12202,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense/upsert 已交付",
@@ -10720,6 +12222,7 @@
         "整批 invalid_input 回滚",
         "不倒写时间"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "整批 invalid_input 回滚",
       "forbidden": [
@@ -10727,6 +12230,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense/upsert 已交付",
@@ -10817,6 +12321,7 @@
         "stop_reason=unread_unverified，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "unknown",
       "forbidden": [
@@ -10824,6 +12329,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10914,6 +12420,7 @@
         "stop_reason=None，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "精确零且已验证才 all",
       "forbidden": [
@@ -10921,6 +12428,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -10940,6 +12448,7 @@
         "任一有效正源仍 present",
         "全局零不能覆盖行级正证据"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "任一有效正源仍 present",
       "forbidden": [
@@ -10947,6 +12456,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -11037,6 +12547,7 @@
         "stop_reason=None，候选类型=[]",
         "生产实现只读夹具与临时库，不连接设备或模型"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "not_applicable 只来自已验证 profile",
       "forbidden": [
@@ -11044,6 +12555,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
@@ -11065,6 +12577,7 @@
         "未触发不是 PASS",
         "unknown 不当检出"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "F/T/O/W 独立汇总",
       "forbidden": [
@@ -11072,6 +12585,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M8 指标汇总",
@@ -11092,6 +12606,7 @@
         "不得以 E0/离线 PASS 代替真机门槛",
         "无样本保持未测"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "不得以 E0/离线 PASS 代替真机门槛",
       "forbidden": [
@@ -11099,6 +12614,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M8 指标汇总",
@@ -11119,6 +12635,7 @@
         "草稿不发送",
         "无阳性 NOT_COVERED"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "草稿不发送",
       "forbidden": [
@@ -11126,6 +12643,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M8 灰度",
@@ -11146,6 +12664,7 @@
         "每级至少一次本版本记录",
         "缺实现/授权 BLOCKED"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "每级至少一次本版本记录",
       "forbidden": [
@@ -11153,6 +12672,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M8 灰度",
@@ -11173,6 +12693,7 @@
         "v1 固定 C，不得靠 mode/TOML 开通",
         "独立判据未定稿则关闭"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "v1 固定 C，不得靠 mode/TOML 开通",
       "forbidden": [
@@ -11180,6 +12701,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M8 灰度",
@@ -11200,6 +12722,7 @@
         "最终档位仍 C",
         "A 档发送不可用"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "最终档位仍 C",
       "forbidden": [
@@ -11207,6 +12730,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M8 灰度",
@@ -11227,6 +12751,7 @@
         "撤回/停止新写入需本轮确认",
         "不声称撤销已发生副作用"
       ],
+      "deferred_to": null,
       "device_gate": true,
       "expected_summary": "撤回/停止新写入需本轮确认",
       "forbidden": [
@@ -11234,6 +12759,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "W",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M8 回滚开关",
@@ -11256,6 +12782,7 @@
         "保留库结构/锁/证据",
         "修复后重跑再升级"
       ],
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "立即 read_only 停新写入",
       "forbidden": [
@@ -11263,6 +12790,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
         "M8 回滚开关",

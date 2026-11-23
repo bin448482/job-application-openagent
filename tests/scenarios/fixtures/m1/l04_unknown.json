@@ -1,0 +1,47 @@
+{
+  "start_at": "2026-11-24T00:00:00.000Z",
+  "steps": [
+    {
+      "op": "init"
+    },
+    {
+      "op": "open",
+      "store_host": "local",
+      "stop_mode": "stopped"
+    },
+    {
+      "op": "upsert",
+      "count": 1,
+      "now": "2026-11-24T00:00:00.000Z"
+    },
+    {
+      "op": "claim",
+      "kind": "unread",
+      "now": "2026-11-24T00:00:00.000Z"
+    },
+    {
+      "op": "start",
+      "now": "2026-11-24T00:00:00.000Z"
+    },
+    {
+      "op": "remember_device"
+    },
+    {
+      "op": "close"
+    },
+    {
+      "op": "open",
+      "store_host": "local",
+      "stop_mode": "unknown"
+    },
+    {
+      "op": "recover",
+      "confirm_stopped": true,
+      "now": "2026-11-24T00:01:01.000Z"
+    },
+    {
+      "op": "inspect",
+      "now": "2026-11-24T00:01:01.000Z"
+    }
+  ]
+}

@@ -29,8 +29,8 @@ MILESTONE_SCENARIO_COUNTS = {
 MILLESTONE_ORDER = tuple(MILESTONE_SCENARIO_COUNTS)
 LAYERS = ("E0", "F", "T", "O", "W")
 OFFLINE_LAYER = "F"
-ASSET_STATUSES = ("READY_FOR_APP", "ASSET_ONLY", "DEVICE_GATE")
-ENTRY_STATES = ("frozen", "unfrozen", "device", "none")
+ASSET_STATUSES = ("READY_FOR_APP", "ASSET_ONLY", "DEVICE_GATE", "DEFERRED", "MODULE_EVIDENCE")
+ENTRY_STATES = ("frozen", "unfrozen", "device", "none", "deferred", "module")
 DEVICE_GATE_LAYERS = ("T", "O", "W")
 SCENARIO_ID_RE = re.compile(r"^SC-[A-Z]\d{2}$")
 VARIANT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
@@ -482,8 +482,34 @@ def validate_assets(assets: LoadedAssets) -> dict[str, Any]:
             if asset_status == "READY_FOR_APP":
                 if entry_state != "frozen":
                     errors.append(f"{ref}: READY_FOR_APP 必须绑定 frozen 入口")
-                if not variant.get("steps"):
+                steps = variant.get("steps")
+                if not steps:
                     errors.append(f"{ref}: READY_FOR_APP 必须给出可执行步骤")
+                else:
+                    for step in steps:
+                        if isinstance(step, str) and step.startswith("python "):
+                            continue
+                        if (
+                            isinstance(step, dict)
+                            and isinstance(step.get("concurrent"), list)
+                            and len(step["concurrent"]) == 2
+                            and all(
+                                isinstance(item, str) and item.startswith("python ")
+                                for item in step["concurrent"]
+                            )
+                        ):
+                            continue
+                        errors.append(f"{ref}: READY 步骤必须是 python 命令或两个并发 python 命令")
+            if asset_status == "DEFERRED":
+                if entry_state != "deferred":
+                    errors.append(f"{ref}: DEFERRED 必须使用 entry_state=deferred")
+                if not variant.get("deferred_to"):
+                    errors.append(f"{ref}: DEFERRED 必须写明 deferred_to")
+            if asset_status == "MODULE_EVIDENCE":
+                if entry_state != "module":
+                    errors.append(f"{ref}: MODULE_EVIDENCE 必须使用 entry_state=module")
+                if not variant.get("module_evidence"):
+                    errors.append(f"{ref}: MODULE_EVIDENCE 必须写明 module_evidence")
             if asset_status == "ASSET_ONLY":
                 if not variant.get("required_api") and not variant.get("setup"):
                     warnings.append(f"{ref}: ASSET_ONLY 未说明缺失入口或前置")

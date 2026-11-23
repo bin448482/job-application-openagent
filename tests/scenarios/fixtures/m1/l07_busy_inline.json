@@ -1,0 +1,34 @@
+{
+  "start_at": "2026-11-24T00:00:00.000Z",
+  "steps": [
+    {
+      "op": "init"
+    },
+    {
+      "op": "open",
+      "store_host": "local",
+      "stop_mode": "stopped"
+    },
+    {
+      "op": "upsert",
+      "count": 1,
+      "now": "2026-11-24T00:00:00.000Z"
+    },
+    {
+      "op": "close"
+    },
+    {
+      "op": "open",
+      "store_host": "local",
+      "stop_mode": "stopped"
+    },
+    {
+      "op": "locked_claim",
+      "now": "2026-11-24T00:00:00.000Z"
+    },
+    {
+      "op": "inspect",
+      "now": "2026-11-24T00:00:00.000Z"
+    }
+  ]
+}

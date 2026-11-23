@@ -80,7 +80,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "no_device",
@@ -122,7 +124,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "ambiguous",
@@ -164,7 +168,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "offline",
@@ -206,7 +212,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unauthorized",
@@ -248,7 +256,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "locked_unknown",
@@ -290,7 +300,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "locked_true",
@@ -332,7 +344,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "foreground_other",
@@ -374,7 +388,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "foreground_unknown",
@@ -416,7 +432,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_probe",
@@ -440,7 +458,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -512,7 +532,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "config_empty_object",
@@ -552,7 +574,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "config_null_mode",
@@ -593,7 +617,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "config_bool_version",
@@ -634,7 +660,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "config_extra_key",
@@ -675,7 +703,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "config_missing_file",
@@ -718,7 +748,9 @@
           "expected_missing_inputs": [
             "tests/scenarios/fixtures/m0/config/missing.json"
           ],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "fixture_device_conflict",
@@ -755,7 +787,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_mode",
@@ -792,7 +826,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_serial",
@@ -829,7 +865,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "duplicate_option",
@@ -866,7 +904,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unknown_option",
@@ -903,7 +943,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "help",
@@ -937,7 +979,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -1001,7 +1045,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "duplicate_alias",
@@ -1038,7 +1084,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "selected_missing",
@@ -1075,7 +1123,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "extra_key",
@@ -1112,7 +1162,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "io_failure",
@@ -1150,7 +1202,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "probe_timeout_protocol",
@@ -1210,7 +1264,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "probe_nonzero_protocol",
@@ -1270,7 +1326,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "fixture_subprocess_zero",
@@ -1312,7 +1370,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -1326,7 +1386,7 @@
         "场景方案 §7"
       ],
       "preconditions": [
-        "M1 store init 已交付",
+        "M1 store init/initialize_database 已交付",
         "只使用临时合成库"
       ],
       "offline_subscenarios": [
@@ -1397,7 +1457,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "path_traversal",
@@ -1406,7 +1468,7 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python -m app store init --db data/../scenario-outside.sqlite3"
+            "python -m app store init --db ../scenario-outside.sqlite3"
           ],
           "fixture": null,
           "setup": null,
@@ -1414,9 +1476,9 @@
           "expected_ref": "SC-L01/path_traversal",
           "device_gate": false,
           "assertions": [
-            "解析 .. 后仍须位于项目内",
+            "解析 .. 后必须拒绝",
             "退出 2 invalid_input",
-            "不创建项目外文件"
+            "不写任何库"
           ],
           "acceptance": {
             "steps": [
@@ -1428,11 +1490,54 @@
                   "reason_code": "invalid_input"
                 }
               }
-            ],
-            "db_checks": [
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
+        },
+        {
+          "id": "init_midway_failure",
+          "label": "建表中途失败回滚",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l01_init_midway.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l01_init_midway.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-L01/init_midway_failure",
+          "device_gate": false,
+          "assertions": [
+            "user_version 仍为 0",
+            "无残留半套表/索引",
+            "不覆盖已有库"
+          ],
+          "acceptance": {
+            "steps": [
               {
-                "kind": "file_absent",
-                "path": "scenario-outside.sqlite3"
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.1.user_version",
+                    "equals": 0
+                  },
+                  {
+                    "path": "steps.1.tables",
+                    "equals": []
+                  }
+                ]
               }
             ]
           },
@@ -1441,104 +1546,153 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
-        },
-        {
-          "id": "init_midway_failure",
-          "label": "建表中途失败回滚",
-          "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "在空库建表中途注入故障",
-          "required_api": "M1 schema 初始化故障注入",
-          "expected_ref": "SC-L01/init_midway_failure",
-          "device_gate": false,
-          "assertions": [
-            "user_version 仍为 0",
-            "无残留半套表/索引",
-            "不覆盖已有库"
-          ],
-          "acceptance": null,
-          "forbidden": [
-            "不得以资产自检代替产品执行",
-            "未执行或 BLOCKED 时不得记 PASS"
-          ],
-          "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unknown_version",
           "label": "未知 user_version",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "预置 user_version=99 的合成库",
-          "required_api": "M1StorePort 打开库",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l01_unknown_version.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l01_unknown_version.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L01/unknown_version",
           "device_gate": false,
           "assertions": [
             "db_version_unsupported",
             "不迁移、不重建、不导入旧库"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.2.error",
+                    "equals": "db_version_unsupported"
+                  },
+                  {
+                    "path": "steps.3.user_version",
+                    "equals": 99
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "nonempty_no_version",
           "label": "非空无版本库",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "预置 user_version=0 且含用户表的合成库",
-          "required_api": "M1 StorePort 打开库",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l01_nonempty_no_version.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l01_nonempty_no_version.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L01/nonempty_no_version",
           "device_gate": false,
           "assertions": [
             "db_version_unsupported",
             "不自动接管非空库"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.2.error",
+                    "equals": "db_version_unsupported"
+                  },
+                  {
+                    "path": "steps.3.user_version",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_index",
           "label": "缺索引/被篡改 v1 库",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "预置删掉唯一索引的 v1 合成库",
-          "required_api": "M1 schema 校验",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l01_missing_index.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l01_missing_index.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L01/missing_index",
           "device_gate": false,
           "assertions": [
             "db_version_unsupported",
             "不补建后声称成功"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.1.prepared",
+                    "equals": "drop_index"
+                  },
+                  {
+                    "path": "steps.2.error",
+                    "equals": "db_version_unsupported"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -1552,8 +1706,8 @@
         "场景方案 §7"
       ],
       "preconditions": [
-        "M1 StorePort claim 已交付",
-        "只访问合成 DB，单独计数测试进程"
+        "M1 SqliteStore.claim 已交付",
+        "父 runner 只启动两个隔离子进程"
       ],
       "offline_subscenarios": [
         "same_task_claim",
@@ -1561,18 +1715,28 @@
         "ttl_expiry_only",
         "device_row_present"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "same_task_claim",
           "label": "两进程竞争同一任务",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "两个本机进程对同一合成库 claim 同一候选",
-          "required_api": "M1 StorePort claim",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_setup_one.json --db {db}",
+            {
+              "concurrent": [
+                "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_claim_unread.json --db {db}",
+                "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_claim_unread_2.json --db {db}"
+              ],
+              "timeout": 45
+            },
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_verify.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l02_setup_one.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L02/same_task_claim",
           "device_gate": false,
           "assertions": [
@@ -1580,48 +1744,190 @@
             "attempt 仅成功 claim +1",
             "失败者 lease_busy"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "children": [
+                  {
+                    "exit_code": 0,
+                    "stdout_paths": [
+                      {
+                        "path": "status",
+                        "equals": "ok"
+                      }
+                    ]
+                  },
+                  {
+                    "exit_code": 0,
+                    "stdout_paths": [
+                      {
+                        "path": "status",
+                        "equals": "ok"
+                      }
+                    ]
+                  }
+                ],
+                "outcome_counts": {
+                  "claimed": 1,
+                  "lease_busy": 1
+                }
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.1.leased_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "steps.1.device.present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.1.device.deadline_matches_task",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "different_task_claim",
           "label": "不同任务仍争设备 primary",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "两进程 claim 不同任务",
-          "required_api": "M1 StorePort claim",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_setup_two.json --db {db}",
+            {
+              "concurrent": [
+                "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_claim_unread.json --db {db}",
+                "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_claim_new.json --db {db}"
+              ],
+              "timeout": 45
+            },
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_verify.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l02_setup_two.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L02/different_task_claim",
           "device_gate": false,
           "assertions": [
             "第二个 claim lease_busy",
             "设备行存在即互斥"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "children": [
+                  {
+                    "exit_code": 0,
+                    "stdout_paths": [
+                      {
+                        "path": "status",
+                        "equals": "ok"
+                      }
+                    ]
+                  },
+                  {
+                    "exit_code": 0,
+                    "stdout_paths": [
+                      {
+                        "path": "status",
+                        "equals": "ok"
+                      }
+                    ]
+                  }
+                ],
+                "outcome_counts": {
+                  "claimed": 1,
+                  "lease_busy": 1
+                }
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.1.leased_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "steps.1.queued_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "steps.1.task_count",
+                    "equals": 2
+                  },
+                  {
+                    "path": "steps.1.device.present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.1.device.deadline_matches_task",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "ttl_expiry_only",
           "label": "仅 TTL 过期不许可抢占",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "推进虚拟时钟超过 60 秒，不提供停止证据",
-          "required_api": "M1 claim/recover",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_ttl.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l02_ttl.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L02/ttl_expiry_only",
           "device_gate": false,
           "assertions": [
@@ -1629,37 +1935,91 @@
             "仍 lease_busy",
             "不覆盖设备行"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.4.error",
+                    "equals": "lease_busy"
+                  },
+                  {
+                    "path": "steps.5.task.state",
+                    "equals": "leased"
+                  },
+                  {
+                    "path": "steps.5.device.present",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "device_row_present",
           "label": "设备行存在即拒绝",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "预置 held 或 quarantined primary 设备行",
-          "required_api": "M1 claim",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l02_device_row.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l02_device_row.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L02/device_row_present",
           "device_gate": false,
           "assertions": [
             "任何状态设备行存在均 lease_busy",
             "不删除或覆盖设备行"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.4.error",
+                    "equals": "lease_busy"
+                  },
+                  {
+                    "path": "steps.5.device.present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.5.task.state",
+                    "equals": "leased"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -1673,7 +2033,7 @@
         "场景方案 §7"
       ],
       "preconditions": [
-        "M1 StorePort renew/start/finish 已交付"
+        "M1 SqliteStore renew/start/finish 已交付"
       ],
       "offline_subscenarios": [
         "renew_updates_both",
@@ -1683,18 +2043,20 @@
         "duplicate_start",
         "duplicate_finish"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "renew_updates_both",
           "label": "续租同步任务与设备截止",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "t0 claim TTL60，t20 用当前 Lease renew",
-          "required_api": "M1 renew",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l03_renew.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l03_renew.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L03/renew_updates_both",
           "device_gate": false,
           "assertions": [
@@ -1702,133 +2064,287 @@
             "返回新 Lease",
             "写入 lease_renewed 事件"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.5.advanced",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.6.device.deadline_matches_task",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "old_lease_after_renew",
           "label": "续租前旧 Lease 失效",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "renew 后继续用旧 Lease",
-          "required_api": "M1 start/finish",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l03_old_lease.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l03_old_lease.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L03/old_lease_after_renew",
           "device_gate": false,
           "assertions": [
             "stale_lease",
             "不改变行或事件"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.6.error",
+                    "equals": "stale_lease"
+                  },
+                  {
+                    "path": "steps.7.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.7.task.lease_fields_present",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "old_nonce",
           "label": "旧 nonce",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "使用上一轮 nonce",
-          "required_api": "M1 start/finish/renew",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l03_old_nonce.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l03_old_nonce.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L03/old_nonce",
           "device_gate": false,
           "assertions": [
             "stale_lease",
             "不得续命或抢占"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.5.error",
+                    "equals": "stale_lease"
+                  },
+                  {
+                    "path": "steps.6.task.state",
+                    "equals": "running"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "expired_lease",
           "label": "now>=截止时间",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "推进时钟到截止时刻",
-          "required_api": "M1 start/finish/renew",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l03_expired.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l03_expired.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L03/expired_lease",
           "device_gate": false,
           "assertions": [
             "已过期一律 stale_lease",
             "失败 API 不改 attempt"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.5.error",
+                    "equals": "stale_lease"
+                  },
+                  {
+                    "path": "steps.6.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.6.task.attempt",
+                    "equals": 1
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "duplicate_start",
           "label": "重复 start",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "同一 Lease 连续 start 两次",
-          "required_api": "M1 start",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l03_duplicate_start.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l03_duplicate_start.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L03/duplicate_start",
           "device_gate": false,
           "assertions": [
             "第二次 stale_lease",
             "不重复写 task_started"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.5.error",
+                    "equals": "stale_lease"
+                  },
+                  {
+                    "path": "steps.6.task.state",
+                    "equals": "running"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "duplicate_finish",
           "label": "重复 finish",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "同一 Lease 连续 finish 两次",
-          "required_api": "M1 finish",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l03_duplicate_finish.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l03_duplicate_finish.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L03/duplicate_finish",
           "device_gate": false,
           "assertions": [
             "第二次 stale_lease",
             "不重复写事件或释放设备"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.6.error",
+                    "equals": "stale_lease"
+                  },
+                  {
+                    "path": "steps.7.task.state",
+                    "equals": "done"
+                  },
+                  {
+                    "path": "steps.7.device.present",
+                    "equals": false
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -1854,18 +2370,20 @@
         "different_host",
         "confirm_false"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "leased_expired_stopped",
           "label": "leased 过期且确认停止",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "注入 stopped 且 confirm_stopped=true",
-          "required_api": "M1 recover",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l04_leased_stopped.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l04_leased_stopped.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L04/leased_expired_stopped",
           "device_gate": false,
           "assertions": [
@@ -1873,24 +2391,52 @@
             "清空任务租约并删除设备行",
             "lease_recovered 同事务"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.6.task_state",
+                    "equals": "queued"
+                  },
+                  {
+                    "path": "steps.7.task.state",
+                    "equals": "queued"
+                  },
+                  {
+                    "path": "steps.7.device.present",
+                    "equals": false
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "running_expired_stopped",
           "label": "running 过期且确认停止",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "注入 stopped 且 confirm_stopped=true",
-          "required_api": "M1 recover",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l04_running_stopped.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l04_running_stopped.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L04/running_expired_stopped",
           "device_gate": false,
           "assertions": [
@@ -1898,133 +2444,316 @@
             "设备行保留并 quarantined",
             "不删除隔离行"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.task_state",
+                    "equals": "blocked"
+                  },
+                  {
+                    "path": "steps.9.task.state",
+                    "equals": "blocked"
+                  },
+                  {
+                    "path": "steps.9.task.reason_code",
+                    "equals": "recovery_requires_reconciliation"
+                  },
+                  {
+                    "path": "steps.9.device.reservation_state",
+                    "equals": "quarantined"
+                  },
+                  {
+                    "path": "steps.9.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "alive",
           "label": "原进程仍活动",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "注入 alive",
-          "required_api": "M1 recover",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l04_alive.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l04_alive.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L04/alive",
           "device_gate": false,
           "assertions": [
             "owner_not_stopped",
             "不变更任务或设备"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.error",
+                    "equals": "owner_not_stopped"
+                  },
+                  {
+                    "path": "steps.9.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.9.device.reservation_state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "steps.9.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unknown",
           "label": "停止未知",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "注入 unknown",
-          "required_api": "M1 recover",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l04_unknown.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l04_unknown.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L04/unknown",
           "device_gate": false,
           "assertions": [
             "owner_not_stopped",
-            "保留未决锁"
+            "不变更任务或设备"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.error",
+                    "equals": "owner_not_stopped"
+                  },
+                  {
+                    "path": "steps.9.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.9.device.reservation_state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "steps.9.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "permission_denied",
           "label": "权限不足",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "注入 permission_denied",
-          "required_api": "M1 recover",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l04_permission.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l04_permission.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L04/permission_denied",
           "device_gate": false,
           "assertions": [
             "owner_not_stopped",
-            "不推断已停止"
+            "不变更任务或设备"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.error",
+                    "equals": "owner_not_stopped"
+                  },
+                  {
+                    "path": "steps.9.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.9.device.reservation_state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "steps.9.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "different_host",
           "label": "不同主机",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "注入不同 owner_host",
-          "required_api": "M1 recover",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l04_different_host.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l04_different_host.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L04/different_host",
           "device_gate": false,
           "assertions": [
             "owner_not_stopped",
-            "v1 不支持跨机恢复"
+            "v1 不支持跨机恢复",
+            "原DB/Lease身份匹配且过期"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.error",
+                    "equals": "owner_not_stopped"
+                  },
+                  {
+                    "path": "steps.9.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.9.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "confirm_false",
           "label": "确认标志为 false",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "confirm_stopped=false",
-          "required_api": "M1 recover",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l04_confirm_false.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l04_confirm_false.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L04/confirm_false",
           "device_gate": false,
           "assertions": [
             "owner_not_stopped",
             "不变更"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.5.error",
+                    "equals": "owner_not_stopped"
+                  },
+                  {
+                    "path": "steps.6.task.state",
+                    "equals": "running"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -2049,151 +2778,359 @@
         "event_write_fail",
         "rollback_then_claim_busy"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "finish_undetermined",
           "label": "ReadResult.undetermined → blocked",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "合成 ReadResult.undetermined",
-          "required_api": "M1 finish",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l05_undetermined.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l05_undetermined.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L05/finish_undetermined",
           "device_gate": false,
           "assertions": [
             "blocked 清空任务五租约字段",
-            "设备行保留原 owner/pid/host/nonce/截止",
+            "设备行保留原身份",
             "仅 quarantined"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.6.result",
+                    "equals": "updated"
+                  },
+                  {
+                    "path": "steps.7.task.state",
+                    "equals": "blocked"
+                  },
+                  {
+                    "path": "steps.7.task.lease_fields_present",
+                    "equals": false
+                  },
+                  {
+                    "path": "steps.7.device.reservation_state",
+                    "equals": "quarantined"
+                  },
+                  {
+                    "path": "steps.7.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "finish_evidence_unknown",
           "label": "Evidence.unknown → blocked",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "合成 Evidence.unknown",
-          "required_api": "M1 finish",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l05_evidence_unknown.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l05_evidence_unknown.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L05/finish_evidence_unknown",
           "device_gate": false,
           "assertions": [
             "与 ReadResult.undetermined 相同设备处置",
             "不把 unknown 当未执行重试"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.7.task.state",
+                    "equals": "blocked"
+                  },
+                  {
+                    "path": "steps.7.device.reservation_state",
+                    "equals": "quarantined"
+                  },
+                  {
+                    "path": "steps.7.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "task_update_miss",
           "label": "任务更新未命中",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "条件更新任务行返回 0 行",
-          "required_api": "M1 finish 事务",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l05_task_update_miss.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l05_task_update_miss.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L05/task_update_miss",
           "device_gate": false,
           "assertions": [
             "全部回滚",
-            "设备行与事件不变"
+            "设备行与事件不变",
+            "stale_lease"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.error",
+                    "equals": "stale_lease"
+                  },
+                  {
+                    "path": "steps.9.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.9.task.lease_fields_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.device.reservation_state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "steps.9.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "device_update_miss",
           "label": "设备更新未命中",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "条件更新设备行返回 0 行",
-          "required_api": "M1 finish 事务",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l05_device_update_miss.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l05_device_update_miss.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L05/device_update_miss",
           "device_gate": false,
           "assertions": [
-            "任务状态与事件全部回滚"
+            "全部回滚",
+            "设备行与事件不变",
+            "stale_lease"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.error",
+                    "equals": "stale_lease"
+                  },
+                  {
+                    "path": "steps.9.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.9.task.lease_fields_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.device.reservation_state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "steps.9.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "event_write_fail",
           "label": "事件写入失败",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "注入 events 写入失败",
-          "required_api": "M1 finish 事务",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l05_event_write_fail.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l05_event_write_fail.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L05/event_write_fail",
           "device_gate": false,
           "assertions": [
-            "任务/设备/事件同事务回滚",
-            "不伪造成功"
+            "全部回滚",
+            "设备行与事件不变",
+            "store_io_error"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.error",
+                    "equals": "store_io_error"
+                  },
+                  {
+                    "path": "steps.9.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.9.task.lease_fields_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.device.reservation_state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "steps.9.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "rollback_then_claim_busy",
           "label": "回滚后仍隔离",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "上述失败后再次 claim",
-          "required_api": "M1 finish/claim",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l05_rollback_claim_busy.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l05_rollback_claim_busy.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L05/rollback_then_claim_busy",
           "device_gate": false,
           "assertions": [
             "下一次 claim lease_busy",
             "设备行保持原值"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.error",
+                    "equals": "store_io_error"
+                  },
+                  {
+                    "path": "steps.9.error",
+                    "equals": "lease_busy"
+                  },
+                  {
+                    "path": "steps.10.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.10.device.identity_unchanged",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -2216,18 +3153,20 @@
         "change_owner",
         "ttl_expired"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "parent_stopped_child_unknown",
           "label": "父进程 stopped、子命令未知",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "停止检查器仅证明父进程",
-          "required_api": "M1 recover + 设备隔离",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l06_parent_child_unknown.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l06_parent_child_unknown.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L06/parent_stopped_child_unknown",
           "device_gate": false,
           "assertions": [
@@ -2235,24 +3174,50 @@
             "未决锁保留",
             "不杀进程、不重放动作"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.task_state",
+                    "equals": "blocked"
+                  },
+                  {
+                    "path": "steps.9.error",
+                    "equals": "lease_busy"
+                  },
+                  {
+                    "path": "steps.10.device.reservation_state",
+                    "equals": "quarantined"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "abandon_task",
           "label": "人工放弃任务",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": null,
-          "setup": "blocked 任务 cancelled",
-          "required_api": "M1 人工出口",
+          "setup": "M1 不提供解除隔离入口；保留场景身份，待 M5 人工出口",
+          "required_api": null,
           "expected_ref": "SC-L06/abandon_task",
           "device_gate": false,
           "assertions": [
@@ -2265,55 +3230,105 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": "M5",
+          "module_evidence": null
         },
         {
           "id": "change_owner",
           "label": "换 owner 请求恢复",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "使用不同 owner 身份",
-          "required_api": "M1 recover",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l06_change_owner.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l06_change_owner.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L06/change_owner",
           "device_gate": false,
           "assertions": [
-            "owner_not_stopped 或 stale_lease",
+            "stale_lease",
             "不变更"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.5.error",
+                    "equals": "stale_lease"
+                  },
+                  {
+                    "path": "steps.6.task.state",
+                    "equals": "running"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "ttl_expired",
           "label": "再等 TTL 到期",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "隔离后仅推进时钟",
-          "required_api": "M1 recover/claim",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l06_ttl_expired.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l06_ttl_expired.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L06/ttl_expired",
           "device_gate": false,
           "assertions": [
             "不自动解除隔离",
             "不许可新任务"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.8.error",
+                    "equals": "lease_busy"
+                  },
+                  {
+                    "path": "steps.9.device.reservation_state",
+                    "equals": "quarantined"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -2340,66 +3355,122 @@
         "io_error",
         "leased_no_start_device_call"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "cross_app_key",
           "label": "跨 app 键",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "提交非 boss 前缀键",
-          "required_api": "M1 仓储入口/事务",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l07_cross_app.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l07_cross_app.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L07/cross_app_key",
           "device_gate": false,
           "assertions": [
             "invalid_input 整批回滚",
             "不放宽 app CHECK"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.2.error",
+                    "equals": "invalid_input"
+                  },
+                  {
+                    "path": "steps.3.task_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "steps.3.device.present",
+                    "equals": false
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "bool_integer",
           "label": "bool 当整数",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "提交 bool 到 INTEGER 列",
-          "required_api": "M1 仓储入口/事务",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l07_bool_integer.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l07_bool_integer.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L07/bool_integer",
           "device_gate": false,
           "assertions": [
             "invalid_input",
             "STRICT 类型不被 bool 绕过"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.3.error",
+                    "equals": "invalid_input"
+                  },
+                  {
+                    "path": "steps.4.task.state",
+                    "equals": "queued"
+                  },
+                  {
+                    "path": "steps.4.task.attempt",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "invalid_lease_state",
           "label": "非法状态租约组合",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "MODULE_EVIDENCE",
+          "entry_state": "module",
           "steps": [],
           "fixture": null,
-          "setup": "queued 带租约字段或 leased 缺字段",
-          "required_api": "M1 仓储入口/事务",
+          "setup": "仅模块层可构造，不在场景层用 SQL 替代生产转换",
+          "required_api": null,
           "expected_ref": "SC-L07/invalid_lease_state",
           "device_gate": false,
           "assertions": [
@@ -2412,18 +3483,20 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": "tests.test_migrations 的 schema 约束证据；不另造跨模块 PASS"
         },
         {
           "id": "missing_foreign_key",
           "label": "外键缺失",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "MODULE_EVIDENCE",
+          "entry_state": "module",
           "steps": [],
           "fixture": null,
-          "setup": "发现引用不存在会话",
-          "required_api": "M1 仓储入口/事务",
+          "setup": "仅模块层可构造，场景层不重复",
+          "required_api": null,
           "expected_ref": "SC-L07/missing_foreign_key",
           "device_gate": false,
           "assertions": [
@@ -2436,18 +3509,20 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": "tests.test_migrations 的外键约束证据"
         },
         {
           "id": "duplicate_nonterminal",
           "label": "重复非终态发现",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "MODULE_EVIDENCE",
+          "entry_state": "module",
           "steps": [],
           "fixture": null,
-          "setup": "同一会话插入第二个非终态行",
-          "required_api": "M1 仓储入口/事务",
+          "setup": "仅模块层可构造，场景层不重复",
+          "required_api": null,
           "expected_ref": "SC-L07/duplicate_nonterminal",
           "device_gate": false,
           "assertions": [
@@ -2460,66 +3535,117 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": "tests.test_store 的 upsert/唯一约束证据"
         },
         {
           "id": "busy_timeout",
           "label": "写锁等待耗尽",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "另一连接持写锁",
-          "required_api": "M1 仓储入口/事务",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l07_busy_inline.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l07_busy_inline.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L07/busy_timeout",
           "device_gate": false,
           "assertions": [
             "store_busy 安全出口",
-            "不当作设备租约过期"
+            "不当作设备租约过期",
+            "释放后业务行不变"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.5.error",
+                    "equals": "store_busy"
+                  },
+                  {
+                    "path": "steps.6.task.state",
+                    "equals": "queued"
+                  },
+                  {
+                    "path": "steps.6.device.present",
+                    "equals": false
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "io_error",
           "label": "IO 失败",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "注入磁盘错误",
-          "required_api": "M1 仓储入口/事务",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l07_io_error.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l07_io_error.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-L07/io_error",
           "device_gate": false,
           "assertions": [
             "store_io_error",
             "不输出 SQL 或路径"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.1.error",
+                    "equals": "store_io_error"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "leased_no_start_device_call",
           "label": "leased 未 start 调设备",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": null,
-          "setup": "在 start 提交前请求假设备命令",
-          "required_api": "M1 仓储入口/事务",
+          "setup": "M1 无设备端口，完整生产时序归 M6；不以空 mock 记 PASS",
+          "required_api": null,
           "expected_ref": "SC-L07/leased_no_start_device_call",
           "device_gate": false,
           "assertions": [
@@ -2532,7 +3658,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": "M6（M5 动作边界；M3 可准备计数探针）",
+          "module_evidence": null
         }
       ]
     },
@@ -2655,7 +3783,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "replay_idempotent",
@@ -2816,7 +3946,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -2936,7 +4068,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "two_badge_nodes",
@@ -3033,7 +4167,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "invalid_bounds",
@@ -3130,7 +4266,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "region_null",
@@ -3227,7 +4365,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -3349,7 +4489,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "nine_plus",
@@ -3446,7 +4588,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "zero_plus",
@@ -3543,7 +4687,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "new_greeting_positive",
@@ -3640,7 +4786,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "new_greeting_zero",
@@ -3737,7 +4885,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -3855,7 +5005,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "viewport_only",
@@ -3952,7 +5104,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -3999,7 +5153,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "partial_unknown",
@@ -4096,7 +5252,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unresolved_discovery",
@@ -4120,7 +5278,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "identity_unknown",
@@ -4144,7 +5304,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -4270,7 +5432,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "same_preview_time_changed",
@@ -4371,7 +5535,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "same_preview_missing_time",
@@ -4468,7 +5634,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "no_baseline",
@@ -4565,7 +5733,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "same_preview_same_time",
@@ -4590,7 +5760,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -4714,7 +5886,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "same_fingerprint_cross_source",
@@ -4738,7 +5912,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "new_fingerprint",
@@ -4762,7 +5938,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -4886,7 +6064,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_bottom",
@@ -4983,7 +6163,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "corrupt_page",
@@ -5066,7 +6248,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "tab_count_changes",
@@ -5163,7 +6347,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -5268,7 +6454,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "future",
@@ -5351,7 +6539,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "exactly_five_seconds",
@@ -5375,7 +6565,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -5483,7 +6675,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "version_mismatch",
@@ -5507,7 +6701,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "wrong_page",
@@ -5590,7 +6786,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "multi_list",
@@ -5673,7 +6871,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "invalid_xml",
@@ -5756,7 +6956,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "path_traversal",
@@ -5839,7 +7041,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -5957,7 +7161,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "global_zero_preview_no_baseline",
@@ -5981,7 +7187,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -6113,7 +7321,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "ambiguous_only",
@@ -6211,7 +7421,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_identity_field",
@@ -6236,7 +7448,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -6283,7 +7497,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "queued_new_key",
@@ -6308,7 +7524,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "running_blocked_new_fingerprint",
@@ -6333,7 +7551,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -6379,7 +7599,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "observed_at_backwards",
@@ -6403,7 +7625,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -6523,7 +7747,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "global_zero_verified",
@@ -6620,7 +7846,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "global_zero_unverified",
@@ -6717,7 +7945,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "global_zero_verified_but_positive",
@@ -6741,7 +7971,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -6788,7 +8020,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "list_only",
@@ -6812,7 +8046,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "enter_once",
@@ -6836,7 +8072,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "ignore_path_check",
@@ -6860,7 +8098,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_authorization",
@@ -6884,7 +8124,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -6929,7 +8171,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "safe_stop_evidence",
@@ -6954,7 +8198,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -6999,7 +8245,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unknown_not_detected",
@@ -7023,7 +8271,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7068,7 +8318,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_no_target",
@@ -7092,7 +8344,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7137,7 +8391,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_unique_positive",
@@ -7161,7 +8417,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7206,7 +8464,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_enter_once",
@@ -7230,7 +8490,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7275,7 +8537,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_arrival",
@@ -7299,7 +8563,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7340,7 +8606,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "second_reader",
@@ -7364,7 +8632,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7408,7 +8678,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "new_greeting_zero",
@@ -7432,7 +8704,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "offline_semantics",
@@ -7456,7 +8730,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7501,7 +8777,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_incomplete",
@@ -7525,7 +8803,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7568,7 +8848,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "window_expired",
@@ -7592,7 +8874,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7636,7 +8920,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_drift",
@@ -7660,7 +8946,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7705,7 +8993,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_conflict",
@@ -7729,7 +9019,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7771,7 +9063,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7819,7 +9113,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "no_false_coverage",
@@ -7843,7 +9139,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -7899,7 +9197,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_key",
@@ -7923,7 +9223,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "extra_key",
@@ -7947,7 +9249,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "fenced_json",
@@ -7971,7 +9275,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "array",
@@ -7995,7 +9301,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "bool_version",
@@ -8018,7 +9326,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "long_reply",
@@ -8041,7 +9351,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "evidence_not_substring",
@@ -8064,7 +9376,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "wrong_task",
@@ -8087,7 +9401,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "wrong_nonce",
@@ -8110,7 +9426,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "wrong_hash",
@@ -8133,7 +9451,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "expired_nonce",
@@ -8157,7 +9477,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -8204,7 +9526,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "post_submit_timeout",
@@ -8229,7 +9553,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "input_too_large",
@@ -8253,7 +9579,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -8303,7 +9631,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unconfirmed_source",
@@ -8327,7 +9657,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_fact",
@@ -8351,7 +9683,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "hr_instruction_injection",
@@ -8375,7 +9709,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "uncertain",
@@ -8399,7 +9735,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "tier_a_without_gate",
@@ -8423,7 +9761,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -8481,7 +9821,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_key",
@@ -8505,7 +9847,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "extra_key",
@@ -8528,7 +9872,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "bool_integer",
@@ -8551,7 +9897,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "tier_overlap",
@@ -8574,7 +9922,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "tier_gap",
@@ -8597,7 +9947,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unsafe_a",
@@ -8620,7 +9972,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "disclosure_missing",
@@ -8643,7 +9997,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "path_in_style",
@@ -8666,7 +10022,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "size_limits",
@@ -8689,7 +10047,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "encoding_and_nul",
@@ -8713,7 +10073,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "symlink_pack",
@@ -8737,7 +10099,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "contact_fact_conflict",
@@ -8761,7 +10125,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "runtime_changed",
@@ -8785,7 +10151,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -8832,7 +10200,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_fact_entry",
@@ -8856,7 +10226,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "operator_docs",
@@ -8880,7 +10252,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -8928,7 +10302,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "injection_no_escalation",
@@ -8952,7 +10328,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "subject_required",
@@ -8976,7 +10354,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -9025,7 +10405,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "nonce_only",
@@ -9048,7 +10430,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "directory_rename",
@@ -9072,7 +10456,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "rendered_tamper",
@@ -9095,7 +10481,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "size_limits",
@@ -9119,7 +10507,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -9168,7 +10558,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "business_failure",
@@ -9192,7 +10584,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "crash_unknown",
@@ -9216,7 +10610,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "normal_release",
@@ -9240,7 +10636,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "ttl_not_release",
@@ -9264,7 +10662,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "run_read_only_covered",
@@ -9288,7 +10688,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -9339,7 +10741,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_manifest",
@@ -9363,7 +10767,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "target_exists",
@@ -9387,7 +10793,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "interrupted_copy",
@@ -9411,7 +10819,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "quota_preserved",
@@ -9435,7 +10845,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "base_mismatch",
@@ -9459,7 +10871,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "old_acceptance_invalid",
@@ -9483,7 +10897,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -9533,7 +10949,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "holdout_freeze",
@@ -9557,7 +10975,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "no_provider",
@@ -9582,7 +11002,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unknown_case",
@@ -9606,7 +11028,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "provider_error",
@@ -9630,7 +11054,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -9682,7 +11108,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A01_FA",
@@ -9707,7 +11135,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A01_FB",
@@ -9732,7 +11162,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A01_FC",
@@ -9758,7 +11190,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A01_FD",
@@ -9783,7 +11217,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A01_FE",
@@ -9809,7 +11245,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A01_input_method_shift",
@@ -9833,7 +11271,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A01_no_send_control",
@@ -9857,7 +11297,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -9909,7 +11351,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A02_FA",
@@ -9934,7 +11378,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A02_FB",
@@ -9959,7 +11405,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A02_FC",
@@ -9985,7 +11433,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A02_FD",
@@ -10010,7 +11460,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A02_FE",
@@ -10036,7 +11488,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A02_request_only",
@@ -10060,7 +11514,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A02_delivered",
@@ -10084,7 +11540,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -10136,7 +11594,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A03_FA",
@@ -10161,7 +11621,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A03_FB",
@@ -10186,7 +11648,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A03_FC",
@@ -10212,7 +11676,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A03_FD",
@@ -10237,7 +11703,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A03_FE",
@@ -10263,7 +11731,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A03_confirm_dialog",
@@ -10287,7 +11757,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A03_direct_send",
@@ -10311,7 +11783,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -10363,7 +11837,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A04_FA",
@@ -10388,7 +11864,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A04_FB",
@@ -10413,7 +11891,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A04_FC",
@@ -10439,7 +11919,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A04_FD",
@@ -10464,7 +11946,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A04_FE",
@@ -10490,7 +11974,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A04_confirm_dialog",
@@ -10514,7 +12000,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A04_direct_send",
@@ -10537,7 +12025,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -10587,7 +12077,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A05_FA",
@@ -10612,7 +12104,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A05_FB",
@@ -10637,7 +12131,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A05_FC",
@@ -10663,7 +12159,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A05_FD",
@@ -10688,7 +12186,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A05_FE",
@@ -10714,7 +12214,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -10764,7 +12266,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A06_FA",
@@ -10789,7 +12293,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A06_FB",
@@ -10814,7 +12320,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A06_FC",
@@ -10840,7 +12348,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A06_FD",
@@ -10865,7 +12375,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "A06_FE",
@@ -10891,7 +12403,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -10938,7 +12452,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "confirm_not_performed",
@@ -10962,7 +12478,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "abandon",
@@ -10986,7 +12504,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "reconnect",
@@ -11010,7 +12530,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11058,7 +12580,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "missing_snapshot",
@@ -11081,7 +12605,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "performed_none",
@@ -11104,7 +12630,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "not_performed_sent",
@@ -11127,7 +12655,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "read_ok_no_action_delta",
@@ -11151,7 +12681,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "screenshot_only",
@@ -11174,7 +12706,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11222,7 +12756,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": "expected/m6-observations.json"
+          "observations_ref": "expected/m6-observations.json",
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "arrival_after_commit",
@@ -11246,7 +12782,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11290,7 +12828,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "all_true",
@@ -11314,7 +12854,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11361,7 +12903,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": "expected/m6-observations.json"
+          "observations_ref": "expected/m6-observations.json",
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11407,7 +12951,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "count_no_target",
@@ -11431,7 +12977,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11476,7 +13024,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "budget_not_reset",
@@ -11500,7 +13050,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11546,7 +13098,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": "expected/m6-observations.json"
+          "observations_ref": "expected/m6-observations.json",
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11592,7 +13146,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "clock_changed",
@@ -11617,7 +13173,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11663,7 +13221,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": "expected/m6-observations.json"
+          "observations_ref": "expected/m6-observations.json",
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11711,7 +13271,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "expiry_unset",
@@ -11735,7 +13297,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "last_activity_unknown",
@@ -11759,7 +13323,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "keeps_contact",
@@ -11783,7 +13349,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "model_only_rejected",
@@ -11807,7 +13375,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11853,7 +13423,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unread_unknown",
@@ -11876,7 +13448,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "draft",
@@ -11899,7 +13473,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "pending_action",
@@ -11922,7 +13498,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "arrival_cancels",
@@ -11946,7 +13524,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -11991,7 +13571,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "unique_with_anchor",
@@ -12015,7 +13597,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "no_ledger",
@@ -12039,7 +13623,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -12087,7 +13673,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "wrong_confirm_target",
@@ -12111,7 +13699,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "target_still_present",
@@ -12135,7 +13725,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "anchor_missing",
@@ -12159,7 +13751,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "success",
@@ -12182,7 +13776,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -12230,7 +13826,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "no_layer_substitution",
@@ -12254,7 +13852,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -12299,7 +13899,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "draft_only",
@@ -12323,7 +13925,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "tier_a",
@@ -12347,7 +13951,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "v1_fixed_c",
@@ -12371,7 +13977,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -12418,7 +14026,9 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         },
         {
           "id": "real_rollback",
@@ -12442,7 +14052,9 @@
             "未执行时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     }

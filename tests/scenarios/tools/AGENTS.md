@@ -6,6 +6,7 @@
 
 ## 二、文件清单
 
+- `m1_requests.py`：生成 M1 纯合成 JSON 请求脚本（初始化/种子/租约/故障/竞争/inspect），供隔离探针读取；不含任意 SQL 文本。
 - `build_assets.py`：定义 M0–M8 的 73 个场景、全部变体、预期断言与夹具生成逻辑；默认重建 `fixtures/` 后写出 `catalogue.json` 与 `expected/oracles.json`。
 - `AGENTS.md`：本文件。
 - `CLAUDE.md`：只包含 `@AGENTS.md`。
