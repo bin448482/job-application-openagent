@@ -16,7 +16,6 @@ from unittest.mock import patch
 from app.adapters.sqlite import repo as repo_module
 from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
-from app.adapters.sqlite.schema import initialize_database
 from app.domain.models import (
     Evidence,
     Lease,
@@ -1190,7 +1189,7 @@ class ProcessLogDegradationTests(unittest.TestCase):
         self.owner = Owner(OWNER_ID, 4242, HOST_A)
 
     def test_default_log_open_success_and_invalid_host_are_isolated(self) -> None:
-        """默认日志器每次运行独立文件，非法 host 走注入日志失败且不改库。"""
+        """默认日志器两成功实例和非法 host 失败各写独立文件/关联且不改库。"""
         with patch("app.process_log.DEFAULT_LOG_DIR", self.directory):
             store = SqliteStore(
                 self.path,
@@ -1213,20 +1212,18 @@ class ProcessLogDegradationTests(unittest.TestCase):
             self.assertNotEqual(success_path, second_path)
 
             before = database_dump(self.path)
-            invalid_log = ProcessLog(
-                path=self.directory / "injected-invalid.jsonl"
-            )
+            before_files = set(self.directory.glob("m0-process-*.jsonl"))
             with self.assertRaises(StoreError) as context:
-                SqliteStore(
-                    self.path,
-                    local_host="invalid",
-                    process_log=invalid_log,
-                )
+                SqliteStore(self.path, local_host="invalid")
             self.assertEqual(context.exception.reason_code, "invalid_input")
             self.assertEqual(database_dump(self.path), before)
+            new_files = set(self.directory.glob("m0-process-*.jsonl")) - before_files
+            self.assertEqual(len(new_files), 1)
+            invalid_path = new_files.pop()
+
         files = sorted(self.directory.glob("m0-process-*.jsonl"))
-        self.assertEqual(files, sorted([success_path, second_path]))
-        for path in files:
+        self.assertEqual(files, sorted([success_path, second_path, invalid_path]))
+        for path in (success_path, second_path):
             events = _log_events(path)
             self.assertEqual(len({event["correlation_id"] for event in events}), 1)
             self.assertEqual(
@@ -1238,12 +1235,13 @@ class ProcessLogDegradationTests(unittest.TestCase):
                     "unresolved_conversations",
                 ],
             )
-        invalid_events = _log_events(invalid_log.path)
+        invalid_events = _log_events(invalid_path)
         self.assertEqual(
             [(event["operation"], event["result"]) for event in invalid_events],
             [("open_store", "started"), ("open_store", "failed")],
         )
         self.assertEqual(invalid_events[-1]["reason_code"], "invalid_input")
+        self.assertEqual(len({event["correlation_id"] for event in invalid_events}), 1)
 
     def test_default_constructor_failure_emits_fixed_warning_once(self) -> None:
         """默认日志写入失败且 host 非法时，无实例仍输出一次固定降级标记。"""
@@ -1283,6 +1281,36 @@ class ProcessLogDegradationTests(unittest.TestCase):
         )
         self.assertEqual(task["state"], "running")
         self.assertTrue(log.degraded)
+        self.assertEqual(stderr.getvalue(), "m0_process_log_degraded\n")
+        for secret in (lease.key, lease.nonce, self.owner.id, HOST_A):
+            self.assertNotIn(secret, stderr.getvalue())
+
+    def test_default_degradation_keeps_business_and_warns_once(self) -> None:
+        """默认日志器成功操作写入失败时业务成功、degraded=True 且只告警一次。"""
+        with patch("app.process_log.DEFAULT_LOG_DIR", self.directory):
+            store = SqliteStore(
+                self.path,
+                local_host=HOST_A,
+                monotonic=self.clock.monotonic,
+            )
+            self.addCleanup(store.close)
+            self.assertEqual(store.process_log.path.parent, self.directory)
+            result = make_result(observed_at=self.clock.now())
+            store.upsert_snapshot(result)
+            stderr = io.StringIO()
+            with patch.object(
+                store.process_log, "_append", side_effect=OSError("secret")
+            ), redirect_stderr(stderr):
+                lease = store.claim(
+                    "boss", "unread", self.owner, self.clock.now()
+                )
+                self.assertIsNotNone(lease)
+                store.start(lease, self.clock.now())
+        task = fetch_one(
+            self.path, "SELECT state FROM hr_discoveries WHERE \"key\" = ?", (lease.key,)
+        )
+        self.assertEqual(task["state"], "running")
+        self.assertTrue(store.process_log.degraded)
         self.assertEqual(stderr.getvalue(), "m0_process_log_degraded\n")
         for secret in (lease.key, lease.nonce, self.owner.id, HOST_A):
             self.assertNotIn(secret, stderr.getvalue())
