@@ -1,0 +1,30 @@
+# Local Python environment and generated files
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.test-artifacts/
+# Local application data, conversations and device captures
+/data/**
+!/data/AGENTS.md
+!/data/CLAUDE.md
+/screenshots/**
+!/screenshots/AGENTS.md
+!/screenshots/CLAUDE.md
+/test-evidence/
+*.sqlite3
+*.sqlite3-*
+*.db
+*.log
+*.log.*
+*.lock
+# User configuration and credentials
+/config.json
+opencode.json
+.env
+.env.*
+!.env.example
+/docs/AI回复事实清单.md
+node_modules/
