@@ -155,45 +155,18 @@ class SqliteStore:
         process_log: ProcessLog | None = None,
     ) -> None:
         """打开并核验 v1 库，保存本机主机摘要、时钟、停止检查器与可选日志器。"""
-        self._local_host = local_host if local_host is not None else default_local_host()
-        if not is_hash(self._local_host):
-            raise StoreError("invalid_input")
         self._monotonic = monotonic
         self._stop_checker = stop_checker if stop_checker is not None else default_stop_checker
         self._fault_hook = fault_hook
         self.process_log = process_log if process_log is not None else ProcessLog()
         self._clock_mark: tuple[float, datetime] | None = None
-        opened = time.perf_counter()
-        self.process_log.record(
-            stage="store", operation="open_store", result="started"
-        )
-        try:
+        with self._operation("open_store"):
+            self._local_host = (
+                local_host if local_host is not None else default_local_host()
+            )
+            if not is_hash(self._local_host):
+                raise StoreError("invalid_input")
             self._connection = connect_database(path)
-        except StoreError as error:
-            self.process_log.record(
-                stage="store",
-                operation="open_store",
-                result="failed",
-                reason_code=error.reason_code,
-                error_category="store",
-                duration_ms=elapsed_ms(opened),
-            )
-            raise
-        except Exception:
-            self.process_log.record(
-                stage="store",
-                operation="open_store",
-                result="failed",
-                error_category="internal",
-                duration_ms=elapsed_ms(opened),
-            )
-            raise
-        self.process_log.record(
-            stage="store",
-            operation="open_store",
-            result="ok",
-            duration_ms=elapsed_ms(opened),
-        )
 
     def close(self) -> None:
         """关闭本机数据库连接；重复关闭保持无害。"""

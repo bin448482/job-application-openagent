@@ -489,6 +489,26 @@ class StoreTests(unittest.TestCase):
                 self.assertEqual(context.exception.reason_code, "invalid_input")
         self.assertIsNone(fetch_one(self.path, "SELECT * FROM device_lease"))
 
+        before = database_dump(self.path)
+        invalid_path = Path(self._tmp.name) / "invalid-host.sqlite3"
+        open_log = ProcessLog(path=Path(self._tmp.name) / "invalid-open.jsonl")
+        with self.assertRaises(StoreError) as context:
+            SqliteStore(
+                invalid_path,
+                local_host="invalid",
+                process_log=open_log,
+            )
+        self.assertEqual(context.exception.reason_code, "invalid_input")
+        self.assertFalse(invalid_path.exists())
+        self.assertEqual(database_dump(self.path), before)
+        open_events = _log_events(open_log.path)
+        self.assertEqual(
+            [(event["operation"], event["result"]) for event in open_events],
+            [("open_store", "started"), ("open_store", "failed")],
+        )
+        self.assertEqual(open_events[-1]["reason_code"], "invalid_input")
+        self.assertEqual(open_events[-1]["error_category"], "store")
+
     def test_start_moves_to_running_without_extending_and_rejects_repeat(self) -> None:
         """start 只允许 leased→running，不延长截止时间，重复或旧 nonce 都 stale。"""
         _, keys = self._seed()

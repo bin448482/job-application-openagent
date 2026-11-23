@@ -135,12 +135,12 @@ class DoctorCliTests(unittest.TestCase):
         self.assertEqual(before, after)
 
         sentinel = ROOT / "data" / "logs" / f"m0-process-{uuid.uuid4()}.jsonl"
-        sentinel.parent.mkdir(parents=True, exist_ok=True)
-        sentinel.write_text("sentinel-before\n", encoding="utf-8")
+        self.assertFalse(sentinel.exists())
         self.addCleanup(sentinel.unlink, missing_ok=True)
 
         def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-            """在 CLI 运行窗口内改写同期日志哨兵，模拟另一独立进程。"""
+            """仅在 CLI 运行窗口内创建同期日志哨兵，模拟另一独立进程。"""
+            sentinel.parent.mkdir(parents=True, exist_ok=True)
             sentinel.write_text("sentinel-after\n", encoding="utf-8")
             return subprocess.CompletedProcess(
                 args=args[0] if args else [],
@@ -152,6 +152,7 @@ class DoctorCliTests(unittest.TestCase):
         with patch("tests.test_doctor.subprocess.run", side_effect=fake_run):
             fake_completed = _run_cli("--help")
         self.assertEqual(fake_completed.returncode, 0)
+        self.assertTrue(sentinel.exists())
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "sentinel-after\n")
 
     def test_help_exits_zero_without_stderr(self) -> None:

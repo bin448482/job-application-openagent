@@ -8,7 +8,7 @@
 
 - `__init__.py`：声明 SQLite 适配器包。
 - `schema.py`：五张 STRICT 表与五个索引的确定性 DDL；`initialize_database` 在单个 `BEGIN IMMEDIATE` 事务内建库或核验，任一步失败回滚；`connect_database` 打开现有 v1 库并设置 `foreign_keys=ON`、`busy_timeout=5000`；`verify_v1` 比较 `user_version`、对象集合与规范化 SQL，缺失、额外或篡改均报 `db_version_unsupported`。
-- `repo.py`：`SqliteStore` 实现 upsert/claim/start/renew/finish/recover/unresolved_conversations；默认创建并可注入唯一 `ProcessLog`，打开库及公开操作以 `operation` 记录 started/ok/failed、固定原因码与耗时，不记 PID/host/nonce/键/正文/SQL/异常，业务事务与幂等不受影响。默认本机 host 为 `H(platform.node())`，owner.id 必须是规范 UUID、owner.host 必须是 64 位小写十六进制本机摘要，租约 key 必须是当前 app 的 discovery 键。默认 Windows 停止检查器用 ctypes `OpenProcess`（同时请求查询权限与 `SYNCHRONIZE`）/`WaitForSingleObject`，显式声明 x64 HANDLE/DWORD/BOOL 签名；非 Windows 用 `os.kill(pid, 0)`。支持注入单调时钟、停止检查器与仅测试使用的故障点回调。
+- `repo.py`：`SqliteStore` 实现 upsert/claim/start/renew/finish/recover/unresolved_conversations；默认创建并可注入唯一 `ProcessLog`，打开库及公开操作以 `operation` 记录 started/ok/failed、固定原因码与耗时，不记 PID/host/nonce/键/正文/SQL/异常，业务事务与幂等不受影响。`open_store` 边界先记录 started，再在连接前校验本机 host 摘要；非法 host 记 `invalid_input`/`store` 失败且不创建或改动数据库。默认本机 host 为 `H(platform.node())`，owner.id 必须是规范 UUID、owner.host 必须是 64 位小写十六进制本机摘要，租约 key 必须是当前 app 的 discovery 键。默认 Windows 停止检查器用 ctypes `OpenProcess`（同时请求查询权限与 `SYNCHRONIZE`）/`WaitForSingleObject`，显式声明 x64 HANDLE/DWORD/BOOL 签名；非 Windows 用 `os.kill(pid, 0)`。支持注入单调时钟、停止检查器与仅测试使用的故障点回调。
 
 ## 三、库结构与事务契约
 

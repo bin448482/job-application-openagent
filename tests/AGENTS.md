@@ -7,8 +7,8 @@
 ## 二、当前文件与子目录
 
 - `__init__.py`：声明测试包，支持按模块运行。
-- `test_doctor.py`：M0 CLI 正反例、配置/夹具校验、重复 JSON 键与孤立代理字符、业务状态映射、keyguard token、`mCurrentFocus` 字段边界/整条 focus 完整 Window/单 Window 多组件/前后附加内容解析、设备失败七键映射、stdout 写失败与 `output=failed`、正常帮助 output/exit、过程日志白名单/降级故障注入、CLI 运行窗口同期日志哨兵不被清理、ADB `started→ok/failed` 与中断仅留 started、调用协议与 fixture 零子进程断言。
-- `test_store.py`：M1 合成 ReadResult/Evidence 入库、未知行跳过、同指纹重放静默、queued 取消/延迟、kind 升级、优先级与 kind 过滤、竞争与 TTL、start/renew/finish/recover、blocked 设备原身份隔离、旧 nonce/截止时间、clock_changed、三类事务故障注入、伪造会话键原子回滚、只读查询写锁 `store_busy`、仓储打开/操作日志 started/ok/failed 与不回显非白名单元数据、严格输入与 Windows ctypes 停止判定 mock。
+- `test_doctor.py`：M0 CLI 正反例、配置/夹具校验、重复 JSON 键与孤立代理字符、业务状态映射、keyguard token、`mCurrentFocus` 字段边界/整条 focus 完整 Window/单 Window 多组件/前后附加内容解析、设备失败七键映射、stdout 写失败与 `output=failed`、正常帮助 output/exit、过程日志白名单/降级故障注入、CLI 运行窗口内新建的同期日志哨兵不被清理、ADB `started→ok/failed` 与中断仅留 started、调用协议与 fixture 零子进程断言。
+- `test_store.py`：M1 合成 ReadResult/Evidence 入库、未知行跳过、同指纹重放静默、queued 取消/延迟、kind 升级、优先级与 kind 过滤、竞争与 TTL、start/renew/finish/recover、blocked 设备原身份隔离、旧 nonce/截止时间、clock_changed、三类事务故障注入、伪造会话键原子回滚、只读查询写锁 `store_busy`、非法 host 的 open_store 失败日志且不建库、仓储打开/操作日志 started/ok/failed 与不回显非白名单元数据、严格输入与 Windows ctypes 停止判定 mock。
 - `test_migrations.py`：v1 STRICT 五表/索引、幂等不改行、建表中途与版本写入后回滚、未知版本/非空无版本/结构篡改拒绝、损坏文件、schema 约束、初始化/打开写锁 `store_busy` 与释放后幂等、`store init` 固定 JSON/默认路径/路径越界/损坏与篡改库/失败日志。
 - `test_process_log_concurrency.py`：两个独立 spawn 进程与 Barrier 同时写默认生产目录与显式基础路径，断言各自独立 UUID 文件、按 correlation_id 的完整事件序列、JSON 有效、互不覆盖；清理只删子进程明确返回的路径，并以合成哨兵断言不误删同期文件。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。
