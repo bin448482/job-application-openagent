@@ -493,6 +493,7 @@ class AcceptanceBoundaryTests(unittest.TestCase):
             real_is_symlink = Path.is_symlink
 
             def fake_is_symlink(self: Path) -> bool:
+                """仅把合成 evil.py 标记为链接，验证复制前拒绝分支。"""
                 return self.name == "evil.py" or real_is_symlink(self)
 
             with mock.patch.object(Path, "is_symlink", fake_is_symlink):
@@ -594,6 +595,7 @@ class AcceptanceBoundaryTests(unittest.TestCase):
                 real_is_junction = Path.is_junction
 
                 def fake_is_junction(self: Path) -> bool:
+                    """无 junction 权限时仅把合成 framework 目录标记为 junction。"""
                     return self.name == "framework" or real_is_junction(self)
 
                 with mock.patch.object(Path, "is_junction", fake_is_junction):
@@ -618,6 +620,7 @@ class AcceptanceBoundaryTests(unittest.TestCase):
             real_is_symlink = Path.is_symlink
 
             def fake_is_symlink(self: Path) -> bool:
+                """仅把合成 M0 探针文件标记为链接，验证不复制链接自身。"""
                 return self.name == "m0_protocol_probe.py" or real_is_symlink(self)
 
             with mock.patch.object(Path, "is_symlink", fake_is_symlink):
