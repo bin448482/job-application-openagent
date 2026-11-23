@@ -184,6 +184,23 @@ def conversation_key_for(app: str, contact: str, company: str, position: str) ->
     return f"{app}:conv:{identity_hash_for(contact, company, position)}"
 
 
+def conversation_key_from_identity(app: str, identity_hash: str) -> str:
+    """由已验证身份摘要重建会话键，供分页合并后唯一身份收敛使用。"""
+    if not isinstance(app, str) or app not in APPS:
+        raise ValueError("app is invalid")
+    if not is_hash(identity_hash):
+        raise ValueError("identity hash is invalid")
+    return f"{app}:conv:{identity_hash}"
+
+
+def is_conversation_key(app: object, key: object) -> bool:
+    """判断是否为指定应用的规范会话键，拒绝跨应用或非摘要后缀。"""
+    if not isinstance(app, str) or app not in APPS or not isinstance(key, str):
+        return False
+    prefix = f"{app}:conv:"
+    return key.startswith(prefix) and is_hash(key[len(prefix):])
+
+
 def fingerprint_for(
     preview_hash: str | None, time_hint: str | None, unread_count: int | None
 ) -> str:

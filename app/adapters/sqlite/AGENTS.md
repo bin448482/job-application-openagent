@@ -34,5 +34,5 @@ python -m app store init --db data/runtime/m1-acceptance.sqlite3
 ## 五、维护要求
 
 1. 修改 DDL、索引、租约/恢复规则或错误码时，同步更新本文件、`app/ports/AGENTS.md`、`app/domain/AGENTS.md`、根 `AGENTS.md`、`docs/operator.md` 与测试。
-2. 不预建 M2+ 动作表、任务表、第二应用或迁移框架；v1 不做 1→2 升级。
+2. 不预建后续动作表、任务表、第二应用或迁移框架；v1 不做 1→2 升级。
 3. 每个函数/方法写 docstring；新增故障注入点只用于测试，不接入生产 CLI。

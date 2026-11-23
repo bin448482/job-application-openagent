@@ -2,13 +2,13 @@
 
 ## 一、目录用途
 
-声明业务用例依赖的能力端口与跨层领域类型，不包含具体平台 IO。当前包含 M0 设备探针与 M1 状态仓储端口。
+声明业务用例依赖的能力端口与跨层领域类型，不包含具体平台 IO。当前包含 M0 设备探针与 M1 状态仓储端口；M2 的 `sense` 直接消费同一 `StorePort`，不新增第二套仓储接口。
 
 ## 二、当前文件
 
 - `__init__.py`：声明端口包。
 - `device.py`：`DeviceEntry`（逻辑别名与状态）、`ProbeSnapshot`（清单、选择、解锁、前台）以及 `DeviceProbe` 协议。
-- `store.py`：`StorePort` 协议与 `StoreError`；方法为 `upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，错误码固定为 `invalid_input/lease_busy/stale_lease/owner_not_stopped/clock_changed/store_busy/store_io_error/db_version_unsupported/migration_failed`。
+- `store.py`：`StorePort` 协议与 `StoreError`；方法为 `upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，错误码固定为 `invalid_input/lease_busy/stale_lease/owner_not_stopped/clock_changed/store_busy/store_io_error/db_version_unsupported/migration_failed`。`sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，`upsert_snapshot` 的返回值限定为写后仍 queued 的发现键。
 
 ## 三、边界
 

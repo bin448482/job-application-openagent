@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy rotation="0">
+  <node index="0" text="" resource-id="com.example.synthetic:id/message_list" class="androidx.recyclerview.widget.RecyclerView" bounds="[0,0][1000,1800]">
+    <node index="0" text="" resource-id="com.example.synthetic:id/conversation_row" class="android.widget.LinearLayout" bounds="[0,0][1000,200]">
+      <node text="合成联系人" resource-id="com.example.synthetic:id/row_name" class="android.widget.TextView" bounds="[20,10][300,60]" />
+      <node text="合成公司" resource-id="com.example.synthetic:id/row_company" class="android.widget.TextView" bounds="[20,60][300,110]" />
+      <node text="合成职位" resource-id="com.example.synthetic:id/row_position" class="android.widget.TextView" bounds="[20,110][300,160]" />
+      <node text="合成预览正文" resource-id="com.example.synthetic:id/row_preview" class="android.widget.TextView" bounds="[320,60][780,120]" />
+      <node text="10:00" resource-id="com.example.synthetic:id/row_time" class="android.widget.TextView" bounds="[820,10][980,50]" />
+      <node text="1" class="android.widget.TextView" bounds="[900,40][960,90]" />
+    </node>
+  </node>
+</hierarchy>

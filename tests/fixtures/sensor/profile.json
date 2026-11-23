@@ -1,0 +1,27 @@
+{
+  "profile_id": "synthetic-boss-m2",
+  "app": "boss",
+  "version": "14.200.0-synthetic",
+  "calibrated": true,
+  "list_id_suffix": "message_list",
+  "row_id_suffix": "conversation_row",
+  "row_fields": {
+    "name": "row_name",
+    "company": "row_company",
+    "position": "row_position",
+    "preview": "row_preview",
+    "time": "row_time"
+  },
+  "badge_region": [0.8, 0.1, 1.0, 0.5],
+  "new_greeting": {
+    "label": "新招呼",
+    "count_id_suffix": "greeting_count",
+    "semantics_verified": false
+  },
+  "tab_badge": {
+    "label": "消息",
+    "count_id_suffix": "tab_count",
+    "global_zero_verified": false
+  },
+  "not_applicable_sources": []
+}

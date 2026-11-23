@@ -26,6 +26,7 @@ STAGES = frozenset(
         "adb_window",
         "decision",
         "store",
+        "sense",
         "output",
         "exit",
     }
@@ -42,6 +43,12 @@ REASON_CODES = frozenset(
         "device_unauthorized",
         "device_locked",
         "wrong_page",
+        "invalid_xml",
+        "incomplete_snapshot",
+        "stale_snapshot",
+        "uncalibrated_profile",
+        "unread_unverified",
+        "needs_targeted_verification",
         "lease_busy",
         "stale_lease",
         "owner_not_stopped",
@@ -60,6 +67,7 @@ ERROR_CATEGORIES = frozenset(
         "probe",
         "business",
         "store",
+        "sense",
         "internal",
         "adb_missing",
         "adb_timeout",
@@ -73,6 +81,7 @@ CONFIG_SOURCES = frozenset({"default", "file"})
 OPERATIONS = frozenset(
     {
         "init",
+        "parse",
         "open_store",
         "upsert_snapshot",
         "claim",
