@@ -51,7 +51,7 @@
 - `hr apply` 需要 Phase 1 契约 JSONL 与 decision JSON，且 `message_key` 在契约中唯一（`scripts/main.py:940-955`、`scripts/hr/apply.py:49-59`）。
 - 执行动作前全局不得存在未核实动作（`scripts/hr/apply.py:477-478`、`scripts/hr/store.py:2028-2033`）。
 - 清理候选要求列表年龄满 7 天或已是拒绝终态，并受草稿/人工待办保护（`scripts/hr/cleanup.py:150-216`）。
-- 心跳要求无进行中的对账问题（`scripts/hr/heartbeat/heartbeat.py:87-89`、`230-232`）。
+- 心跳要求无进行中的对账问题（`scripts/heartbeat/heartbeat.py:87-89`、`230-232`）。
 
 ### 0.5 授权前提
 
@@ -705,7 +705,7 @@
 - 输入：`requested_serial`。
 - 输出：`serial` 或 `preflight_failed` 结果。
 - 成功判据：唯一设备且状态为 `device`。
-- 失败处理：断连/未授权不再执行截图；其他失败尽力截图（`scripts/hr/heartbeat/heartbeat.py:95-117`）。
+- 失败处理：断连/未授权不再执行截图；其他失败尽力截图（`scripts/heartbeat/heartbeat.py:95-117`）。
 - 副作用与幂等性：只读；可能写预检截图。
 
 ### H02 预检解锁
@@ -776,18 +776,18 @@
 
 ### H08 审计门控回退轮次
 - 目的：`enforce` 模式下审计 `fail` 或 B 档判定不可信时，不推进下一轮并恢复本轮。
-- 代码位置：`scripts/hr/heartbeat/heartbeat.py:240-267`、`scripts/heartbeat/store.py:145-160`
+- 代码位置：`scripts/heartbeat/heartbeat.py:240-267`、`scripts/heartbeat/store.py:145-160`
 - 前置条件：`audit_mode='enforce'`；合并结论为 `fail` 或 `judge_untrusted`。
 - 原子动作：`UPDATE ... SET round_in_progress=1, round_started_at=COALESCE(last_round_started_at, round_started_at), last_round_finished_at=NULL, next_due_at=<原值>`。
 - 输入：`run_id`、`previous_next_due`。
 - 输出：`paused` 结果，含 `reason_code=audit_failed/judge_untrusted`。
 - 成功判据：`rowcount == 1`。
 - 失败处理：状态已变化抛 `RuntimeError`。
-- 副作用与幂等性：本地写入；报告/审计故障只记录错误类型，不改变裁决（`scripts/hr/heartbeat/heartbeat.py:309-349`）。
+- 副作用与幂等性：本地写入；报告/审计故障只记录错误类型，不改变裁决（`scripts/heartbeat/heartbeat.py:309-349`）。
 
 ### H09 停止心跳
 - 目的：用户确认后停止活动心跳，不提供自动恢复。
-- 代码位置：`scripts/hr/heartbeat/heartbeat.py:398-411`、`scripts/hr/heartbeat/store.py:163-174`
+- 代码位置：`scripts/heartbeat/heartbeat.py:398-411`、`scripts/heartbeat/store.py:163-174`
 - 前置条件：`--confirmed`；存在活动心跳；`reason` 为最多 64 位字母/数字/下划线。
 - 原子动作：`UPDATE ... SET state='stopped', ended_at=?, stop_reason=?, round_in_progress=0, ...`。
 - 输入：`reason`、`stopped_at`。
@@ -798,18 +798,18 @@
 
 ### H10 心跳内设备/锁屏检查
 - 目的：等待与到期时确认设备仍连接且已解锁，异常则立即停止心跳。
-- 代码位置：`scripts/hr/heartbeat/heartbeat.py:55-75`
+- 代码位置：`scripts/heartbeat/heartbeat.py:55-75`
 - 前置条件：存在活动心跳。
 - 原子动作：调用注入的 `device_check`（默认 `adb.select_device`）与 `unlock_check`（默认 `_verify_unlocked`）。
 - 输入：`run`、`moment`、检查函数。
 - 输出：`None`（通过）或停止原因码。
 - 成功判据：两项检查均不抛异常。
-- 失败处理：`DispatchStateError` 取 `reason`；断连取 `error.reason`；其他 ADB/运行时错误归 `device_disconnected` 或 `device_locked`；随后调用 H09 的 store 停止函数（`scripts/hr/heartbeat/store.py:163-174`）。
+- 失败处理：`DispatchStateError` 取 `reason`；断连取 `error.reason`；其他 ADB/运行时错误归 `device_disconnected` 或 `device_locked`；随后调用 H09 的 store 停止函数（`scripts/heartbeat/store.py:163-174`）。
 - 副作用与幂等性：只读检查 + 可能的本地停止写入。
 
 ### H11 显式恢复心跳
 - 目的：用户确认手机重连后收敛上次残留轮次并立即开始新心跳。
-- 代码位置：`scripts/hr/heartbeat/heartbeat.py:157-164`、`scripts/heartbeat/store.py:177-189`
+- 代码位置：`scripts/heartbeat/heartbeat.py:157-164`、`scripts/heartbeat/store.py:177-189`
 - 前置条件：`--recover`；存在活动心跳。
 - 原子动作：`UPDATE ... SET state='stopped', stop_reason = CASE WHEN round_in_progress=1 THEN 'round_interrupted' ELSE 'restarted_after_reconnect' END`，随后 H03 创建新 run。
 - 输入：`stopped_at`。
@@ -897,7 +897,7 @@
 
 - **本地数据库**：`hr_action_events`（意图/结果/待核对）、`hr_reply_drafts`、`hr_messages`、`hr_conversations`、`hr_cleanup_ledger`、`hr_non_text_pending`、`hr_non_text_review_events`、`heartbeat_runs`。写入集中在 `scripts/hr/store.py` 与 `scripts/heartbeat/store.py`；进程中断后以数据库事实为准，不靠内存恢复。
 - **操作日志**：`scripts/core/operation_log.py` 记录命令拒绝、人工处置、输入法恢复失败、发送后尾部未知等；日志只含码值与摘要键，不含正文（`scripts/hr/actions.py:849`、`870`、`scripts/hr/apply.py:870`）。
-- **截图**：清理停止现场写入 `screenshots/hr-cleanup-<time_ns>.png`（`scripts/hr/cleanup.py:443`）；心跳预检写入 `screenshots/heartbeat-preflight-<timestamp>.png`（`scripts/hr/heartbeat/heartbeat.py:107-109`）。截图含聊天画面，属于敏感本机文件。
+- **截图**：清理停止现场写入 `screenshots/hr-cleanup-<time_ns>.png`（`scripts/hr/cleanup.py:443`）；心跳预检写入 `screenshots/heartbeat-preflight-<timestamp>.png`（`scripts/heartbeat/heartbeat.py:107-109`）。截图含聊天画面，属于敏感本机文件。
 - **对外发送**：B09（文本）、C01/C02（联系方式请求与确认）、D02/D03（附件简历）会立即对 HR 可见且不可撤回；`unknown` 必须人工核对，不得自动重试。
 - **对外删除**：G09 删除手机端会话不可逆；本地数据库不会同步删除，后续同名 HR 再发消息可能以新会话出现（`scripts/hr/store.py:710-733` 保留上下文）。
 - **输入法副作用**：B06/B07 改变设备全局输入法；异常退出可能遗留 ADBKeyboard，需人工确认。
