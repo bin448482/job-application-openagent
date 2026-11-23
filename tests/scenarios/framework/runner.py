@@ -658,7 +658,11 @@ def _execute_variant(
             errors.append(f"第{len(step_results) + 1}步: 未知步骤形状")
             continue
         commands = [_substitute(command, substitutions) for command in variant_step["concurrent"]]
-        child_results = _run_concurrent(commands, isolation, run_id, int(variant_step.get("timeout", 30)))
+        timeout = variant_step.get("timeout", 30)
+        if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 120:
+            errors.append("并发超时必须为 1–120 秒整数，未启动子进程")
+            continue
+        child_results = _run_concurrent(commands, isolation, run_id, timeout)
         child_expectations = step_expectation.get("children", [])
         if len(child_expectations) != len(child_results):
             errors.append("并发子进程预期数量不一致")

@@ -903,6 +903,111 @@ class M1DriverBoundaryTests(unittest.TestCase):
             self.assertTrue(all(item["error"] for item in results))
             self.assertFalse((root / "barrier" / "go").exists())
 
+    def test_real_junction_in_relative_and_barrier_paths_is_rejected(self) -> None:
+        """原始路径祖先为真实 Windows junction 时必须拒绝，不靠 mock。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            real = root / "real"
+            real.mkdir()
+            linked = root / "linked"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(linked), str(real)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if created.returncode != 0 or not runner._is_link_like(linked):
+                self.skipTest("当前平台/账户不能创建 junction")
+            with self.assertRaises(Exception):
+                m1_probe._relative_path("linked/request.json", root, "request", must_exist=False)
+            with mock.patch.dict(
+                os.environ,
+                {"M1_BARRIER_DIR": str(linked), "M1_BARRIER_NAME": "0"},
+            ):
+                with self.assertRaises(Exception):
+                    m1_probe._barrier_paths(root)
+
+    def test_clock_rejects_invalid_mono_delta_without_state_change(self) -> None:
+        """mono_delta 必须为非 bool 有限非负数字，失败时不改两钟。"""
+        clock = m1_probe.FakeClock("2026-11-24T00:00:00.000Z")
+        before_wall = clock._wall
+        before_mono = clock.monotonic()
+        for invalid in (-1, True, "1", float("nan"), float("inf")):
+            with self.assertRaises(Exception):
+                clock.set_now("2026-11-24T00:00:20.000Z", mono_delta=invalid)
+            self.assertEqual(clock._wall, before_wall)
+            self.assertEqual(clock.monotonic(), before_mono)
+        clock.set_now("2026-11-24T00:00:20.000Z", mono_delta=0.0)
+        self.assertEqual(clock.monotonic(), before_mono)
+
+    def test_invalid_concurrent_timeout_never_starts_children(self) -> None:
+        """_execute_variant 不得 int() 强转 bool/字符串 timeout；非法时零启动。"""
+        assets = load_assets()
+        oracle = {
+            "variants": {
+                "SC-X/x": {
+                    "scenario_id": "SC-X",
+                    "variant_id": "x",
+                    "layer": "F",
+                    "expected_summary": "timeout",
+                    "assertions": ["invalid timeout"],
+                    "acceptance": {"steps": [{"children": [{}, {}]}]},
+                    "forbidden": [],
+                    "source": [],
+                }
+            }
+        }
+        variant = {
+            "id": "x",
+            "layer": "F",
+            "asset_status": "READY_FOR_APP",
+            "entry_state": "frozen",
+            "steps": [{"concurrent": ["python a", "python b"], "timeout": True}],
+            "expected_ref": "SC-X/x",
+        }
+        scenario = {"id": "SC-X", "milestone": "M1"}
+        custom = model.LoadedAssets({"scenarios": []}, oracle, SCENARIO_ROOT)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch.object(runner, "_prepare_isolation", return_value=root), mock.patch.object(
+                runner, "_run_concurrent"
+            ) as concurrent:
+                result = runner._execute_variant(custom, scenario, variant, SCENARIO_ROOT.parent.parent, "run-test")
+            self.assertEqual(result["result"], "FAIL")
+            concurrent.assert_not_called()
+
+    def test_real_sut_mutant_skipping_task_finished_is_caught(self) -> None:
+        """真实 SqliteStore 仅跳过 task_finished 时，实际场景 oracle 必须失败。"""
+        from app.adapters.sqlite.repo import SqliteStore
+
+        assets = load_assets()
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m1/l05_undetermined.json").read_text(encoding="utf-8")
+        )
+        oracle = assets.oracles["variants"]["SC-L05/finish_undetermined"]["acceptance"]["steps"][0]
+        original = SqliteStore._insert_event
+
+        def skip_task_finished(self, **kwargs):
+            """只丢弃 task_finished，模拟漏事件缺陷。"""
+            if kwargs.get("event") == "task_finished":
+                return None
+            return original(self, **kwargs)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            db = root / "runtime.sqlite3"
+            with mock.patch.object(SqliteStore, "_insert_event", skip_task_finished):
+                actual = m1_probe.run_request(request, db, root)
+            invocation = {
+                "exit_code": 0,
+                "stdout_json": actual,
+                "stdout_json_ok": True,
+                "stdout_text": "",
+                "stderr": "",
+            }
+            differences = compare_invocation(invocation, oracle)
+            self.assertTrue(any("task_finished" in item for item in differences), differences)
+
     def test_oracles_reject_missing_event_attempt_and_partial_lease(self) -> None:
         """关键 oracle 必须能抓住漏事件、attempt 误增与部分租约残留。"""
         l05 = self.assets.oracles["variants"]["SC-L05/finish_undetermined"]["acceptance"]

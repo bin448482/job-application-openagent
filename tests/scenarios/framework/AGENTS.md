@@ -24,7 +24,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --target .
 ```
 
 - assets 只看测试资产，退出 0 不是产品 PASS。
-- acceptance 缺 `app/__main__.py`、里程碑未实现、入口未冻结、DEFERRED 或 MODULE_EVIDENCE 退 3；任一执行差异退 1；只有全部 F 变体执行通过才退 0，且报告仍标记设备门槛未验收。当前门禁为 M0/M1；新增里程碑须先更新常量与指南。并发组只由父 runner 启动两个隔离子进程，有限 ready-go 屏障与超时清理，子进程 tripwire 仍禁设备/网络/孙进程。
+- acceptance 缺 `app/__main__.py`、里程碑未实现、入口未冻结、DEFERRED 或 MODULE_EVIDENCE 退 3；任一执行差异退 1；只有全部 F 变体执行通过才退 0，且报告仍标记设备门槛未验收。当前门禁为 M0/M1；新增里程碑须先更新常量与指南。并发组只由父 runner 启动两个隔离子进程，全部 ready 才 go，spawn 失败/提前退出/超时均 FAIL，并在 try/finally 有界终止/回收全部已创建子进程；timeout 必须为 1–120 秒非 bool 整数，非法时零启动；子进程 tripwire 仍禁设备/网络/孙进程。
 - 报告只写 `data/evals/scenario-runs/<run>/report.json`；隔离根同在其下，含 app 副本、夹具副本、tripwire 日志与临时库。
 
 ## 四、维护要求

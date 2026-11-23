@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sqlite3
@@ -62,28 +63,38 @@ def _is_link_like(path: Path) -> bool:
     return bool(callable(is_junction) and is_junction())
 
 
-def _reject_links_to(path: Path, root: Path, label: str) -> None:
-    """拒绝从根到目标的父路径链接/junction，防止越过隔离根。"""
+def _reject_links_on_path(path: Path, root: Path, label: str) -> None:
+    """从原始路径到根逐项检查链接，再检查根的祖先；不做 resolve 前置。"""
     current = path
     while True:
         if _is_link_like(current):
             raise ProbeError(f"{label} 路径含链接或 junction")
-        if current == root or current.parent == current:
+        if current == root:
+            break
+        if current.parent == current:
+            break
+        current = current.parent
+    current = root
+    while True:
+        if _is_link_like(current):
+            raise ProbeError(f"{label} 根的祖先含链接或 junction")
+        if current.parent == current:
             break
         current = current.parent
 
 
 def _relative_path(value: str, root: Path, label: str, *, must_exist: bool) -> Path:
-    """只接受隔离根内相对路径；拒绝绝对、..、链接与越界。"""
+    """只接受隔离根内相对路径；先查原始链接再做 resolve/containment。"""
     if not isinstance(value, str) or not value:
         raise ProbeError(f"{label} 必须是非空相对路径")
     candidate = Path(value)
     if candidate.is_absolute() or ".." in candidate.parts:
         raise ProbeError(f"{label} 不得是绝对路径或包含 ..")
-    resolved = (root / candidate).resolve()
+    lexical = root / candidate
+    _reject_links_on_path(lexical, root, label)
+    resolved = lexical.resolve()
     if not _within(resolved, root):
         raise ProbeError(f"{label} 解析后越出隔离根")
-    _reject_links_to(resolved.parent, root, label)
     if must_exist and not resolved.is_file():
         raise ProbeError(f"{label} 不存在")
     return resolved
@@ -106,10 +117,13 @@ def _barrier_paths(root: Path) -> tuple[Path, str]:
         raise ProbeError("barrier 环境缺失")
     if re.fullmatch(r"[01]", name) is None:
         raise ProbeError("barrier 名称必须为 0 或 1")
-    directory = Path(directory_value).resolve()
+    raw_directory = Path(directory_value)
+    if not raw_directory.is_absolute():
+        raise ProbeError("barrier 目录必须为绝对路径")
+    _reject_links_on_path(raw_directory, root, "barrier")
+    directory = raw_directory.resolve()
     if not _within(directory, root) or not directory.is_dir():
         raise ProbeError("barrier 目录越界或不存在")
-    _reject_links_to(directory, root, "barrier")
     return directory, name
 
 
@@ -127,6 +141,11 @@ class FakeClock:
         delta = (target - self._wall).total_seconds()
         if delta < 0:
             raise ProbeError("墙钟不得回退")
+        if mono_delta is not None:
+            if isinstance(mono_delta, bool) or not isinstance(mono_delta, (int, float)):
+                raise ProbeError("mono_delta 必须是非负有限数字")
+            if not math.isfinite(mono_delta) or mono_delta < 0:
+                raise ProbeError("mono_delta 必须是非负有限数字")
         self._mono += delta if mono_delta is None else mono_delta
         self._wall = target
 
