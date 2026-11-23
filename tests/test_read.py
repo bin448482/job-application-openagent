@@ -413,6 +413,58 @@ class ReadFixtureCLITests(unittest.TestCase):
         ]
         self.assertIn(("failed", "not_ok"), gate_states)
 
+    def test_later_page_duplicate_identity_survives_merge(self) -> None:
+        """R1：后页 parser 清键后的身份歧义必须传播到真实 CLI/merge。"""
+        page1 = fixture_text("conversation-1.xml").replace(
+            'content-desc="msg-3"', 'content-desc="msg-2"'
+        )
+        manifest = make_read_fixture(
+            self.root,
+            "later-duplicate",
+            "conversation",
+            [fixture_text("conversation-0.xml"), page1],
+            proof={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            context={
+                "contact": "合成联系人甲",
+                "company": "合成公司甲",
+                "position": "合成职位甲",
+                "source_snapshot_id": "00000000-0000-4000-8000-000000000201",
+            },
+        )
+        code, payload, _ = run_cli(
+            self.root, ["read", "--fixture", manifest], self.root / "later.jsonl"
+        )
+        self.assertEqual(code, 2)
+        self.assertFalse(payload["actionable"])
+        value = payload["result"]["value"]
+        self.assertEqual(value["inbound_state"], "unknown")
+        self.assertIsNone(value["latest_inbound_key"])
+        self.assertFalse(value["message_identity_verified"])
+
+    def test_pixel_trace_requires_actual_execution(self) -> None:
+        """R3：合法标定但 XML 错页时不得记录 pixel 开始/失败。"""
+        wrong_page = '<hierarchy rotation="0"><node text="无列表" bounds="[0,0][10,10]" /></hierarchy>'
+        manifest = make_read_fixture(
+            self.root,
+            "wrong-page",
+            "unread",
+            [wrong_page],
+            pixel=(calibration(threshold=1), make_raw(100, 100, [])),
+        )
+        log_path = self.root / "wrong-page.jsonl"
+        code, payload, _ = run_cli(
+            self.root, ["read", "--fixture", manifest], log_path
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["result"]["reason_code"], "wrong_page")
+        events = self._log_events(self.root, "wrong-page-*.jsonl")
+        self.assertFalse(
+            any(
+                event["stage"] == "read" and event["operation"] == "pixel"
+                for event in events
+            )
+        )
+
     def test_pixel_conflict_logged_as_field_undetermined(self) -> None:
         """F6：像素与层级冲突记 pixel undetermined/ambiguous_signal。"""
         manifest = make_read_fixture(
@@ -1127,6 +1179,44 @@ class LadderTests(unittest.TestCase):
                     count=2,
                     source="hierarchy",
                     confidence="high",
+                )
+            )
+
+    def test_conflict_cannot_be_forged_resolved(self) -> None:
+        """R2：保留冲突证据时不能把 undetermined 伪造成层级 present。"""
+        hierarchy = ladder_reading(state="present", count=1)
+        pixel = ladder_reading(state="absent", source="pixel", count=0)
+        actual = resolve_field(hierarchy=hierarchy, pixel=pixel)
+        self.assertEqual(actual.state, "undetermined")
+        with self.assertRaises(ValueError):
+            validate_field_resolution(
+                replace(
+                    actual,
+                    state="present",
+                    count=1,
+                    reason_code=None,
+                    source="hierarchy",
+                    confidence="high",
+                    requires_human=False,
+                )
+            )
+
+    def test_failure_cannot_be_forged_resolved(self) -> None:
+        """R2：保留 failed evidence 时不能把 failed 伪造成 pixel present。"""
+        hierarchy = ladder_reading(state="failed", reason="invalid_xml")
+        pixel = ladder_reading(state="present", source="pixel")
+        actual = resolve_field(hierarchy=hierarchy, pixel=pixel)
+        self.assertEqual(actual.state, "failed")
+        with self.assertRaises(ValueError):
+            validate_field_resolution(
+                replace(
+                    actual,
+                    state="present",
+                    count=None,
+                    reason_code=None,
+                    source="pixel",
+                    confidence="medium",
+                    requires_human=False,
                 )
             )
 

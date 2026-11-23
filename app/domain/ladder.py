@@ -176,12 +176,50 @@ def validate_field_resolution(resolution: object) -> None:
         resolution.reason_code,
         resolution.source,
     )
+    if resolution.state in {"present", "absent", "failed"}:
+        _require_unique_resolution_evidence(resolution)
     if resolution.state == "failed":
         if resolution.confidence != "low":
             raise ValueError("failed field resolution confidence is invalid")
         return
     if resolution.state == "absent" and resolution.count != 0:
         raise ValueError("absent field resolution count is invalid")
+
+
+def _require_unique_resolution_evidence(resolution: FieldResolution) -> None:
+    """用唯一 resolve_field 规则重算并核对已决结果，防止伪造外层。"""
+    by_source: dict[str, FieldReading] = {}
+    for reading in resolution.evidence:
+        if reading.source in by_source:
+            raise ValueError("field resolution source is duplicated")
+        by_source[reading.source] = reading
+    expected_fields = (
+        resolution.state,
+        resolution.count,
+        resolution.reason_code,
+        resolution.source,
+        resolution.confidence,
+        resolution.requires_human,
+    )
+    for vision_enabled in (False, True):
+        expected = resolve_field(
+            hierarchy=by_source.get("hierarchy"),
+            pixel=by_source.get("pixel"),
+            vision=by_source.get("vision"),
+            human=by_source.get("human"),
+            vision_enabled=vision_enabled,
+            independent_cross_evidence=True,
+        )
+        if (
+            expected.state,
+            expected.count,
+            expected.reason_code,
+            expected.source,
+            expected.confidence,
+            expected.requires_human,
+        ) == expected_fields:
+            return
+    raise ValueError("field resolution contradicts merge rule")
 
 
 def resolve_field(

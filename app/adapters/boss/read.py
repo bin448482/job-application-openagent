@@ -281,9 +281,6 @@ def load_and_read_fixture(
             )
         elif fixture.kind == "unread":
             effective_now = fixture.observed_at if now is None else now
-            pixel_started = time.perf_counter()
-            if fixture.calibration is not None:
-                _record_read(process_log, "pixel", "started", pixel_started)
             result = parse_unread(
                 fixture.xml_texts[0],
                 profile,
@@ -294,17 +291,8 @@ def load_and_read_fixture(
                 fixture.coverage_proof,
                 effective_now,
                 app_version=fixture.app_version,
+                process_log=process_log,
             )
-            if fixture.calibration is not None:
-                pixel_result, pixel_reason = _pixel_trace(result)
-                _record_read(
-                    process_log,
-                    "pixel",
-                    pixel_result,
-                    pixel_started,
-                    pixel_reason,
-                    "pixel" if pixel_result == "failed" else None,
-                )
         else:
             pages = [
                 parse_conversation_page(
@@ -357,24 +345,13 @@ def load_and_read_fixture(
     return result
 
 
-def _pixel_trace(result: ReadResult) -> tuple[str, str | None]:
-    """把未读像素字段的冲突/未知映射为可追溯结果与固定原因。"""
-    if result.status != "ok":
-        return result.status, result.reason_code
-    if not isinstance(result.value, UnreadRead):
-        return result.status, result.reason_code
-    reasons = [
-        row.reason_code
-        for row in result.value.rows
-        if row.state == "unknown" and row.reason_code is not None
-    ]
-    if reasons:
-        reason = next(
-            (name for name in FIELD_REASON_PRIORITY if name in reasons),
-            "ambiguous_signal",
-        )
-        return "undetermined", reason
-    return "ok", None
+def _pixel_reading_result(reading: FieldReading) -> str:
+    """把实际像素单级结论映射为固定日志结果词表。"""
+    if reading.state == "failed":
+        return "failed"
+    if reading.state == "unknown":
+        return "undetermined"
+    return "ok"
 
 
 def _record_read(
@@ -698,6 +675,7 @@ def parse_unread(
     now: str,
     *,
     app_version: str | None = None,
+    process_log: ProcessLog | None = None,
 ) -> ReadResult:
     """解析未读行并按字段阶梯合并层级/像素，必要时保留 unknown。"""
     safe_time_value = safe_time(observed_at)
@@ -739,6 +717,7 @@ def parse_unread(
                 calibration,
                 raw_screen,
                 context,
+                process_log,
             )
             if row is None:
                 return _failed("invalid_fixture", safe_snapshot, safe_time_value)
@@ -954,9 +933,12 @@ def merge_conversations(
         )
         merged.extend(current_value.messages[overlap:])
     messages, identity_ambiguous = _clear_duplicate_stable_ids(tuple(merged))
-    effective_identity_verified = (
-        first.value.message_identity_verified and not identity_ambiguous
+    page_identity_verified = all(
+        page.value.message_identity_verified
+        for page in pages
+        if isinstance(page.value, Conversation)
     )
+    effective_identity_verified = page_identity_verified and not identity_ambiguous
     read_complete = bool(
         proof["kind"] == "full_traversal"
         and proof["top_proven"] is True
@@ -998,6 +980,7 @@ def _parse_unread_row(
     calibration: dict[str, object] | None,
     raw_screen: bytes | None,
     context: dict[str, str],
+    process_log: ProcessLog | None,
 ) -> UnreadRowRead | None:
     """解析一行未读角标并执行层级/像素字段阶梯；结构失败返回 None。"""
     selectors = profile["selectors"]
@@ -1011,7 +994,10 @@ def _parse_unread_row(
     )
     hierarchy = _hierarchy_badge_reading(row_node, profile, context)
     pixel = None
+    pixel_started: float | None = None
     if calibration is not None and raw_screen is not None:
+        pixel_started = time.perf_counter()
+        _record_read(process_log, "pixel", "started", pixel_started)
         pixel = parse_pixel_row_badge(
             raw_screen,
             calibration,
@@ -1023,8 +1009,29 @@ def _parse_unread_row(
             observed_at=context["observed_at"],
             layout_context=context["layout_context"],
         )
+        _record_read(
+            process_log,
+            "pixel",
+            _pixel_reading_result(pixel),
+            pixel_started,
+            pixel.reason_code,
+            "pixel" if pixel.state == "failed" else None,
+        )
     resolution = resolve_field(hierarchy=hierarchy, pixel=pixel)
     validate_field_resolution(resolution)
+    if (
+        pixel is not None
+        and pixel.state in {"present", "absent"}
+        and resolution.state == "undetermined"
+    ):
+        _record_read(
+            process_log,
+            "pixel",
+            "undetermined",
+            pixel_started or time.perf_counter(),
+            resolution.reason_code,
+            "pixel",
+        )
     if resolution.state == "failed":
         return None
     if resolution.state == "undetermined":

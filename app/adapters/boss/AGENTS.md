@@ -25,9 +25,9 @@
 9. 身份摘要复用 `app.domain.models.identity_hash_for`，会话键组装复用 `conversation_key_from_identity`；manifest/profile 严格 JSON 复用 `app.domain.json_input`，适配器不导入 CLI，各调用方保留自己的文件 IO 与 `invalid_fixture` 分类。
 10. M3 `read` manifest 固定 `{profile_path,app_version,observed_at,kind,hierarchy_paths,coverage_proof,conversation_context,pixel}`；profile 固定 `{profile_id,app,version,calibrated,selectors}`。`kind` 仅 `page/job_list/job_detail/unread/conversation`，`pixel` 仅 unread，`conversation_context` 仅 conversation；全部键必填、拒绝额外键。
 11. M3 页面按 `CORE-W14` 优先级；职位卡只接受 `clickable=true` 且 title/salary/company 唯一非空；职位标题只去首尾 `@%&空格`，公司/薪资只去首尾空白，`job_key="boss:job:"+H([title,company,salary])`；重复身份保留摘要但不可定位；详情截断为 `undetermined/incomplete_snapshot`，正文原文只进内存/CLI 数据区。
-12. M3 未读行身份复用 `H([联系人,公司,职位])`；角标层级未知时才用显式合成像素后备，像素只证明 present/absent 不生成精确计数；层级显式 0 为 absent；分辨率/profile/version 不符为 `calibration_mismatch`，损坏/未知格式为失败，低于阈值仅在 `absent_state_verified=true` 时 absent。合成标定只接受 `source=synthetic`、真实日历日期、RGBA `format=1/colorspace=0`。
+12. M3 未读行身份复用 `H([联系人,公司,职位])`；角标层级未知时才用显式合成像素后备，像素只证明 present/absent 不生成精确计数；层级显式 0 为 absent；分辨率/profile/version 不符为 `calibration_mismatch`，损坏/未知格式为失败，低于阈值仅在 `absent_state_verified=true` 时 absent。合成标定只接受 `source=synthetic`、真实日历日期、RGBA `format=1/colorspace=0`。像素 `started/完成` 日志只在 `parse_pixel_row_badge` 实际调用时记录；错页/零调用不伪造 pixel 事件。
 13. M3 会话页要求实际标题与输入上下文逐字相等并重算会话键；上下文只是合成发现链假设，不是仓储来源认证。消息 `content_hash` 只比较内容；稳定消息身份只来自 profile 验证过的应用 `content-desc` 原值，`message_key="boss:msg:"+H([conversation_key,stable_identity_hash])`。同正文/同秒/坐标/屏幕序号/布局 resource-id 均不构成身份。
-14. 跨屏只裁剪相邻页边界稳定身份与 kind/direction/content_hash/time_hint 一致的连续最长重叠；重复稳定 ID、方向冲突、截断、读未全或未知行使入站 `unknown`；重复稳定 ID 会使 `message_identity_verified=false` 并传播到整个会话。单页需 `scrollable=false`，多页需 `full_traversal` 首尾证明。公开解析入口自身校验 profile 已标定/版本与 context 形状，合并入口核对值类型和 profile_id；所有失败/未决 `value=null`。
+14. 跨屏只裁剪相邻页边界稳定身份与 kind/direction/content_hash/time_hint 一致的连续最长重叠；重复稳定 ID、方向冲突、截断、读未全或未知行使入站 `unknown`；重复稳定 ID 会使 `message_identity_verified=false` 并传播到整个会话，合并必须同时遵守所有参与页的该标志。单页需 `scrollable=false`，多页需 `full_traversal` 首尾证明。公开解析入口自身校验 profile 已标定/版本与 context 形状，合并入口核对值类型和 profile_id；所有失败/未决 `value=null`。
 
 ## 四、依赖与边界
 
