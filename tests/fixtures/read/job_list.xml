@@ -1,0 +1,16 @@
+<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.hpbr.bosszhipin" bounds="[0,0][1080,2400]">
+    <node resource-id="com.hpbr.bosszhipin:id/recycler_view" class="androidx.recyclerview.widget.RecyclerView" scrollable="true" bounds="[0,200][1080,2200]">
+      <node clickable="true" class="android.widget.LinearLayout" bounds="[0,200][1080,500]">
+        <node text="合成岗位甲" resource-id="com.hpbr.bosszhipin:id/tv_position_name" class="android.widget.TextView" bounds="[40,220][600,280]" />
+        <node text="20-30K" resource-id="com.hpbr.bosszhipin:id/tv_salary_statue" class="android.widget.TextView" bounds="[620,220][900,280]" />
+        <node text="合成公司甲" resource-id="com.hpbr.bosszhipin:id/tv_company_name" class="android.widget.TextView" bounds="[40,290][600,340]" />
+      </node>
+      <node clickable="true" class="android.widget.LinearLayout" bounds="[0,500][1080,800]">
+        <node text="合成岗位乙" resource-id="com.hpbr.bosszhipin:id/tv_position_name" class="android.widget.TextView" bounds="[40,520][600,580]" />
+        <node text="15-20K" resource-id="com.hpbr.bosszhipin:id/tv_salary_statue" class="android.widget.TextView" bounds="[620,520][900,580]" />
+        <node text="合成公司乙" resource-id="com.hpbr.bosszhipin:id/tv_company_name" class="android.widget.TextView" bounds="[40,590][600,640]" />
+      </node>
+    </node>
+  </node>
+</hierarchy>

@@ -1,0 +1,10 @@
+{
+  "profile_path": "profile.json",
+  "app_version": "14.200-synthetic",
+  "observed_at": "2026-11-24T00:00:00.000Z",
+  "kind": "page",
+  "hierarchy_paths": ["page.xml"],
+  "coverage_proof": {"kind": "viewport", "top_proven": false, "bottom_proven": false},
+  "conversation_context": null,
+  "pixel": null
+}

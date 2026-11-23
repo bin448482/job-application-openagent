@@ -27,6 +27,9 @@ STAGES = frozenset(
         "decision",
         "store",
         "sense",
+        "read",
+        "adb_hierarchy",
+        "adb_screen",
         "output",
         "exit",
     }
@@ -49,6 +52,7 @@ REASON_CODES = frozenset(
         "uncalibrated_profile",
         "unread_unverified",
         "needs_targeted_verification",
+        "device_gate_unavailable",
         "lease_busy",
         "stale_lease",
         "owner_not_stopped",
@@ -68,6 +72,9 @@ ERROR_CATEGORIES = frozenset(
         "business",
         "store",
         "sense",
+        "read",
+        "pixel",
+        "gate",
         "internal",
         "adb_missing",
         "adb_timeout",
@@ -75,7 +82,15 @@ ERROR_CATEGORIES = frozenset(
         "adb_oserror",
     }
 )
-COMMANDS = frozenset({"adb_devices", "adb_window"})
+COMMANDS = frozenset(
+    {
+        "adb_devices",
+        "adb_window",
+        "adb_hierarchy_dump",
+        "adb_hierarchy_cat",
+        "adb_screencap",
+    }
+)
 MODES = frozenset({"fixture", "device"})
 CONFIG_SOURCES = frozenset({"default", "file"})
 OPERATIONS = frozenset(
@@ -92,6 +107,15 @@ OPERATIONS = frozenset(
         "finish",
         "recover",
         "unresolved_conversations",
+        "load",
+        "page",
+        "job_list",
+        "job_detail",
+        "unread",
+        "conversation",
+        "pixel",
+        "merge",
+        "gate",
     }
 )
 EVENT_KEYS = (

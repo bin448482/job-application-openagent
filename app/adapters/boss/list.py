@@ -2,14 +2,29 @@
 
 from __future__ import annotations
 
-import math
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
 from xml.etree import ElementTree
 
-from app.domain.json_input import load_json_object as _load_strict_json
+from app.adapters.boss.support import (
+    EPOCH,
+    FixtureEncodingError as _FixtureXmlError,
+    XmlShapeError as _XmlError,
+    parse_bounds as _parse_bounds,
+    parse_xml_root as _parse_xml_root,
+    parent_map as _parent_map,
+    read_json_file as _read_json_file,
+    read_xml_text as _read_xml_text,
+    rect_inside as _rect_inside,
+    require_text as _require_text,
+    require_time as _require_time,
+    resolve_fixture_reference as _resolve_fixture_reference,
+    rid_matches as _rid_matches,
+    safe_time as _safe_time,
+    validate_ratio_region,
+)
 from app.domain.models import (
     APP,
     Candidate,
@@ -73,22 +88,12 @@ UNKNOWN_REASON_PRIORITY = (
     "incomplete_coverage",
 )
 SNAPSHOT_SECONDS = 5
-EPOCH = "1970-01-01T00:00:00.000Z"
 
-_BOUNDS_RE = re.compile(r"^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$")
 _ASCII_INT_RE = re.compile(r"^[0-9]+$")
 _COUNT_RE = re.compile(r"^([0-9]+)(\+)?$")
 _VIEWPORT = "viewport"
 _ALL = "all"
 _FIXTURE_SOURCE = "fixture"
-
-
-class _XmlError(Exception):
-    """表示受控 XML 形状错误，由调用方映射为 invalid_xml。"""
-
-
-class _FixtureXmlError(ValueError):
-    """表示夹具 XML 文件编码损坏，用于与 manifest/IO 错误区分。"""
 
 
 @dataclass(frozen=True)
@@ -440,19 +445,7 @@ def validate_profile(profile: object) -> None:
 
     region = profile["badge_region"]
     if region is not None:
-        if not isinstance(region, list) or len(region) != 4:
-            raise ValueError("badge region is invalid")
-        for value in region:
-            if type(value) is int:
-                if value < 0 or value > 1:
-                    raise ValueError("badge region is invalid")
-            elif type(value) is float:
-                if not math.isfinite(value) or value < 0 or value > 1:
-                    raise ValueError("badge region is invalid")
-            else:
-                raise ValueError("badge region is invalid")
-        if region[0] >= region[2] or region[1] >= region[3]:
-            raise ValueError("badge region is invalid")
+        validate_ratio_region(region)
 
     _validate_label_config(profile["new_greeting"], "semantics_verified")
     _validate_label_config(profile["tab_badge"], "global_zero_verified")
@@ -530,38 +523,6 @@ def _validate_coverage_proof(value: object) -> dict[str, object]:
 def _validate_page(page: ReadResult) -> None:
     """校验合并入口的页面为完整三态结果，拒绝非法原因或快照形状。"""
     validate_read_result(page)
-
-
-def _parse_xml_root(xml_text: str) -> ElementTree.Element:
-    """拒绝损坏 Unicode、DTD/ENTITY、非 hierarchy 根和非 node 元素后解析 XML。"""
-    try:
-        xml_text.encode("utf-8")
-    except UnicodeError:
-        raise _XmlError from None
-    upper = xml_text.upper()
-    if "<!DOCTYPE" in upper or "<!ENTITY" in upper:
-        raise _XmlError
-    try:
-        root = ElementTree.fromstring(xml_text)
-    except (ElementTree.ParseError, UnicodeError, ValueError):
-        raise _XmlError from None
-    if root.tag != "hierarchy":
-        raise _XmlError
-    for element in root.iter():
-        if element is root:
-            continue
-        if element.tag != "node":
-            raise _XmlError
-    return root
-
-
-def _parent_map(root: ElementTree.Element) -> dict[ElementTree.Element, ElementTree.Element]:
-    """构建元素到直接父节点的映射，用于标签容器与行内排除。"""
-    return {
-        child: parent
-        for parent in root.iter()
-        for child in list(parent)
-    }
 
 
 def _row_nodes(
@@ -698,34 +659,6 @@ def _row_badge(
     if len(values) == 1:
         return values[0], None
     return None, "missing_signal"
-
-
-def _parse_bounds(element: ElementTree.Element) -> tuple[int, int, int, int] | None:
-    """严格解析四个非负整数且正尺寸的 bounds，否则返回 None。"""
-    value = element.get("bounds")
-    if not isinstance(value, str):
-        return None
-    match = _BOUNDS_RE.fullmatch(value)
-    if match is None:
-        return None
-    left, top, right, bottom = (int(group) for group in match.groups())
-    if right <= left or bottom <= top:
-        return None
-    return left, top, right, bottom
-
-
-def _rect_inside(
-    inner: tuple[int, int, int, int], outer: tuple[float, float, float, float]
-) -> bool:
-    """判断节点矩形是否完全落在标定区域内（含边界）。"""
-    left, top, right, bottom = inner
-    outer_left, outer_top, outer_right, outer_bottom = outer
-    return (
-        left >= outer_left
-        and top >= outer_top
-        and right <= outer_right
-        and bottom <= outer_bottom
-    )
 
 
 def _global_signal(
@@ -1008,81 +941,9 @@ def _reason(reasons: list[str]) -> str:
     return "ambiguous_signal"
 
 
-def _rid_matches(node: ElementTree.Element, suffix: str) -> bool:
-    """按 resource-id 的 :id/ 后缀边界匹配，避免子串误命中。"""
-    rid = node.get("resource-id")
-    if not isinstance(rid, str):
-        return False
-    return (
-        rid == suffix
-        or rid.endswith(":id/" + suffix)
-        or rid.endswith("/" + suffix)
-    )
-
-
 def _suffix(profile: dict, name: str) -> str:
     """返回列表或行的资源 ID 后缀。"""
     return str(profile["list_id_suffix"] if name == "list" else profile["row_id_suffix"])
-
-
-def _read_xml_text(path: Path) -> str:
-    """以严格 UTF-8 读取 XML；编码损坏映射为 invalid_xml 专用错误。"""
-    try:
-        data = path.read_bytes()
-    except OSError:
-        raise ValueError("xml file is unreadable") from None
-    try:
-        return data.decode("utf-8")
-    except UnicodeDecodeError:
-        raise _FixtureXmlError("xml encoding is invalid") from None
-
-
-def _read_json_file(path: Path) -> object:
-    """读取严格 UTF-8 JSON，并复用共享重复对象键校验。"""
-    text = path.read_text(encoding="utf-8")
-    return _load_strict_json(text)
-
-
-def _resolve_fixture_reference(base: Path, value: str) -> Path:
-    """把 manifest 引用限制在夹具目录内，拒绝绝对路径、.. 与链接。"""
-    if not is_nonempty_text(value) or value.startswith("~"):
-        raise ValueError("fixture reference is invalid")
-    candidate = Path(value)
-    if candidate.is_absolute() or candidate.drive or candidate.anchor:
-        raise ValueError("fixture reference is absolute")
-    if ".." in candidate.parts:
-        raise ValueError("fixture reference escapes")
-    current = base
-    for part in candidate.parts:
-        current = current / part
-        if current.is_symlink() or current.is_junction():
-            raise ValueError("fixture reference is a link")
-    resolved = (base / candidate).resolve()
-    if not resolved.is_relative_to(base) or not resolved.is_file():
-        raise ValueError("fixture reference is invalid")
-    return resolved
-
-
-def _require_text(value: object) -> str:
-    """要求非空且可 UTF-8 编码的字符串。"""
-    if not is_nonempty_text(value):
-        raise ValueError("text is invalid")
-    return str(value)
-
-
-def _require_time(value: object) -> str:
-    """要求规范毫秒 UTC 时间字符串。"""
-    parse_utc(value)
-    return str(value)
-
-
-def _safe_time(value: object) -> str:
-    """把无效时间替换为固定纪元值，仅用于构造安全失败结果。"""
-    try:
-        parse_utc(value)
-    except ValueError:
-        return EPOCH
-    return str(value)
 
 
 def _failed(reason_code: str, snapshot_id: str | None, observed_at: str) -> ReadResult:

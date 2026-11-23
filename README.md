@@ -4,12 +4,13 @@
 
 ## 当前状态
 
-旧的业务源码、Skills 与业务离线测试已清理，项目正在分阶段实现。当前已实现 M0 只读探针、M1 本机状态库/租约与 M2 合成未读四源传感器，并已建立独立的 promptfoo 合成黄金测试集：
+旧的业务源码、Skills 与业务离线测试已清理，项目正在分阶段实现。当前已实现 M0 只读探针、M1 本机状态库/租约、M2 合成未读四源传感器与 M3 离线读取阶梯/页面/职位/会话读取，并已建立独立的 promptfoo 合成黄金测试集：
 
 - `pyproject.toml`、`requirements.txt`：Python 业务元数据；暂不引入第三方 Python 依赖。
-- `app/`：M0–M2 分层程序，提供 `python -m app`、只读 `doctor`、`store init` 与合成 `sense`，以及 `domain/` 纯模型、`adapters/sqlite/` 本机仓储和 `adapters/boss/list.py` XML 解析。
-- `tests/`：M0–M2 标准库 `unittest` 与纯合成夹具；M3+ 测试待实现。
-- `docs/operator.md`：M0–M2 探针、状态库与合成传感器的运行、配置、schema、停因与错误码说明。
+- `app/`：M0–M3 分层程序，提供 `python -m app`、只读 `doctor`、`store init`、合成 `sense` 与合成 `read`，以及 `domain/` 纯模型/读取契约、`adapters/sqlite/` 本机仓储、`adapters/boss/` 解析与 `adapters/adb/` 采集适配器。
+- `tests/`：M0–M3 标准库 `unittest` 与纯合成夹具；M4+ 测试待实现。
+- `docs/operator.md`：M0–M2 探针、状态库与合成传感器及 M3 离线读取的运行、配置、schema、停因与错误码说明。
+- `docs/BOSS直聘_M3读取阶梯与最小数据契约_20261124.md`：M3 读取值类型、字段阶梯、像素标定、跨屏稳定消息身份与失败/门禁契约。
 - `config.example.json`：可提交的示例配置，当前只描述未来 M4 的策略包引用，不是 M0 配置。
 - `data/`、`screenshots/`：本机运行产物目录，只提交目录说明；`data/runtime/` 中的 SQLite 库被忽略。
 - `.agents/AGENTS.md`、`.claude/AGENTS.md`：工作流入口占位，内容待设计。
@@ -80,14 +81,33 @@ python -m app sense --fixture tests/fixtures/sensor/positive.json --db data/runt
 
 M2 只读合成 profile/manifest/XML：不支持设备、网络、模型或子进程，不 `claim/start/finish`、不打开会话、不推进已读基线，也不把合成 profile 标为已标定真实版本。`stop_reason` 非空时退出 `2`，用于表达 `unread_unverified` 或 `needs_targeted_verification`；读取本身失败/未决时保留完整 `ReadResult` 且不写库。manifest/profile 字段、四源规则、分页重叠、覆盖率、原因码与夹具布局见 [docs/operator.md](docs/operator.md) 与 [tests/fixtures/sensor/AGENTS.md](tests/fixtures/sensor/AGENTS.md)。
 
+## M3 离线读取阶梯（已实现，未真机验收）
+
+在项目根目录执行：
+
+```powershell
+python -m unittest tests.test_read tests.test_screen
+python -m app read --fixture tests/fixtures/read/page.json
+python -m app read --fixture tests/fixtures/read/job_list.json
+python -m app read --fixture tests/fixtures/read/job_detail.json
+python -m app read --fixture tests/fixtures/read/unread.json
+python -m app read --fixture tests/fixtures/read/conversation.json
+```
+
+`read` 只读合成 M3 manifest/profile/XML 与可选显式合成像素标定，不连接设备、数据库、模型或网络，不 `claim/start/finish`、不关闭发现、不写正文或 `verified` 基线。输出固定外层 `{schema_version:1,result:ReadResult,actionable:bool,gate_reason:...}`：`ok` 但字段未知/身份未决时 `actionable=false` 并退出 `2`；`failed/undetermined` 的 `value=null`。读取值类型包括 `PageSnapshot/JobList/JobDetail/UnreadRead/Conversation`，并继续复用唯一 `ReadResult` 三态/来源/原因外层。
+
+M3 的层级默认优先，仅字段未决时才用显式标定像素；视觉默认关闭，无独立交叉证据不放行；前级 `failed` 不降级掩盖，跨级冲突转 `undetermined`/人工。跨屏消息身份与正文内容指纹分离：只有 profile 显式验证的应用消息稳定标识才能生成 `boss:msg:` 入站键；同正文、同秒、屏幕序号、坐标或布局 resource-id 都不构成稳定身份。会话身份必须与实际标题及已保存发现上下文重新核对，不能用 manifest 自报键。详细契约见 [M3 契约文档](docs/BOSS直聘_M3读取阶梯与最小数据契约_20261124.md)。
+
+真实采集适配器已按参数数组、`shell=false`、5 秒超时、不重试并有本机证据保存实现，但只在测试中 mock `subprocess.run` 验证。共享 OS 设备门禁（M4）未交付前不提供真实 `read --device`，不得用 profile 内 `primary` 任务锁替代。真机像素阈值/区域/字体/分辨率、真实消息稳定标识、真实 ADB 输出与单台真机只读一轮均未执行，M3 不代表真机标定或里程碑真机通过。
+
 ## 开发环境
 
 - Python 3.13 或更高版本。
 - 评测工具另需 Node.js >=22.22.0 与 npm；promptfoo 固定为 0.126.0。
-- 真机功能另需 Android SDK Platform-Tools 中的 `adb`、USB 调试和使用者确认；M0–M2 离线测试不连接设备。
+- 真机功能另需 Android SDK Platform-Tools 中的 `adb`、USB 调试和使用者确认；M0–M3 离线测试不连接设备。
 - 仓库中的 `.venv/` 与 `config.json` 为被 Git 忽略的本机文件，可自行保留或删除。
 
-M3–M8 的读取阶梯、决策、动作、调度与灰度仍待实现；M2 的合成传感器不代表真实设备采集或真实版本标定。数据库、日志、截图、契约、凭据和个人事实只在本机保存。
+M4–M8 的决策、动作、调度与灰度仍待实现；M3 的读取阶梯只使用合成 XML、合成 RGBA、模拟 ADB 与独立门禁测试，不代表真实设备采集或真实版本标定。数据库、日志、截图、契约、凭据和个人事实只在本机保存。
 
 全新机器的引导、依赖边界与验收规划见[新环境自动化部署方案](docs/求职自动化_新环境自动化部署方案_20261123.md)：分别设计 eval、ADB 工具准备和经本轮确认后的手机环境检测（§8、§10.1）；工具安装不代表手机或业务就绪。安装器与手机检查器尚未实现，干净机器及手机验收均待执行；本轮仅文档，不运行 ADB 或连接手机。
 
