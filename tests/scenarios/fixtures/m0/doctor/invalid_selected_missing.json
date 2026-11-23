@@ -1,0 +1,11 @@
+{
+  "devices": [
+    {
+      "alias": "primary",
+      "state": "device"
+    }
+  ],
+  "selected_alias": "absent",
+  "unlocked": true,
+  "foreground_app": "boss"
+}

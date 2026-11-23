@@ -1,0 +1,14 @@
+{
+  "profile_path": "profile.json",
+  "xml_paths": [
+    "list.xml"
+  ],
+  "app_version": "synthetic-1",
+  "observed_at": "2026-11-24T00:00:00.000Z",
+  "baseline_rows": [],
+  "coverage_proof": {
+    "kind": "full_traversal",
+    "top_proven": true,
+    "bottom_proven": true
+  }
+}

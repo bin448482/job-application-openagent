@@ -1,0 +1,35 @@
+{
+  "script_id": "SC-S01/safe-point-preemption",
+  "clock_start_ms": 0,
+  "events": [
+    {
+      "seq": 1,
+      "virtual_ms": 0,
+      "event": "job_started",
+      "note": "J甲 running，未回列表"
+    },
+    {
+      "seq": 2,
+      "virtual_ms": 8000,
+      "event": "synthetic_unread_arrives",
+      "arrival_at": 8000
+    },
+    {
+      "seq": 3,
+      "virtual_ms": 10000,
+      "event": "snapshot_observed",
+      "first_observed_at": 10000
+    },
+    {
+      "seq": 4,
+      "virtual_ms": 20020,
+      "event": "safe_point_reached"
+    },
+    {
+      "seq": 5,
+      "virtual_ms": 20200,
+      "event": "unread_handling_started",
+      "handling_started_at": 20200
+    }
+  ]
+}

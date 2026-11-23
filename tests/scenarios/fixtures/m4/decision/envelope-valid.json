@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "task_id": "boss:conv:synthetic",
+  "nonce": "00000000-0000-4000-8000-000000000001",
+  "input_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "app": "boss",
+  "kind": "hr_message",
+  "subject": {
+    "conversation_key": "boss:conv:synthetic",
+    "job_brief": null
+  },
+  "inbound": "您好，这个岗位还在招吗",
+  "context": [],
+  "allowed_facts": [
+    {
+      "key": "work_location",
+      "value": "合成城市甲",
+      "source": "user_confirmed",
+      "expires_at": null
+    }
+  ],
+  "base_version": "synthetic-base-1",
+  "base_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+  "policy_pack_id": "synthetic-profile",
+  "policy_pack_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+  "prompt_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+  "policy_tier": "C",
+  "constraints": {
+    "max_chars": 300,
+    "no_contact": true,
+    "max_bytes": 2048
+  }
+}

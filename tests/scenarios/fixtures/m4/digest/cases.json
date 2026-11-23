@@ -1,0 +1,55 @@
+{
+  "description": "摘要关系判据；实际值待 base/包文件交付后计算，不在此硬编码",
+  "cases": [
+    {
+      "id": "nonce_only",
+      "changed": [
+        "nonce"
+      ],
+      "expected_changed": [
+        "input_hash"
+      ],
+      "prompt_hash_changed": false
+    },
+    {
+      "id": "task_only",
+      "changed": [
+        "task_id"
+      ],
+      "expected_changed": [
+        "input_hash"
+      ],
+      "prompt_hash_changed": false
+    },
+    {
+      "id": "pack_comment",
+      "changed": [
+        "pack.toml:comment"
+      ],
+      "expected_changed": [
+        "pack_hash",
+        "prompt_hash",
+        "input_hash"
+      ]
+    },
+    {
+      "id": "directory_rename",
+      "changed": [
+        "directory_name"
+      ],
+      "expected_changed": [],
+      "prompt_hash_changed": false
+    },
+    {
+      "id": "same_bytes_other_dir",
+      "changed": [
+        "directory_name"
+      ],
+      "expected_same_hash": true
+    }
+  ],
+  "limits": {
+    "envelope_bytes_max": 2048,
+    "decision_content_bytes_max": 65536
+  }
+}

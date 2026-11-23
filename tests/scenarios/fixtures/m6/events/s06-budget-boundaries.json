@@ -1,0 +1,31 @@
+{
+  "script_id": "SC-S06/budget-boundaries",
+  "limits": {
+    "round_seconds": [
+      899.999,
+      900,
+      900.001
+    ],
+    "device_calls": [
+      199,
+      200,
+      201
+    ],
+    "candidates": [
+      19,
+      20,
+      21
+    ],
+    "job_seconds": [
+      29.999,
+      30,
+      30.001
+    ]
+  },
+  "expected": {
+    "check_before_new_action": true,
+    "at_limit_start_no_new_action": true,
+    "in_flight_result_still_reconciled": true,
+    "overrun_separately_reported": true
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "from_mode": "auto_send_tier_a",
+  "events": [
+    {
+      "seq": 1,
+      "virtual_ms": 0,
+      "event": "unknown_rate_alert"
+    },
+    {
+      "seq": 2,
+      "virtual_ms": 100,
+      "event": "switch_to_read_only"
+    }
+  ],
+  "expected": {
+    "no_new_actions": true,
+    "in_flight_reconciled": true,
+    "cursor_and_locks_preserved": true,
+    "evidence_not_deleted": true,
+    "reupgrade_requires_retest": true
+  }
+}

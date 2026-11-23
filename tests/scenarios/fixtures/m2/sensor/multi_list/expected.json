@@ -1,0 +1,10 @@
+{
+  "manifest.json": {
+    "exit_code": 2,
+    "result_status": "undetermined",
+    "unread_state": null,
+    "stop_reason": "incomplete_snapshot",
+    "candidate_kinds": [],
+    "discovery_count": 0
+  }
+}

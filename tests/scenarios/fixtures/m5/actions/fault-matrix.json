@@ -1,0 +1,70 @@
+{
+  "description": "不可逆动作与五个故障窗口的独立判据矩阵",
+  "actions": {
+    "A01_text": {
+      "effect": "sent",
+      "key": "app:message_key:reply"
+    },
+    "A02_resume": {
+      "effect": "request_sent",
+      "key": "conversation:resume"
+    },
+    "A03_wechat": {
+      "effect": "request_sent",
+      "key": "conversation:wechat"
+    },
+    "A04_phone": {
+      "effect": "request_sent",
+      "key": "conversation:phone"
+    },
+    "A05_delete": {
+      "effect": "deleted",
+      "key": "conversation:delete"
+    },
+    "A06_apply": {
+      "effect": "applied",
+      "key": "app:job_key:apply"
+    }
+  },
+  "fault_windows": {
+    "F-A": {
+      "outcome": "not_performed",
+      "effect": "none",
+      "reasons": [
+        "authorization_missing",
+        "precondition_failed",
+        "cancelled_before_action"
+      ]
+    },
+    "F-B": {
+      "outcome": "blocked_pending",
+      "effect": "none",
+      "reason": "interrupted_after_pending"
+    },
+    "F-C": {
+      "outcome": "unknown",
+      "effect": "none",
+      "reasons": [
+        "device_disconnected",
+        "executor_interrupted"
+      ],
+      "max_executions": 1,
+      "device_quarantined": true
+    },
+    "F-D": {
+      "outcome": "unknown",
+      "effect": "none",
+      "reasons": [
+        "result_unverified"
+      ],
+      "device_quarantined": true
+    },
+    "F-E": {
+      "outcome": "pending_reconcile",
+      "effect": "unknown",
+      "remote_may_have_happened": true,
+      "local_rollback": true,
+      "max_executions": 1
+    }
+  }
+}
