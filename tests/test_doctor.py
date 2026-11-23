@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -48,7 +49,7 @@ READY_OUTPUT = {
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
-    """在项目根以 UTF-8 运行一次 python -m app 并捕获标准输出与错误。"""
+    """在项目根运行一次 python -m app；默认生产日志保留在被忽略目录，不按差集清理。"""
     return subprocess.run(
         [sys.executable, "-m", "app", *args],
         cwd=ROOT,
@@ -121,7 +122,7 @@ class DoctorCliTests(unittest.TestCase):
     """覆盖验收命令、配置与参数负例、业务失败和设备状态映射。"""
 
     def test_ready_fixture_contract(self) -> None:
-        """ready 夹具必须退出 0、只输出一个完整 JSON，且不新增业务库。"""
+        """ready 夹具退出 0、只输出一个完整 JSON、不新增业务库且不清理同期日志。"""
         before = _sqlite_files()
         completed = _run_cli("doctor", "--fixture", READY_FIXTURE)
         after = _sqlite_files()
@@ -132,6 +133,27 @@ class DoctorCliTests(unittest.TestCase):
         self.assertEqual(payload, READY_OUTPUT)
         self.assertEqual(list(payload), OUTPUT_KEYS)
         self.assertEqual(before, after)
+
+        sentinel = ROOT / "data" / "logs" / f"m0-process-{uuid.uuid4()}.jsonl"
+        self.assertFalse(sentinel.exists())
+        self.addCleanup(sentinel.unlink, missing_ok=True)
+
+        def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+            """仅在 CLI 运行窗口内创建同期日志哨兵，模拟另一独立进程。"""
+            sentinel.parent.mkdir(parents=True, exist_ok=True)
+            sentinel.write_text("sentinel-after\n", encoding="utf-8")
+            return subprocess.CompletedProcess(
+                args=args[0] if args else [],
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
+
+        with patch("tests.test_doctor.subprocess.run", side_effect=fake_run):
+            fake_completed = _run_cli("--help")
+        self.assertEqual(fake_completed.returncode, 0)
+        self.assertTrue(sentinel.exists())
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "sentinel-after\n")
 
     def test_help_exits_zero_without_stderr(self) -> None:
         """帮助路径退出 0，且不向 stderr 写内容。"""
@@ -721,8 +743,8 @@ class AdbProbeTests(unittest.TestCase):
                         caught.exception.reason_code,
                         "device_disconnected",
                     )
-                    events = _read_log(path)
-                    log_text = path.read_text(encoding="utf-8")
+                    events = _read_log(log.path)
+                    log_text = log.path.read_text(encoding="utf-8")
                 self.assertEqual(len(events), 2)
                 started, failed = events
                 self.assertEqual(started["stage"], "adb_devices")
@@ -749,8 +771,8 @@ class AdbProbeTests(unittest.TestCase):
             with patch("subprocess.run", side_effect=RuntimeError("interrupt")):
                 with self.assertRaises(RuntimeError):
                     AdbDeviceProbe(process_log=log).probe("synthetic-serial")
-            events = _read_log(path)
-            log_text = path.read_text(encoding="utf-8")
+            events = _read_log(log.path)
+            log_text = log.path.read_text(encoding="utf-8")
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["stage"], "adb_devices")
         self.assertEqual(events[0]["result"], "started")
@@ -780,7 +802,7 @@ class AdbProbeTests(unittest.TestCase):
             ) as run_mock:
                 with self.assertRaises(DeviceProbeError) as caught:
                     AdbDeviceProbe(process_log=log).probe("synthetic-serial")
-            events = _read_log(path)
+            events = _read_log(log.path)
         self.assertEqual(run_mock.call_count, 2)
         self.assertEqual(caught.exception.reason_code, "device_disconnected")
         self.assertEqual(caught.exception.device_count, 1)
@@ -1020,7 +1042,9 @@ class ProcessLogTests(unittest.TestCase):
             ]
             for event in events:
                 self.assertTrue(log.record(**event))
-            parsed = _read_log(path)
+            parsed = _read_log(log.path)
+            self.assertNotEqual(log.path, path)
+            self.assertFalse(path.exists())
 
         self.assertEqual(len(parsed), len(events))
         for event in parsed:
@@ -1038,6 +1062,11 @@ class ProcessLogTests(unittest.TestCase):
             cases = {
                 "stage": {"stage": "raw", "result": "ok"},
                 "result": {"stage": "start", "result": "done"},
+                "operation": {
+                    "stage": "store",
+                    "result": "started",
+                    "operation": "raw",
+                },
                 "reason": {
                     "stage": "start",
                     "result": "ok",
@@ -1084,7 +1113,7 @@ class ProcessLogTests(unittest.TestCase):
                 with self.subTest(name=name):
                     self.assertFalse(log.record(**event))
             self.assertTrue(log.degraded)
-            self.assertFalse(path.exists())
+            self.assertFalse(log.path.exists())
 
     def test_append_failure_is_silent_and_returns_false(self) -> None:
         """日志 IO 失败必须返回 False，且不向 stdout/stderr 泄露异常原值。"""
@@ -1104,7 +1133,7 @@ class ProcessLogTests(unittest.TestCase):
             self.assertTrue(log.degraded)
             self.assertEqual(stdout.getvalue(), "")
             self.assertEqual(stderr.getvalue(), "")
-            self.assertFalse(path.exists())
+            self.assertFalse(log.path.exists())
 
 
 class DoctorLoggingTests(unittest.TestCase):
@@ -1114,21 +1143,19 @@ class DoctorLoggingTests(unittest.TestCase):
         """fixture 成功流程记录 start 到 exit，且不写夹具路径或业务值。"""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path, correlation_id="corr-fixture")
             stdout = io.StringIO()
             stderr = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 code = main(
                     ["doctor", "--fixture", READY_FIXTURE],
-                    process_log=ProcessLog(
-                        path=path,
-                        correlation_id="corr-fixture",
-                    ),
+                    process_log=log,
                 )
             self.assertEqual(code, 0)
             self.assertEqual(stderr.getvalue(), "")
             self.assertEqual(json.loads(stdout.getvalue()), READY_OUTPUT)
-            events = _read_log(path)
-            log_text = path.read_text(encoding="utf-8")
+            events = _read_log(log.path)
+            log_text = log.path.read_text(encoding="utf-8")
 
         self.assertEqual(
             _event_stages(events),
@@ -1167,6 +1194,7 @@ class DoctorLoggingTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path, correlation_id="corr-device")
             stdout = io.StringIO()
             stderr = io.StringIO()
             with patch(
@@ -1176,16 +1204,13 @@ class DoctorLoggingTests(unittest.TestCase):
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     code = main(
                         ["doctor", "--device", "--serial", "synthetic-serial"],
-                        process_log=ProcessLog(
-                            path=path,
-                            correlation_id="corr-device",
-                        ),
+                        process_log=log,
                     )
             self.assertEqual(code, 0)
             self.assertEqual(stderr.getvalue(), "")
             self.assertEqual(json.loads(stdout.getvalue()), READY_OUTPUT)
-            events = _read_log(path)
-            log_text = path.read_text(encoding="utf-8")
+            events = _read_log(log.path)
+            log_text = log.path.read_text(encoding="utf-8")
 
         self.assertEqual(
             _event_stages(events),
@@ -1233,15 +1258,13 @@ class DoctorLoggingTests(unittest.TestCase):
             directory = Path(tmp)
             fixture_path = _write_text(directory, "bad.json", "{")
             log_path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=log_path, correlation_id="corr-invalid")
             stdout = io.StringIO()
             stderr = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 code = main(
                     ["doctor", "--fixture", fixture_path],
-                    process_log=ProcessLog(
-                        path=log_path,
-                        correlation_id="corr-invalid",
-                    ),
+                    process_log=log,
                 )
             self.assertEqual(code, 2)
             self.assertEqual(stderr.getvalue(), "")
@@ -1253,8 +1276,8 @@ class DoctorLoggingTests(unittest.TestCase):
                     "reason_code": "invalid_fixture",
                 },
             )
-            events = _read_log(log_path)
-            log_text = log_path.read_text(encoding="utf-8")
+            events = _read_log(log.path)
+            log_text = log.path.read_text(encoding="utf-8")
 
         failed = [
             event
@@ -1275,6 +1298,7 @@ class DoctorLoggingTests(unittest.TestCase):
         """日志写入失败时 stdout/退出码不变，但 stderr 有明显固定降级标记。"""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path)
             stdout = io.StringIO()
             stderr = io.StringIO()
             with patch.object(
@@ -1285,12 +1309,12 @@ class DoctorLoggingTests(unittest.TestCase):
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     code = main(
                         ["doctor", "--fixture", READY_FIXTURE],
-                        process_log=ProcessLog(path=path),
+                        process_log=log,
                     )
             self.assertEqual(code, 0)
             self.assertEqual(stderr.getvalue(), "m0_process_log_degraded\n")
             self.assertEqual(json.loads(stdout.getvalue()), READY_OUTPUT)
-            self.assertFalse(path.exists())
+            self.assertFalse(log.path.exists())
 
     def test_stdout_write_failures_exit_two_without_traceback(self) -> None:
         """stdout 写出 UnicodeError/OSError 时安全退出 2，不输出 traceback。"""
@@ -1324,17 +1348,18 @@ class DoctorLoggingTests(unittest.TestCase):
             with self.subTest(name=name):
                 with tempfile.TemporaryDirectory() as tmp:
                     path = Path(tmp) / "m0-process.jsonl"
+                    log = ProcessLog(path=path)
                     stderr = io.StringIO()
                     with redirect_stdout(_FailingStdout(error)):
                         with redirect_stderr(stderr):
                             code = main(
                                 ["doctor", "--fixture", READY_FIXTURE],
-                                process_log=ProcessLog(path=path),
+                                process_log=log,
                             )
                     self.assertEqual(code, 2)
                     self.assertNotIn("Traceback", stderr.getvalue())
                     self.assertNotIn("secret", stderr.getvalue())
-                    events = _read_log(path)
+                    events = _read_log(log.path)
                 output_events = [
                     event for event in events if event["stage"] == "output"
                 ]
@@ -1352,16 +1377,14 @@ class DoctorLoggingTests(unittest.TestCase):
         before = _sqlite_files()
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path, correlation_id="corr-device-failure")
             stdout = io.StringIO()
             stderr = io.StringIO()
             with patch("subprocess.run", side_effect=FileNotFoundError("missing")):
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     code = main(
                         ["doctor", "--device", "--serial", "synthetic-serial"],
-                        process_log=ProcessLog(
-                            path=path,
-                            correlation_id="corr-device-failure",
-                        ),
+                        process_log=log,
                     )
             self.assertEqual(code, 2)
             self.assertEqual(stderr.getvalue(), "")
@@ -1378,7 +1401,7 @@ class DoctorLoggingTests(unittest.TestCase):
                     "unknown",
                 ),
             )
-            events = _read_log(path)
+            events = _read_log(log.path)
         self.assertEqual(before, _sqlite_files())
         device_events = [
             event for event in events if event["stage"] == "adb_devices"
@@ -1400,21 +1423,19 @@ class DoctorLoggingTests(unittest.TestCase):
         """--help 保持 argparse 标准行为，并记录 output/exit 而不伪造 JSON。"""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path, correlation_id="corr-help")
             stdout = io.StringIO()
             stderr = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 with self.assertRaises(SystemExit) as caught:
                     main(
                         ["--help"],
-                        process_log=ProcessLog(
-                            path=path,
-                            correlation_id="corr-help",
-                        ),
+                        process_log=log,
                     )
             self.assertEqual(caught.exception.code, 0)
             self.assertEqual(stderr.getvalue(), "")
             self.assertIn("usage:", stdout.getvalue())
-            events = _read_log(path)
+            events = _read_log(log.path)
         self.assertEqual(
             _event_stages(events),
             ["start", "arguments", "output", "exit"],
@@ -1439,8 +1460,8 @@ class DoctorLoggingTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(stderr.getvalue(), "m0_process_log_degraded\n")
             self.assertEqual(json.loads(stdout.getvalue()), READY_OUTPUT)
-            events = _read_log(path)
-            log_text = path.read_text(encoding="utf-8")
+            events = _read_log(log.path)
+            log_text = log.path.read_text(encoding="utf-8")
         self.assertEqual(
             _event_stages(events),
             [

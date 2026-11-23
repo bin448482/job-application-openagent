@@ -1,15 +1,18 @@
-"""追加 M0 本机白名单过程日志，只写固定字段且不影响业务输出。"""
+"""按运行隔离地追加本机白名单过程日志，只写固定字段且不影响业务输出。"""
 
 from __future__ import annotations
 
 import json
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 SCHEMA_VERSION = 1
-DEFAULT_LOG_PATH = Path(__file__).resolve().parents[1] / "data" / "logs" / "m0-process.jsonl"
+DEFAULT_LOG_DIR = Path(__file__).resolve().parents[1] / "data" / "logs"
+DEFAULT_LOG_NAME = "m0-process.jsonl"
+DEGRADED_MARKER = "m0_process_log_degraded"
 
 STAGES = frozenset(
     {
@@ -22,6 +25,7 @@ STAGES = frozenset(
         "adb_devices",
         "adb_window",
         "decision",
+        "store",
         "output",
         "exit",
     }
@@ -38,6 +42,14 @@ REASON_CODES = frozenset(
         "device_unauthorized",
         "device_locked",
         "wrong_page",
+        "lease_busy",
+        "stale_lease",
+        "owner_not_stopped",
+        "clock_changed",
+        "store_busy",
+        "store_io_error",
+        "db_version_unsupported",
+        "migration_failed",
     }
 )
 ERROR_CATEGORIES = frozenset(
@@ -47,6 +59,7 @@ ERROR_CATEGORIES = frozenset(
         "fixture",
         "probe",
         "business",
+        "store",
         "internal",
         "adb_missing",
         "adb_timeout",
@@ -57,11 +70,25 @@ ERROR_CATEGORIES = frozenset(
 COMMANDS = frozenset({"adb_devices", "adb_window"})
 MODES = frozenset({"fixture", "device"})
 CONFIG_SOURCES = frozenset({"default", "file"})
+OPERATIONS = frozenset(
+    {
+        "init",
+        "open_store",
+        "upsert_snapshot",
+        "claim",
+        "start",
+        "renew",
+        "finish",
+        "recover",
+        "unresolved_conversations",
+    }
+)
 EVENT_KEYS = (
     "schema_version",
     "ts",
     "correlation_id",
     "stage",
+    "operation",
     "result",
     "reason_code",
     "error_category",
@@ -80,19 +107,22 @@ def elapsed_ms(started: float) -> int:
 
 
 class ProcessLog:
-    """尽力追加 JSON Lines 过程日志；非法值或写入失败都置 degraded 并返回 False。"""
+    """每次运行写独立 JSON Lines 文件；非法值或写入失败都置 degraded 并返回 False。"""
 
     def __init__(self, path: Path | None = None, correlation_id: str | None = None) -> None:
-        """保存日志路径、关联 ID 与降级标记，构造阶段不创建目录或打开文件。"""
-        self.path = DEFAULT_LOG_PATH if path is None else path
+        """确定本次运行唯一文件与关联 ID，构造阶段不创建目录或打开文件。"""
         self.correlation_id = correlation_id or str(uuid.uuid4())
+        self.path = _run_log_path(path)
         self.degraded = False
+        self._created = False
+        self._warning_emitted = False
 
     def record(
         self,
         *,
         stage: str,
         result: str,
+        operation: str | None = None,
         reason_code: str | None = None,
         error_category: str | None = None,
         duration_ms: int = 0,
@@ -107,6 +137,7 @@ class ProcessLog:
             if not _valid_event(
                 stage=stage,
                 result=result,
+                operation=operation,
                 reason_code=reason_code,
                 error_category=error_category,
                 duration_ms=duration_ms,
@@ -124,6 +155,7 @@ class ProcessLog:
                 "ts": _utc_now(),
                 "correlation_id": self.correlation_id,
                 "stage": stage,
+                "operation": operation,
                 "result": result,
                 "reason_code": reason_code,
                 "error_category": error_category,
@@ -142,17 +174,52 @@ class ProcessLog:
         return True
 
     def _append(self, line: str) -> None:
-        """追加一行 UTF-8 文本；由 `record` 统一处理失败，不自行打印。"""
+        """向本次运行唯一文件追加一行；首次用独占创建避免覆盖同名文件。"""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8", newline="\n") as handle:
+        mode = "a" if self._created else "x"
+        with self.path.open(mode, encoding="utf-8", newline="\n") as handle:
+            self._created = True
             handle.write(line)
             handle.flush()
+
+    def emit_degraded_warning(self) -> bool:
+        """日志已降级时向 stderr 写一次固定标记；写失败不抛出、不遮蔽业务结果。"""
+        if not self.degraded or self._warning_emitted:
+            return False
+        self._warning_emitted = True
+        try:
+            sys.stderr.write(DEGRADED_MARKER + "\n")
+            sys.stderr.flush()
+        except Exception:
+            return False
+        return True
+
+
+def _run_log_path(path: Path | None) -> Path:
+    """把默认或显式基础路径规范为本次运行唯一的文件路径。
+
+    显式参数可以是文件基础路径，也可以是目录；无论哪种都只作为命名基础，
+    实际文件固定为同目录的 `<基础名>-<运行 UUID>.<后缀>`，不追加到共享文件。
+    """
+    if path is None:
+        base = DEFAULT_LOG_DIR / DEFAULT_LOG_NAME
+    else:
+        candidate = Path(path)
+        if candidate.exists() and candidate.is_dir():
+            base = candidate / DEFAULT_LOG_NAME
+        elif candidate.exists() or candidate.suffix:
+            base = candidate
+        else:
+            base = candidate / DEFAULT_LOG_NAME
+    suffix = base.suffix or ".jsonl"
+    return base.with_name(f"{base.stem}-{uuid.uuid4()}{suffix}")
 
 
 def _valid_event(
     *,
     stage: str,
     result: str,
+    operation: str | None,
     reason_code: str | None,
     error_category: str | None,
     duration_ms: int,
@@ -162,8 +229,12 @@ def _valid_event(
     config_source: str | None,
     device_count: int | None,
 ) -> bool:
-    """检查事件只含固定阶段、结果、原因码和可选元数据。"""
+    """检查事件只含固定阶段、操作名、结果、原因码和可选元数据。"""
     if stage not in STAGES or result not in RESULTS:
+        return False
+    if operation is not None and (
+        not isinstance(operation, str) or operation not in OPERATIONS
+    ):
         return False
     if reason_code is not None and reason_code not in REASON_CODES:
         return False

@@ -33,5 +33,5 @@ python -m unittest tests.test_doctor
 
 ## 六、已知限制
 
-- 当前只有 `doctor`；`sense.py`、`round.py`、`message.py`、`job.py` 等尚未创建。
+- 当前只有 `doctor`；`sense.py`、`round.py`、`message.py`、`job.py` 等尚未创建。M1 `store init` 由 CLI 直接调用 SQLite 适配器，不经本层。
 - 真实设备模式只复用本用例的判定，不在用例内执行 ADB。
