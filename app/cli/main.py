@@ -10,11 +10,14 @@ from pathlib import Path
 from typing import NoReturn
 
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
+from app.adapters.sqlite.schema import initialize_database
 from app.ports.device import ProbeSnapshot
+from app.ports.store import StoreError
 from app.process_log import ProcessLog, elapsed_ms
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_DB_PATH = "data/runtime/runtime.sqlite3"
 
 
 class _CliArgumentError(Exception):
@@ -86,10 +89,10 @@ class _UniqueStoreTrue(argparse.Action):
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """构造只含全局 --config 与 doctor 子命令的严格解析器。"""
+    """构造只含全局 --config、doctor 与 store init 的严格解析器。"""
     parser = _StrictArgumentParser(
         prog="python -m app",
-        description="M0 只读 doctor 探针；默认不连接设备、不调用网络。",
+        description="M0 只读 doctor 探针与 M1 store init；默认不连接设备、不调用网络。",
         allow_abbrev=False,
     )
     parser.add_argument(
@@ -127,6 +130,29 @@ def _build_parser() -> argparse.ArgumentParser:
         action=_UniqueStore,
         metavar="<serial>",
         help="仅与 --device 同用；只在内存匹配，不写入输出。",
+    )
+    store = subparsers.add_parser(
+        "store",
+        allow_abbrev=False,
+        help="维护 M1 本机状态库。",
+        description="只支持 store init；不导入旧库、不覆盖已有业务行。",
+    )
+    store_commands = store.add_subparsers(
+        dest="store_command",
+        required=True,
+        parser_class=_StrictArgumentParser,
+    )
+    store_init = store_commands.add_parser(
+        "init",
+        allow_abbrev=False,
+        help="幂等创建或核验 v1 空库。",
+        description="首次创建五表、约束与索引；已存在 v1 库只核验不改行。",
+    )
+    store_init.add_argument(
+        "--db",
+        action=_UniqueStore,
+        metavar="<项目内相对文件>",
+        help=f"本机 SQLite 路径；省略为 {DEFAULT_DB_PATH}。",
     )
     return parser
 
@@ -276,6 +302,66 @@ def _error_payload(reason_code: str) -> dict[str, object]:
     }
 
 
+def _store_success_payload() -> dict[str, object]:
+    """返回 store init 成功时的唯一固定 JSON 对象。"""
+    return {"schema_version": 1, "status": "ok", "reason_code": None}
+
+
+def _run_store_init(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
+    """解析项目内 --db 并幂等初始化或核验，最多输出一个安全 JSON。"""
+    db_value = args.db if args.db is not None else DEFAULT_DB_PATH
+    stage_started = time.perf_counter()
+    log.record(stage="store", result="started")
+    try:
+        path = _resolve_project_path(db_value)
+    except ValueError:
+        log.record(
+            stage="store",
+            result="failed",
+            reason_code="invalid_input",
+            error_category="store",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log, started, _error_payload("invalid_input"), 2, "invalid_input", "store"
+        )
+    try:
+        initialize_database(path)
+    except StoreError as error:
+        log.record(
+            stage="store",
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="store",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "store",
+        )
+    except Exception:
+        log.record(
+            stage="store",
+            result="failed",
+            reason_code="store_io_error",
+            error_category="store",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log, started, _error_payload("store_io_error"), 2, "store_io_error", "store"
+        )
+    log.record(
+        stage="store",
+        result="ok",
+        duration_ms=elapsed_ms(stage_started),
+    )
+    return _finalize_output(log, started, _store_success_payload(), 0, None, None)
+
+
 def _finish_output_failure(log: ProcessLog, started: float) -> int:
     """输出通道不可用时记录 output=failed，并安全完成 exit。"""
     log.record(
@@ -394,6 +480,9 @@ def main(
             "internal",
         )
     log.record(stage="config", result="ok", config_source=config_source)
+
+    if args.command == "store":
+        return _run_store_init(log, started, args)
 
     mode = _requested_mode(args)
     if not _mode_is_valid(args):

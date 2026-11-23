@@ -1,4 +1,4 @@
-"""追加 M0 本机白名单过程日志，只写固定字段且不影响业务输出。"""
+"""追加本机白名单过程日志，只写固定字段且不影响 M0/M1 业务输出。"""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ STAGES = frozenset(
         "adb_devices",
         "adb_window",
         "decision",
+        "store",
         "output",
         "exit",
     }
@@ -38,6 +39,14 @@ REASON_CODES = frozenset(
         "device_unauthorized",
         "device_locked",
         "wrong_page",
+        "lease_busy",
+        "stale_lease",
+        "owner_not_stopped",
+        "clock_changed",
+        "store_busy",
+        "store_io_error",
+        "db_version_unsupported",
+        "migration_failed",
     }
 )
 ERROR_CATEGORIES = frozenset(
@@ -47,6 +56,7 @@ ERROR_CATEGORIES = frozenset(
         "fixture",
         "probe",
         "business",
+        "store",
         "internal",
         "adb_missing",
         "adb_timeout",
