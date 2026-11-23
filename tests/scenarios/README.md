@@ -34,7 +34,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --target .
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-C01 --target .
 ```
 
-- unittest：47 项，验证资产完整性、严格比较反例、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝与 CLI 安全失败。
+- unittest：49 项，验证资产完整性、严格比较反例、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝与 CLI 安全失败。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；

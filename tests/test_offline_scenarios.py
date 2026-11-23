@@ -564,6 +564,66 @@ class AcceptanceBoundaryTests(unittest.TestCase):
             self.assertFalse(any(path.endswith("expected.json") for path in copied))
             self.assertFalse(any("other" in path for path in copied))
 
+    def test_m0_probe_copy_rejects_ancestor_junction(self) -> None:
+        """M0 边界替身复制入口必须复用父路径 junction 校验。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / "app").mkdir()
+            (target / "app" / "__main__.py").write_text("", encoding="utf-8")
+            fixtures = target / "tests" / "scenarios" / "fixtures"
+            fixtures.mkdir(parents=True)
+            real_framework = target / "real-framework"
+            real_framework.mkdir()
+            probe = real_framework / "m0_protocol_probe.py"
+            probe.write_text("", encoding="utf-8")
+            linked = target / "tests" / "scenarios" / "framework"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(linked), str(real_framework)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            variant = {
+                "steps": ["python tests/scenarios/framework/m0_protocol_probe.py --case timeout"],
+                "fixture": None,
+            }
+            if created.returncode == 0 and runner._is_link_like(linked):
+                with self.assertRaises(runner.IsolationError):
+                    runner._prepare_isolation(target, "run-test", "SC-C03", "probe", variant)
+            else:
+                real_is_junction = Path.is_junction
+
+                def fake_is_junction(self: Path) -> bool:
+                    return self.name == "framework" or real_is_junction(self)
+
+                with mock.patch.object(Path, "is_junction", fake_is_junction):
+                    with self.assertRaises(runner.IsolationError):
+                        runner._prepare_isolation(target, "run-test", "SC-C03", "probe", variant)
+
+    def test_m0_probe_symlink_is_rejected_before_copy(self) -> None:
+        """M0 边界替身自身为链接时不得复制。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / "app").mkdir()
+            (target / "app" / "__main__.py").write_text("", encoding="utf-8")
+            fixtures = target / "tests" / "scenarios" / "fixtures"
+            fixtures.mkdir(parents=True)
+            framework = target / "tests" / "scenarios" / "framework"
+            framework.mkdir()
+            (framework / "m0_protocol_probe.py").write_text("", encoding="utf-8")
+            variant = {
+                "steps": ["python tests/scenarios/framework/m0_protocol_probe.py --case timeout"],
+                "fixture": None,
+            }
+            real_is_symlink = Path.is_symlink
+
+            def fake_is_symlink(self: Path) -> bool:
+                return self.name == "m0_protocol_probe.py" or real_is_symlink(self)
+
+            with mock.patch.object(Path, "is_symlink", fake_is_symlink):
+                with self.assertRaises(runner.IsolationError):
+                    runner._prepare_isolation(target, "run-test", "SC-C03", "probe", variant)
+
     def test_declared_missing_input_is_not_blocked_but_unexpected_missing_is(self) -> None:
         """只有显式登记的缺失输入可交给真实 CLI 返回 invalid_config。"""
         with tempfile.TemporaryDirectory() as temporary:

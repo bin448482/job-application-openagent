@@ -20,6 +20,7 @@ def _run_case(case: str) -> dict:
     calls: list[tuple] = []
 
     def fake_run(*args, **kwargs):
+        """记录设备边界调用并返回合成超时/非零结果，不启动进程。"""
         calls.append((args, kwargs))
         if case == "timeout":
             raise subprocess.TimeoutExpired(cmd=["adb"], timeout=5)

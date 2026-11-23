@@ -267,11 +267,17 @@ def _prepare_isolation(
     shutil.copytree(source_app, root / "app", symlinks=False)
     if any(M0_PROBE_PATH in str(step) for step in variant.get("steps", [])):
         source_probe = target / M0_PROBE_PATH
-        if not source_probe.is_file():
+        _reject_link_ancestors(source_probe, target, "m0_protocol_probe")
+        if source_probe.is_symlink():
+            raise IsolationError("M0 探针边界替身不得是符号链接")
+        resolved_probe = source_probe.resolve()
+        if not _within(resolved_probe, target.resolve()):
+            raise IsolationError("M0 探针边界替身解析后越出目标根")
+        if not resolved_probe.is_file():
             raise IsolationError("M0 探针边界替身不存在")
         destination = root / M0_PROBE_PATH
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source_probe, destination)
+        shutil.copyfile(resolved_probe, destination)
     for source in selected:
         relative = source.relative_to((target / "tests" / "scenarios" / "fixtures").resolve())
         destination = root / "tests" / "scenarios" / "fixtures" / relative

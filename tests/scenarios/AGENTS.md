@@ -40,7 +40,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --target .
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-C01 --target .
 ```
 
-- unittest：资产完整性、严格比较、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝等 47 项检查；只证明判据能抓错误。
+- unittest：资产完整性、严格比较、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝等 49 项检查；只证明判据能抓错误。
 - `--mode assets`：只读清单/预期/夹具并校验；退出 0 仅表示资产自洽，不表示产品通过。
 - `--mode acceptance`：先校验资产，失败即拒绝执行；只为已实现里程碑的 READY F 变体创建隔离根并运行真实 `python -m app` 或 M0 协议边界替身。全量当前为 29 PASS、0 FAIL，但其余里程碑/ASSET_ONLY/设备门槛使总体 BLOCKED、退出 3；`--only SC-C` 的 M0 子集退出 0，`product_acceptance` 仍不是 PASS。
 - 报告 JSON 写入被忽略的 `data/evals/scenario-runs/`；不提交生成报告，不修改 `.gitignore`。
