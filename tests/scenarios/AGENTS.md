@@ -4,7 +4,7 @@
 
 本目录存放 BOSS 直聘离线场景测试资产：按《BOSS直聘_求职自动化_场景测试方案_20261123》登记的 73 个场景及其全部变体、独立 expected、纯合成夹具、标准库执行辅助、使用说明与三轮作者自审记录。它服务于“测试资产/判据自检”和“对真实交付 app 的离线场景验收”两条不同链路，不实现未读解析、调度、动作执行或任何业务替代实现。
 
-M0 稳定 main `51333d8` 与 M1 稳定 main `a600d0a` 已接入并在隔离框架实际执行；M2+ 接口尚未交付。READY 表示入口、夹具和独立预期齐备，实际执行仍受里程碑门禁限制；ASSET_ONLY 接口未冻结；DEFERRED 与 MODULE_EVIDENCE 不计 PASS；T/O/W 实机门槛保持未验收。M0 29 PASS、M1 38 PASS，不等于产品整体通过。
+M0 稳定 main `51333d8` 与 M1 稳定 main `a600d0a` 已接入并在隔离框架实际执行；M3+ 接口尚未交付。READY 表示入口、夹具和独立预期齐备，实际执行仍受里程碑门禁限制；ASSET_ONLY 接口未冻结；DEFERRED 与 MODULE_EVIDENCE 不计 PASS；T/O/W 实机门槛保持未验收。M0 29 PASS、M1 38 PASS、M2 52 PASS，不等于产品整体通过。
 
 ## 二、文件与子目录索引
 
@@ -24,10 +24,10 @@ M0 稳定 main `51333d8` 与 M1 稳定 main `a600d0a` 已接入并在隔离框�
 
 - 场景 73 个：M0 3、M1 7、M2 15、M3 14、M4 11、M5 8、M6 8、M7 4、M8 3。
 - 变体 315 个：F 293、T 9、O 12、W 1。
-- 资产状态：READY_FOR_APP 103、ASSET_ONLY 185、DEFERRED 2、MODULE_EVIDENCE 3、DEVICE_GATE 22。
+- 资产状态：READY_FOR_APP 119、ASSET_ONLY 169、DEFERRED 2、MODULE_EVIDENCE 3、DEVICE_GATE 22。
 - M0 已执行：C01 9 PASS + 1 T 门槛、C02 12 PASS、C03 8 PASS；共 29 PASS、0 FAIL。C01 real_probe 仍是未验收 T 门槛。
 - M1 已执行：38 PASS、0 FAIL；2 DEFERRED（M5/M6）、3 MODULE_EVIDENCE（纯约束，不重做模块单测）。M1 总体仍 BLOCKED，不冒充完整通过。
-- 其余 36 个 M2+ READY 记 `BLOCKED_MILESTONE_UNIMPLEMENTED`；185 个 ASSET_ONLY 记 `BLOCKED_ENTRY_UNFROZEN`；DEFERRED/MODULE_EVIDENCE 均不得算 PASS。
+- 其余 169 个 M3+ ASSET_ONLY 记 `BLOCKED_ENTRY_UNFROZEN`；DEFERRED/MODULE_EVIDENCE 均不得算 PASS。
 - DEVICE_GATE 是 T/O/W 纯实机门槛，保留未验收；F 通过不能替代。
 
 ## 四、入口与验证命令
@@ -41,9 +41,9 @@ python -m tests.scenarios.framework.runner --mode acceptance --target .
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-C01 --target .
 ```
 
-- unittest：资产完整性、严格比较、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝等 59 项检查；只证明判据能抓错误。
+- unittest：资产完整性、严格比较、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝等 60 项检查；只证明判据能抓错误。
 - `--mode assets`：只读清单/预期/夹具并校验；退出 0 仅表示资产自洽，不表示产品通过。
-- `--mode acceptance`：先校验资产，失败即拒绝执行；只为已实现里程碑的 READY F 变体创建隔离根，运行真实 `python -m app`、M0 协议边界替身或 M1 探针/受控两进程。全量当前 67 PASS、0 FAIL，但 M2+/ASSET_ONLY/DEFERRED/MODULE/设备门槛使总体 BLOCKED、退出 3；M0 子集退出 0，M1 子集退出 3，均不声明产品 PASS。
+- `--mode acceptance`：先校验资产，失败即拒绝执行；只为已实现里程碑的 READY F 变体创建隔离根，运行真实 `python -m app`、M0 协议边界替身、M1 探针/受控两进程或 M2 受限探针。全量当前 119 PASS、0 FAIL，但 M3+/ASSET_ONLY/DEFERRED/MODULE/设备门槛使总体 BLOCKED、退出 3；M0 子集退出 0，M1 子集退出 3，M2 子集退出 0，均不声明产品 PASS。
 - 报告 JSON 写入被忽略的 `data/evals/scenario-runs/`；不提交生成报告，不修改 `.gitignore`。
 
 ## 五、维护要求

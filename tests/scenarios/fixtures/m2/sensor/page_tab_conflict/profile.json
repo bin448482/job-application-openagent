@@ -29,7 +29,6 @@
     "global_zero_verified": false
   },
   "not_applicable_sources": [
-    "new_greeting",
-    "tab_badge"
+    "new_greeting"
   ]
 }

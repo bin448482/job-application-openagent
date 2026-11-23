@@ -37,7 +37,7 @@ EXIT_FAIL = 1
 EXIT_BLOCKED = 3
 RUN_ROOT = Path("data") / "evals" / "scenario-runs"
 # 只有已独立验收并进入稳定 main 的里程碑才允许执行；扩展前先更新指南。
-IMPLEMENTED_MILESTONES = {"M0", "M1"}
+IMPLEMENTED_MILESTONES = {"M0", "M1", "M2"}
 
 
 def _utc_stamp() -> str:
@@ -182,6 +182,7 @@ def _validate_source_tree(source: Path, stop: Path, label: str) -> None:
 FIXTURE_TOKEN = re.compile(r"tests/scenarios/fixtures/[A-Za-z0-9_./-]+")
 M0_PROBE_PATH = "tests/scenarios/framework/m0_protocol_probe.py"
 M1_PROBE_PATH = "tests/scenarios/framework/m1_probe.py"
+M2_PROBE_PATH = "tests/scenarios/framework/m2_probe.py"
 EXPECTED_FILE_NAMES = {"expected.json", "oracles.json"}
 
 
@@ -244,6 +245,13 @@ def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path
         if _is_expected_name(resolved):
             continue
         selected.append(resolved)
+        if resolved.parent.name == "probe" and resolved.suffix == ".json":
+            try:
+                probe_request = json.loads(resolved.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                probe_request = None
+            if isinstance(probe_request, dict) and isinstance(probe_request.get("fixture"), str):
+                queue.append(target / probe_request["fixture"])
         if resolved.name == "manifest.json":
             try:
                 manifest = json.loads(resolved.read_text(encoding="utf-8"))
@@ -289,6 +297,17 @@ def _prepare_isolation(
         destination_m1 = root / M1_PROBE_PATH
         destination_m1.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(resolved_m1, destination_m1)
+    if any(M2_PROBE_PATH in command for command in _iter_command_strings(variant)):
+        source_m2 = target / M2_PROBE_PATH
+        _reject_link_ancestors(source_m2, target, "m2_probe")
+        if source_m2.is_symlink():
+            raise IsolationError("M2 探针不得是符号链接")
+        resolved_m2 = source_m2.resolve()
+        if not _within(resolved_m2, target.resolve()) or not resolved_m2.is_file():
+            raise IsolationError("M2 探针路径越界或不存在")
+        destination_m2 = root / M2_PROBE_PATH
+        destination_m2.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(resolved_m2, destination_m2)
     if any(M0_PROBE_PATH in command for command in _iter_command_strings(variant)):
         source_probe = target / M0_PROBE_PATH
         _reject_link_ancestors(source_probe, target, "m0_protocol_probe")
@@ -478,6 +497,7 @@ def _run_concurrent(
             command.startswith("python -m app ")
             or command.startswith(f"python {M0_PROBE_PATH} ")
             or command.startswith(f"python {M1_PROBE_PATH} ")
+            or command.startswith(f"python {M2_PROBE_PATH} ")
         ):
             raise IsolationError("并发子进程命令不在白名单")
     barrier = root / "barrier"
@@ -616,6 +636,7 @@ def _variant_status(scenario: dict[str, Any], variant: dict[str, Any], target: P
             command.startswith("python -m app ")
             or command.startswith(f"python {M0_PROBE_PATH} ")
             or command.startswith(f"python {M1_PROBE_PATH} ")
+            or command.startswith(f"python {M2_PROBE_PATH} ")
         ):
             return "BLOCKED_ENTRY_UNFROZEN"
     return "READY"

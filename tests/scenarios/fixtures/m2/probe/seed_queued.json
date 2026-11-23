@@ -1,0 +1,8 @@
+{
+  "mode": "seed",
+  "fixture": "tests/scenarios/fixtures/m2/sensor/positive/manifest.json",
+  "now": "2026-11-24T00:00:00.000Z",
+  "state": "queued",
+  "reason_code": null,
+  "updated_at": "2026-11-24T00:00:00.000Z"
+}

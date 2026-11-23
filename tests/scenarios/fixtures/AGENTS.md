@@ -10,6 +10,7 @@
 - `m0/config/`：M0 最小配置的省略/空对象/非法类型/额外键输入；缺文件场景由清单声明而不预建文件。
 - `m2/sensor/`：M2 合成 profile、消息列表 XML、manifest 与 app 侧 expected；每个案例只覆盖一个独立判据，含正角标、区域外数字、歧义/非法 bounds、全局计数、9+/0+、新招呼语义、全覆盖否定、预览变化、多页重叠/损坏、过期/未来快照、未标定 profile、错误页面、多列表、坏 XML、路径越界、身份歧义与幂等重放。
 - `m1/`：M1 纯合成探针请求：初始化/损坏注入、单会话种子、claim/start/renew/finish/recover、并发 barrier/hold_lock 与只读 inspect；不含真实数据或任意 SQL。
+- `m2/probe/`：M2 now 注入、合成 seed 与只读 inspect 请求；不读取 expected，不连接设备。
 - `m3/`：进入会话消耗角标、授权矩阵、版本漂移与跨级冲突的声明式输入。
 - `m4/`：Decision envelope 与突变、合成策略包及负例、桥注入、摘要关系、共享门禁、快照恢复输入。
 - `m5/actions/`：六个不可逆动作 × F-A 至 F-E 故障窗口的声明式矩阵。

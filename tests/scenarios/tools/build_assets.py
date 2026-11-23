@@ -14,6 +14,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from m1_requests import build_m1_fixtures  # noqa: E402
+from m2_requests import build_m2_requests  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "fixtures"
@@ -275,7 +276,7 @@ def sensor_row(
     time: str,
     badge: str | None,
     *,
-    badge_bounds: str | None = "[900,10][980,60]",
+    badge_bounds: str | None = None,
     duplicate_badge: bool = False,
 ) -> str:
     """生成一行合成会话；角标文本可为 None、数字、0 或尾部 +。"""
@@ -290,7 +291,7 @@ def sensor_row(
         xml_node("android.widget.TextView", text=time, rid="tv_time", bounds=f"[820,{field_top}][1040,{field_top + 40}]"),
     ]
     if badge is not None:
-        bounds = badge_bounds or "[900,10][980,60]"
+        bounds = badge_bounds or f"[900,{top + 10}][980,{top + 60}]"
         children.append(xml_node("android.widget.TextView", text=badge, bounds=bounds))
         if duplicate_badge:
             children.append(xml_node("android.widget.TextView", text=badge, bounds=bounds))
@@ -354,7 +355,7 @@ def sensor_xml(
             row["preview"],
             row["time"],
             row.get("badge"),
-            badge_bounds=row.get("badge_bounds", "[900,10][980,60]"),
+            badge_bounds=row.get("badge_bounds"),
             duplicate_badge=row.get("duplicate_badge", False),
         )
         for index, row in enumerate(rows)
@@ -392,6 +393,7 @@ def sensor_case(
     omit_list: bool = False,
     duplicate_list: bool = False,
     manifest_name: str = "manifest.json",
+    app_version: str | None = None,
 ) -> dict[str, Any]:
     """写出一个 M2 合成夹具目录，并返回该变体的标准预期描述。"""
     directory = FIXTURES / "m2" / "sensor" / name
@@ -460,7 +462,7 @@ def sensor_case(
     manifest = {
         "profile_path": "profile.json",
         "xml_paths": page_names,
-        "app_version": active_profile["version"],
+        "app_version": app_version or active_profile["version"],
         "observed_at": observed_at,
         "baseline_rows": baseline_rows,
         "coverage_proof": coverage
@@ -742,7 +744,7 @@ def build_sensor_cases() -> dict[str, dict[str, Any]]:
     cases["page_tab_conflict"] = sensor_case(
         "page_tab_conflict",
         rows=[{**row_a, "badge": "0"}],
-        profile=all_absent_profile,
+        profile={"not_applicable_sources": ["new_greeting"]},
         coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
         baseline="matching",
         xml_pages=[tab_one, tab_two],
@@ -797,7 +799,7 @@ def build_sensor_cases() -> dict[str, dict[str, Any]]:
         rows=[{**row_a, "badge": "0"}],
         tab_count="0",
         profile={
-            **all_absent_profile,
+            "not_applicable_sources": ["new_greeting"],
             "tab_badge": {
                 "label": "消息",
                 "count_id_suffix": "tab_badge",
@@ -806,7 +808,7 @@ def build_sensor_cases() -> dict[str, dict[str, Any]]:
         },
         coverage={"kind": "calibrated_global_zero", "top_proven": False, "bottom_proven": False},
         baseline="matching",
-        expected=sensor_expectation(0, "ok", "absent", None, [], 0),
+        expected=sensor_expectation(2, "ok", "unknown", "unread_unverified", [], 0),
     )
     cases["global_zero_unverified"] = sensor_case(
         "global_zero_unverified",
@@ -816,6 +818,90 @@ def build_sensor_cases() -> dict[str, dict[str, Any]]:
         coverage={"kind": "calibrated_global_zero", "top_proven": False, "bottom_proven": False},
         baseline="matching",
         expected=sensor_expectation(2, "ok", "unknown", "unread_unverified", [], 0),
+    )
+    cases["all_not_applicable"] = sensor_case(
+        "all_not_applicable",
+        rows=[{**row_a, "badge": "0"}],
+        profile={
+            "not_applicable_sources": [
+                "row_badge",
+                "new_greeting",
+                "tab_badge",
+                "preview_delta",
+            ]
+        },
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        expected=sensor_expectation(2, "ok", "unknown", "unread_unverified", [], 0),
+    )
+    cases["same_preview_same_time"] = sensor_case(
+        "same_preview_same_time",
+        rows=[{**row_a, "badge": "0"}],
+        profile=all_absent_profile,
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        baseline="matching",
+        expected=sensor_expectation(0, "ok", "absent", None, [], 0),
+    )
+    cases["version_mismatch"] = sensor_case(
+        "version_mismatch",
+        rows=[{**row_a, "badge": "1"}],
+        profile={"version": "synthetic-2"},
+        app_version="synthetic-1",
+        expected=sensor_expectation(2, "undetermined", None, "uncalibrated_profile", [], 0),
+    )
+    cases["global_zero_preview_no_baseline"] = sensor_case(
+        "global_zero_preview_no_baseline",
+        rows=[{**row_a, "badge": "0"}],
+        tab_count="0",
+        profile={
+            "not_applicable_sources": ["new_greeting"],
+            "tab_badge": {
+                "label": "消息",
+                "count_id_suffix": "tab_badge",
+                "global_zero_verified": True,
+            },
+        },
+        coverage={"kind": "calibrated_global_zero", "top_proven": False, "bottom_proven": False},
+        expected=sensor_expectation(2, "ok", "unknown", "unread_unverified", [], 0),
+    )
+    cases["missing_identity_field"] = sensor_case(
+        "missing_identity_field",
+        rows=[{**row_a, "company": "", "badge": "0"}],
+        profile=all_absent_profile,
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        baseline="matching",
+        expected=sensor_expectation(2, "ok", "unknown", "unread_unverified", [], 0),
+    )
+    cases["new_fingerprint"] = sensor_case(
+        "new_fingerprint",
+        rows=[{**row_a, "preview": "更新后的合成预览", "badge": "0"}],
+        profile=all_absent_profile,
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        baseline="different",
+        expected=sensor_expectation(0, "ok", "present", None, ["new_message"], 1),
+    )
+    cases["no_badge_same"] = sensor_case(
+        "no_badge_same",
+        rows=[{**row_a, "badge": None}],
+        profile=all_absent_profile,
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        baseline="matching",
+        expected=sensor_expectation(2, "ok", "unknown", "unread_unverified", [], 0),
+    )
+    cases["global_zero_verified_but_positive"] = sensor_case(
+        "global_zero_verified_but_positive",
+        rows=[{**row_a, "badge": "1"}],
+        tab_count="0",
+        profile={
+            "not_applicable_sources": ["new_greeting"],
+            "tab_badge": {
+                "label": "消息",
+                "count_id_suffix": "tab_badge",
+                "global_zero_verified": True,
+            },
+        },
+        coverage={"kind": "calibrated_global_zero", "top_proven": False, "bottom_proven": False},
+        baseline="matching",
+        expected=sensor_expectation(0, "ok", "present", None, ["unread"], 1),
     )
     # 坏 XML 与越界 manifest 单独写，不参与正常 XML 解析校验。
     write_text("fixtures/m2/sensor/invalid_xml/list.xml", "<hierarchy><node class='x'>")
@@ -2506,6 +2592,44 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
     # ---- M2 ----
+    def m2_cmd(name: str) -> str:
+        """返回 M2 探针命令；请求 fixture 由隔离层按引用复制。"""
+        return (
+            "python tests/scenarios/framework/m2_probe.py "
+            f"--request tests/scenarios/fixtures/m2/probe/{name}.json --db {{db}}"
+        )
+
+    def m2_probe_ok(*paths: dict[str, Any]) -> dict[str, Any]:
+        """构造单个 m2_probe 命令的成功预期。"""
+        return {"exit_code": 0, "stdout_paths": [{"path": "status", "equals": "ok"}, *paths]}
+
+    def m2_cli_ok(*paths: dict[str, Any]) -> dict[str, Any]:
+        """构造 sense CLI 成功预期。"""
+        return {"exit_code": 0, "stdout_paths": [{"path": "result.status", "equals": "ok"}, *paths]}
+
+    def m2_cli_stop(reason: str) -> dict[str, Any]:
+        """构造 sense CLI 业务停止预期。"""
+        return {
+            "exit_code": 2,
+            "stdout_paths": [
+                {"path": "result.status", "equals": "ok"},
+                {"path": "stop_reason", "equals": reason},
+            ],
+        }
+
+    def m2_parse_ready(variant_id: str, *, label: str, request: str, assertions: list[str], paths: list[dict[str, Any]]) -> dict[str, Any]:
+        """构造 now 注入解析变体；不发生数据库写入。"""
+        return ready_variant(
+            variant_id,
+            label=label,
+            steps=[m2_cmd(request)],
+            fixture=f"fixtures/m2/probe/{request}.json",
+            assertions=assertions,
+            acceptance={
+                "steps": [m1_ok(*paths)],
+                "db_checks": [{"kind": "file_absent", "path": "{db}"}],
+            },
+        )
     u01_replay_acceptance = sensor_acceptance(sensor["positive"], steps=2)
     u01_replay_acceptance["db_checks"] = [
         {"kind": "table_count", "table": "hr_discoveries", "equals": 1, "path": "{db}"}
@@ -2576,29 +2700,39 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "不适用、部分未知、未关闭发现与身份未知",
         ["M2 sense 已交付", "未关闭发现需合成库预置"],
         [
-            variant(
+            sensor_ready(
                 "all_not_applicable",
-                "F",
+                sensor["all_not_applicable"],
                 label="全部源不适用",
-                setup="合成 profile 声明四源均不适用",
-                required_api="M2 sense + 合成 profile",
                 assertions=["全部不适用仍 unknown", "不得 absent"],
             ),
             sensor_ready("partial_unknown", sensor["badge_outside"], label="部分源 unknown", assertions=["不得 absent", "保留未知原因"]),
-            variant(
+            ready_variant(
                 "unresolved_discovery",
-                "F",
                 label="存在未关闭发现",
-                setup="预置 blocked 发现的合成库后重采集",
-                required_api="M2 sense + StorePort.unresolved_conversations",
-                assertions=["有未关闭发现不得 absent", "保留正信号"],
+                steps=[
+                    m2_cmd("seed_blocked"),
+                    f"python -m app sense --fixture tests/scenarios/{sensor['positive']['manifest']} --db {{db}}",
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m2/probe/seed_blocked.json",
+                assertions=["有未关闭发现不得 absent", "保留正信号", "不消耗发现"],
+                acceptance={
+                    "steps": [
+                        m2_probe_ok(),
+                        m2_cli_stop("needs_targeted_verification"),
+                        m2_probe_ok(
+                            {"path": "task_count", "equals": 1},
+                            {"path": "states.0", "equals": "blocked"},
+                            {"path": "event_counts.task_claimed", "equals": 0},
+                        ),
+                    ]
+                },
             ),
-            variant(
+            sensor_ready(
                 "identity_unknown",
-                "F",
+                sensor["missing_identity_field"],
                 label="身份未知行",
-                setup="行缺公司字段",
-                required_api="M2 sense",
                 assertions=["该行不可定位、不产生候选", "不连带其它明确正信号"],
             ),
         ],
@@ -2613,12 +2747,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
             sensor_ready("same_preview_time_changed", sensor["same_preview_new_time"], label="摘要同时间变", assertions=["可证明变化", "候选 new_message"]),
             sensor_ready("same_preview_missing_time", sensor["same_preview_missing_time"], label="摘要同但缺时间", assertions=["unknown/no_baseline 或对应原因", "不得 absent"]),
             sensor_ready("no_baseline", sensor["preview_no_baseline"], label="无基线", assertions=["unknown/no_baseline", "不得声称无新消息"]),
-            variant(
+            sensor_ready(
                 "same_preview_same_time",
-                "F",
+                sensor["same_preview_same_time"],
                 label="摘要与时间均相同",
-                setup="全覆盖且双方摘要/时间均可比且相同",
-                required_api="M2 sense",
                 assertions=["该行可判无变化", "只有全部适用源 absent 才可 absent", "不能用 null==null 证明无变化"],
             ),
         ],
@@ -2635,21 +2767,30 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 label="同一行未读与预览同时正",
                 assertions=["合成一个 unread", "source_names 保留实际行来源", "不把全局计数拆成虚构消息"],
             ),
-            variant(
+            sensor_ready(
                 "same_fingerprint_cross_source",
-                "F",
+                sensor["row_unread_plus_preview"],
                 label="同指纹跨源重放",
-                setup="同一行先预览后角标，指纹相同",
-                required_api="M2 upsert",
                 assertions=["不新增第二条发现", "不续租"],
+                steps=2,
+                extra_checks=[{"kind": "table_count", "table": "hr_discoveries", "equals": 1, "path": "{db}"}],
             ),
-            variant(
+            ready_variant(
                 "new_fingerprint",
-                "F",
                 label="新指纹",
-                setup="预览/时间/计数至少一项变化",
-                required_api="M2 upsert",
+                steps=[
+                    f"python -m app sense --fixture tests/scenarios/{sensor['row_unread_plus_preview']['manifest']} --db {{db}}",
+                    f"python -m app sense --fixture tests/scenarios/{sensor['new_fingerprint']['manifest']} --db {{db}}",
+                ],
+                fixture=sensor["row_unread_plus_preview"]["fixture"],
                 assertions=["新指纹按 §6 键规则处理", "终态旧键不重开"],
+                acceptance={
+                    "steps": [
+                        sensor_acceptance(sensor["row_unread_plus_preview"])["steps"][0],
+                        sensor_acceptance(sensor["new_fingerprint"])["steps"][0],
+                    ],
+                    "db_checks": [{"kind": "table_count", "table": "hr_discoveries", "equals": 2, "path": "{db}"}],
+                },
             ),
         ],
     )
@@ -2671,15 +2812,39 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "快照时钟、未来时间与过期",
         ["M2 sense 已交付", "observed_at 注入为合成时间"],
         [
-            sensor_ready("stale", sensor["stale_snapshot"], label="超 5 秒", assertions=["undetermined/stale_snapshot", "不写库"]),
-            sensor_ready("future", sensor["future_snapshot"], label="未来快照", assertions=["拒绝为 stale_snapshot", "不写库"]),
-            variant(
+            m2_parse_ready(
+                "stale",
+                label="超 5 秒",
+                request="parse_stale",
+                assertions=["undetermined/stale_snapshot", "不写库"],
+                paths=[
+                    {"path": "payload.result.status", "equals": "undetermined"},
+                    {"path": "payload.result.reason_code", "equals": "stale_snapshot"},
+                    {"path": "payload.result.value", "equals": None},
+                    {"path": "payload.stop_reason", "equals": "stale_snapshot"},
+                ],
+            ),
+            m2_parse_ready(
+                "future",
+                label="未来快照",
+                request="parse_future",
+                assertions=["拒绝为 stale_snapshot", "不写库"],
+                paths=[
+                    {"path": "payload.result.status", "equals": "undetermined"},
+                    {"path": "payload.result.reason_code", "equals": "stale_snapshot"},
+                    {"path": "payload.result.value", "equals": None},
+                ],
+            ),
+            m2_parse_ready(
                 "exactly_five_seconds",
-                "F",
                 label="恰 5 秒边界",
-                setup="注入 now-observed_at=5000ms",
-                required_api="M2 可注入 now",
+                request="parse_exactly_five",
                 assertions=["恰 5 秒可接受", "5001ms 拒绝"],
+                paths=[
+                    {"path": "payload.result.status", "equals": "ok"},
+                    {"path": "payload.result.value.unread_state", "equals": "present"},
+                    {"path": "payload.stop_reason", "equals": None},
+                ],
             ),
         ],
     )
@@ -2690,12 +2855,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         ["M2 sense 已交付", "坏输入不得写任何候选"],
         [
             sensor_ready("uncalibrated", sensor["uncalibrated_profile"], label="profile 未标定", assertions=["undetermined/uncalibrated_profile", "不以空列表替代"]),
-            variant(
+            sensor_ready(
                 "version_mismatch",
-                "F",
+                sensor["version_mismatch"],
                 label="app_version 与 profile.version 不符",
-                setup="合成 manifest 声明不同 app_version",
-                required_api="M2 sense",
                 assertions=["undetermined/uncalibrated_profile", "不写候选"],
             ),
             sensor_ready("wrong_page", sensor["wrong_page"], label="唯一列表缺失", assertions=["failed/wrong_page", "不写候选"]),
@@ -2711,13 +2874,12 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         ["M2 sense 已交付", "最小 profile 不定义空态"],
         [
             sensor_ready("empty_list", sensor["empty_list"], label="无行空列表", assertions=["行角标与预览 unknown", "空列表不等于无未读"]),
-            variant(
+            sensor_ready(
                 "global_zero_preview_no_baseline",
-                "F",
+                sensor["global_zero_preview_no_baseline"],
                 label="全局零但预览无基线",
-                setup="tab 已验证零且 preview 无基线",
-                required_api="M2 sense",
                 assertions=["全局零只给 coverage", "不把未知 preview 改 absent"],
+                extra_paths=[{"path": "result.value.coverage", "equals": "all"}, {"path": "result.value.signals.tab_badge.state", "equals": "absent"}],
             ),
         ],
     )
@@ -2738,12 +2900,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 ],
             ),
             sensor_ready("ambiguous_only", sensor["duplicate_identity_only"], label="仅歧义正信号", assertions=["无候选", "needs_targeted_verification", "保留人工出口"]),
-            variant(
+            sensor_ready(
                 "missing_identity_field",
-                "F",
+                sensor["missing_identity_field"],
                 label="缺一身份字段",
-                setup="行缺公司或职位字段",
-                required_api="M2 sense",
                 assertions=["conversation_key=null", "不产生候选", "不按行号猜测"],
             ),
         ],
@@ -2754,29 +2914,72 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "终态、queued 与在途旧键",
         ["M2 upsert 已交付", "保留合成库与状态"],
         [
-            variant(
+            ready_variant(
                 "terminal_not_reopened",
-                "F",
                 label="终态旧指纹再正",
-                setup="预置 done 发现后同指纹重放",
-                required_api="M2 upsert",
-                assertions=["终态不重开", "只报 needs_targeted_verification", "不制造第二入站"],
+                steps=[
+                    m2_cmd("seed_terminal"),
+                    f"python -m app sense --fixture tests/scenarios/{sensor['positive']['manifest']} --db {{db}}",
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m2/probe/seed_terminal.json",
+                assertions=["终态不重开", "不制造第二入站"],
+                acceptance={
+                    "steps": [
+                        m2_probe_ok(),
+                        m2_cli_stop("needs_targeted_verification"),
+                        m2_probe_ok(
+                            {"path": "task_count", "equals": 1},
+                            {"path": "states.0", "equals": "done"},
+                            {"path": "event_counts.task_claimed", "equals": 0},
+                        ),
+                    ]
+                },
             ),
-            variant(
+            ready_variant(
                 "queued_new_key",
-                "F",
                 label="queued 旧键与新键并存",
-                setup="预置 queued 旧发现，插入新指纹",
-                required_api="M2 upsert",
+                steps=[
+                    m2_cmd("seed_queued"),
+                    f"python -m app sense --fixture tests/scenarios/{sensor['new_fingerprint']['manifest']} --db {{db}}",
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m2/probe/seed_queued.json",
                 assertions=["旧 queued 可 superseded", "不取消其它 queued", "事件 candidate_superseded"],
+                acceptance={
+                    "steps": [
+                        m2_probe_ok(),
+                        sensor_acceptance(sensor["new_fingerprint"])["steps"][0],
+                        m2_probe_ok(
+                            {"path": "task_count", "equals": 2},
+                            {"path": "states.0", "equals": "cancelled"},
+                            {"path": "states.1", "equals": "queued"},
+                            {"path": "event_counts.candidate_superseded", "equals": 1},
+                        ),
+                    ]
+                },
             ),
-            variant(
+            ready_variant(
                 "running_blocked_new_fingerprint",
-                "F",
                 label="旧键在途时新指纹",
-                setup="旧发现 running/blocked，观察到新指纹",
-                required_api="M2 upsert",
+                steps=[
+                    m2_cmd("seed_running"),
+                    f"python -m app sense --fixture tests/scenarios/{sensor['new_fingerprint']['manifest']} --db {{db}}",
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m2/probe/seed_running.json",
                 assertions=["仅 deferred", "不改在途输入/负载", "下一安全轮次重采"],
+                acceptance={
+                    "steps": [
+                        m2_probe_ok(),
+                        m2_cli_stop("needs_targeted_verification"),
+                        m2_probe_ok(
+                            {"path": "task_count", "equals": 1},
+                            {"path": "states.0", "equals": "running"},
+                            {"path": "event_counts.candidate_deferred", "equals": 1},
+                        ),
+                    ]
+                },
             ),
         ],
     )
@@ -2786,21 +2989,55 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "未关闭发现与时间倒退",
         ["M2 sense/upsert 已交付", "预置未关闭发现"],
         [
-            variant(
+            ready_variant(
                 "badge_disappears_after_discovery",
-                "F",
                 label="未关闭发现后角标消失",
-                setup="预置未关闭发现，最新视口无角标",
-                required_api="M2 unresolved 查询",
+                steps=[
+                    m2_cmd("seed_blocked"),
+                    f"python -m app sense --fixture tests/scenarios/{sensor['no_badge_same']['manifest']} --db {{db}}",
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m2/probe/seed_blocked.json",
                 assertions=["聚合用 upsert 后 unresolved", "不缓存空集合关闭发现", "不以消失宣称读全"],
+                acceptance={
+                    "steps": [
+                        m2_probe_ok(),
+                        sensor_acceptance(sensor["no_badge_same"])["steps"][0],
+                        m2_probe_ok(
+                            {"path": "task_count", "equals": 1},
+                            {"path": "states.0", "equals": "blocked"},
+                        ),
+                    ]
+                },
             ),
-            variant(
+            ready_variant(
                 "observed_at_backwards",
-                "F",
                 label="倒退 observed_at",
-                setup="新观察时间早于待改发现 updated_at",
-                required_api="M2 upsert",
+                steps=[
+                    m2_cmd("seed_backwards"),
+                    f"python -m app sense --fixture tests/scenarios/{sensor['new_fingerprint']['manifest']} --db {{db}}",
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m2/probe/seed_backwards.json",
                 assertions=["整批 invalid_input 回滚", "不倒写时间"],
+                acceptance={
+                    "steps": [
+                        m2_probe_ok(),
+                        {
+                            "exit_code": 2,
+                            "stdout_json_equals": {
+                                "schema_version": 1,
+                                "status": "failed",
+                                "reason_code": "invalid_input",
+                            },
+                        },
+                        m2_probe_ok(
+                            {"path": "task_count", "equals": 1},
+                            {"path": "states.0", "equals": "queued"},
+                            {"path": "updated_at.0", "equals": "2026-11-24T00:02:00.000Z"},
+                        ),
+                    ]
+                },
             ),
         ],
     )
@@ -2811,14 +3048,12 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         ["M2 sense 已交付", "合成 profile 显式声明依据"],
         [
             sensor_ready("not_applicable_sources", sensor["full_all_absent"], label="显式不适用源", assertions=["not_applicable 只来自已验证 profile", "不能遮盖缺失"]),
-            sensor_ready("global_zero_verified", sensor["global_zero_verified"], label="已验证全局零", assertions=["精确零且已验证才 all", "其它适用源仍按证据"]),
+            sensor_ready("global_zero_verified", sensor["global_zero_verified"], label="已验证全局零", assertions=["精确零且已验证才给 all，但不把行/预览改为 absent", "其它适用源仍按实际证据判定"], extra_paths=[{"path": "result.value.coverage", "equals": "all"}, {"path": "result.value.signals.tab_badge.state", "equals": "absent"}]),
             sensor_ready("global_zero_unverified", sensor["global_zero_unverified"], label="未验证全局零", assertions=["unknown", "不把 0 改 absent"]),
-            variant(
+            sensor_ready(
                 "global_zero_verified_but_positive",
-                "F",
+                sensor["global_zero_verified_but_positive"],
                 label="已验证全局零但另有正信号",
-                setup="tab 精确零且已验证，同时行角标为正/实际正数",
-                required_api="M2 sense",
                 assertions=["任一有效正源仍 present", "全局零不能覆盖行级正证据"],
             ),
         ],
@@ -3588,6 +3823,7 @@ def build_catalogue() -> dict[str, Any]:
     sensor = build_sensor_cases()
     build_support_fixtures()
     build_m1_fixtures()
+    build_m2_requests()
     for name, text in preserved.items():
         (FIXTURES / name).write_text(text, encoding="utf-8", newline="\n")
     _write_fixture_guides()

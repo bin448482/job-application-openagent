@@ -6,6 +6,7 @@
 
 ## 二、直接子项
 
+- `all_not_applicable/`：子目录，见其自身指南。
 - `ambiguous_identity_plus_target/`：子目录，见其自身指南。
 - `badge_ambiguous/`：子目录，见其自身指南。
 - `badge_invalid_bounds/`：子目录，见其自身指南。
@@ -15,14 +16,19 @@
 - `full_all_absent/`：子目录，见其自身指南。
 - `future_snapshot/`：子目录，见其自身指南。
 - `global_count_no_target/`：子目录，见其自身指南。
+- `global_zero_preview_no_baseline/`：子目录，见其自身指南。
 - `global_zero_unverified/`：子目录，见其自身指南。
 - `global_zero_verified/`：子目录，见其自身指南。
+- `global_zero_verified_but_positive/`：子目录，见其自身指南。
 - `invalid_xml/`：子目录，见其自身指南。
 - `missing_bottom_proof/`：子目录，见其自身指南。
+- `missing_identity_field/`：子目录，见其自身指南。
 - `multi_list/`：子目录，见其自身指南。
+- `new_fingerprint/`：子目录，见其自身指南。
 - `new_greeting_positive_unverified/`：子目录，见其自身指南。
 - `new_greeting_zero_unverified/`：子目录，见其自身指南。
 - `nine_plus/`：子目录，见其自身指南。
+- `no_badge_same/`：子目录，见其自身指南。
 - `page_corrupt/`：子目录，见其自身指南。
 - `page_tab_conflict/`：子目录，见其自身指南。
 - `path_traversal/`：子目录，见其自身指南。
@@ -33,9 +39,11 @@
 - `row_unread_plus_preview/`：子目录，见其自身指南。
 - `same_preview_missing_time/`：子目录，见其自身指南。
 - `same_preview_new_time/`：子目录，见其自身指南。
+- `same_preview_same_time/`：子目录，见其自身指南。
 - `stale_snapshot/`：子目录，见其自身指南。
 - `two_pages_overlap/`：子目录，见其自身指南。
 - `uncalibrated_profile/`：子目录，见其自身指南。
+- `version_mismatch/`：子目录，见其自身指南。
 - `viewport_all_zero/`：子目录，见其自身指南。
 - `wrong_page/`：子目录，见其自身指南。
 - `zero_plus/`：子目录，见其自身指南。

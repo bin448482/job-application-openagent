@@ -5515,19 +5515,92 @@
           "id": "all_not_applicable",
           "label": "全部源不适用",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "合成 profile 声明四源均不适用",
-          "required_api": "M2 sense + 合成 profile",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/all_not_applicable/manifest.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/sensor/all_not_applicable",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U05/all_not_applicable",
           "device_gate": false,
           "assertions": [
             "全部不适用仍 unknown",
-            "不得 absent"
+            "不得 absent",
+            "退出码 2，result.status=ok",
+            "stop_reason=unread_unverified，候选类型=[]",
+            "生产实现只读夹具与临时库，不连接设备或模型"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "unread_unverified"
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "table_count",
+                "table": "hr_discoveries",
+                "equals": 0,
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -5640,19 +5713,70 @@
           "id": "unresolved_discovery",
           "label": "存在未关闭发现",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "预置 blocked 发现的合成库后重采集",
-          "required_api": "M2 sense + StorePort.unresolved_conversations",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_blocked.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/positive/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/probe/seed_blocked.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U05/unresolved_discovery",
           "device_gate": false,
           "assertions": [
             "有未关闭发现不得 absent",
-            "保留正信号"
+            "保留正信号",
+            "不消耗发现"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "needs_targeted_verification"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "blocked"
+                  },
+                  {
+                    "path": "event_counts.task_claimed",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -5666,19 +5790,92 @@
           "id": "identity_unknown",
           "label": "身份未知行",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "行缺公司字段",
-          "required_api": "M2 sense",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/missing_identity_field/manifest.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/sensor/missing_identity_field",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U05/identity_unknown",
           "device_gate": false,
           "assertions": [
             "该行不可定位、不产生候选",
-            "不连带其它明确正信号"
+            "不连带其它明确正信号",
+            "退出码 2，result.status=ok",
+            "stop_reason=unread_unverified，候选类型=[]",
+            "生产实现只读夹具与临时库，不连接设备或模型"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "unread_unverified"
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "table_count",
+                "table": "hr_discoveries",
+                "equals": 0,
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -6121,20 +6318,93 @@
           "id": "same_preview_same_time",
           "label": "摘要与时间均相同",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "全覆盖且双方摘要/时间均可比且相同",
-          "required_api": "M2 sense",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/same_preview_same_time/manifest.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/sensor/same_preview_same_time",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U06/same_preview_same_time",
           "device_gate": false,
           "assertions": [
             "该行可判无变化",
             "只有全部适用源 absent 才可 absent",
-            "不能用 null==null 证明无变化"
+            "不能用 null==null 证明无变化",
+            "退出码 0，result.status=ok",
+            "stop_reason=None，候选类型=[]",
+            "生产实现只读夹具与临时库，不连接设备或模型"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "absent"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "table_count",
+                "table": "hr_discoveries",
+                "equals": 0,
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -6274,19 +6544,164 @@
           "id": "same_fingerprint_cross_source",
           "label": "同指纹跨源重放",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "同一行先预览后角标，指纹相同",
-          "required_api": "M2 upsert",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/row_unread_plus_preview/manifest.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/row_unread_plus_preview/manifest.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/sensor/row_unread_plus_preview",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U07/same_fingerprint_cross_source",
           "device_gate": false,
           "assertions": [
             "不新增第二条发现",
-            "不续租"
+            "不续租",
+            "退出码 0，result.status=ok",
+            "stop_reason=None，候选类型=['unread']",
+            "生产实现只读夹具与临时库，不连接设备或模型"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "table_count",
+                "table": "hr_discoveries",
+                "equals": 1,
+                "path": "{db}"
+              },
+              {
+                "kind": "table_count",
+                "table": "hr_discoveries",
+                "equals": 1,
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -6300,19 +6715,155 @@
           "id": "new_fingerprint",
           "label": "新指纹",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "预览/时间/计数至少一项变化",
-          "required_api": "M2 upsert",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/row_unread_plus_preview/manifest.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/new_fingerprint/manifest.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/sensor/row_unread_plus_preview",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U07/new_fingerprint",
           "device_gate": false,
           "assertions": [
             "新指纹按 §6 键规则处理",
             "终态旧键不重开"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "new_message"
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "table_count",
+                "table": "hr_discoveries",
+                "equals": 2,
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -6760,63 +7311,40 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/stale_snapshot/manifest.json --db {db}"
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/parse_stale.json --db {db}"
           ],
-          "fixture": "fixtures/m2/sensor/stale_snapshot",
+          "fixture": "fixtures/m2/probe/parse_stale.json",
           "setup": null,
           "required_api": null,
           "expected_ref": "SC-U09/stale",
           "device_gate": false,
           "assertions": [
             "undetermined/stale_snapshot",
-            "不写库",
-            "退出码 2，result.status=undetermined",
-            "stop_reason=stale_snapshot，候选类型=[]",
-            "生产实现只读夹具与临时库，不连接设备或模型"
+            "不写库"
           ],
           "acceptance": {
             "steps": [
               {
-                "exit_code": 2,
+                "exit_code": 0,
                 "stdout_paths": [
                   {
-                    "path": "",
-                    "keys": [
-                      "schema_version",
-                      "result",
-                      "stop_reason"
-                    ]
+                    "path": "status",
+                    "equals": "ok"
                   },
                   {
-                    "path": "schema_version",
-                    "equals": 1
-                  },
-                  {
-                    "path": "result.status",
+                    "path": "payload.result.status",
                     "equals": "undetermined"
                   },
                   {
-                    "path": "result",
-                    "keys": [
-                      "status",
-                      "value",
-                      "reason_code",
-                      "snapshot_id",
-                      "observed_at",
-                      "source",
-                      "confidence"
-                    ]
-                  },
-                  {
-                    "path": "stop_reason",
+                    "path": "payload.result.reason_code",
                     "equals": "stale_snapshot"
                   },
                   {
-                    "path": "result.value",
+                    "path": "payload.result.value",
                     "equals": null
                   },
                   {
-                    "path": "result.reason_code",
+                    "path": "payload.stop_reason",
                     "equals": "stale_snapshot"
                   }
                 ]
@@ -6845,64 +7373,37 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/future_snapshot/manifest.json --db {db}"
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/parse_future.json --db {db}"
           ],
-          "fixture": "fixtures/m2/sensor/future_snapshot",
+          "fixture": "fixtures/m2/probe/parse_future.json",
           "setup": null,
           "required_api": null,
           "expected_ref": "SC-U09/future",
           "device_gate": false,
           "assertions": [
             "拒绝为 stale_snapshot",
-            "不写库",
-            "退出码 2，result.status=undetermined",
-            "stop_reason=stale_snapshot，候选类型=[]",
-            "生产实现只读夹具与临时库，不连接设备或模型"
+            "不写库"
           ],
           "acceptance": {
             "steps": [
               {
-                "exit_code": 2,
+                "exit_code": 0,
                 "stdout_paths": [
                   {
-                    "path": "",
-                    "keys": [
-                      "schema_version",
-                      "result",
-                      "stop_reason"
-                    ]
+                    "path": "status",
+                    "equals": "ok"
                   },
                   {
-                    "path": "schema_version",
-                    "equals": 1
-                  },
-                  {
-                    "path": "result.status",
+                    "path": "payload.result.status",
                     "equals": "undetermined"
                   },
                   {
-                    "path": "result",
-                    "keys": [
-                      "status",
-                      "value",
-                      "reason_code",
-                      "snapshot_id",
-                      "observed_at",
-                      "source",
-                      "confidence"
-                    ]
-                  },
-                  {
-                    "path": "stop_reason",
+                    "path": "payload.result.reason_code",
                     "equals": "stale_snapshot"
                   },
                   {
-                    "path": "result.value",
+                    "path": "payload.result.value",
                     "equals": null
-                  },
-                  {
-                    "path": "result.reason_code",
-                    "equals": "stale_snapshot"
                   }
                 ]
               }
@@ -6927,19 +7428,51 @@
           "id": "exactly_five_seconds",
           "label": "恰 5 秒边界",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "注入 now-observed_at=5000ms",
-          "required_api": "M2 可注入 now",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/parse_exactly_five.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/probe/parse_exactly_five.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U09/exactly_five_seconds",
           "device_gate": false,
           "assertions": [
             "恰 5 秒可接受",
             "5001ms 拒绝"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "payload.result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "payload.result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "payload.stop_reason",
+                    "equals": null
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "file_absent",
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -7063,19 +7596,78 @@
           "id": "version_mismatch",
           "label": "app_version 与 profile.version 不符",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "合成 manifest 声明不同 app_version",
-          "required_api": "M2 sense",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/version_mismatch/manifest.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/sensor/version_mismatch",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U10/version_mismatch",
           "device_gate": false,
           "assertions": [
             "undetermined/uncalibrated_profile",
-            "不写候选"
+            "不写候选",
+            "退出码 2，result.status=undetermined",
+            "stop_reason=uncalibrated_profile，候选类型=[]",
+            "生产实现只读夹具与临时库，不连接设备或模型"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "undetermined"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "uncalibrated_profile"
+                  },
+                  {
+                    "path": "result.value",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": "uncalibrated_profile"
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "file_absent",
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -7549,19 +8141,100 @@
           "id": "global_zero_preview_no_baseline",
           "label": "全局零但预览无基线",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "tab 已验证零且 preview 无基线",
-          "required_api": "M2 sense",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/global_zero_preview_no_baseline/manifest.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/sensor/global_zero_preview_no_baseline",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U11/global_zero_preview_no_baseline",
           "device_gate": false,
           "assertions": [
             "全局零只给 coverage",
-            "不把未知 preview 改 absent"
+            "不把未知 preview 改 absent",
+            "退出码 2，result.status=ok",
+            "stop_reason=unread_unverified，候选类型=[]",
+            "生产实现只读夹具与临时库，不连接设备或模型"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "unread_unverified"
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "result.value.coverage",
+                    "equals": "all"
+                  },
+                  {
+                    "path": "result.value.signals.tab_badge.state",
+                    "equals": "absent"
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "table_count",
+                "table": "hr_discoveries",
+                "equals": 0,
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -7809,20 +8482,93 @@
           "id": "missing_identity_field",
           "label": "缺一身份字段",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "行缺公司或职位字段",
-          "required_api": "M2 sense",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/missing_identity_field/manifest.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/sensor/missing_identity_field",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U12/missing_identity_field",
           "device_gate": false,
           "assertions": [
             "conversation_key=null",
             "不产生候选",
-            "不按行号猜测"
+            "不按行号猜测",
+            "退出码 2，result.status=ok",
+            "stop_reason=unread_unverified，候选类型=[]",
+            "生产实现只读夹具与临时库，不连接设备或模型"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "unread_unverified"
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "table_count",
+                "table": "hr_discoveries",
+                "equals": 0,
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -7852,26 +8598,75 @@
         "queued_new_key",
         "running_blocked_new_fingerprint"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "terminal_not_reopened",
           "label": "终态旧指纹再正",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "预置 done 发现后同指纹重放",
-          "required_api": "M2 upsert",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_terminal.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/positive/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/probe/seed_terminal.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U13/terminal_not_reopened",
           "device_gate": false,
           "assertions": [
             "终态不重开",
-            "只报 needs_targeted_verification",
             "不制造第二入站"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "needs_targeted_verification"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "done"
+                  },
+                  {
+                    "path": "event_counts.task_claimed",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -7885,12 +8680,16 @@
           "id": "queued_new_key",
           "label": "queued 旧键与新键并存",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "预置 queued 旧发现，插入新指纹",
-          "required_api": "M2 upsert",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_queued.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/new_fingerprint/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/probe/seed_queued.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U13/queued_new_key",
           "device_gate": false,
           "assertions": [
@@ -7898,7 +8697,105 @@
             "不取消其它 queued",
             "事件 candidate_superseded"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "new_message"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 2
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "cancelled"
+                  },
+                  {
+                    "path": "states.1",
+                    "equals": "queued"
+                  },
+                  {
+                    "path": "event_counts.candidate_superseded",
+                    "equals": 1
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -7912,12 +8809,16 @@
           "id": "running_blocked_new_fingerprint",
           "label": "旧键在途时新指纹",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "旧发现 running/blocked，观察到新指纹",
-          "required_api": "M2 upsert",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_running.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/new_fingerprint/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/probe/seed_running.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U13/running_blocked_new_fingerprint",
           "device_gate": false,
           "assertions": [
@@ -7925,7 +8826,53 @@
             "不改在途输入/负载",
             "下一安全轮次重采"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "needs_targeted_verification"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "event_counts.candidate_deferred",
+                    "equals": 1
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -7954,18 +8901,22 @@
         "badge_disappears_after_discovery",
         "observed_at_backwards"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "badge_disappears_after_discovery",
           "label": "未关闭发现后角标消失",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "预置未关闭发现，最新视口无角标",
-          "required_api": "M2 unresolved 查询",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_blocked.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/no_badge_same/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/probe/seed_blocked.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U14/badge_disappears_after_discovery",
           "device_gate": false,
           "assertions": [
@@ -7973,7 +8924,93 @@
             "不缓存空集合关闭发现",
             "不以消失宣称读全"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "unread_unverified"
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 0
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "blocked"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -7987,19 +9024,64 @@
           "id": "observed_at_backwards",
           "label": "倒退 observed_at",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "新观察时间早于待改发现 updated_at",
-          "required_api": "M2 upsert",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_backwards.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/new_fingerprint/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/probe/seed_backwards.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U14/observed_at_backwards",
           "device_gate": false,
           "assertions": [
             "整批 invalid_input 回滚",
             "不倒写时间"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_json_equals": {
+                  "schema_version": 1,
+                  "status": "failed",
+                  "reason_code": "invalid_input"
+                }
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "queued"
+                  },
+                  {
+                    "path": "updated_at.0",
+                    "equals": "2026-11-24T00:02:00.000Z"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -8146,16 +9228,16 @@
           "expected_ref": "SC-U15/global_zero_verified",
           "device_gate": false,
           "assertions": [
-            "精确零且已验证才 all",
-            "其它适用源仍按证据",
-            "退出码 0，result.status=ok",
-            "stop_reason=None，候选类型=[]",
+            "精确零且已验证才给 all，但不把行/预览改为 absent",
+            "其它适用源仍按实际证据判定",
+            "退出码 2，result.status=ok",
+            "stop_reason=unread_unverified，候选类型=[]",
             "生产实现只读夹具与临时库，不连接设备或模型"
           ],
           "acceptance": {
             "steps": [
               {
-                "exit_code": 0,
+                "exit_code": 2,
                 "stdout_paths": [
                   {
                     "path": "",
@@ -8187,11 +9269,11 @@
                   },
                   {
                     "path": "stop_reason",
-                    "equals": null
+                    "equals": "unread_unverified"
                   },
                   {
                     "path": "result.value.unread_state",
-                    "equals": "absent"
+                    "equals": "unknown"
                   },
                   {
                     "path": "result.value",
@@ -8208,6 +9290,14 @@
                   {
                     "path": "result.value.candidates",
                     "length_equals": 0
+                  },
+                  {
+                    "path": "result.value.coverage",
+                    "equals": "all"
+                  },
+                  {
+                    "path": "result.value.signals.tab_badge.state",
+                    "equals": "absent"
                   }
                 ]
               }
@@ -8333,19 +9423,96 @@
           "id": "global_zero_verified_but_positive",
           "label": "已验证全局零但另有正信号",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "tab 精确零且已验证，同时行角标为正/实际正数",
-          "required_api": "M2 sense",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/global_zero_verified_but_positive/manifest.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/sensor/global_zero_verified_but_positive",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-U15/global_zero_verified_but_positive",
           "device_gate": false,
           "assertions": [
             "任一有效正源仍 present",
-            "全局零不能覆盖行级正证据"
+            "全局零不能覆盖行级正证据",
+            "退出码 0，result.status=ok",
+            "stop_reason=None，候选类型=['unread']",
+            "生产实现只读夹具与临时库，不连接设备或模型"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "table_count",
+                "table": "hr_discoveries",
+                "equals": 1,
+                "path": "{db}"
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"

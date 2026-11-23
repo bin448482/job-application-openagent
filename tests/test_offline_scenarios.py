@@ -744,17 +744,22 @@ class IsolationTripwireTests(unittest.TestCase):
 class P2M0BindingTests(unittest.TestCase):
     """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
 
-    def test_milestone_gate_blocks_unimplemented_m2(self) -> None:
-        """M2 虽 READY，但未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
+    def test_milestone_gate_blocks_unimplemented_m3(self) -> None:
+        """M3 虽 READY，但未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
         assets = load_assets()
-        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0", "M1"})
-        m2_scenario = next(item for item in assets.catalogue["scenarios"] if item["milestone"] == "M2")
-        m2_ready = next(
-            item for item in m2_scenario["variants"] if item["asset_status"] == "READY_FOR_APP"
-        )
+        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2"})
+        scenario = {"id": "SC-R99", "milestone": "M3"}
+        variant = {
+            "id": "synthetic",
+            "layer": "F",
+            "asset_status": "READY_FOR_APP",
+            "entry_state": "frozen",
+            "steps": ["python -m app doctor --fixture tests/scenarios/fixtures/m0/doctor/ready.json"],
+            "expected_ref": "SC-R99/synthetic",
+        }
         target = SCENARIO_ROOT.parent.parent
         self.assertEqual(
-            runner._variant_status(m2_scenario, m2_ready, target),
+            runner._variant_status(scenario, variant, target),
             "BLOCKED_MILESTONE_UNIMPLEMENTED",
         )
 
@@ -975,6 +980,31 @@ class M1DriverBoundaryTests(unittest.TestCase):
                 result = runner._execute_variant(custom, scenario, variant, SCENARIO_ROOT.parent.parent, "run-test")
             self.assertEqual(result["result"], "FAIL")
             concurrent.assert_not_called()
+
+    def test_real_m2_sut_mutant_coverage_is_caught(self) -> None:
+        """真实 M2 解析器把 coverage 降为 viewport 时，SC-U04 oracle 必须失败。"""
+        from app.adapters.boss.list import load_and_parse_snapshot
+        from app.usecases.sense import build_sense_payload
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-U04/full_all_absent"]["acceptance"]["steps"][0]
+        manifest = SCENARIO_ROOT / "fixtures/m2/sensor/full_all_absent/manifest.json"
+        with mock.patch("app.adapters.boss.list._coverage", return_value="viewport"):
+            result = load_and_parse_snapshot(
+                manifest,
+                "00000000-0000-4000-8000-0000000000b1",
+                "2026-11-24T00:00:00.000Z",
+            )
+        payload = build_sense_payload(result, None)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": payload,
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("unread_state" in item or "stop_reason" in item for item in differences))
 
     def test_real_sut_mutant_skipping_task_finished_is_caught(self) -> None:
         """真实 SqliteStore 仅跳过 task_finished 时，实际场景 oracle 必须失败。"""
