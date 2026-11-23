@@ -195,7 +195,7 @@ def identity_hash_for(contact: str, company: str, position: str) -> str:
 
 def conversation_key_for(app: str, contact: str, company: str, position: str) -> str:
     """生成带应用前缀的会话键；只对身份字段齐全的合成行使用。"""
-    if app not in APPS:
+    if not isinstance(app, str) or app not in APPS:
         raise ValueError("app is invalid")
     return f"{app}:conv:{identity_hash_for(contact, company, position)}"
 
@@ -211,7 +211,7 @@ def fingerprint_for(
 
 def discovery_key_for(app: str, conversation_key: str, fingerprint: str) -> str:
     """生成带应用前缀的发现键；同一会话多来源仍由会话唯一索引收敛。"""
-    if app not in APPS:
+    if not isinstance(app, str) or app not in APPS:
         raise ValueError("app is invalid")
     if not is_nonempty_text(conversation_key) or not is_nonempty_text(fingerprint):
         raise ValueError("discovery key inputs are invalid")
@@ -296,25 +296,33 @@ def is_optional_text(value: object) -> bool:
     return value is None or is_nonempty_text(value)
 
 
+def is_discovery_key(app: object, key: object) -> bool:
+    """判断是否为指定应用的规范发现键，拒绝跨应用或非摘要后缀。"""
+    if not isinstance(app, str) or app not in APPS or not isinstance(key, str):
+        return False
+    prefix = f"{app}:discovery:"
+    return key.startswith(prefix) and is_hash(key[len(prefix):])
+
+
 def validate_owner(owner: object) -> None:
-    """校验租约持有者的非空 ID、正整数 PID 与非空主机摘要。"""
+    """校验租约持有者的 UUID、正整数 PID 与本机摘要 host。"""
     if not isinstance(owner, Owner):
         raise ValueError("owner is invalid")
-    if not is_nonempty_text(owner.id):
+    if not is_uuid(owner.id):
         raise ValueError("owner id is invalid")
     if not is_int(owner.pid) or owner.pid <= 0:
         raise ValueError("owner pid is invalid")
-    if not is_nonempty_text(owner.host):
+    if not is_hash(owner.host):
         raise ValueError("owner host is invalid")
 
 
 def validate_lease(lease: object) -> None:
-    """校验租约的应用、键、持有者、nonce 与截止时间形状。"""
+    """校验租约的应用、发现键、持有者、nonce 与截止时间形状。"""
     if not isinstance(lease, Lease):
         raise ValueError("lease is invalid")
-    if lease.app not in APPS:
+    if not isinstance(lease.app, str) or lease.app not in APPS:
         raise ValueError("lease app is invalid")
-    if not is_nonempty_text(lease.key):
+    if not is_discovery_key(lease.app, lease.key):
         raise ValueError("lease key is invalid")
     validate_owner(lease.owner)
     if not is_uuid(lease.nonce):
@@ -326,13 +334,20 @@ def validate_unread_snapshot(snapshot: object) -> None:
     """校验未读快照的固定键、四源结论、行与候选，不做 IO。"""
     if not isinstance(snapshot, UnreadSnapshot):
         raise ValueError("snapshot is invalid")
-    if snapshot.app not in APPS:
+    if not isinstance(snapshot.app, str) or snapshot.app not in APPS:
         raise ValueError("snapshot app is invalid")
     if not is_nonempty_text(snapshot.profile_id):
         raise ValueError("profile is invalid")
-    if snapshot.coverage not in {"viewport", "all"}:
+    if not isinstance(snapshot.coverage, str) or snapshot.coverage not in {
+        "viewport",
+        "all",
+    }:
         raise ValueError("coverage is invalid")
-    if snapshot.unread_state not in {"present", "absent", "unknown"}:
+    if not isinstance(snapshot.unread_state, str) or snapshot.unread_state not in {
+        "present",
+        "absent",
+        "unknown",
+    }:
         raise ValueError("unread state is invalid")
     if not isinstance(snapshot.signals, dict) or set(snapshot.signals) != set(SIGNAL_KEYS):
         raise ValueError("signals are invalid")
@@ -356,7 +371,7 @@ def _validate_signal(signal: object) -> None:
     """校验单个未读源的状态、计数与原因组合。"""
     if not isinstance(signal, UnreadSignal):
         raise ValueError("signal is invalid")
-    if signal.state not in SIGNAL_STATES:
+    if not isinstance(signal.state, str) or signal.state not in SIGNAL_STATES:
         raise ValueError("signal state is invalid")
     if signal.count is not None and (not is_int(signal.count) or signal.count < 0):
         raise ValueError("signal count is invalid")
@@ -371,7 +386,7 @@ def _validate_signal(signal: object) -> None:
     if signal.count is not None:
         raise ValueError("signal count is invalid")
     if signal.state == "unknown":
-        if signal.reason_code not in SIGNAL_UNKNOWN_REASONS:
+        if not isinstance(signal.reason_code, str) or signal.reason_code not in SIGNAL_UNKNOWN_REASONS:
             raise ValueError("signal reason is invalid")
         return
     if signal.reason_code != "profile_not_applicable":
@@ -404,7 +419,7 @@ def _validate_candidate(candidate: object) -> None:
         raise ValueError("candidate key is invalid")
     if not is_nonempty_text(candidate.conversation_key):
         raise ValueError("candidate conversation key is invalid")
-    if candidate.kind not in DISCOVERY_KINDS:
+    if not isinstance(candidate.kind, str) or candidate.kind not in DISCOVERY_KINDS:
         raise ValueError("candidate kind is invalid")
     canonical_source_names(candidate.source_names)
     if not is_nonempty_text(candidate.fingerprint):
@@ -415,9 +430,14 @@ def validate_read_result(result: object) -> None:
     """校验读取结果的三态、来源、置信度、快照 ID 与 UTC 时间及原因组合。"""
     if not isinstance(result, ReadResult):
         raise ValueError("read result is invalid")
-    if result.status not in READ_STATUSES:
+    if not isinstance(result.status, str) or result.status not in READ_STATUSES:
         raise ValueError("read status is invalid")
-    if result.source not in READ_SOURCES or result.confidence not in CONFIDENCES:
+    if (
+        not isinstance(result.source, str)
+        or result.source not in READ_SOURCES
+        or not isinstance(result.confidence, str)
+        or result.confidence not in CONFIDENCES
+    ):
         raise ValueError("read metadata is invalid")
     parse_utc(result.observed_at)
     if result.snapshot_id is not None and not is_uuid(result.snapshot_id):
@@ -430,10 +450,16 @@ def validate_read_result(result: object) -> None:
     if result.value is not None:
         raise ValueError("failed result must not carry a value")
     if result.status == "failed":
-        if result.reason_code not in READ_FAILED_REASONS:
+        if (
+            not isinstance(result.reason_code, str)
+            or result.reason_code not in READ_FAILED_REASONS
+        ):
             raise ValueError("failed reason is invalid")
         return
-    if result.reason_code not in READ_UNDETERMINED_REASONS:
+    if (
+        not isinstance(result.reason_code, str)
+        or result.reason_code not in READ_UNDETERMINED_REASONS
+    ):
         raise ValueError("undetermined reason is invalid")
 
 
@@ -443,9 +469,9 @@ def validate_evidence(evidence: object) -> None:
         raise ValueError("evidence is invalid")
     if not is_nonempty_text(evidence.action_key):
         raise ValueError("action key is invalid")
-    if evidence.outcome not in EVIDENCE_OUTCOMES:
+    if not isinstance(evidence.outcome, str) or evidence.outcome not in EVIDENCE_OUTCOMES:
         raise ValueError("evidence outcome is invalid")
-    if evidence.effect not in EVIDENCE_EFFECTS:
+    if not isinstance(evidence.effect, str) or evidence.effect not in EVIDENCE_EFFECTS:
         raise ValueError("evidence effect is invalid")
     parse_utc(evidence.observed_at)
     for snapshot_id in (evidence.before_snapshot_id, evidence.after_snapshot_id):
@@ -464,14 +490,22 @@ def validate_evidence(evidence: object) -> None:
     if evidence.effect != "none":
         raise ValueError("non-performed effect is invalid")
     if evidence.outcome == "not_performed":
-        if evidence.reason_code not in EVIDENCE_NOT_PERFORMED_REASONS:
+        if (
+            not isinstance(evidence.reason_code, str)
+            or evidence.reason_code not in EVIDENCE_NOT_PERFORMED_REASONS
+        ):
             raise ValueError("not performed reason is invalid")
         return
-    if evidence.reason_code not in EVIDENCE_UNKNOWN_REASONS:
+    if (
+        not isinstance(evidence.reason_code, str)
+        or evidence.reason_code not in EVIDENCE_UNKNOWN_REASONS
+    ):
         raise ValueError("unknown reason is invalid")
 
 
 def validate_event_reason(reason_code: object) -> None:
     """校验事件原因只取任务、证据或仓储固定词表或 null。"""
-    if reason_code is not None and reason_code not in TASK_REASON_CODES:
+    if reason_code is not None and (
+        not isinstance(reason_code, str) or reason_code not in TASK_REASON_CODES
+    ):
         raise ValueError("event reason is invalid")

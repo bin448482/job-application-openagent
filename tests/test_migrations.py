@@ -26,7 +26,7 @@ from app.domain.models import canonical_hash
 from app.ports.store import StoreError
 from app.process_log import ProcessLog
 
-from tests.m1_helpers import database_dump, make_result, open_store
+from tests.m1_helpers import HOST_A, database_dump, make_result, open_store
 
 SUCCESS_TEXT = '{"schema_version":1,"status":"ok","reason_code":null}\n'
 
@@ -153,7 +153,7 @@ class MigrationTests(unittest.TestCase):
         for operation in (
             lambda: initialize_database(path),
             lambda: connect_database(path),
-            lambda: SqliteStore(path, local_host="host-a"),
+            lambda: SqliteStore(path, local_host=HOST_A),
         ):
             with self.subTest(operation=operation):
                 with self.assertRaises(StoreError) as context:
@@ -309,6 +309,7 @@ class StoreCliTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
         self.log_path = self.root / "process.jsonl"
+        self.log_paths: list[Path] = []
         self.patcher = patch("app.cli.main.PROJECT_ROOT", self.root)
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
@@ -317,12 +318,22 @@ class StoreCliTests(unittest.TestCase):
         """在进程内运行 CLI 并返回退出码、stdout 与 stderr。"""
         stdout = io.StringIO()
         stderr = io.StringIO()
+        log = ProcessLog(path=self.log_path)
+        self.log_paths.append(log.path)
         with redirect_stdout(stdout), redirect_stderr(stderr):
             code = main(
                 list(args),
-                process_log=ProcessLog(path=self.log_path),
+                process_log=log,
             )
         return code, stdout.getvalue(), stderr.getvalue()
+
+    def _all_events(self) -> list[dict[str, object]]:
+        """按创建顺序读取本次测试所有独立运行日志的事件。"""
+        return [
+            json.loads(line)
+            for path in self.log_paths
+            for line in path.read_text(encoding="utf-8").splitlines()
+        ]
 
     def test_store_init_is_idempotent_with_fixed_json(self) -> None:
         """连续两次 init 都退出 0 且第二次不改业务行。"""
@@ -343,10 +354,7 @@ class StoreCliTests(unittest.TestCase):
         code, stdout, stderr = self._run("store", "init", "--db", relative)
         self.assertEqual((code, stdout, stderr), (0, SUCCESS_TEXT, ""))
         self.assertEqual(database_dump(path), before)
-        events = [
-            json.loads(line)
-            for line in self.log_path.read_text(encoding="utf-8").splitlines()
-        ]
+        events = self._all_events()
         self.assertIn("store", [event["stage"] for event in events])
         self.assertEqual(
             [event["result"] for event in events if event["stage"] == "store"],
@@ -445,10 +453,7 @@ class StoreCliTests(unittest.TestCase):
         """store 失败日志只写固定阶段、原因与 store 错误类别。"""
         code, _, _ = self._run("store", "init", "--db", "../escape.sqlite3")
         self.assertEqual(code, 2)
-        events = [
-            json.loads(line)
-            for line in self.log_path.read_text(encoding="utf-8").splitlines()
-        ]
+        events = self._all_events()
         store_events = [event for event in events if event["stage"] == "store"]
         self.assertEqual(store_events[0]["result"], "started")
         self.assertEqual(store_events[-1]["result"], "failed")

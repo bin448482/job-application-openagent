@@ -28,6 +28,10 @@ from app.domain.models import (
 
 BASE_TIME = "2026-11-24T00:00:00.000Z"
 SIGNAL_KEYS = ("row_badge", "new_greeting", "tab_badge", "preview_delta")
+HOST_A = canonical_hash("synthetic-host-a")
+HOST_B = canonical_hash("synthetic-host-b")
+OWNER_ID = "00000000-0000-4000-8000-000000000001"
+OWNER_ID_2 = "00000000-0000-4000-8000-000000000002"
 
 
 class FakeClock:
@@ -56,7 +60,7 @@ def open_store(
     directory: str | Path,
     *,
     clock: FakeClock | None = None,
-    local_host: str = "host-a",
+    local_host: str = HOST_A,
     stop_checker: object | None = None,
     fault_hook: object | None = None,
 ) -> tuple[Path, SqliteStore, FakeClock]:

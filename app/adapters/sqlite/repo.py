@@ -33,6 +33,7 @@ from app.domain.models import (
     discovery_key_for,
     fingerprint_for,
     format_utc,
+    is_hash,
     is_int,
     is_nonempty_text,
     parse_utc,
@@ -68,12 +69,24 @@ def default_stop_checker(pid: int) -> str:
 
 def _windows_process_state(pid: int) -> str:
     """通过 OpenProcess 与 WaitForSingleObject 区分已停止、仍活动与未知。"""
+    from ctypes import wintypes
+
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
     process_query_limited_information = 0x1000
+    synchronize = 0x00100000
     wait_object_0 = 0x00000000
     wait_timeout = 0x00000102
     error_invalid_parameter = 87
-    handle = kernel32.OpenProcess(process_query_limited_information, False, int(pid))
+    handle = kernel32.OpenProcess(
+        process_query_limited_information | synchronize, False, int(pid)
+    )
     if not handle:
         return (
             "stopped"
@@ -105,7 +118,7 @@ class SqliteStore:
     ) -> None:
         """打开并核验 v1 库，保存本机主机摘要、时钟与可注入停止检查器。"""
         self._local_host = local_host if local_host is not None else default_local_host()
-        if not is_nonempty_text(self._local_host):
+        if not is_hash(self._local_host):
             raise StoreError("invalid_input")
         self._monotonic = monotonic
         self._stop_checker = stop_checker if stop_checker is not None else default_stop_checker
@@ -221,7 +234,7 @@ class SqliteStore:
         try:
             if app != APP:
                 raise ValueError("app is invalid")
-            if kind not in DISCOVERY_KINDS:
+            if not isinstance(kind, str) or kind not in DISCOVERY_KINDS:
                 raise ValueError("kind is invalid")
             validate_owner(owner)
             if owner.host != self._local_host:
@@ -770,7 +783,7 @@ def _prepare_upsert(
                     identity_hash=row.identity_hash,
                 )
             )
-    except (ValueError, TypeError):
+    except ValueError:
         raise StoreError("invalid_input") from None
     records.sort(key=lambda record: record.key)
     return result.observed_at, result.snapshot_id, records
@@ -778,7 +791,12 @@ def _prepare_upsert(
 
 def _validate_finish(state: str, reason_code: str | None, proof: object) -> None:
     """校验 finish 的状态、原因与 ReadResult/Evidence 三态组合。"""
-    if state not in {"done", "not_sent", "failed", "blocked"}:
+    if not isinstance(state, str) or state not in {
+        "done",
+        "not_sent",
+        "failed",
+        "blocked",
+    }:
         raise ValueError("finish state is invalid")
     if reason_code is not None and not is_nonempty_text(reason_code):
         raise ValueError("finish reason is invalid")

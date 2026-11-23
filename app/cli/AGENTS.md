@@ -20,12 +20,12 @@
 7. fixture 模式不得实例化或调用 ADB 适配器，不得启动子进程；CLI 导入适配器模块本身必须零副作用。`store init` 只调用 SQLite 初始化/核验，不启动子进程、不调用网络。
 8. JSON 输出统一经过 `_finalize_output`：安全 `emit`、记录 `output` 成功/失败、再记录 `exit`；输出失败时安全退出 `2`、不打印 traceback，日志明确为 `output=failed`，不能假称 JSON 已输出。成功或业务停止正常时 stderr 为空；日志写入失败时 stdout/退出码不变，stderr 仅写固定 `m0_process_log_degraded`。`--help` 保持 argparse 直接输出并退出 `0`，只记录其 output/exit 路径，不伪造业务 JSON。其余失败退出 `2`，不使用退出 `1`。
 9. `store init` 成功只输出 `{"schema_version":1,"status":"ok","reason_code":null}`；失败原因取 `invalid_input/store_busy/store_io_error/db_version_unsupported/migration_failed` 等仓储词表，不新增业务成功字段。
-10. 过程日志阶段覆盖 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/output/exit`；store 调用先记 `started` 再记 `ok/failed`，error_category 固定为 `store`；只写固定原因码/耗时，不写原值或数据库路径。stdout 七键/三键契约不含 `correlation_id`。
+10. 过程日志阶段覆盖 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/output/exit`；store 调用先记 `started` 再记 `ok/failed`，error_category 固定为 `store`；只写固定原因码/耗时，不写原值或数据库路径。每次运行由 `ProcessLog` 生成独立 UUID 文件，显式路径也只作命名基础；stdout 不包含 `correlation_id`。
 
 ## 四、测试
 
 ```powershell
-python -m unittest tests.test_doctor tests.test_store tests.test_migrations
+python -m unittest tests.test_doctor tests.test_store tests.test_migrations tests.test_process_log_concurrency
 ```
 
 `tests/test_doctor.py` 覆盖 M0 配置/夹具负例、重复 JSON 键、孤立代理字符、模式冲突、重复/未知选项、帮助 output/exit、业务失败、设备失败七键映射、窗口字段边界/解析、stdout 写失败、`output=failed`、白名单拒绝降级提示、日志 started→结束顺序与 fixture 零子进程断言。`tests/test_migrations.py` 覆盖 `store init` 的固定 JSON、幂等、默认路径、路径越界、损坏/篡改/未知版本库与失败日志。

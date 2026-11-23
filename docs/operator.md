@@ -9,7 +9,7 @@
 - `doctor`：一次独立的只读探针，读取 ADB 设备清单或合成 fixture，并输出设备数量、所选逻辑别名、解锁状态和前台应用类别。
 - `store init`：创建或核验设计说明 §6 的本机 SQLite v1 状态库（五表、约束、索引与用户版本 1），不导入旧库。
 
-M0/M1 都不切换应用、不 dump 聊天、不截图、不点击、不发送、不调用网络或模型。`fixture` 模式只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite。每次 `doctor`/`store init` 运行只追加被忽略的 `data/logs/m0-process.jsonl` 本机过程日志（见第八节）。
+M0/M1 都不切换应用、不 dump 聊天、不截图、不点击、不发送、不调用网络或模型。`fixture` 模式只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite。每次 `doctor`/`store init` 运行创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl` 本机过程日志（见第八节），运行之间不共享追加。
 
 M1 的仓储 API 已实现候选入库、任务租约、三态收敛与过期恢复，但 M1 **没有** `sense`、业务循环、设备动作或调度子命令；当前只通过单元测试使用合成 ReadResult/Evidence。
 
@@ -91,7 +91,7 @@ v1 结构摘要（以设计说明 §6 为准）：
 仓储行为（通过测试或未来用例调用，不在此手工作业）：
 
 - `upsert_snapshot` 只接受 `ReadResult.status=ok`、非空快照 ID 的完整合成结果；未知行不落库，同指纹重放不追加事件，queued 可升级 `new_message→unread`。
-- `claim` 在任一 `device_lease` 行存在（含过期或 quarantined）时返回 `lease_busy`；仅 TTL 到期不会释放占用。
+- `claim` 在任一 `device_lease` 行存在（含过期或 quarantined）时返回 `lease_busy`；仅 TTL 到期不会释放占用。owner.id 必须是规范 UUID，owner.host 必须是本机 `H(platform.node())` 摘要；Lease.key 必须是当前 app 的 discovery 键，非法类型/枚举、非 UUID owner 与跨 app 键统一 `invalid_input`。
 - `start` 只允许 `leased→running` 且不延长截止时间；`renew` 同步延长任务与设备；旧 Lease、旧 nonce 或重复操作返回 `stale_lease`。
 - `finish` 只允许 `running→done/not_sent/failed/blocked`，原因必须与读取/证据三态匹配。blocked 清空任务租约，但保留设备原 owner/pid/host/nonce/截止时间，仅把 `reservation_state` 置为 `quarantined`；下一次 claim 仍为 `lease_busy`。
 - `recover` 仅在任务/设备身份与 nonce 匹配、已过期、`confirm_stopped=true`、本机 host 匹配且注入的停止检查器判定 `stopped` 后生效：leased 回 `queued` 并删除设备行；running 转 `blocked/recovery_requires_reconciliation` 并隔离设备。未过期返回 `lease_busy`，其余停止/主机不确定返回 `owner_not_stopped`。
@@ -178,7 +178,9 @@ M1 的 ReadResult/Evidence 只由测试或后续 `sense` 构造；当前没有 C
 
 ## 八、本机过程日志与复核
 
-每次 `python -m app doctor` 或 `python -m app store init` 运行都会尝试向 `data/logs/m0-process.jsonl` 追加 JSON Lines 过程日志。该路径被根 `.gitignore` 的 `/data/**` 覆盖，不提交 Git；不调用网络、不启动后台任务，也不写远程日志。
+每次 `python -m app doctor` 或 `python -m app store init` 运行都会创建一个独立的 `data/logs/m0-process-<运行 UUID>.jsonl` JSON Lines 过程日志；不同进程/命令不共享同一个追加文件，避免并发丢行或互相覆盖。该目录被根 `.gitignore` 的 `/data/**` 覆盖，不提交 Git；不调用网络、不启动后台任务，也不写远程日志。旧的共享 `m0-process.jsonl` 若存在仅为历史文件，当前代码不再写入。
+
+日志器对显式 `ProcessLog(path=...)` 同样采用隔离语义：传入路径只作为同目录命名基础（目录或文件均可），实际文件名由唯一日志器追加运行 UUID 后决定；不会退回共享追加。需要读取时使用日志器给出的实际路径，而不是假定等于传入路径。
 
 每行固定包含 `schema_version/ts/correlation_id/stage/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`：
 
@@ -188,16 +190,23 @@ M1 的 ReadResult/Evidence 只由测试或后续 `sense` 构造；当前没有 C
 - `store` 阶段先记 `started`，再记 `ok` 或带固定仓储原因与 `error_category=store` 的 `failed`；不写数据库路径。
 - `output` 只为 JSON 收尾：写出成功记 `ok`，写出失败记 `failed`（`error_category=internal`）并安全退出 `2`；不能据此假称 JSON 已输出。
 - 不写参数原值、serial、窗口原文、数据库路径、SQL 参数、异常消息、绝对路径或个人事实。
-- 日志是尽力而为的辅助产物：调用端忽略单次 `record` 的 `False`，写入失败时设置内部 `degraded` 标记；CLI 在出口向 stderr 写固定 `m0_process_log_degraded`，stdout JSON 与退出码不变，也不伪造成功行。没有日志行不等于命令成功；该标记表示日志不完整，不能声称磁盘失败时完整日志已保存。
+- 日志是尽力而为的辅助产物：调用端忽略单次 `record` 的 `False`，写入失败时设置内部 `degraded` 标记；CLI 在出口向 stderr 写固定 `m0_process_log_degraded`，stdout JSON 与退出码不变，也不伪造成功行。没有日志行不等于命令成功；该标记表示该次日志不完整，不能声称磁盘失败时完整日志已保存。
 
-复核方式：
+复核方式（按修改时间取最近一次运行；每次运行只有一个完整文件）：
 
 ```powershell
-Get-Content data/logs/m0-process.jsonl -Tail 20
+$log = Get-ChildItem data/logs/m0-process-*.jsonl | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+Get-Content $log.FullName
 git check-ignore data/logs/m0-process.jsonl data/runtime/m1-acceptance.sqlite3
 ```
 
-stdout 不包含 `correlation_id`。需要按单次运行核对时，从本机日志中取该次命令时间附近的 `start`→`exit` 事件。fixture 模式仍保持零设备、零网络、零子进程和零业务库；`store init` 只写项目内本机 SQLite。
+已知某次 `correlation_id` 时可跨文件过滤：
+
+```powershell
+Select-String -Path data/logs/m0-process-*.jsonl -Pattern '"correlation_id":"<UUID>"'
+```
+
+stdout 不包含 `correlation_id`。按单次运行核对时，优先读取该次独立的 `start`→`exit` 文件；同一 `correlation_id` 不应跨两个运行文件。fixture 模式仍保持零设备、零网络、零子进程和零业务库；`store init` 只写项目内本机 SQLite。日志按运行累积且没有自动轮转/保留期，需要时由使用者在本机清理旧文件。
 
 ## 九、尚未实现
 

@@ -23,6 +23,10 @@ from app.domain.models import (
 from app.ports.store import StoreError
 
 from tests.m1_helpers import (
+    HOST_A,
+    HOST_B,
+    OWNER_ID,
+    OWNER_ID_2,
     event_count,
     fetch_all,
     fetch_one,
@@ -32,7 +36,7 @@ from tests.m1_helpers import (
     sources_json,
 )
 
-OWNER = Owner("owner-1", 4242, "host-a")
+OWNER = Owner(OWNER_ID, 4242, HOST_A)
 
 
 class StoreTests(unittest.TestCase):
@@ -268,7 +272,7 @@ class StoreTests(unittest.TestCase):
         _, second = self._seed(contact="合成联系人乙")
         self.assertEqual(self.store.claim("boss", "new_message", OWNER, self.clock.now()), None)
         self.store.close()
-        connection = SqliteStore(self.path, local_host="host-a", monotonic=self.clock.monotonic)
+        connection = SqliteStore(self.path, local_host=HOST_A, monotonic=self.clock.monotonic)
         self.addCleanup(connection.close)
         connection._connection.execute(
             "UPDATE hr_discoveries SET priority = 5 WHERE \"key\" = ?", (second[0],)
@@ -301,7 +305,7 @@ class StoreTests(unittest.TestCase):
         first = self.store.claim("boss", "unread", OWNER, self.clock.now())
         self.assertIsNotNone(first)
         device_before = fetch_one(self.path, "SELECT * FROM device_lease")
-        for owner in (OWNER, Owner("owner-2", 5252, "host-a")):
+        for owner in (OWNER, Owner(OWNER_ID_2, 5252, HOST_A)):
             with self.subTest(owner=owner.id):
                 with self.assertRaises(StoreError) as context:
                     self.store.claim("boss", "unread", owner, self.clock.now())
@@ -321,7 +325,7 @@ class StoreTests(unittest.TestCase):
         device_before = fetch_one(self.path, "SELECT * FROM device_lease")
         self.clock.advance(61)
         with self.assertRaises(StoreError) as context:
-            self.store.claim("boss", "unread", Owner("owner-2", 9, "host-a"), self.clock.now())
+            self.store.claim("boss", "unread", Owner(OWNER_ID_2, 9, HOST_A), self.clock.now())
         self.assertEqual(context.exception.reason_code, "lease_busy")
         self.assertEqual(fetch_one(self.path, "SELECT * FROM device_lease"), device_before)
         task = fetch_one(
@@ -357,15 +361,15 @@ class StoreTests(unittest.TestCase):
             ("kind", dict(app="boss", kind="job", owner=OWNER, now=self.clock.now())),
             (
                 "host",
-                dict(app="boss", kind="unread", owner=Owner("o", 1, "host-b"), now=self.clock.now()),
+                dict(app="boss", kind="unread", owner=Owner(OWNER_ID, 1, HOST_B), now=self.clock.now()),
             ),
             (
                 "bool-pid",
-                dict(app="boss", kind="unread", owner=Owner("o", True, "host-a"), now=self.clock.now()),
+                dict(app="boss", kind="unread", owner=Owner(OWNER_ID, True, HOST_A), now=self.clock.now()),
             ),
             (
                 "zero-pid",
-                dict(app="boss", kind="unread", owner=Owner("o", 0, "host-a"), now=self.clock.now()),
+                dict(app="boss", kind="unread", owner=Owner(OWNER_ID, 0, HOST_A), now=self.clock.now()),
             ),
             ("time", dict(app="boss", kind="unread", owner=OWNER, now="2026-11-24T00:00:00Z")),
         )
@@ -583,8 +587,8 @@ class StoreTests(unittest.TestCase):
         lease = self._claim_and_start()
         for name, altered in (
             ("nonce", replace(lease, nonce=str(uuid.uuid4()))),
-            ("pid", replace(lease, owner=Owner("owner-1", 9999, "host-a"))),
-            ("host", replace(lease, owner=Owner("owner-1", 4242, "host-b"))),
+            ("pid", replace(lease, owner=Owner(OWNER_ID, 9999, HOST_A))),
+            ("host", replace(lease, owner=Owner(OWNER_ID, 4242, HOST_B))),
             ("expiry", replace(lease, expires_at="2026-11-24T00:00:01.000Z")),
         ):
             with self.subTest(name=name):
@@ -637,7 +641,7 @@ class StoreTests(unittest.TestCase):
                 self.store.close()
 
         self.path, self.store, self.clock = open_store(
-            self._tmp.name, clock=self.clock, local_host="host-b"
+            self._tmp.name, clock=self.clock, local_host=HOST_B
         )
         with self.assertRaises(StoreError) as context:
             self.store.recover(lease, True, self.clock.now())
@@ -861,49 +865,129 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(context.exception.reason_code, "invalid_input")
         self.assertEqual(fetch_all(self.path, "SELECT * FROM hr_discoveries"), [])
 
+    def test_strict_types_enums_owner_uuid_and_cross_app_lease(self) -> None:
+        """非法类型/枚举、非 UUID owner 与跨 app 租约键都安全报 invalid_input。"""
+        result, keys = self._seed()
+        with self.assertRaises(StoreError) as context:
+            self.store.claim("boss", [], OWNER, self.clock.now())
+        self.assertEqual(context.exception.reason_code, "invalid_input")
+        with self.assertRaises(StoreError) as context:
+            self.store.claim(
+                "boss", "unread", Owner("not-a-uuid", 1, HOST_A), self.clock.now()
+            )
+        self.assertEqual(context.exception.reason_code, "invalid_input")
+        self.assertIsNone(fetch_one(self.path, "SELECT * FROM device_lease"))
+
+        lease = self._claim_and_start()
+        for name, bad_result in (
+            ("status", replace(result, status=[])),
+            ("source", replace(result, source=[])),
+            ("confidence", replace(result, confidence=[])),
+            ("coverage", replace(result, value=replace(result.value, coverage=[]))),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaises(StoreError) as context:
+                    self.store.upsert_snapshot(bad_result)
+                self.assertEqual(context.exception.reason_code, "invalid_input")
+
+        for name, bad_lease in (
+            ("app", replace(lease, app=[])),
+            ("key-type", replace(lease, key=[])),
+            ("cross-app-key", replace(lease, key="liepin:discovery:" + "0" * 64)),
+            ("nonce", replace(lease, nonce=[])),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaises(StoreError) as context:
+                    self.store.start(bad_lease, self.clock.now())
+                self.assertEqual(context.exception.reason_code, "invalid_input")
+
+        with self.assertRaises(StoreError) as context:
+            self.store.finish(lease, self.clock.now(), [], None, result)
+        self.assertEqual(context.exception.reason_code, "invalid_input")
+        bad_evidence = replace(make_evidence(outcome="unknown"), outcome=[])
+        with self.assertRaises(StoreError) as context:
+            self.store.finish(
+                lease, self.clock.now(), "blocked", "result_unverified", bad_evidence
+            )
+        self.assertEqual(context.exception.reason_code, "invalid_input")
+        task = fetch_one(
+            self.path, "SELECT * FROM hr_discoveries WHERE \"key\" = ?", (keys[0],)
+        )
+        self.assertEqual(task["state"], "running")
+        self.assertEqual(task["attempt"], 1)
+        self.assertEqual(task["nonce"], lease.nonce)
+        self.assertEqual(self.store.finish(lease, self.clock.now(), "done", None, result), "updated")
+
 
 @unittest.skipUnless(repo_module.os.name == "nt", "Windows-only ctypes contract")
 class WindowsStopCheckerTests(unittest.TestCase):
     """用 mock 的 ctypes 句柄验证 Windows 停止判定，不检查真实 PID。"""
 
+    class _Api:
+        """记录调用参数并返回预设值，模拟带 argtypes/restype 的 ctypes 函数。"""
+
+        def __init__(self, result: int) -> None:
+            """保存预设返回值并初始化签名槽位。"""
+            self.result = result
+            self.argtypes = None
+            self.restype = None
+            self.calls: list[tuple[object, ...]] = []
+
+        def __call__(self, *args: object) -> int:
+            """记录一次调用并返回预设值，不访问真实内核。"""
+            self.calls.append(args)
+            return self.result
+
     class _Kernel32:
-        """记录调用并返回预设句柄与等待结果。"""
+        """提供 OpenProcess/WaitForSingleObject/CloseHandle 三个可断言 mock。"""
 
         def __init__(self, handle: int, wait: int) -> None:
-            """保存 OpenProcess 句柄值与 WaitForSingleObject 结果。"""
-            self.handle = handle
-            self.wait = wait
-            self.closed = False
+            """保存预设句柄与等待结果。"""
+            self.OpenProcess = WindowsStopCheckerTests._Api(handle)
+            self.WaitForSingleObject = WindowsStopCheckerTests._Api(wait)
+            self.CloseHandle = WindowsStopCheckerTests._Api(1)
 
-        def OpenProcess(self, access: int, inherit: bool, pid: int) -> int:
-            """返回预设句柄，不访问真实进程。"""
-            return self.handle
+    def test_windows_state_mapping_and_signatures(self) -> None:
+        """签名、权限、64 位句柄与全部等待/错误映射都符合契约。"""
+        from ctypes import wintypes
 
-        def WaitForSingleObject(self, handle: int, timeout: int) -> int:
-            """返回预设等待码。"""
-            return self.wait
-
-        def CloseHandle(self, handle: int) -> None:
-            """记录句柄已关闭。"""
-            self.closed = True
-
-    def test_windows_state_mapping(self) -> None:
-        """无效 PID、访问拒绝、已退出、仍活动与未知等待码分别映射。"""
+        high_handle = 0x123456789ABCDEF0
         cases = (
             ("missing-pid", 0, 87, 0, "stopped"),
             ("access-denied", 0, 5, 0, "unknown"),
-            ("exited", 1, 0, 0, "stopped"),
-            ("alive", 1, 0, 258, "alive"),
-            ("unknown-wait", 1, 0, 1, "unknown"),
+            ("exited", high_handle, 0, 0, "stopped"),
+            ("alive", high_handle, 0, 258, "alive"),
+            ("wait-failed", high_handle, 0, 0xFFFFFFFF, "unknown"),
+            ("unknown-wait", high_handle, 0, 1, "unknown"),
         )
         for name, handle, error, wait, expected in cases:
             with self.subTest(name=name):
-                kernel = self._Kernel32(handle, wait)
+                kernel32 = self._Kernel32(handle, wait)
                 with patch.object(
-                    repo_module.ctypes, "WinDLL", return_value=kernel
+                    repo_module.ctypes, "WinDLL", return_value=kernel32
                 ), patch.object(
                     repo_module.ctypes, "get_last_error", return_value=error
                 ):
                     self.assertEqual(repo_module._windows_process_state(1234), expected)
+                self.assertEqual(
+                    kernel32.OpenProcess.argtypes,
+                    (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD),
+                )
+                self.assertIs(kernel32.OpenProcess.restype, wintypes.HANDLE)
+                self.assertEqual(
+                    kernel32.WaitForSingleObject.argtypes,
+                    (wintypes.HANDLE, wintypes.DWORD),
+                )
+                self.assertIs(kernel32.WaitForSingleObject.restype, wintypes.DWORD)
+                self.assertEqual(kernel32.CloseHandle.argtypes, (wintypes.HANDLE,))
+                self.assertIs(kernel32.CloseHandle.restype, wintypes.BOOL)
+                access = kernel32.OpenProcess.calls[0][0]
+                self.assertTrue(int(access) & 0x1000)
+                self.assertTrue(int(access) & 0x00100000)
                 if handle:
-                    self.assertTrue(kernel.closed)
+                    self.assertEqual(
+                        kernel32.WaitForSingleObject.calls[0][0], high_handle
+                    )
+                    self.assertEqual(kernel32.CloseHandle.calls[0][0], high_handle)
+                else:
+                    self.assertEqual(kernel32.CloseHandle.calls, [])

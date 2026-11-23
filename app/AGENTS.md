@@ -13,7 +13,7 @@
 - `ports/`：能力端口与领域快照/租约类型；见 `ports/AGENTS.md`。
 - `usecases/`：单次用例的校验、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。
-- `process_log.py`：追加固定字段的本机 JSON Lines 过程日志，只写被忽略的 `data/logs/m0-process.jsonl`；写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值。阶段已扩展到 `store`，仍复用唯一日志器。
+- `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值。阶段已扩展到 `store`，仍复用唯一日志器。
 
 ## 三、依赖与边界
 
@@ -32,12 +32,12 @@
 在项目根执行：
 
 ```powershell
-python -m unittest tests.test_doctor tests.test_store tests.test_migrations
+python -m unittest tests.test_doctor tests.test_store tests.test_migrations tests.test_process_log_concurrency
 python -m app doctor --fixture tests/fixtures/doctor/ready.json
 python -m app store init --db data/runtime/m1-acceptance.sqlite3
 ```
 
-`tests.test_doctor` 覆盖 M0 CLI、配置与夹具校验、设备解析、日志与 fixture 零子进程；`tests.test_store` 覆盖候选入库、竞争、TTL、三态收敛、恢复、clock_changed 与事务回滚；`tests.test_migrations` 覆盖空库建表/核验、幂等、初始化回滚、schema 篡改与 `store init` CLI。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行；M1 测试只用合成库与注入检查器。
+`tests.test_doctor` 覆盖 M0 CLI、配置与夹具校验、设备解析、日志与 fixture 零子进程；`tests.test_process_log_concurrency` 用两个独立进程验证默认与显式日志路径的隔离和完整关联；`tests.test_store` 覆盖候选入库、竞争、TTL、三态收敛、恢复、clock_changed、严格输入与事务回滚；`tests.test_migrations` 覆盖空库建表/核验、幂等、初始化回滚、schema 篡改与 `store init` CLI。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行；M1 测试只用合成库与注入检查器。
 
 ## 五、维护要求
 

@@ -10,7 +10,7 @@
 
 文档所描述的消费方：评测可接受 promptfoo provider ID 连接模型或自定义端点，认证由使用者按 provider 类型配置，不提供默认真实模型。README 约定未来设备功能需要 Android SDK Platform-Tools 的 adb、USB 调试及使用者确认；当前没有业务 Skill 或设备工作流，不推定宿主、机型、包名或发送授权。
 
-主要入口与模块关系：README 提供使用概览；`python -m app` 进入 app/cli/main.py，当前分派只读 `doctor` 与 `store init`。fixture 由 CLI 读取，真实探针经 app/ports/device.py 注入 app/adapters/adb/device.py，业务判定在 app/usecases/doctor.py；`store init` 经 app/adapters/sqlite/schema.py 建库/核验，仓储实现在 app/adapters/sqlite/repo.py，领域模型与键/摘要算法在 app/domain/models.py，端口在 app/ports/store.py。白名单过程日志由 app/process_log.py 追加到 data/logs/m0-process.jsonl（阶段含 `store`），M1 业务库写到被忽略的 data/runtime/。package.json 的 npm scripts 调用 evals 的断言测试或评测入口，promptfooconfig.json 加载提示词、24 个案例和 JavaScript 断言。smoke 仅回放参考输出，model 才使用显式 provider；case metadata 不渲染进模型提示词。评测产物仅保存到 data/evals。pyproject.toml 为业务元数据，不是已实现的 CLI 或发行包。每个目录的 CLAUDE.md 仅引用同目录 AGENTS.md，全局规则只在根指南保存。
+主要入口与模块关系：README 提供使用概览；`python -m app` 进入 app/cli/main.py，当前分派只读 `doctor` 与 `store init`。fixture 由 CLI 读取，真实探针经 app/ports/device.py 注入 app/adapters/adb/device.py，业务判定在 app/usecases/doctor.py；`store init` 经 app/adapters/sqlite/schema.py 建库/核验，仓储实现在 app/adapters/sqlite/repo.py，领域模型与键/摘要算法在 app/domain/models.py，端口在 app/ports/store.py。白名单过程日志由 app/process_log.py 每次运行写到被忽略的 data/logs/m0-process-<运行 UUID>.jsonl（阶段含 `store`），M1 业务库写到被忽略的 data/runtime/。package.json 的 npm scripts 调用 evals 的断言测试或评测入口，promptfooconfig.json 加载提示词、24 个案例和 JavaScript 断言。smoke 仅回放参考输出，model 才使用显式 provider；case metadata 不渲染进模型提示词。评测产物仅保存到 data/evals。pyproject.toml 为业务元数据，不是已实现的 CLI 或发行包。每个目录的 CLAUDE.md 仅引用同目录 AGENTS.md，全局规则只在根指南保存。
 
 新环境自动化部署方案已形成设计文档，建议首批 Windows 11 x64 / Windows PowerShell 5.1，分别验收 Node 合成评测、ADB 工具准备和经本轮确认后的手机环境检测；Python venv、模型认证、Android 与开发编排工具不作为当前评测必需。Android 检测不等待完整业务，但须先实现检查器与共享设备门禁；部署入口、引导发行物与检查器尚未实现，干净机器及手机验收均待执行，本轮仅文档、未运行 ADB；既有本机测试记录不能替代该验收。
 
@@ -61,7 +61,7 @@
 - `.gitignore`：依赖、缓存、运行产物、个人事实及凭据忽略约定，包含 data/screenshots 指导文档例外。
 - `.agents/`：Codex 工作流入口占位，当前只有双指导文档，Skills 待设计。
 - `.claude/`：Claude 工作流入口占位，当前只有双指导文档，Skills 待设计。
-- `data/`：本机产物目录，含自动生成的 evals 结果/状态子目录、`logs/m0-process.jsonl` 过程日志与 `runtime/` M1 SQLite 库；运行产物排除文档覆盖且不提交 Git。过程日志只含固定字段（含 `store` 阶段），写入失败不影响 stdout/退出码，但 stderr 固定标记 `m0_process_log_degraded`，不声称完整日志已保存。
+- `data/`：本机产物目录，含自动生成的 evals 结果/状态子目录、`logs/m0-process-<运行 UUID>.jsonl` 每次运行独立过程日志与 `runtime/` M1 SQLite 库；运行产物排除文档覆盖且不提交 Git。过程日志只含固定字段（含 `store` 阶段），写入失败不影响 stdout/退出码，但 stderr 固定标记 `m0_process_log_degraded`，不声称完整日志已保存。
 - `screenshots/`：本机截图预留位置，当前只含双指导文档，截图不提交 Git。
 - `AGENTS.md`：项目事实、完整索引、母本规则原文及命令状态；子目录指南引用本文件。
 - `CLAUDE.md`：仅含 `@AGENTS.md`，必须与同目录指南配合使用，不能另存一套规则。
@@ -187,10 +187,10 @@ function normalizeQuote(raw: QuoteRecord): NormalizedQuote {
 以下均在项目根执行。M0/M1 使用 Python >=3.13 标准库；评测需 Node.js >=22.22.0 与 npm，依赖以 package-lock.json 为准：
 
 ```powershell
-python -m unittest tests.test_doctor tests.test_store tests.test_migrations
+python -m unittest tests.test_doctor tests.test_store tests.test_migrations tests.test_process_log_concurrency
 python -m app doctor --fixture tests/fixtures/doctor/ready.json
 python -m app store init --db data/runtime/m1-acceptance.sqlite3
-Get-Content data/logs/m0-process.jsonl -Tail 20
+Get-ChildItem data/logs/m0-process-*.jsonl | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 git check-ignore data/logs/m0-process.jsonl data/runtime/m1-acceptance.sqlite3
 npm ci
 npm test
@@ -198,13 +198,13 @@ npm run eval:smoke
 npm run eval:model -- "<provider-id>"
 ```
 
-`tests.test_doctor` 覆盖 doctor 正反例、重复 JSON 键、孤立代理字符、畸形 keyguard token、`mCurrentFocus` 字段边界/整条 focus 完整 Window/单 Window 多组件/前后附加内容、提示行清单、设备失败七键映射、stdout 写失败与 `output=failed`、帮助 output/exit、日志白名单/降级故障注入、ADB `started→ok/failed`/中断与 fixture 零子进程断言。ready 夹具命令在日志正常时退出 0、只输出一个 JSON、stderr 为空且不写业务库；每次运行只追加被忽略的 `data/logs/m0-process.jsonl`。日志写入失败时 stdout/退出码不变，stderr 仅写固定 `m0_process_log_degraded`，表示日志不完整，不能声称完整日志已保存。fixture 模式零设备、零网络、零子进程；真实 `doctor --device --serial <serial>` 只在取得本轮设备确认后手动执行，离线验收不运行。
+`tests.test_doctor` 覆盖 doctor 正反例、重复 JSON 键、孤立代理字符、畸形 keyguard token、`mCurrentFocus` 字段边界/整条 focus 完整 Window/单 Window 多组件/前后附加内容、提示行清单、设备失败七键映射、stdout 写失败与 `output=failed`、帮助 output/exit、日志白名单/降级故障注入、ADB `started→ok/failed`/中断与 fixture 零子进程断言。ready 夹具命令在日志正常时退出 0、只输出一个 JSON、stderr 为空且不写业务库；每次运行只创建自己的 `data/logs/m0-process-<运行 UUID>.jsonl`，不向共享文件追加。日志写入失败时 stdout/退出码不变，stderr 仅写固定 `m0_process_log_degraded`，表示日志不完整，不能声称完整日志已保存。fixture 模式零设备、零网络、零子进程；真实 `doctor --device --serial <serial>` 只在取得本轮设备确认后手动执行，离线验收不运行。
 
-`tests.test_store` 覆盖同一候选竞争、不同 owner 全局设备互斥、仅 TTL 过期不释放、priority/created/key 领取顺序、start/renew/finish/recover、blocked 的任务清租约与设备原身份隔离、ReadResult.undetermined/Evidence.unknown 两条路径、旧 nonce/旧截止时间/重复操作、停止未知/异主机/未确认、clock_changed、事件与任务/设备更新未命中/事件写入失败的整体回滚；Windows 停止检查器只用 mock ctypes，不读取真实 PID。`tests.test_migrations` 覆盖 v1 STRICT 五表/索引、重复初始化不改业务行、建表中途及版本写入后回滚、未知版本/非空无版本/schema 篡改拒绝、外键与 check 约束、非 SQLite 文件，以及 `store init` 固定 JSON、默认路径、路径越界、损坏/篡改库和失败日志。`python -m app store init --db data/runtime/m1-acceptance.sqlite3` 连续两次退出 0、只输出固定成功 JSON，第二次只核验且不改业务行；数据库写在被忽略的 `data/runtime/`。
+`tests.test_process_log_concurrency` 用两个独立 spawn 进程与 Barrier，分别覆盖默认生产目录和显式测试基础路径：两运行必须写不同 UUID 文件，各自按 correlation_id 得到完整、有效、无混行的固定事件序列；显式基础路径不被写入，避免共享追加。`tests.test_store` 覆盖同一候选竞争、不同 owner 全局设备互斥、仅 TTL 过期不释放、priority/created/key 领取顺序、start/renew/finish/recover、blocked 的任务清租约与设备原身份隔离、ReadResult.undetermined/Evidence.unknown 两条路径、旧 nonce/旧截止时间/重复操作、停止未知/异主机/未确认、clock_changed、事件与任务/设备更新未命中/事件写入失败的整体回滚，以及非法类型/枚举、非 UUID owner、跨 app 租约键与 bool 类型；Windows 停止检查器只用 mock ctypes，不读取真实 PID。`tests.test_migrations` 覆盖 v1 STRICT 五表/索引、重复初始化不改业务行、建表中途及版本写入后回滚、未知版本/非空无版本/schema 篡改拒绝、外键与 check 约束、非 SQLite 文件，以及 `store init` 固定 JSON、默认路径、路径越界、损坏/篡改库和失败日志。`python -m app store init --db data/runtime/m1-acceptance.sqlite3` 连续两次退出 0、只输出固定成功 JSON，第二次只核验且不改业务行；数据库写在被忽略的 `data/runtime/`。
 
 npm ci 安装锁定依赖；npm test 运行 Node 内置正反例检查，无需安装 promptfoo；smoke 需先安装依赖，仅回放合成参考答案，不请求模型。model 必须指定真实 provider 并按其类型配置认证，可能产生调用费用；本次未选择或调用实际模型。M2+ 的业务 Python CLI、传感器测试或独立构建/lint 命令尚未实现，不执行旧 scripts/main.py/unittest 命令。
 
-本次已执行 `python -m unittest tests.test_doctor tests.test_store tests.test_migrations`（80 个测试，含子测试断言；退出 0）、`python -m app doctor --fixture tests/fixtures/doctor/ready.json`（退出 0，stderr 为空，未新增业务库，日志追加成功）、`python -m app store init --db data/runtime/m1-acceptance.sqlite3` 连续两次（均退出 0、固定 JSON、第二次不改业务行）、`npm test`（52 项通过）与 `git diff --check`；另完成根 `AGENTS.md` RULES 区逐字比对。它们验证 M0 判据、M1 合成库/租约/回滚与评测链路，不代表真实模型、真实设备、运行时调度或 M2 传感器验证。新增修改后须运行受影响检查，不能沿用该记录当作新版本验证。
+本次已执行 `python -m unittest tests.test_doctor tests.test_store tests.test_migrations tests.test_process_log_concurrency`（83 个测试，含子测试断言；退出 0）、`python -m app doctor --fixture tests/fixtures/doctor/ready.json`（退出 0，stderr 为空，未新增业务库，日志写入本次独立文件）、`python -m app store init --db data/runtime/m1-acceptance.sqlite3` 连续两次（均退出 0、固定 JSON、第二次不改业务行）、`npm test`（52 项通过）与 `git diff --check`；另完成根 `AGENTS.md` RULES 区逐字比对。并发日志用两个独立 spawn 进程分别验证默认生产目录与显式路径的隔离、完整 correlation 事件序列与互不覆盖；M1 严格输入与 Windows ctypes 签名/高 64 位句柄均由 mock 断言。它们验证 M0 判据、M1 合成库/租约/回滚与评测链路，不代表真实模型、真实设备、运行时调度或 M2 传感器验证。新增修改后须运行受影响检查，不能沿用该记录当作新版本验证。
 
 文档维护的一次性校验仍按初始化提示词：比较母本规则区两个标记与全文、8 小节顺序、Python/TypeScript 各 2 个示例，并检查自有目录的双指南、精确大小写、引用与直接子项索引；排除 Git、虚拟环境、node_modules 和 data/evals 等自动生成产物。此类校验不是业务测试。
 
