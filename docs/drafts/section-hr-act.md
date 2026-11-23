@@ -1,6 +1,6 @@
 # hr-act HR 动作原始操作
 
-> 依据只读参考仓库 `D:\0-development\works\android-job-application` 的静态阅读整理。行号以本次阅读时的文件为准；未运行任何 Python 代码、未连接设备、未读取参考仓库的 `config.json`、`data/`、`screenshots/`、数据库、日志与凭据。
+> 依据只读参考仓库 android-job-application 的 `scripts/` 静态阅读整理。行号以本次阅读时的文件为准；未运行任何 Python 代码、未连接设备、未读取参考仓库的 `config.json`、`data/`、`screenshots/`、数据库、日志与凭据。
 
 ## 0 概览
 
