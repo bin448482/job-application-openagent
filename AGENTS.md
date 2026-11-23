@@ -19,7 +19,7 @@
 - 不扩展真实自动发送授权，不继承旧工作地点、简历事实或联系方式授权。黄金集中的城市、薪资、记忆、授权与 HR 消息均为合成输入；can_send=true 只是拟执行测试决策，不触发真实发送、记忆写入或手机动作。
 - 数据库、日志、契约、截图、凭据和个人事实只在本机保存。不读取或记录密钥、令牌、密码等敏感值；不读取根 config.json 或私人事实来填充测试集。新增故障案例须先脱敏并确定独立判据，不直接把模型输出当正确答案。
 - 操作手机前说明具体动作、预计占用时长和是否独占，并取得本轮确认；未确认不得连接设备或运行 ADB。npm 自检和黄金集评测均不操作设备。
-- config.example.json 当前为 `{}`，业务 schema、字段和默认值仍待设计。config.json 是被忽略的本机文件，不作为示例或授权来源，不沿用旧批次大小、每日额度或 HR 间隔。
+- config.example.json 当前只含 `policy_pack`，指向被忽略的本机策略包；其余业务 schema、字段和默认值仍待设计。config.json 是被忽略的本机文件，不作为示例或授权来源，不沿用旧批次大小、每日额度或 HR 间隔。
 - promptfooconfig.json 的默认 provider 为 echo 占位，sharing=false、并发上限 1；通过 `npm run eval:smoke` 才回放参考 provider。`npm run eval:model -- "<provider-id>"` 必须指定 provider，拒绝 echo 和内置参考 provider；真实评测将合成输入发往所选服务，认证与计费按该 provider 配置。
 - evals/run.cjs 设置 PROMPTFOO_DISABLE_TELEMETRY=1、PROMPTFOO_DISABLE_UPDATE=1，配置 PROMPTFOO_CONFIG_DIR 为本项目 data/evals/promptfoo、PROMPTFOO_CACHE_PATH 为 data/evals/cache；通过 --no-share、--no-cache、--no-write 关闭分享、缓存和评测数据库保存。逐次 results.json 写入 data/evals/smoke-UUID 或 model-UUID。直接使用裸 promptfoo 命令不会自动继承本入口的环境设置。
 - 黄金集当前只评测给定记忆的单次决策，未验证 SQLite 持久化、跨会话检索或动作执行。自由文本只做关键词约束，不证明全部语义正确；smoke 的参考回放通过率不代表真实模型能力。
@@ -48,8 +48,8 @@
 - `package-lock.json`：npm 依赖完整锁文件，使用 npm ci 重现安装；依赖更新时同步维护。
 - `promptfooconfig.json`：根评测配置，引用 evals 提示词、案例和断言；echo 为占位，不当作真实模型，默认关闭分享、并发 1。
 - `evals/`：24 个合成黄金案例、单次决策提示词、断言、正反例自检、参考 provider 及 smoke/model 运行入口。
-- `docs/`：公开文档目录。终稿 `BOSS直聘_手机客户端原始操作_原子化分析.md` 合并旧项目 `scripts/` 的静态阅读结果，按 CORE/JOBS/HRR/HRA 前缀的原子 ID 组织，含 0–9 小节与源码索引；技术结论带 `file:line` 证据，不构成设备执行授权。同目录另有 `BOSS直聘_实机验证偏差与修订建议_20261123.md`（单机型单版本，记录 7 条偏差与 5 条待确认）、`BOSS直聘_求职自动化_简化架构设计说明_20261123.md`（失败证据、简化架构、接口与验收指标）、`BOSS直聘_求职自动化_实施计划_20261123.md`（M0–M8 里程碑、六张图、测试与回滚）、`求职自动化_多应用扩展与分层_设计说明_20261123.md`（分层、端口、多应用共存与接入猎聘步骤）、本目录 `AGENTS.md` 与只含 `@AGENTS.md` 的 `CLAUDE.md`。
-- `config.example.json`：空对象业务配置示例，正式 schema 待设计。
+- `docs/`：公开文档目录。终稿 `BOSS直聘_手机客户端原始操作_原子化分析.md` 合并旧项目 `scripts/` 的静态阅读结果，按 CORE/JOBS/HRR/HRA 前缀的原子 ID 组织，含 0–9 小节与源码索引；技术结论带 `file:line` 证据，不构成设备执行授权。同目录另有 `BOSS直聘_实机验证偏差与修订建议_20261123.md`（单机型单版本，记录 7 条偏差与 5 条待确认）、`BOSS直聘_求职自动化_简化架构设计说明_20261123.md`（失败证据、简化架构、接口与验收指标）、`BOSS直聘_求职自动化_实施计划_20261123.md`（M0–M8 里程碑、六张图、测试与回滚）、`求职自动化_多应用扩展与分层_设计说明_20261123.md`（分层、端口、多应用共存与接入猎聘步骤）、`求职自动化_公开仓库与策略包_设计说明_20261123.md`（公开/私有资产边界、策略包与黄金集分层）、本目录 `AGENTS.md` 与只含 `@AGENTS.md` 的 `CLAUDE.md`。
+- `config.example.json`：示例配置，当前只含 `policy_pack`（指向被忽略的本机策略包）；其余 schema 待设计。
 - `config.json`：当前存在、被忽略的本机配置，保留且不读取内容；不是评测配置。
 - `.gitignore`：依赖、缓存、运行产物、个人事实及凭据忽略约定，包含 data/screenshots 指导文档例外。
 - `.agents/`：Codex 工作流入口占位，当前只有双指导文档，Skills 待设计。

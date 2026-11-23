@@ -27,6 +27,11 @@ opencode.json
 .env.*
 !.env.example
 /docs/AI回复事实清单.md
+# Local strategy packs and private holdout cases
+/prompts/local/
+/evals/private/
+*.local.toml
+*.local.json
 node_modules/
 # Local promptfoo state and exported evaluation evidence
 .promptfoo/
