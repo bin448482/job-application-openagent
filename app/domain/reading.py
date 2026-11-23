@@ -310,20 +310,22 @@ def validate_field_evidence(evidence: object) -> None:
     """校验字段名、来源组合、状态与原因词表。"""
     if not isinstance(evidence, FieldEvidence):
         raise ValueError("field evidence is invalid")
-    if evidence.field not in FIELD_NAMES:
+    if not _is_enum(evidence.field, FIELD_NAMES):
         raise ValueError("field name is invalid")
-    if evidence.source not in FIELD_SOURCES:
+    if not _is_enum(evidence.source, FIELD_SOURCES):
         raise ValueError("field source is invalid")
     if evidence.field != "unread_badges" and evidence.source == "pixel":
         raise ValueError("pixel field source is invalid")
-    if evidence.confidence not in {"low", "medium", "high"}:
+    if not _is_enum(evidence.confidence, {"low", "medium", "high"}):
         raise ValueError("field confidence is invalid")
-    if evidence.state not in FIELD_STATES:
+    if not _is_enum(evidence.state, FIELD_STATES):
         raise ValueError("field state is invalid")
     if evidence.state == "ok":
         if evidence.reason_code is not None:
             raise ValueError("ok field reason is invalid")
         return
+    if not isinstance(evidence.reason_code, str):
+        raise ValueError("field reason is invalid")
     if evidence.state == "unknown":
         if evidence.reason_code not in FIELD_UNKNOWN_REASONS:
             raise ValueError("unknown field reason is invalid")
@@ -338,7 +340,7 @@ def validate_page_snapshot(snapshot: object) -> None:
         raise ValueError("page snapshot is invalid")
     if snapshot.app != APP or not is_nonempty_text(snapshot.profile_id):
         raise ValueError("page snapshot identity is invalid")
-    if snapshot.page not in PAGE_KINDS:
+    if not _is_enum(snapshot.page, PAGE_KINDS):
         raise ValueError("page kind is invalid")
     signals = _validate_signal_names(snapshot.signals)
     expected = tuple(name for name in PAGE_SIGNALS if name in set(signals))
@@ -475,11 +477,11 @@ def validate_unread_row(row: object) -> None:
             raise ValueError("unread row conversation key is invalid")
         if row.conversation_key != conversation_key_from_identity(APP, row.identity_hash):
             raise ValueError("unread row conversation key is stale")
-    if row.state not in UNREAD_ROW_STATES:
+    if not _is_enum(row.state, UNREAD_ROW_STATES):
         raise ValueError("unread row state is invalid")
-    if row.source not in UNREAD_ROW_SOURCES:
+    if not _is_enum(row.source, UNREAD_ROW_SOURCES):
         raise ValueError("unread row source is invalid")
-    if row.confidence not in {"low", "medium", "high"}:
+    if not _is_enum(row.confidence, {"low", "medium", "high"}):
         raise ValueError("unread row confidence is invalid")
     if row.count is not None and (not _is_nonnegative_int(row.count)):
         raise ValueError("unread row count is invalid")
@@ -493,7 +495,11 @@ def validate_unread_row(row: object) -> None:
         if row.count != 0 or row.reason_code is not None or row.source == "none":
             raise ValueError("absent unread row is invalid")
         return
-    if row.count is not None or row.reason_code not in FIELD_UNKNOWN_REASONS:
+    if (
+        row.count is not None
+        or not isinstance(row.reason_code, str)
+        or row.reason_code not in FIELD_UNKNOWN_REASONS
+    ):
         raise ValueError("unknown unread row is invalid")
 
 
@@ -503,7 +509,7 @@ def validate_unread_read(value: object) -> None:
         raise ValueError("unread read is invalid")
     if value.app != APP or not is_nonempty_text(value.profile_id):
         raise ValueError("unread read identity is invalid")
-    if value.coverage not in {"viewport", "all"}:
+    if not _is_enum(value.coverage, {"viewport", "all"}):
         raise ValueError("unread coverage is invalid")
     if not isinstance(value.rows, (tuple, list)) or not value.rows:
         raise ValueError("unread rows are empty")
@@ -545,7 +551,9 @@ def validate_chat_message(message: object) -> None:
     """校验聊天消息的类型、方向、内容指纹与稳定身份组合。"""
     if not isinstance(message, ChatMessage):
         raise ValueError("chat message is invalid")
-    if message.kind not in CHAT_KINDS or message.direction not in DIRECTIONS:
+    if not _is_enum(message.kind, CHAT_KINDS) or not _is_enum(
+        message.direction, DIRECTIONS
+    ):
         raise ValueError("chat message enum is invalid")
     if message.text is not None and not isinstance(message.text, str):
         raise ValueError("chat message text is invalid")
@@ -574,6 +582,8 @@ def validate_chat_message(message: object) -> None:
     if not isinstance(message.direction_evidence, (tuple, list)):
         raise ValueError("chat direction evidence is invalid")
     names = tuple(message.direction_evidence)
+    if any(not isinstance(name, str) for name in names):
+        raise ValueError("chat direction evidence name is invalid")
     if any(name not in DIRECTION_EVIDENCE_NAMES for name in names):
         raise ValueError("chat direction evidence name is invalid")
     if len(set(names)) != len(names):
@@ -603,7 +613,7 @@ def validate_conversation(value: object) -> None:
         raise ValueError("conversation key is stale")
     if not is_nonempty_text(value.contact) or value.contact_verified is not True:
         raise ValueError("conversation contact is unverified")
-    if value.role not in ROLES:
+    if not _is_enum(value.role, ROLES):
         raise ValueError("conversation role is invalid")
     if type(value.message_identity_verified) is not bool:
         raise ValueError("conversation identity flag is invalid")
@@ -719,6 +729,8 @@ def _validate_signal_names(values: object) -> tuple[str, ...]:
     if not isinstance(values, (tuple, list)):
         raise ValueError("page signals are invalid")
     names = tuple(values)
+    if any(not isinstance(name, str) for name in names):
+        raise ValueError("page signal is invalid")
     if any(name not in PAGE_SIGNALS for name in names):
         raise ValueError("page signal is invalid")
     if len(set(names)) != len(names):
@@ -754,11 +766,18 @@ def _validate_missing_fields(values: object) -> tuple[str, ...]:
         raise ValueError("missing fields are invalid")
     names = tuple(values)
     allowed = ("recruiter", "location")
+    if any(not isinstance(name, str) for name in names):
+        raise ValueError("missing field name is invalid")
     if any(name not in allowed for name in names) or len(set(names)) != len(names):
         raise ValueError("missing field name is invalid")
     if names != tuple(name for name in allowed if name in set(names)):
         raise ValueError("missing fields are not canonical")
     return names
+
+
+def _is_enum(value: object, allowed: object) -> bool:
+    """判断字符串枚举成员，避免列表等不可哈希类型泄漏 TypeError。"""
+    return isinstance(value, str) and value in allowed
 
 
 def _reason(reasons: list[str]) -> str:

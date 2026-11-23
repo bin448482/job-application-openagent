@@ -868,6 +868,73 @@ class LadderTests(unittest.TestCase):
                 ladder_reading(state="present", source="pixel", count=1)
             )
 
+    def test_source_must_match_call_slot(self) -> None:
+        """伪装来源或把同源当独立证据必须拒绝，不能绕过视觉默认关闭。"""
+        vision_as_hierarchy = ladder_reading(state="present", source="vision")
+        with self.assertRaises(ValueError):
+            resolve_field(hierarchy=vision_as_hierarchy)
+        pixel_as_hierarchy = ladder_reading(state="present", source="pixel")
+        pixel_as_pixel = ladder_reading(state="present", source="pixel")
+        with self.assertRaises(ValueError):
+            resolve_field(hierarchy=pixel_as_hierarchy, pixel=pixel_as_pixel)
+        hierarchy_as_pixel = ladder_reading(state="present", count=1)
+        with self.assertRaises(ValueError):
+            resolve_field(hierarchy=hierarchy_as_pixel, pixel=hierarchy_as_pixel)
+
+    def test_failed_survives_later_context_conflict(self) -> None:
+        """后级不同上下文的成功/冲突不能改写前级明确 failed。"""
+        failed = ladder_reading(state="failed", reason="invalid_xml")
+        unrelated = ladder_reading(
+            state="present",
+            source="pixel",
+            layout=canonical_hash({"different": True}),
+        )
+        resolution = resolve_field(hierarchy=failed, pixel=unrelated)
+        self.assertEqual(resolution.state, "failed")
+        self.assertEqual(resolution.reason_code, "invalid_xml")
+        validate_field_resolution(resolution)
+        self.assertEqual(
+            {reading.layout_context for reading in resolution.evidence},
+            {failed.layout_context},
+        )
+
+    def test_mixed_context_undetermined_is_self_validating(self) -> None:
+        """跨上下文未决/人工出口只携带同上下文证据，自身可通过验证器。"""
+        hierarchy = ladder_reading(state="present", count=1)
+        pixel = ladder_reading(
+            state="present",
+            source="pixel",
+            layout=canonical_hash({"different": True}),
+        )
+        resolution = resolve_field(hierarchy=hierarchy, pixel=pixel)
+        self.assertEqual(resolution.state, "undetermined")
+        self.assertTrue(resolution.requires_human)
+        validate_field_resolution(resolution)
+        self.assertEqual(
+            {reading.layout_context for reading in resolution.evidence},
+            {hierarchy.layout_context},
+        )
+
+    def test_bad_types_raise_value_error_not_type_error(self) -> None:
+        """列表来源、坏置信度/状态/原因/flag 与 bool 计数统一 ValueError。"""
+        base = ladder_reading(state="present", count=1)
+        bad_sources = replace(base, source=[])
+        bad_confidence = replace(base, confidence=[])
+        bad_state = replace(base, state=[])
+        bad_reason = replace(
+            ladder_reading(state="unknown", reason="missing_signal"),
+            reason_code=[],
+        )
+        bad_count = replace(base, count=True)
+        for reading in (bad_sources, bad_confidence, bad_state, bad_reason, bad_count):
+            with self.subTest(reading=reading):
+                with self.assertRaises(ValueError):
+                    resolve_field(hierarchy=reading)
+        with self.assertRaises(ValueError):
+            resolve_field(hierarchy=base, vision_enabled=1)
+        with self.assertRaises(ValueError):
+            resolve_field(hierarchy=base, independent_cross_evidence=1)
+
 
 class ConversationReadTests(unittest.TestCase):
     """覆盖跨屏合并、稳定身份、方向、读全与入站门禁。"""

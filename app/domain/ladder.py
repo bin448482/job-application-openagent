@@ -15,6 +15,12 @@ FIELD_READING_STATES = frozenset({"present", "absent", "unknown", "failed"})
 FIELD_RESOLUTION_STATES = frozenset({"present", "absent", "undetermined", "failed"})
 LADDER_FIELD = "unread_badges"
 LADDER_SOURCES = frozenset({"hierarchy", "pixel", "vision", "human"})
+_SLOT_SOURCE = {
+    "hierarchy": "hierarchy",
+    "pixel": "pixel",
+    "vision": "vision",
+    "human": "human",
+}
 
 
 @dataclass(frozen=True)
@@ -68,11 +74,15 @@ def validate_field_reading(reading: object) -> None:
         reading.observed_at,
         reading.layout_context,
     )
-    if reading.source not in LADDER_SOURCES:
+    if not isinstance(reading.source, str) or reading.source not in LADDER_SOURCES:
         raise ValueError("field reading source is invalid")
-    if reading.confidence not in {"low", "medium", "high"}:
+    if not isinstance(reading.confidence, str) or reading.confidence not in {
+        "low",
+        "medium",
+        "high",
+    }:
         raise ValueError("field reading confidence is invalid")
-    if reading.state not in FIELD_READING_STATES:
+    if not isinstance(reading.state, str) or reading.state not in FIELD_READING_STATES:
         raise ValueError("field reading state is invalid")
     _validate_count_reason(reading.state, reading.count, reading.reason_code, reading.source)
     if reading.source == "pixel" and reading.state == "present" and reading.count is not None:
@@ -92,7 +102,7 @@ def validate_field_resolution(resolution: object) -> None:
         resolution.observed_at,
         resolution.layout_context,
     )
-    if resolution.state not in FIELD_RESOLUTION_STATES:
+    if not isinstance(resolution.state, str) or resolution.state not in FIELD_RESOLUTION_STATES:
         raise ValueError("field resolution state is invalid")
     if type(resolution.requires_human) is not bool:
         raise ValueError("field resolution human flag is invalid")
@@ -116,13 +126,22 @@ def validate_field_resolution(resolution: object) -> None:
             or resolution.source is not None
             or resolution.confidence is not None
             or resolution.count is not None
+            or not isinstance(resolution.reason_code, str)
             or resolution.reason_code not in FIELD_UNKNOWN_REASONS
         ):
             raise ValueError("undetermined field resolution is invalid")
         return
-    if resolution.requires_human is not False or resolution.source is None:
+    if (
+        resolution.requires_human is not False
+        or not isinstance(resolution.source, str)
+        or resolution.source not in LADDER_SOURCES
+    ):
         raise ValueError("resolved field resolution is invalid")
-    if resolution.confidence not in {"low", "medium", "high"}:
+    if not isinstance(resolution.confidence, str) or resolution.confidence not in {
+        "low",
+        "medium",
+        "high",
+    }:
         raise ValueError("field resolution confidence is invalid")
     _validate_count_reason(
         resolution.state,
@@ -148,67 +167,59 @@ def resolve_field(
     independent_cross_evidence: bool = False,
 ) -> FieldResolution:
     """按层级→像素→视觉→人工顺序合并字段，保留失败并拒绝冲突覆盖。"""
-    readings = [
-        reading
-        for reading in (hierarchy, pixel, vision, human)
-        if reading is not None
-    ]
+    if type(vision_enabled) is not bool:
+        raise ValueError("vision flag is invalid")
+    if type(independent_cross_evidence) is not bool:
+        raise ValueError("cross evidence flag is invalid")
+    slots = (
+        ("hierarchy", hierarchy),
+        ("pixel", pixel),
+        ("vision", vision),
+        ("human", human),
+    )
+    readings = [reading for _, reading in slots if reading is not None]
     if not readings:
         raise ValueError("field readings are empty")
     for reading in readings:
         validate_field_reading(reading)
+    for name, reading in slots:
+        if reading is not None and reading.source != _SLOT_SOURCE[name]:
+            raise ValueError("field reading source does not match slot")
     first = readings[0]
     if any(reading.field != first.field for reading in readings):
         raise ValueError("field readings use different fields")
-    if any(
-        (
-            reading.app,
-            reading.profile_id,
-            reading.profile_version,
-            reading.snapshot_id,
-            reading.observed_at,
-            reading.layout_context,
-        )
-        != (
-            first.app,
-            first.profile_id,
-            first.profile_version,
-            first.snapshot_id,
-            first.observed_at,
-            first.layout_context,
-        )
-        for reading in readings
-    ):
-        return _resolution(
-            first,
-            "undetermined",
-            None,
-            "ambiguous_signal",
-            None,
-            None,
-            True,
-            tuple(readings),
-        )
 
-    ordered = tuple(
-        reading
-        for reading in (hierarchy, pixel, vision, human)
-        if reading is not None
+    primary = hierarchy if hierarchy is not None else first
+    ordered = tuple(reading for _, reading in slots if reading is not None)
+    evidence = tuple(
+        reading for reading in ordered if _same_context(reading, primary)
     )
+    contexts_mixed = len(evidence) != len(ordered)
+
     if hierarchy is not None and hierarchy.state == "failed":
         return _resolution(
-            first,
+            primary,
             "failed",
             None,
             hierarchy.reason_code,
             hierarchy.source,
             "low",
             False,
-            ordered,
+            evidence,
+        )
+    if contexts_mixed:
+        return _resolution(
+            primary,
+            "undetermined",
+            None,
+            "ambiguous_signal",
+            None,
+            None,
+            True,
+            evidence,
         )
 
-    primary = hierarchy
-    if primary is not None and primary.state in {"present", "absent"}:
+    if primary.state in {"present", "absent"}:
         conflict = any(
             reading.state in {"present", "absent"} and reading.state != primary.state
             for reading in (pixel, vision)
@@ -217,59 +228,59 @@ def resolve_field(
         )
         if conflict:
             return _resolution(
-                first,
+                primary,
                 "undetermined",
                 None,
                 "ambiguous_signal",
                 None,
                 None,
                 True,
-                ordered,
+                evidence,
             )
         return _resolution(
-            first,
+            primary,
             primary.state,
             primary.count,
             None,
             "hierarchy",
             "high",
             False,
-            ordered,
+            evidence,
         )
 
     if pixel is not None and pixel.state == "failed":
         return _resolution(
-            first,
+            primary,
             "failed",
             None,
             pixel.reason_code,
             pixel.source,
             "low",
             False,
-            ordered,
+            evidence,
         )
 
     if human is not None:
         if human.state in {"present", "absent"}:
             return _resolution(
-                first,
+                primary,
                 human.state,
                 human.count,
                 None,
                 "human",
                 "high",
                 False,
-                ordered,
+                evidence,
             )
         return _resolution(
-            first,
+            primary,
             "undetermined",
             None,
             human.reason_code or "ambiguous_signal",
             None,
             None,
             True,
-            ordered,
+            evidence,
         )
 
     if pixel is not None and pixel.state in {"present", "absent"}:
@@ -282,37 +293,37 @@ def resolve_field(
         )
         if conflict:
             return _resolution(
-                first,
+                primary,
                 "undetermined",
                 None,
                 "ambiguous_signal",
                 None,
                 None,
                 True,
-                ordered,
+                evidence,
             )
         return _resolution(
-            first,
+            primary,
             pixel.state,
             pixel.count,
             None,
             "pixel",
             "medium",
             False,
-            ordered,
+            evidence,
         )
 
     if vision is not None and vision.state in {"present", "absent"}:
         # 视觉不是可独立放行的证据；启用但无独立交叉证据时仍转人工。
         return _resolution(
-            first,
+            primary,
             "undetermined",
             None,
             "ambiguous_signal",
             None,
             None,
             True,
-            ordered,
+            evidence,
         )
 
     reasons = [
@@ -321,14 +332,26 @@ def resolve_field(
         if reading.state == "unknown" and reading.reason_code is not None
     ]
     return _resolution(
-        first,
+        primary,
         "undetermined",
         None,
         _reason(reasons),
         None,
         None,
         True,
-        ordered,
+        evidence,
+    )
+
+
+def _same_context(left: FieldReading, right: FieldReading) -> bool:
+    """判断两级结论是否绑定同一 app/profile/snapshot/时间/版式上下文。"""
+    return (
+        left.app == right.app
+        and left.profile_id == right.profile_id
+        and left.profile_version == right.profile_version
+        and left.snapshot_id == right.snapshot_id
+        and left.observed_at == right.observed_at
+        and left.layout_context == right.layout_context
     )
 
 
@@ -371,11 +394,11 @@ def _validate_context(
     layout_context: str,
 ) -> None:
     """校验字段名与 app/profile/snapshot/时间/版式绑定上下文。"""
-    if field != LADDER_FIELD:
+    if not isinstance(field, str) or field != LADDER_FIELD:
         raise ValueError("ladder field is invalid")
-    if app != APP or not is_nonempty_text(profile_id) or not is_nonempty_text(
-        profile_version
-    ):
+    if not isinstance(app, str) or app != APP:
+        raise ValueError("ladder profile is invalid")
+    if not is_nonempty_text(profile_id) or not is_nonempty_text(profile_version):
         raise ValueError("ladder profile is invalid")
     if not is_uuid(snapshot_id) or not is_hash(layout_context):
         raise ValueError("ladder snapshot is invalid")
@@ -386,8 +409,14 @@ def _validate_count_reason(
     state: str, count: int | None, reason_code: str | None, source: str
 ) -> None:
     """校验状态、计数、来源与原因的联动，禁止各自合法但互相矛盾。"""
+    if not isinstance(source, str) or source not in LADDER_SOURCES:
+        raise ValueError("field source is invalid")
+    if not isinstance(state, str) or state not in FIELD_READING_STATES:
+        raise ValueError("field state is invalid")
     if count is not None and (type(count) is not int or count < 0):
         raise ValueError("field count is invalid")
+    if reason_code is not None and not isinstance(reason_code, str):
+        raise ValueError("field reason is invalid")
     if state == "present":
         if reason_code is not None or count is not None and count <= 0:
             raise ValueError("present field is invalid")

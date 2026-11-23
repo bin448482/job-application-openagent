@@ -155,5 +155,3 @@ def read_from_device(
     gate.require_available()
     capture = screen.dump_hierarchy(serial)
     return parse_hierarchy(capture.xml_text)
-
-
