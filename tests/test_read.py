@@ -915,6 +915,71 @@ class UnreadReadTests(unittest.TestCase):
         self.assertEqual(result.status, "failed")
         self.assertEqual(result.reason_code, "invalid_fixture")
 
+    def test_invalid_calibration_is_rejected_before_pixel_trace(self) -> None:
+        """窄收尾：不支持 source 在像素开始前拒绝，零 pixel 事件。"""
+        bad = calibration()
+        bad["source"] = "unsupported-synthetic"
+        with tempfile.TemporaryDirectory() as temp:
+            log = ProcessLog(path=Path(temp) / "process.jsonl")
+            result = parse_unread(
+                unread_xml(None),
+                base_profile(),
+                bad,
+                make_raw(100, 100, []),
+                BASE_TIME,
+                SNAPSHOT_ID,
+                {"kind": "viewport", "top_proven": False, "bottom_proven": False},
+                BASE_TIME,
+                process_log=log,
+            )
+            self.assertEqual(result.status, "failed")
+            self.assertEqual(result.reason_code, "invalid_fixture")
+            events = self._read_log(log)
+        self.assertFalse(
+            any(
+                event["stage"] == "read" and event["operation"] == "pixel"
+                for event in events
+            )
+        )
+        self.assertFalse(log.degraded)
+
+    def test_corrupt_pixel_logs_started_to_failed(self) -> None:
+        """窄收尾：实际像素失败保留 started→failed 与固定原因/耗时。"""
+        with tempfile.TemporaryDirectory() as temp:
+            log = ProcessLog(path=Path(temp) / "process.jsonl")
+            result = parse_unread(
+                unread_xml(None),
+                base_profile(),
+                calibration(),
+                b"bad",
+                BASE_TIME,
+                SNAPSHOT_ID,
+                {"kind": "viewport", "top_proven": False, "bottom_proven": False},
+                BASE_TIME,
+                process_log=log,
+            )
+            events = self._read_log(log)
+        self.assertEqual(result.status, "failed")
+        pixel_events = [
+            event
+            for event in events
+            if event["stage"] == "read" and event["operation"] == "pixel"
+        ]
+        self.assertEqual([event["result"] for event in pixel_events], ["started", "failed"])
+        self.assertEqual(pixel_events[-1]["reason_code"], "invalid_fixture")
+        self.assertGreaterEqual(pixel_events[-1]["duration_ms"], 0)
+        self.assertEqual(len({event["correlation_id"] for event in events}), 1)
+
+    @staticmethod
+    def _read_log(log: ProcessLog) -> list[dict]:
+        """读取本次日志器实际创建的唯一文件事件；无可读事件返回空。"""
+        if not log.path.exists():
+            return []
+        return [
+            json.loads(line)
+            for line in log.path.read_text(encoding="utf-8").splitlines()
+        ]
+
     def test_hierarchy_pixel_conflict_becomes_unknown(self) -> None:
         """层级 present 与像素 absent 冲突时转 undetermined/人工，不覆盖前级。"""
         result = parse_unread(

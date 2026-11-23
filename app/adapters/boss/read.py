@@ -688,6 +688,8 @@ def parse_unread(
         parse_utc(observed_at)
         now_dt = parse_utc(now)
         delta = (now_dt - parse_utc(observed_at)).total_seconds()
+        if calibration is not None:
+            validate_calibration(calibration)
     except ValueError:
         return _failed("invalid_fixture", safe_snapshot, safe_time_value)
     if not _profile_is_readable(profile, app_version):
