@@ -490,6 +490,8 @@ def validate_unread_row(row: object) -> None:
             raise ValueError("present unread row is invalid")
         if row.count is not None and row.count <= 0:
             raise ValueError("present unread row count is invalid")
+        if row.source == "pixel" and row.count is not None:
+            raise ValueError("pixel present count must be unknown")
         return
     if row.state == "absent":
         if row.count != 0 or row.reason_code is not None or row.source == "none":
@@ -708,9 +710,16 @@ def conversation_inbound_state(
 
 
 def new_message_keys(previous: Conversation, current: Conversation) -> tuple[str, ...]:
-    """比较两个独立会话快照，只返回当前新出现的稳定消息键。"""
+    """比较同一会话的两个独立快照，只返回当前新出现的稳定消息键。"""
     validate_conversation(previous)
     validate_conversation(current)
+    if (
+        previous.app != current.app
+        or previous.profile_id != current.profile_id
+        or previous.conversation_key != current.conversation_key
+        or previous.identity_hash != current.identity_hash
+    ):
+        raise ValueError("conversation identity mismatch")
     old = {
         message.message_key
         for message in previous.messages

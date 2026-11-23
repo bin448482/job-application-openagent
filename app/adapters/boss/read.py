@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from xml.etree import ElementTree
@@ -12,18 +12,21 @@ from app.adapters.boss.support import (
     EPOCH,
     FixtureEncodingError,
     XmlShapeError,
+    collect_region_badge_values,
     parse_bounds,
     parse_xml_root,
     read_json_file,
     read_xml_text,
-    rect_inside,
     require_text,
     require_time,
     resolve_fixture_reference,
     rid_matches,
+    row_nodes as _row_nodes,
     safe_time,
+    validate_coverage_proof as _validate_coverage_proof,
     validate_ratio_region,
 )
+from app.process_log import ProcessLog, elapsed_ms
 from app.domain.ladder import (
     FieldReading,
     resolve_field,
@@ -114,15 +117,12 @@ MANIFEST_KEYS = frozenset(
 )
 CONTEXT_KEYS = frozenset({"contact", "company", "position", "source_snapshot_id"})
 PIXEL_KEYS = frozenset({"calibration_path", "raw_path"})
-COVERAGE_KEYS = frozenset({"kind", "top_proven", "bottom_proven"})
-COVERAGE_KINDS = frozenset({"viewport", "full_traversal", "calibrated_global_zero"})
 READ_KINDS = frozenset(
     {"page", "job_list", "job_detail", "unread", "conversation"}
 )
 SNAPSHOT_SECONDS = 5
 _FIXTURE_SOURCE = "fixture"
 _HR_ROLE_TERMS = ("招聘者", "猎头", "人事", "recruiter", "hr")
-_ASCII_INT_RE = __import__("re").compile(r"^[0-9]+$")
 _DIRECTION_NAMES = ("avatar", "bubble", "sent_status")
 
 
@@ -213,8 +213,20 @@ def load_read_fixture(manifest_path: Path) -> ReadFixture:
     )
 
 
+def _profile_is_readable(profile: dict, app_version: str | None) -> bool:
+    """判断已校验 profile 是否已标定且与采集应用版本一致。"""
+    if profile["calibrated"] is not True:
+        return False
+    if app_version is None:
+        return True
+    return is_nonempty_text(app_version) and app_version == profile["version"]
+
+
 def load_and_read_fixture(
-    fixture_path: Path, snapshot_id: str, now: str | None = None
+    fixture_path: Path,
+    snapshot_id: str,
+    now: str | None = None,
+    process_log: ProcessLog | None = None,
 ) -> ReadResult:
     """加载 M3 合成夹具并分派到生产解析/阶梯/跨屏合并函数。"""
     if not is_uuid(snapshot_id):
@@ -225,28 +237,54 @@ def load_and_read_fixture(
         return _failed("invalid_xml", snapshot_id, EPOCH)
     except (OSError, UnicodeError, ValueError):
         return _failed("invalid_fixture", None, EPOCH)
+    operation = fixture.kind
+    operation_started = time.perf_counter()
+    _record_read(process_log, operation, "started", operation_started)
     profile = fixture.profile
-    if (
-        profile["calibrated"] is not True
-        or fixture.app_version != profile["version"]
-    ):
-        return _undetermined("uncalibrated_profile", snapshot_id, fixture.observed_at)
+    if not _profile_is_readable(profile, fixture.app_version):
+        result = _undetermined(
+            "uncalibrated_profile", snapshot_id, fixture.observed_at
+        )
+        _record_read(
+            process_log,
+            operation,
+            result.status,
+            operation_started,
+            result.reason_code,
+            "read",
+        )
+        return result
     try:
         if fixture.kind == "page":
-            return parse_page(
-                fixture.xml_texts[0], profile, fixture.observed_at, snapshot_id
+            result = parse_page(
+                fixture.xml_texts[0],
+                profile,
+                fixture.observed_at,
+                snapshot_id,
+                app_version=fixture.app_version,
             )
-        if fixture.kind == "job_list":
-            return parse_job_list(
-                fixture.xml_texts[0], profile, fixture.observed_at, snapshot_id
+        elif fixture.kind == "job_list":
+            result = parse_job_list(
+                fixture.xml_texts[0],
+                profile,
+                fixture.observed_at,
+                snapshot_id,
+                app_version=fixture.app_version,
             )
-        if fixture.kind == "job_detail":
-            return parse_job_detail(
-                fixture.xml_texts[0], profile, fixture.observed_at, snapshot_id
+        elif fixture.kind == "job_detail":
+            result = parse_job_detail(
+                fixture.xml_texts[0],
+                profile,
+                fixture.observed_at,
+                snapshot_id,
+                app_version=fixture.app_version,
             )
-        if fixture.kind == "unread":
+        elif fixture.kind == "unread":
             effective_now = fixture.observed_at if now is None else now
-            return parse_unread(
+            pixel_started = time.perf_counter()
+            if fixture.calibration is not None:
+                _record_read(process_log, "pixel", "started", pixel_started)
+            result = parse_unread(
                 fixture.xml_texts[0],
                 profile,
                 fixture.calibration,
@@ -255,23 +293,113 @@ def load_and_read_fixture(
                 snapshot_id,
                 fixture.coverage_proof,
                 effective_now,
+                app_version=fixture.app_version,
             )
-        pages = [
-            parse_conversation_page(
-                xml_text,
+            if fixture.calibration is not None:
+                pixel_result, pixel_reason = _pixel_trace(result)
+                _record_read(
+                    process_log,
+                    "pixel",
+                    pixel_result,
+                    pixel_started,
+                    pixel_reason,
+                    "pixel" if pixel_result == "failed" else None,
+                )
+        else:
+            pages = [
+                parse_conversation_page(
+                    xml_text,
+                    profile,
+                    fixture.conversation_context,
+                    fixture.observed_at,
+                    snapshot_id,
+                    app_version=fixture.app_version,
+                )
+                for xml_text in fixture.xml_texts
+            ]
+            effective_now = fixture.observed_at if now is None else now
+            merge_started = time.perf_counter()
+            _record_read(process_log, "merge", "started", merge_started)
+            result = merge_conversations(
+                pages,
                 profile,
-                fixture.conversation_context,
-                fixture.observed_at,
-                snapshot_id,
+                fixture.coverage_proof,
+                effective_now,
+                app_version=fixture.app_version,
             )
-            for xml_text in fixture.xml_texts
-        ]
-        effective_now = fixture.observed_at if now is None else now
-        return merge_conversations(
-            pages, profile, fixture.coverage_proof, effective_now
+            _record_read(
+                process_log,
+                "merge",
+                result.status,
+                merge_started,
+                result.reason_code,
+                "read" if result.status == "failed" else None,
+            )
+    except Exception:
+        result = _failed("invalid_fixture", snapshot_id, fixture.observed_at)
+        _record_read(
+            process_log,
+            operation,
+            "failed",
+            operation_started,
+            "invalid_fixture",
+            "internal",
+        )
+        return result
+    _record_read(
+        process_log,
+        operation,
+        result.status,
+        operation_started,
+        result.reason_code,
+        "read" if result.status == "failed" else None,
+    )
+    return result
+
+
+def _pixel_trace(result: ReadResult) -> tuple[str, str | None]:
+    """把未读像素字段的冲突/未知映射为可追溯结果与固定原因。"""
+    if result.status != "ok":
+        return result.status, result.reason_code
+    if not isinstance(result.value, UnreadRead):
+        return result.status, result.reason_code
+    reasons = [
+        row.reason_code
+        for row in result.value.rows
+        if row.state == "unknown" and row.reason_code is not None
+    ]
+    if reasons:
+        reason = next(
+            (name for name in FIELD_REASON_PRIORITY if name in reasons),
+            "ambiguous_signal",
+        )
+        return "undetermined", reason
+    return "ok", None
+
+
+def _record_read(
+    process_log: ProcessLog | None,
+    operation: str,
+    result: str,
+    started: float,
+    reason_code: str | None = None,
+    error_category: str | None = None,
+) -> None:
+    """写固定读取阶段事件；日志失败不影响解析或泄露正文。"""
+    if process_log is None:
+        return
+    try:
+        process_log.record(
+            stage="read",
+            operation=operation,
+            result=result,
+            reason_code=reason_code,
+            error_category=error_category,
+            duration_ms=elapsed_ms(started),
         )
     except Exception:
-        return _failed("invalid_fixture", snapshot_id, fixture.observed_at)
+        return
+
 
 
 def validate_read_profile(profile: object) -> None:
@@ -331,7 +459,12 @@ def validate_read_profile(profile: object) -> None:
 
 
 def parse_page(
-    xml_text: str, profile: dict, observed_at: str, snapshot_id: str
+    xml_text: str,
+    profile: dict,
+    observed_at: str,
+    snapshot_id: str,
+    *,
+    app_version: str | None = None,
 ) -> ReadResult:
     """按 CORE-W14 优先级分类页面并输出唯一字段证据。"""
     safe_time_value = safe_time(observed_at)
@@ -343,6 +476,8 @@ def parse_page(
         parse_utc(observed_at)
     except ValueError:
         return _failed("invalid_fixture", safe_snapshot, safe_time_value)
+    if not _profile_is_readable(profile, app_version):
+        return _undetermined("uncalibrated_profile", safe_snapshot, safe_time_value)
     try:
         root = parse_xml_root(xml_text)
     except XmlShapeError:
@@ -400,7 +535,12 @@ def parse_page(
 
 
 def parse_job_list(
-    xml_text: str, profile: dict, observed_at: str, snapshot_id: str
+    xml_text: str,
+    profile: dict,
+    observed_at: str,
+    snapshot_id: str,
+    *,
+    app_version: str | None = None,
 ) -> ReadResult:
     """提取当前视口内完整职位卡并重算去重后的职位键。"""
     safe_time_value = safe_time(observed_at)
@@ -412,6 +552,8 @@ def parse_job_list(
         parse_utc(observed_at)
     except ValueError:
         return _failed("invalid_fixture", safe_snapshot, safe_time_value)
+    if not _profile_is_readable(profile, app_version):
+        return _undetermined("uncalibrated_profile", safe_snapshot, safe_time_value)
     try:
         root = parse_xml_root(xml_text)
     except XmlShapeError:
@@ -469,7 +611,12 @@ def parse_job_list(
 
 
 def parse_job_detail(
-    xml_text: str, profile: dict, observed_at: str, snapshot_id: str
+    xml_text: str,
+    profile: dict,
+    observed_at: str,
+    snapshot_id: str,
+    *,
+    app_version: str | None = None,
 ) -> ReadResult:
     """解析职位详情正文、字段与完整性；截断正文不得返回部分值。"""
     safe_time_value = safe_time(observed_at)
@@ -481,6 +628,8 @@ def parse_job_detail(
         parse_utc(observed_at)
     except ValueError:
         return _failed("invalid_fixture", safe_snapshot, safe_time_value)
+    if not _profile_is_readable(profile, app_version):
+        return _undetermined("uncalibrated_profile", safe_snapshot, safe_time_value)
     try:
         root = parse_xml_root(xml_text)
     except XmlShapeError:
@@ -547,6 +696,8 @@ def parse_unread(
     snapshot_id: str,
     coverage_proof: dict[str, object],
     now: str,
+    *,
+    app_version: str | None = None,
 ) -> ReadResult:
     """解析未读行并按字段阶梯合并层级/像素，必要时保留 unknown。"""
     safe_time_value = safe_time(observed_at)
@@ -561,6 +712,8 @@ def parse_unread(
         delta = (now_dt - parse_utc(observed_at)).total_seconds()
     except ValueError:
         return _failed("invalid_fixture", safe_snapshot, safe_time_value)
+    if not _profile_is_readable(profile, app_version):
+        return _undetermined("uncalibrated_profile", safe_snapshot, safe_time_value)
     if delta < 0 or delta > SNAPSHOT_SECONDS:
         return _undetermined("stale_snapshot", safe_snapshot, safe_time_value)
     try:
@@ -639,6 +792,8 @@ def parse_conversation_page(
     context: dict[str, str] | None,
     observed_at: str,
     snapshot_id: str,
+    *,
+    app_version: str | None = None,
 ) -> ReadResult:
     """解析单页会话消息、方向证据与应用稳定消息身份。"""
     safe_time_value = safe_time(observed_at)
@@ -648,13 +803,16 @@ def parse_conversation_page(
     try:
         validate_read_profile(profile)
         parse_utc(observed_at)
-        if context is None:
+        validated_context = _validate_context(context)
+        if validated_context is None:
             return _undetermined("identity_ambiguous", safe_snapshot, safe_time_value)
-        contact_raw = require_text(context["contact"])
-        company = require_text(context["company"])
-        position = require_text(context["position"])
     except ValueError:
         return _failed("invalid_fixture", safe_snapshot, safe_time_value)
+    if not _profile_is_readable(profile, app_version):
+        return _undetermined("uncalibrated_profile", safe_snapshot, safe_time_value)
+    contact_raw = validated_context["contact"]
+    company = validated_context["company"]
+    position = validated_context["position"]
     try:
         root = parse_xml_root(xml_text)
     except XmlShapeError:
@@ -692,10 +850,13 @@ def parse_conversation_page(
             )
             for row_node in row_nodes
         )
-        messages = _clear_duplicate_stable_ids(messages)
+        messages, identity_ambiguous = _clear_duplicate_stable_ids(messages)
+        effective_identity_verified = (
+            message_identity_verified and not identity_ambiguous
+        )
         read_complete = list_node.get("scrollable") == "false"
         state, key, reason = conversation_inbound_state(
-            messages, read_complete, True, message_identity_verified
+            messages, read_complete, True, effective_identity_verified
         )
         inbound_evidence = FieldEvidence(
             field="conversation_inbound",
@@ -712,7 +873,7 @@ def parse_conversation_page(
             contact=contact,
             contact_verified=True,
             role=role,
-            message_identity_verified=message_identity_verified,
+            message_identity_verified=effective_identity_verified,
             read_complete=read_complete,
             messages=messages,
             inbound_state=state,
@@ -734,12 +895,14 @@ def merge_conversations(
     profile: dict,
     coverage_proof: dict[str, object],
     now: str,
+    *,
+    app_version: str | None = None,
 ) -> ReadResult:
     """合并同一次遍历的会话页，只裁剪有稳定身份的连续边界重叠。"""
     if not isinstance(pages, (list, tuple)) or not pages:
-        return _failed("invalid_fixture", None, _safe_now(now))
+        return _failed("invalid_fixture", None, safe_time(now))
     if any(not isinstance(page, ReadResult) for page in pages):
-        return _failed("invalid_fixture", None, _safe_now(now))
+        return _failed("invalid_fixture", None, safe_time(now))
     try:
         validate_read_profile(profile)
         proof = _validate_coverage_proof(coverage_proof)
@@ -747,36 +910,53 @@ def merge_conversations(
         for page in pages:
             validate_read_result(page)
     except ValueError:
-        return _failed("invalid_fixture", None, _safe_now(now))
+        return _failed("invalid_fixture", None, safe_time(now))
+    if not _profile_is_readable(profile, app_version):
+        return _undetermined("uncalibrated_profile", None, safe_time(now))
     for page in pages:
         if page.status != "ok":
             return page
     first = pages[0]
-    assert isinstance(first.value, Conversation)
+    if not isinstance(first.value, Conversation) or not is_uuid(first.snapshot_id):
+        return _failed("invalid_fixture", None, safe_time(now))
     snapshot_id = first.snapshot_id
     observed_at = first.observed_at
+    profile_id = str(profile["profile_id"])
+    if first.value.profile_id != profile_id:
+        return _failed("invalid_fixture", snapshot_id, observed_at)
     delta = (now_dt - parse_utc(observed_at)).total_seconds()
     if delta < 0 or delta > SNAPSHOT_SECONDS:
         return _undetermined("stale_snapshot", snapshot_id, observed_at)
     for page in pages:
         value = page.value
-        assert isinstance(value, Conversation)
+        if not isinstance(value, Conversation):
+            return _failed("invalid_fixture", snapshot_id, observed_at)
         if (
             page.snapshot_id != snapshot_id
             or page.observed_at != observed_at
             or value.app != APP
             or value.profile_id != first.value.profile_id
+            or value.profile_id != profile_id
             or value.conversation_key != first.value.conversation_key
             or value.contact != first.value.contact
         ):
             return _failed("invalid_fixture", snapshot_id, observed_at)
     merged = list(first.value.messages)
     for previous, current in zip(pages, pages[1:]):
-        assert isinstance(previous.value, Conversation)
-        assert isinstance(current.value, Conversation)
-        overlap = _conversation_overlap(previous.value.messages, current.value.messages)
-        merged.extend(current.value.messages[overlap:])
-    messages = _clear_duplicate_stable_ids(tuple(merged))
+        previous_value = previous.value
+        current_value = current.value
+        if not isinstance(previous_value, Conversation) or not isinstance(
+            current_value, Conversation
+        ):
+            return _failed("invalid_fixture", snapshot_id, observed_at)
+        overlap = _conversation_overlap(
+            previous_value.messages, current_value.messages
+        )
+        merged.extend(current_value.messages[overlap:])
+    messages, identity_ambiguous = _clear_duplicate_stable_ids(tuple(merged))
+    effective_identity_verified = (
+        first.value.message_identity_verified and not identity_ambiguous
+    )
     read_complete = bool(
         proof["kind"] == "full_traversal"
         and proof["top_proven"] is True
@@ -788,7 +968,7 @@ def merge_conversations(
         messages,
         read_complete,
         first.value.contact_verified,
-        first.value.message_identity_verified,
+        effective_identity_verified,
     )
     inbound_evidence = FieldEvidence(
         field="conversation_inbound",
@@ -800,6 +980,7 @@ def merge_conversations(
     value = replace(
         first.value,
         messages=messages,
+        message_identity_verified=effective_identity_verified,
         read_complete=read_complete,
         inbound_state=state,
         latest_inbound_key=key,
@@ -875,7 +1056,6 @@ def _hierarchy_badge_reading(
     """在标定行区域内读取唯一 TextView ASCII 整数，返回层级单级结论。"""
     selectors = profile["selectors"]
     region = selectors["unread_badge_region"]
-    row_bounds = parse_bounds(row_node)
 
     def reading(state: str, count: int | None, reason: str | None) -> FieldReading:
         """用固定绑定上下文构造层级字段结论。"""
@@ -896,49 +1076,23 @@ def _hierarchy_badge_reading(
 
     if region is None:
         return reading("unknown", None, "uncalibrated_region")
-    if row_bounds is None:
-        return reading("unknown", None, "uncalibrated_region")
-    left, top, right, bottom = row_bounds
-    width = right - left
-    height = bottom - top
-    try:
-        region_rect = (
-            left + float(region[0]) * width,
-            top + float(region[1]) * height,
-            left + float(region[2]) * width,
-            top + float(region[3]) * height,
-        )
-    except (OverflowError, ValueError):
-        return reading("unknown", None, "uncalibrated_region")
     field_suffixes = {
         str(selectors["unread_name_suffix"]),
         str(selectors["unread_company_suffix"]),
         str(selectors["unread_position_suffix"]),
     }
-    values: list[int] = []
-    invalid_bounds = False
-    for node in row_node.iter():
-        if node is row_node or node.get("class") != selectors["unread_badge_class"]:
-            continue
-        if any(rid_matches(node, suffix) for suffix in field_suffixes):
-            continue
-        text = node.get("text")
-        if not isinstance(text, str) or _ASCII_INT_RE.fullmatch(text) is None:
-            continue
-        bounds = parse_bounds(node)
-        if bounds is None:
-            invalid_bounds = True
-            continue
-        if not rect_inside(bounds, region_rect):
-            continue
-        values.append(int(text))
-    if invalid_bounds:
-        return reading("unknown", None, "uncalibrated_region")
-    if len(values) > 1:
-        return reading("unknown", None, "ambiguous_signal")
-    if len(values) == 1:
-        return reading("present", values[0], None)
-    return reading("unknown", None, "missing_signal")
+    values, reason = collect_region_badge_values(
+        row_node,
+        region,
+        str(selectors["unread_badge_class"]),
+        field_suffixes,
+    )
+    if reason is not None:
+        return reading("unknown", None, reason)
+    assert len(values) == 1
+    if values[0] == 0:
+        return reading("absent", 0, None)
+    return reading("present", values[0], None)
 
 
 def _parse_chat_message(
@@ -949,23 +1103,40 @@ def _parse_chat_message(
 ) -> ChatMessage:
     """解析一条聊天行的类型、方向、截断与稳定身份，不靠内容生成身份。"""
     selectors = profile["selectors"]
-    system_text = _unique_text(row_node, str(selectors["conversation_system_suffix"]))
-    card = _unique_node(row_node, str(selectors["conversation_card_suffix"]))
-    text = _unique_text(row_node, str(selectors["conversation_text_suffix"]))
-    time_hint = _unique_text(row_node, str(selectors["conversation_time_suffix"]))
-    if system_text is not None:
+    text_nodes = _nodes(row_node, str(selectors["conversation_text_suffix"]))
+    system_nodes = _nodes(row_node, str(selectors["conversation_system_suffix"]))
+    card_nodes = _nodes(row_node, str(selectors["conversation_card_suffix"]))
+    time_nodes = _nodes(row_node, str(selectors["conversation_time_suffix"]))
+    system_text = _one_text(system_nodes)
+    text = _one_text(text_nodes)
+    time_hint = _one_text(time_nodes)
+    ambiguous = (
+        len(system_nodes) > 1
+        or (len(system_nodes) == 1 and system_text is None)
+        or len(text_nodes) > 1
+        or (len(text_nodes) == 1 and text is None)
+        or len(card_nodes) > 1
+        or len(time_nodes) > 1
+        or (len(time_nodes) == 1 and time_hint is None)
+    )
+    if ambiguous:
+        kind = "unknown"
+        direction = "unknown"
+        evidence: tuple[str, ...] = ()
+        content = None
+    elif system_text is not None:
         kind = "system_tip"
         direction = "system"
-        evidence: tuple[str, ...] = ()
+        evidence = ()
         content = system_text
-    elif card is not None and text is None:
-        kind = "card"
-        direction, evidence = _direction_for(row_node, profile)
-        content = None
     elif text is not None:
         kind = "text"
         direction, evidence = _direction_for(row_node, profile)
         content = text
+    elif len(card_nodes) == 1:
+        kind = "card"
+        direction, evidence = _direction_for(row_node, profile)
+        content = None
     elif time_hint is not None:
         kind = "time"
         direction = "system"
@@ -977,10 +1148,8 @@ def _parse_chat_message(
         evidence = ()
         content = None
     truncated = row_node.get("truncated") == "true"
-    if text is not None:
-        text_nodes = _unique_nodes(row_node, str(selectors["conversation_text_suffix"]))
-        if len(text_nodes) == 1 and text_nodes[0].get("truncated") == "true":
-            truncated = True
+    if len(text_nodes) == 1 and text_nodes[0].get("truncated") == "true":
+        truncated = True
     stable_hash = None
     stable_source = None
     if message_identity_verified:
@@ -1004,7 +1173,7 @@ def _parse_chat_message(
         direction=direction,
         text=content,
         content_hash=content_hash,
-        time_hint=time_hint,
+        time_hint=time_hint if kind != "unknown" else None,
         stable_identity_hash=stable_hash,
         stable_identity_source=stable_source,
         repeat_safe=repeat_safe,
@@ -1017,38 +1186,44 @@ def _parse_chat_message(
 def _direction_for(
     row_node: ElementTree.Element, profile: dict
 ) -> tuple[str, tuple[str, ...]]:
-    """按头像、气泡、我方发送状态三路证据判定方向，冲突或缺失为 unknown。"""
+    """按头像、气泡、我方发送状态三路证据判定方向，冲突/多候选为 unknown。"""
     selectors = profile["selectors"]
     row_bounds = parse_bounds(row_node)
     if row_bounds is None:
         return "unknown", ()
     row_left, _, row_right, _ = row_bounds
-    center = (row_left + row_right) / 2
+    center_twice = row_left + row_right
     evidence: list[str] = []
     directions: set[str] = set()
-    for name, suffix, evidence_name in (
-        ("avatar", str(selectors["conversation_avatar_suffix"]), "avatar"),
-        ("bubble", str(selectors["conversation_bubble_suffix"]), "bubble"),
+    for suffix, evidence_name in (
+        (str(selectors["conversation_avatar_suffix"]), "avatar"),
+        (str(selectors["conversation_bubble_suffix"]), "bubble"),
     ):
-        node = _unique_node(row_node, suffix)
-        if node is None:
+        nodes = _nodes(row_node, suffix)
+        if not nodes:
             continue
-        bounds = parse_bounds(node)
+        if len(nodes) != 1:
+            evidence.append(evidence_name)
+            return "unknown", _ordered_direction_evidence(evidence)
+        bounds = parse_bounds(nodes[0])
         if bounds is None:
-            continue
+            evidence.append(evidence_name)
+            return "unknown", _ordered_direction_evidence(evidence)
         left, _, right, _ = bounds
-        node_center = (left + right) / 2
-        if node_center == center:
+        node_center_twice = left + right
+        if node_center_twice == center_twice:
             continue
         evidence.append(evidence_name)
-        directions.add("incoming" if node_center < center else "outgoing")
-    status_node = _unique_node(row_node, str(selectors["conversation_status_suffix"]))
-    if status_node is not None and is_nonempty_text(status_node.get("text")):
+        directions.add(
+            "incoming" if node_center_twice < center_twice else "outgoing"
+        )
+    status_nodes = _nodes(row_node, str(selectors["conversation_status_suffix"]))
+    if status_nodes:
         evidence.append("sent_status")
+        if len(status_nodes) != 1 or not is_nonempty_text(status_nodes[0].get("text")):
+            return "unknown", _ordered_direction_evidence(evidence)
         directions.add("outgoing")
-    evidence_tuple = tuple(
-        name for name in _DIRECTION_NAMES if name in evidence
-    )
+    evidence_tuple = _ordered_direction_evidence(evidence)
     if len(directions) == 1:
         return next(iter(directions)), evidence_tuple
     if len(directions) > 1:
@@ -1056,16 +1231,22 @@ def _direction_for(
     return "unknown", evidence_tuple
 
 
+def _ordered_direction_evidence(names: list[str]) -> tuple[str, ...]:
+    """按头像、气泡、发送状态固定顺序去重方向证据名。"""
+    return tuple(name for name in _DIRECTION_NAMES if name in set(names))
+
+
 def _clear_duplicate_stable_ids(
     messages: tuple[ChatMessage, ...]
-) -> tuple[ChatMessage, ...]:
-    """清除非边界重复的稳定身份，避免把不同消息合并成可发送键。"""
+) -> tuple[tuple[ChatMessage, ...], bool]:
+    """清除非边界重复的稳定身份，并返回是否存在身份歧义。"""
     counts: dict[str, int] = {}
     for message in messages:
         if message.stable_identity_hash is not None:
             counts[message.stable_identity_hash] = (
                 counts.get(message.stable_identity_hash, 0) + 1
             )
+    duplicate = any(count > 1 for count in counts.values())
     result: list[ChatMessage] = []
     for message in messages:
         if (
@@ -1083,7 +1264,7 @@ def _clear_duplicate_stable_ids(
             )
         else:
             result.append(message)
-    return tuple(result)
+    return tuple(result), duplicate
 
 
 def _conversation_overlap(
@@ -1153,21 +1334,6 @@ def _field_context(
     }
 
 
-def _validate_coverage_proof(value: object) -> dict[str, object]:
-    """校验覆盖率证明固定三键、枚举与布尔证明位。"""
-    if not isinstance(value, dict) or set(value) != COVERAGE_KEYS:
-        raise ValueError("coverage proof is invalid")
-    if not isinstance(value["kind"], str) or value["kind"] not in COVERAGE_KINDS:
-        raise ValueError("coverage kind is invalid")
-    if type(value["top_proven"]) is not bool or type(value["bottom_proven"]) is not bool:
-        raise ValueError("coverage proof is invalid")
-    return {
-        "kind": value["kind"],
-        "top_proven": value["top_proven"],
-        "bottom_proven": value["bottom_proven"],
-    }
-
-
 def _validate_context(value: object) -> dict[str, str] | None:
     """校验合成会话上下文的固定键、文本与来源快照 UUID。"""
     if value is None:
@@ -1223,17 +1389,20 @@ def _unique_node(root: ElementTree.Element, suffix: str) -> ElementTree.Element 
     return nodes[0] if len(nodes) == 1 else None
 
 
-def _unique_nodes(root: ElementTree.Element, suffix: str) -> list[ElementTree.Element]:
-    """返回匹配后缀的节点列表，供截断属性判断。"""
-    return _nodes(root, suffix)
-
-
 def _unique_text(root: ElementTree.Element, suffix: str) -> str | None:
     """只接受唯一节点的原样非空 text，缺失或重复返回 None。"""
     node = _unique_node(root, suffix)
     if node is None:
         return None
     text = node.get("text")
+    return text if isinstance(text, str) and text != "" else None
+
+
+def _one_text(nodes: list[ElementTree.Element]) -> str | None:
+    """仅在恰好一个节点且 text 非空时返回原样文本。"""
+    if len(nodes) != 1:
+        return None
+    text = nodes[0].get("text")
     return text if isinstance(text, str) and text != "" else None
 
 
@@ -1250,36 +1419,6 @@ def _unique_nodes_any(
     for suffix in suffixes:
         found.extend(_nodes(root, suffix))
     return found
-
-
-def _row_nodes(
-    list_node: ElementTree.Element, suffix: str
-) -> list[ElementTree.Element] | None:
-    """按文档顺序取直属行；嵌套行返回 None 表示不完整。"""
-    nodes = [
-        node
-        for node in list_node.iter()
-        if node is not list_node and rid_matches(node, suffix)
-    ]
-    matched = set(nodes)
-    for node in nodes:
-        parent = _parent_of(list_node, node)
-        while parent is not None and parent is not list_node:
-            if parent in matched:
-                return None
-            parent = _parent_of(list_node, parent)
-    return nodes
-
-
-def _parent_of(
-    root: ElementTree.Element, target: ElementTree.Element
-) -> ElementTree.Element | None:
-    """在给定子树中查找 target 的直接父节点。"""
-    for element in root.iter():
-        for child in list(element):
-            if child is target:
-                return element
-    return None
 
 
 def _description_incomplete(text: str) -> bool:
@@ -1312,12 +1451,3 @@ def _undetermined(
     return ReadResult(
         "undetermined", None, reason_code, snapshot_id, observed_at, _FIXTURE_SOURCE, "low"
     )
-
-
-def _safe_now(value: object) -> str:
-    """把无效时间替换为固定纪元值，仅用于失败结果。"""
-    try:
-        parse_utc(value)
-    except ValueError:
-        return EPOCH
-    return str(value)

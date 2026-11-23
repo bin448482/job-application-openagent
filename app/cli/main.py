@@ -578,30 +578,6 @@ def _run_sense(log: ProcessLog, started: float, args: argparse.Namespace) -> int
 
 
 
-def _read_operation(result: object) -> str:
-    """按读取值类型返回固定过程日志操作名。"""
-    from app.domain.reading import (
-        Conversation,
-        JobDetail,
-        JobList,
-        PageSnapshot,
-        UnreadRead,
-    )
-
-    value = getattr(result, "value", None)
-    if isinstance(value, PageSnapshot):
-        return "page"
-    if isinstance(value, JobList):
-        return "job_list"
-    if isinstance(value, JobDetail):
-        return "job_detail"
-    if isinstance(value, UnreadRead):
-        return "unread"
-    if isinstance(value, Conversation):
-        return "conversation"
-    return "load"
-
-
 def _run_read(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
     """加载 M3 合成读取夹具，输出唯一 JSON 并按决策门禁返回退出码。"""
     try:
@@ -620,7 +596,9 @@ def _run_read(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
     load_started = time.perf_counter()
     log.record(stage="read", operation="load", result="started")
     try:
-        result = load_and_read_fixture(fixture_path, str(uuid.uuid4()))
+        result = load_and_read_fixture(
+            fixture_path, str(uuid.uuid4()), process_log=log
+        )
     except (OSError, UnicodeError, ValueError):
         log.record(
             stage="read",
@@ -645,35 +623,46 @@ def _run_read(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
         return _finalize_output(
             log, started, _error_payload("invalid_fixture"), 2, "invalid_fixture", "internal"
         )
-    operation = _read_operation(result)
     log.record(
         stage="read",
-        operation=operation,
-        result="failed" if result.status == "failed" else "ok",
+        operation="load",
+        result=result.status,
         reason_code=result.reason_code,
         error_category="read" if result.status == "failed" else None,
         duration_ms=elapsed_ms(load_started),
     )
+    gate_started = time.perf_counter()
+    log.record(stage="read", operation="gate", result="started")
     try:
         payload = build_read_payload(result)
     except Exception:
         log.record(
             stage="read",
-            operation=operation,
+            operation="gate",
             result="failed",
             reason_code=None,
             error_category="internal",
+            duration_ms=elapsed_ms(gate_started),
         )
         return _finalize_output(
             log, started, _error_payload("invalid_fixture"), 2, "invalid_fixture", "internal"
         )
     actionable = bool(payload["actionable"])
+    gate_reason = payload["gate_reason"]
     exit_code = 0 if actionable else 2
     error_category = None if actionable else "read"
     log.record(
+        stage="read",
+        operation="gate",
+        result="ok" if actionable else "failed",
+        reason_code=gate_reason,
+        error_category=error_category,
+        duration_ms=elapsed_ms(gate_started),
+    )
+    log.record(
         stage="decision",
         result="ok" if actionable else "failed",
-        reason_code=result.reason_code,
+        reason_code=result.reason_code if result.reason_code is not None else gate_reason,
         error_category=error_category,
     )
     return _finalize_output(
@@ -681,7 +670,7 @@ def _run_read(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
         started,
         payload,
         exit_code,
-        result.reason_code,
+        result.reason_code if result.reason_code is not None else gate_reason,
         error_category,
     )
 

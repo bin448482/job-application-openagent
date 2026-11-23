@@ -143,6 +143,33 @@ def validate_field_resolution(resolution: object) -> None:
         "high",
     }:
         raise ValueError("field resolution confidence is invalid")
+    expected_confidence = {
+        "hierarchy": "high",
+        "pixel": "medium",
+        "human": "high",
+        "vision": "low",
+    }[resolution.source]
+    required_confidence = "low" if resolution.state == "failed" else expected_confidence
+    if resolution.confidence != required_confidence:
+        raise ValueError("field resolution confidence is stale")
+    if resolution.state in {"present", "absent"}:
+        matches = [
+            reading
+            for reading in resolution.evidence
+            if reading.source == resolution.source and reading.state == resolution.state
+        ]
+        if not matches or not any(reading.count == resolution.count for reading in matches):
+            raise ValueError("field resolution state is stale")
+    elif resolution.state == "failed":
+        matches = [
+            reading
+            for reading in resolution.evidence
+            if reading.source == resolution.source
+            and reading.state == "failed"
+            and reading.reason_code == resolution.reason_code
+        ]
+        if not matches:
+            raise ValueError("field resolution failure is stale")
     _validate_count_reason(
         resolution.state,
         resolution.count,
@@ -219,10 +246,10 @@ def resolve_field(
             evidence,
         )
 
-    if primary.state in {"present", "absent"}:
+    if hierarchy is not None and hierarchy.state in {"present", "absent"}:
         conflict = any(
-            reading.state in {"present", "absent"} and reading.state != primary.state
-            for reading in (pixel, vision)
+            reading.state in {"present", "absent"} and reading.state != hierarchy.state
+            for reading in (pixel, vision, human)
             if reading is not None
             and (reading is not vision or vision_enabled)
         )
@@ -239,8 +266,8 @@ def resolve_field(
             )
         return _resolution(
             primary,
-            primary.state,
-            primary.count,
+            hierarchy.state,
+            hierarchy.count,
             None,
             "hierarchy",
             "high",
@@ -256,6 +283,40 @@ def resolve_field(
             pixel.reason_code,
             pixel.source,
             "low",
+            False,
+            evidence,
+        )
+
+    if pixel is not None and pixel.state in {"present", "absent"}:
+        human_conflict = (
+            human is not None
+            and human.state in {"present", "absent"}
+            and human.state != pixel.state
+        )
+        vision_conflict = (
+            vision is not None
+            and vision_enabled
+            and vision.state in {"present", "absent"}
+            and vision.state != pixel.state
+        )
+        if human_conflict or vision_conflict:
+            return _resolution(
+                primary,
+                "undetermined",
+                None,
+                "ambiguous_signal",
+                None,
+                None,
+                True,
+                evidence,
+            )
+        return _resolution(
+            primary,
+            pixel.state,
+            pixel.count,
+            None,
+            "pixel",
+            "medium",
             False,
             evidence,
         )
@@ -280,36 +341,6 @@ def resolve_field(
             None,
             None,
             True,
-            evidence,
-        )
-
-    if pixel is not None and pixel.state in {"present", "absent"}:
-        conflict = (
-            vision is not None
-            and vision_enabled
-            and independent_cross_evidence
-            and vision.state in {"present", "absent"}
-            and vision.state != pixel.state
-        )
-        if conflict:
-            return _resolution(
-                primary,
-                "undetermined",
-                None,
-                "ambiguous_signal",
-                None,
-                None,
-                True,
-                evidence,
-            )
-        return _resolution(
-            primary,
-            pixel.state,
-            pixel.count,
-            None,
-            "pixel",
-            "medium",
-            False,
             evidence,
         )
 

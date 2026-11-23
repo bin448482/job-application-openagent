@@ -13,7 +13,7 @@
 - `ports/`：能力端口与领域快照/租约类型；见 `ports/AGENTS.md`。
 - `usecases/`：单次用例的校验、持久化编排、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。
-- `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值；唯一 `emit_degraded_warning` 每次运行只写一次固定 stderr 标记，CLI 与仓储 API 共用。阶段已扩展到 `store/sense/read/adb_hierarchy/adb_screen`，并以 `operation` 记录 init/parse/aggregate/stop_reason/load/page/job_list/job_detail/unread/conversation/merge/pixel/open/upsert/claim/start/renew/finish/recover/unresolved_conversations，仍复用唯一日志器。
+- `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值；唯一 `emit_degraded_warning` 每次运行只写一次固定 stderr 标记，CLI 与仓储 API 共用。阶段已扩展到 `store/sense/read/adb_hierarchy/adb_screen/adb_evidence`，结果含 `started/ok/undetermined/failed`，并以 `operation` 记录 init/parse/aggregate/stop_reason/load/page/job_list/job_detail/unread/conversation/merge/pixel/gate/open/upsert/claim/start/renew/finish/recover/unresolved_conversations，仍复用唯一日志器。
 
 ## 三、依赖与边界
 

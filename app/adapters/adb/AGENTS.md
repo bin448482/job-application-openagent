@@ -20,7 +20,7 @@
 - 前台要求唯一的 `mCurrentFocus` 字段行只允许前置缩进，字段名必须是该行开头 token；拒绝 `notmCurrentFocus`/`prefixmCurrentFocus` 等粘连前缀、`prefix mCurrentFocus` 等行内前缀和 `mCurrentFocusExtra` 等后缀字段，任一 line 含该名字却非合法字段即保守 `unknown`。字段值（允许首尾空白）必须恰好是一个完整 `Window{...}` 结构，内部恰好一个 `包名/Activity` token；前后附加文本/组件、同一行或同一 Window 内多个组件、畸形/混合组件、缺失/多值均为 `unknown`。包名 `com.hpbr.bosszhipin` 为 `boss`，其它单一包为 `other`。
 - 本模块不得在 fixture 模式或其他离线测试中实际执行；测试只 mock `subprocess.run`。模块导入必须零副作用。
 - `AdbScreenReader` 的 dump 后 cat 固定为两条命令；`exec-out screencap` 以二进制捕获。缺失/超时/OSError/非零退出统一 `ScreenReadError('device_disconnected')`，单次 attempt 不重放；证据落盘失败为 `ScreenReadError('invalid_fixture')`，不声称已保存。
-- 过程日志 `stage=adb_hierarchy/adb_screen`、`command=adb_hierarchy_dump/adb_hierarchy_cat/adb_screencap`，只写固定结果、耗时和 `adb_missing/adb_timeout/adb_oserror/adb_nonzero` 类别；不写 serial、设备临时路径、XML、截图或异常文本。
+- 过程日志 `stage=adb_hierarchy/adb_screen/adb_evidence`、`command=adb_hierarchy_dump/adb_hierarchy_cat/adb_screencap`，只写固定结果、耗时和 `adb_missing/adb_timeout/adb_oserror/adb_nonzero/evidence` 类别；证据保存成功/失败记 `adb_evidence`，失败原因 `invalid_fixture`；不写 serial、设备临时路径、XML、截图或异常文本。
 - 真实 `read` 在调用本适配器前必须先通过共享设备门禁；M4 门禁未交付时 usecase 直接拒绝，不以 profile 内任务锁代替。
 
 ## 四、测试

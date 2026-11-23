@@ -115,11 +115,44 @@ class AdbScreenReader:
 
     def _save(self, name: str, payload: bytes) -> None:
         """把证据写到调用方指定的本机目录；失败不伪造已保存。"""
+        started = time.perf_counter()
         try:
             self._evidence_dir.mkdir(parents=True, exist_ok=True)
             (self._evidence_dir / name).write_bytes(payload)
         except OSError:
+            self._record_evidence_failure(started)
             raise ScreenReadError("invalid_fixture") from None
+        self._record_evidence("ok", elapsed_ms(started))
+
+    def _record_evidence_failure(self, started: float) -> None:
+        """记录证据保存失败；不写路径或异常。"""
+        if self._process_log is None:
+            return
+        try:
+            self._process_log.record(
+                stage="adb_evidence",
+                result="failed",
+                reason_code="invalid_fixture",
+                error_category="evidence",
+                duration_ms=elapsed_ms(started),
+                mode="device",
+            )
+        except Exception:
+            return
+
+    def _record_evidence(self, result: str, duration_ms: int) -> None:
+        """记录证据保存成功；不写路径或内容。"""
+        if self._process_log is None:
+            return
+        try:
+            self._process_log.record(
+                stage="adb_evidence",
+                result=result,
+                duration_ms=duration_ms,
+                mode="device",
+            )
+        except Exception:
+            return
 
     def _record_failure(
         self, stage: str, command: str, started: float, error_category: str

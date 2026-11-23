@@ -181,6 +181,16 @@ class ScreenAdapterTests(unittest.TestCase):
             with self.assertRaises(ScreenReadError) as caught:
                 reader.dump_hierarchy(SERIAL)
         self.assertEqual(caught.exception.reason_code, "invalid_fixture")
+        events = self._events()
+        self.assertTrue(
+            any(
+                event["stage"] == "adb_evidence"
+                and event["result"] == "failed"
+                and event["reason_code"] == "invalid_fixture"
+                and event["error_category"] == "evidence"
+                for event in events
+            )
+        )
 
     def test_serial_is_required(self) -> None:
         """空 serial 在子进程启动前拒绝。"""

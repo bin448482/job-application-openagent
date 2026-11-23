@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import re
 import struct
 from dataclasses import dataclass
+from datetime import date
 
 from app.adapters.boss.support import validate_ratio_region
 from app.domain.ladder import FieldReading
@@ -29,7 +29,8 @@ CALIBRATION_KEYS = frozenset(
 )
 HEADER_SIZE = 16
 SUPPORTED_PIXEL_FORMATS = frozenset({1})
-_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+SUPPORTED_COLORSPACES = frozenset({0})
+CALIBRATION_SOURCES = frozenset({"synthetic"})
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,8 @@ def parse_screen_header(raw: bytes) -> ScreenHeader:
         raise ValueError("screen size is invalid")
     if pixel_format not in SUPPORTED_PIXEL_FORMATS:
         raise ValueError("screen format is unsupported")
+    if colorspace not in SUPPORTED_COLORSPACES:
+        raise ValueError("screen colorspace is unsupported")
     expected = width * height * 4
     if len(raw) - HEADER_SIZE != expected:
         raise ValueError("screen length is invalid")
@@ -64,6 +67,8 @@ def validate_calibration(calibration: object) -> dict[str, object]:
     for name in ("calibration_id", "profile_id", "version", "source"):
         if not is_nonempty_text(calibration[name]):
             raise ValueError("calibration text is invalid")
+    if calibration["source"] not in CALIBRATION_SOURCES:
+        raise ValueError("calibration source is unsupported")
     if calibration["app"] != APP:
         raise ValueError("calibration app is invalid")
     if type(calibration["calibrated"]) is not bool:
@@ -92,7 +97,13 @@ def validate_calibration(calibration: object) -> dict[str, object]:
     if type(threshold) is not int or threshold <= 0:
         raise ValueError("calibration threshold is invalid")
     calibrated_on = calibration["calibrated_on"]
-    if not isinstance(calibrated_on, str) or _DATE_RE.fullmatch(calibrated_on) is None:
+    if not isinstance(calibrated_on, str):
+        raise ValueError("calibration date is invalid")
+    try:
+        parsed_date = date.fromisoformat(calibrated_on)
+    except ValueError:
+        raise ValueError("calibration date is invalid") from None
+    if parsed_date.isoformat() != calibrated_on:
         raise ValueError("calibration date is invalid")
     return {
         "calibration_id": str(calibration["calibration_id"]),

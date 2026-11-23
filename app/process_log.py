@@ -30,11 +30,12 @@ STAGES = frozenset(
         "read",
         "adb_hierarchy",
         "adb_screen",
+        "adb_evidence",
         "output",
         "exit",
     }
 )
-RESULTS = frozenset({"started", "ok", "failed"})
+RESULTS = frozenset({"started", "ok", "undetermined", "failed"})
 REASON_CODES = frozenset(
     {
         "invalid_input",
@@ -50,8 +51,19 @@ REASON_CODES = frozenset(
         "incomplete_snapshot",
         "stale_snapshot",
         "uncalibrated_profile",
+        "identity_ambiguous",
         "unread_unverified",
         "needs_targeted_verification",
+        "ambiguous_signal",
+        "uncalibrated_region",
+        "calibration_mismatch",
+        "missing_signal",
+        "stable_identity_unverified",
+        "unverified_identity",
+        "not_ok",
+        "field_unknown",
+        "incomplete",
+        "no_target",
         "device_gate_unavailable",
         "lease_busy",
         "stale_lease",
@@ -75,6 +87,7 @@ ERROR_CATEGORIES = frozenset(
         "read",
         "pixel",
         "gate",
+        "evidence",
         "internal",
         "adb_missing",
         "adb_timeout",

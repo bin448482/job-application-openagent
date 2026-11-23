@@ -11,7 +11,12 @@ from app.domain.json_input import load_json_object as _load_strict_json
 from app.domain.models import is_nonempty_text, parse_utc
 
 EPOCH = "1970-01-01T00:00:00.000Z"
+COVERAGE_KEYS = frozenset({"kind", "top_proven", "bottom_proven"})
+COVERAGE_KINDS = frozenset(
+    {"viewport", "full_traversal", "calibrated_global_zero"}
+)
 _BOUNDS_RE = re.compile(r"^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$")
+_ASCII_INT_RE = re.compile(r"^[0-9]+$")
 
 
 class XmlShapeError(Exception):
@@ -130,6 +135,91 @@ def rid_matches(node: ElementTree.Element, suffix: str) -> bool:
         or rid.endswith(":id/" + suffix)
         or rid.endswith("/" + suffix)
     )
+
+
+def validate_coverage_proof(value: object) -> dict[str, object]:
+    """校验覆盖率证明固定三键、枚举与布尔证明位。"""
+    if not isinstance(value, dict) or set(value) != COVERAGE_KEYS:
+        raise ValueError("coverage proof is invalid")
+    if not isinstance(value["kind"], str) or value["kind"] not in COVERAGE_KINDS:
+        raise ValueError("coverage kind is invalid")
+    if type(value["top_proven"]) is not bool or type(value["bottom_proven"]) is not bool:
+        raise ValueError("coverage proof is invalid")
+    return {
+        "kind": value["kind"],
+        "top_proven": value["top_proven"],
+        "bottom_proven": value["bottom_proven"],
+    }
+
+
+def row_nodes(
+    list_node: ElementTree.Element, suffix: str
+) -> list[ElementTree.Element] | None:
+    """按文档顺序取直属行；嵌套行返回 None 表示不完整。"""
+    parents = parent_map(list_node)
+    nodes = [
+        node
+        for node in list_node.iter()
+        if node is not list_node and rid_matches(node, suffix)
+    ]
+    matched = set(nodes)
+    for node in nodes:
+        parent = parents.get(node)
+        while parent is not None and parent is not list_node:
+            if parent in matched:
+                return None
+            parent = parents.get(parent)
+    return nodes
+
+
+def collect_region_badge_values(
+    row_node: ElementTree.Element,
+    region: object,
+    badge_class: str,
+    excluded_suffixes: set[str],
+) -> tuple[list[int], str | None]:
+    """在行内标定区域读取唯一 ASCII 整数 TextView，返回计数或未知原因。"""
+    if region is None:
+        return [], "uncalibrated_region"
+    row_bounds = parse_bounds(row_node)
+    if row_bounds is None:
+        return [], "uncalibrated_region"
+    left, top, right, bottom = row_bounds
+    width = right - left
+    height = bottom - top
+    try:
+        region_rect = (
+            left + float(region[0]) * width,
+            top + float(region[1]) * height,
+            left + float(region[2]) * width,
+            top + float(region[3]) * height,
+        )
+    except (OverflowError, ValueError, TypeError):
+        return [], "uncalibrated_region"
+    values: list[int] = []
+    invalid_bounds = False
+    for node in row_node.iter():
+        if node is row_node or node.get("class") != badge_class:
+            continue
+        if any(rid_matches(node, suffix) for suffix in excluded_suffixes):
+            continue
+        text = node.get("text")
+        if not isinstance(text, str) or _ASCII_INT_RE.fullmatch(text) is None:
+            continue
+        bounds = parse_bounds(node)
+        if bounds is None:
+            invalid_bounds = True
+            continue
+        if not rect_inside(bounds, region_rect):
+            continue
+        values.append(int(text))
+    if invalid_bounds:
+        return [], "uncalibrated_region"
+    if len(values) > 1:
+        return [], "ambiguous_signal"
+    if not values:
+        return [], "missing_signal"
+    return values, None
 
 
 def require_text(value: object) -> str:

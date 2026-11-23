@@ -14,7 +14,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.adapters.boss.list import parse_snapshot
-from app.adapters.boss.pixel import parse_pixel_row_badge, parse_screen_header
+from app.adapters.boss.pixel import (
+    parse_pixel_row_badge,
+    parse_screen_header,
+    validate_calibration,
+)
 from app.adapters.boss.read import (
     load_and_read_fixture,
     merge_conversations,
@@ -62,6 +66,7 @@ from app.domain.reading import (
     new_message_keys,
     normalize_job_title,
     validate_read_value,
+    validate_unread_row,
 )
 from app.domain.scheduler import stop_reason_for
 from app.process_log import ProcessLog
@@ -336,11 +341,113 @@ class ReadFixtureCLITests(unittest.TestCase):
             for line in files[0].read_text(encoding="utf-8").splitlines()
         ]
         self.assertEqual(events[0]["stage"], "start")
-        self.assertTrue(any(event["stage"] == "read" for event in events))
-        self.assertTrue(
-            any(event["stage"] == "read" and event["operation"] == "page" for event in events)
-        )
+        read_events = [event for event in events if event["stage"] == "read"]
+        for operation in ("load", "page", "gate"):
+            states = [
+                event["result"]
+                for event in read_events
+                if event["operation"] == operation
+            ]
+            self.assertIn("started", states)
+            self.assertTrue(any(state != "started" for state in states))
         self.assertNotIn("tests/fixtures", files[0].read_text(encoding="utf-8"))
+
+    def test_uncalibrated_result_logs_undetermined_not_ok(self) -> None:
+        """F6：未标定结果日志区分 undetermined，不混成成功。"""
+        profile = base_profile()
+        profile["calibrated"] = False
+        manifest = make_read_fixture(
+            self.root, "uncalibrated", "page", [fixture_text("page.xml")], profile=profile
+        )
+        log_path = self.root / "uncalibrated.jsonl"
+        code, payload, stderr = run_cli(
+            self.root, ["read", "--fixture", manifest], log_path
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["result"]["status"], "undetermined")
+        self.assertEqual(stderr, "")
+        events = self._log_events(self.root, "uncalibrated-*.jsonl")
+        load_states = [
+            (event["result"], event["reason_code"])
+            for event in events
+            if event["stage"] == "read" and event["operation"] == "load"
+        ]
+        self.assertIn(("undetermined", "uncalibrated_profile"), load_states)
+        self.assertNotIn(("ok", None), load_states)
+        self.assertFalse(any(event["result"] == "ok" and event["stage"] == "read" and event["operation"] == "page" for event in events))
+
+    def test_identity_ambiguous_is_logged_without_degradation(self) -> None:
+        """F6：合法 identity_ambiguous 可追溯且不触日志降级。"""
+        context = {
+            "contact": "合成联系人乙",
+            "company": "合成公司甲",
+            "position": "合成职位甲",
+            "source_snapshot_id": "00000000-0000-4000-8000-000000000201",
+        }
+        manifest = make_read_fixture(
+            self.root,
+            "identity",
+            "conversation",
+            [fixture_text("conversation-0.xml"), fixture_text("conversation-1.xml")],
+            proof={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            context=context,
+        )
+        log_path = self.root / "identity.jsonl"
+        code, payload, stderr = run_cli(
+            self.root, ["read", "--fixture", manifest], log_path
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["result"]["reason_code"], "identity_ambiguous")
+        self.assertNotIn("m0_process_log_degraded", stderr)
+        events = self._log_events(self.root, "identity-*.jsonl")
+        reasons = [
+            event["reason_code"]
+            for event in events
+            if event["reason_code"] is not None
+        ]
+        self.assertIn("identity_ambiguous", reasons)
+        gate_states = [
+            (event["result"], event["reason_code"])
+            for event in events
+            if event["stage"] == "read" and event["operation"] == "gate"
+        ]
+        self.assertIn(("failed", "not_ok"), gate_states)
+
+    def test_pixel_conflict_logged_as_field_undetermined(self) -> None:
+        """F6：像素与层级冲突记 pixel undetermined/ambiguous_signal。"""
+        manifest = make_read_fixture(
+            self.root,
+            "pixel-conflict",
+            "unread",
+            [unread_xml("1")],
+            pixel=(calibration(threshold=1), make_raw(100, 100, [])),
+        )
+        log_path = self.root / "pixel-conflict.jsonl"
+        code, payload, stderr = run_cli(
+            self.root, ["read", "--fixture", manifest], log_path
+        )
+        self.assertEqual(code, 2)
+        self.assertFalse(payload["actionable"])
+        self.assertNotIn("m0_process_log_degraded", stderr)
+        events = self._log_events(self.root, "pixel-conflict-*.jsonl")
+        self.assertTrue(
+            any(
+                event["stage"] == "read"
+                and event["operation"] == "pixel"
+                and event["result"] == "undetermined"
+                and event["reason_code"] == "ambiguous_signal"
+                for event in events
+            )
+        )
+
+    def _log_events(self, root: Path, pattern: str) -> list[dict]:
+        """读取指定模式的本机过程日志事件。"""
+        files = list(root.glob(pattern))
+        self.assertEqual(len(files), 1)
+        return [
+            json.loads(line)
+            for line in files[0].read_text(encoding="utf-8").splitlines()
+        ]
 
 
 class PageReadTests(unittest.TestCase):
@@ -529,6 +636,38 @@ class UnreadReadTests(unittest.TestCase):
         self.assertEqual(result.value.rows[0].state, "unknown")
         self.assertEqual(result.value.unread_state, "unknown")
         self.assertFalse(is_actionable(result)[0])
+
+    def test_explicit_zero_badge_is_absent(self) -> None:
+        """F5：层级显式 0 与 M2 一致为 absent，不变成 failed。"""
+        result = parse_unread(
+            unread_xml("0"),
+            base_profile(),
+            None,
+            None,
+            BASE_TIME,
+            SNAPSHOT_ID,
+            {"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            BASE_TIME,
+        )
+        self.assertEqual(result.status, "ok")
+        row = result.value.rows[0]
+        self.assertEqual(row.state, "absent")
+        self.assertEqual(row.count, 0)
+        self.assertEqual(result.value.unread_state, "absent")
+
+    def test_pixel_present_count_is_rejected(self) -> None:
+        """F5：像素 present 不得携带精确计数。"""
+        row = UnreadRowRead(
+            identity_hash=None,
+            conversation_key=None,
+            state="present",
+            count=7,
+            source="pixel",
+            confidence="medium",
+            reason_code=None,
+        )
+        with self.assertRaises(ValueError):
+            validate_unread_row(row)
 
     def test_badge_disappearance_in_viewport_is_not_absent(self) -> None:
         """SC-R08：角标消失/延迟刷新在仅视口时不得宣告无未读或关闭发现。"""
@@ -935,6 +1074,62 @@ class LadderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             resolve_field(hierarchy=base, independent_cross_evidence=1)
 
+    def test_pixel_only_keeps_pixel_source_and_confidence(self) -> None:
+        """仅像素确认不得冒充 hierarchy/high。"""
+        pixel = ladder_reading(state="present", source="pixel")
+        resolution = resolve_field(pixel=pixel)
+        self.assertEqual(resolution.state, "present")
+        self.assertEqual(resolution.source, "pixel")
+        self.assertEqual(resolution.confidence, "medium")
+        self.assertIsNone(resolution.count)
+        validate_field_resolution(resolution)
+
+    def test_human_only_keeps_human_source(self) -> None:
+        """仅显式人工确认使用 human/high。"""
+        human = ladder_reading(state="present", source="human", count=1)
+        resolution = resolve_field(human=human)
+        self.assertEqual(resolution.state, "present")
+        self.assertEqual(resolution.source, "human")
+        self.assertEqual(resolution.confidence, "high")
+        validate_field_resolution(resolution)
+
+    def test_human_conflict_with_pixel_is_undetermined(self) -> None:
+        """后级人工不同值不得覆盖像素已确认值。"""
+        resolution = resolve_field(
+            pixel=ladder_reading(state="present", source="pixel"),
+            human=ladder_reading(state="absent", source="human", count=0),
+        )
+        self.assertEqual(resolution.state, "undetermined")
+        self.assertTrue(resolution.requires_human)
+        validate_field_resolution(resolution)
+
+    def test_resolution_tampering_is_rejected(self) -> None:
+        """结论状态/计数必须与证据联动，不能只改派生值。"""
+        resolution = resolve_field(
+            hierarchy=ladder_reading(state="present", count=1)
+        )
+        validate_field_resolution(resolution)
+        with self.assertRaises(ValueError):
+            validate_field_resolution(
+                replace(
+                    resolution,
+                    state="absent",
+                    count=0,
+                    source="hierarchy",
+                    confidence="high",
+                )
+            )
+        with self.assertRaises(ValueError):
+            validate_field_resolution(
+                replace(
+                    resolution,
+                    state="present",
+                    count=2,
+                    source="hierarchy",
+                    confidence="high",
+                )
+            )
+
 
 class ConversationReadTests(unittest.TestCase):
     """覆盖跨屏合并、稳定身份、方向、读全与入站门禁。"""
@@ -1088,6 +1283,195 @@ class ConversationReadTests(unittest.TestCase):
                 if message.text in {"合成消息甲", "合成消息丙"}
             )
         )
+
+    def test_earlier_duplicate_stable_identity_makes_conversation_unknown(self) -> None:
+        """F1：较早重复稳定身份不能被最后一条唯一入站覆盖。"""
+        page0 = fixture_text("conversation-0.xml").replace(
+            'content-desc="msg-1"', 'content-desc="msg-2"'
+        )
+        pages = [
+            parse_conversation_page(page0, base_profile(), self._context(), BASE_TIME, SNAPSHOT_ID),
+            parse_conversation_page(fixture_text("conversation-1.xml"), base_profile(), self._context(), BASE_TIME, SNAPSHOT_ID),
+        ]
+        result = merge_conversations(
+            pages,
+            base_profile(),
+            {"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            BASE_TIME,
+        )
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.value.inbound_state, "unknown")
+        self.assertIsNone(result.value.latest_inbound_key)
+        self.assertFalse(result.value.message_identity_verified)
+        self.assertFalse(is_actionable(result)[0])
+
+    def test_duplicate_content_controls_make_latest_row_unknown(self) -> None:
+        """F2：同正文控件多候选不得降级为 time/system 或 none。"""
+        text_node = (
+            '<node text="合成消息丙" resource-id="com.hpbr.bosszhipin:id/tv_content_text" '
+            'class="android.widget.TextView" bounds="[160,630][680,710]" />'
+        )
+        duplicate = text_node.replace("合成消息丙", "合成消息丙二")
+        page1 = fixture_text("conversation-1.xml").replace(text_node, text_node + duplicate)
+        pages = [
+            parse_conversation_page(fixture_text("conversation-0.xml"), base_profile(), self._context(), BASE_TIME, SNAPSHOT_ID),
+            parse_conversation_page(page1, base_profile(), self._context(), BASE_TIME, SNAPSHOT_ID),
+        ]
+        result = merge_conversations(
+            pages,
+            base_profile(),
+            {"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            BASE_TIME,
+        )
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.value.inbound_state, "unknown")
+        self.assertIsNone(result.value.latest_inbound_key)
+        self.assertEqual(result.value.messages[-2].kind, "unknown")
+
+    def test_duplicate_direction_controls_make_row_unknown(self) -> None:
+        """F2：多头像/方向控件冲突不得被单一气泡证据掩盖。"""
+        avatar = (
+            '<node resource-id="com.hpbr.bosszhipin:id/iv_avatar" '
+            'class="android.widget.ImageView" bounds="[20,620][120,720]" />'
+        )
+        duplicate = avatar.replace("[20,620][120,720]", "[880,620][980,720]")
+        page1 = fixture_text("conversation-1.xml").replace(avatar, avatar + duplicate)
+        pages = [
+            parse_conversation_page(fixture_text("conversation-0.xml"), base_profile(), self._context(), BASE_TIME, SNAPSHOT_ID),
+            parse_conversation_page(page1, base_profile(), self._context(), BASE_TIME, SNAPSHOT_ID),
+        ]
+        result = merge_conversations(
+            pages,
+            base_profile(),
+            {"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            BASE_TIME,
+        )
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.value.inbound_state, "unknown")
+        self.assertIsNone(result.value.latest_inbound_key)
+
+    def test_new_message_keys_rejects_cross_conversation(self) -> None:
+        """新消息比较必须先核对同 app/profile/conversation。"""
+        previous = merge_conversations(
+            self._pages(),
+            base_profile(),
+            {"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            BASE_TIME,
+        )
+        other_context = {
+            "contact": "合成联系人乙",
+            "company": "合成公司甲",
+            "position": "合成职位甲",
+            "source_snapshot_id": "00000000-0000-4000-8000-000000000202",
+        }
+        page0 = fixture_text("conversation-0.xml").replace("合成联系人甲", "合成联系人乙")
+        page1 = fixture_text("conversation-1.xml").replace("合成联系人甲", "合成联系人乙")
+        other_pages = [
+            parse_conversation_page(page0, base_profile(), other_context, BASE_TIME, SNAPSHOT_ID),
+            parse_conversation_page(page1, base_profile(), other_context, BASE_TIME, SNAPSHOT_ID),
+        ]
+        other = merge_conversations(
+            other_pages,
+            base_profile(),
+            {"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            BASE_TIME,
+        )
+        self.assertEqual(other.status, "ok")
+        with self.assertRaises(ValueError):
+            new_message_keys(previous.value, other.value)
+
+    def test_public_parsers_reject_uncalibrated_and_bad_context(self) -> None:
+        """F3：公开解析入口自身执行标定/上下文校验，不依赖 fixture 包装。"""
+        profile = base_profile()
+        profile["calibrated"] = False
+        page = parse_page(fixture_text("page.xml"), profile, BASE_TIME, SNAPSHOT_ID)
+        self.assertEqual(page.status, "undetermined")
+        self.assertEqual(page.reason_code, "uncalibrated_profile")
+        version = parse_page(
+            fixture_text("page.xml"),
+            base_profile(),
+            BASE_TIME,
+            SNAPSHOT_ID,
+            app_version="other-version",
+        )
+        self.assertEqual(version.reason_code, "uncalibrated_profile")
+        job = parse_job_list(fixture_text("job_list.xml"), profile, BASE_TIME, SNAPSHOT_ID)
+        self.assertEqual(job.reason_code, "uncalibrated_profile")
+        detail = parse_job_detail(fixture_text("job_detail.xml"), profile, BASE_TIME, SNAPSHOT_ID)
+        self.assertEqual(detail.reason_code, "uncalibrated_profile")
+        unread = parse_unread(
+            fixture_text("unread.xml"),
+            profile,
+            None,
+            None,
+            BASE_TIME,
+            SNAPSHOT_ID,
+            {"kind": "viewport", "top_proven": False, "bottom_proven": False},
+            BASE_TIME,
+        )
+        self.assertEqual(unread.reason_code, "uncalibrated_profile")
+        conversation = parse_conversation_page(
+            fixture_text("conversation-0.xml"), profile, self._context(), BASE_TIME, SNAPSHOT_ID
+        )
+        self.assertEqual(conversation.reason_code, "uncalibrated_profile")
+        missing = parse_conversation_page(
+            fixture_text("conversation-0.xml"), base_profile(), {}, BASE_TIME, SNAPSHOT_ID
+        )
+        self.assertEqual(missing.status, "failed")
+        self.assertEqual(missing.reason_code, "invalid_fixture")
+        extra = dict(self._context())
+        extra["extra"] = "x"
+        bad_extra = parse_conversation_page(
+            fixture_text("conversation-0.xml"), base_profile(), extra, BASE_TIME, SNAPSHOT_ID
+        )
+        self.assertEqual(bad_extra.reason_code, "invalid_fixture")
+        page_none = parse_conversation_page(
+            fixture_text("conversation-0.xml"), base_profile(), None, BASE_TIME, SNAPSHOT_ID
+        )
+        self.assertEqual(page_none.reason_code, "identity_ambiguous")
+
+    def test_public_merge_rejects_wrong_value_and_profile(self) -> None:
+        """F3：公开合并入口对坏值类型/错 profile 受控失败，不泄漏 AssertionError。"""
+        page = PageSnapshot(
+            app=APP,
+            profile_id="synthetic-boss-m3",
+            page="chat_list",
+            signals=("chat_list",),
+            field_evidence=(FieldEvidence("page", "hierarchy", "high", "ok", None),),
+        )
+        wrong_value = ReadResult(
+            "ok", page, None, SNAPSHOT_ID, BASE_TIME, "fixture", "high"
+        )
+        result = merge_conversations(
+            [wrong_value],
+            base_profile(),
+            {"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            BASE_TIME,
+        )
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(result.reason_code, "invalid_fixture")
+        pages = self._pages()
+        other_profile = base_profile()
+        other_profile["profile_id"] = "other-synthetic"
+        mismatch = merge_conversations(
+            pages,
+            other_profile,
+            {"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+            BASE_TIME,
+        )
+        self.assertEqual(mismatch.status, "failed")
+        self.assertEqual(mismatch.reason_code, "invalid_fixture")
+
+    def test_huge_row_bounds_do_not_leak_overflow(self) -> None:
+        """F3：巨大行坐标在方向中心计算中受控，不泄漏 OverflowError。"""
+        huge = "9" * 400
+        page1 = fixture_text("conversation-1.xml").replace(
+            'bounds="[0,600][1000,800]"', f'bounds="[0,0][{huge},{huge}]"'
+        )
+        result = parse_conversation_page(
+            page1, base_profile(), self._context(), BASE_TIME, SNAPSHOT_ID
+        )
+        self.assertIn(result.status, {"ok", "failed", "undetermined"})
 
     def test_unverified_stable_id_never_yields_key(self) -> None:
         """未标定稳定标识的真实版本即使方向/读全满足也不可发送。"""
@@ -1314,6 +1698,21 @@ class ReadValueAndStoreBoundaryTests(unittest.TestCase):
                 None,
             )
 
+    def test_process_log_accepts_undetermined_and_identity_reason(self) -> None:
+        """F6：日志白名单接受 undetermined 与 identity_ambiguous。"""
+        with tempfile.TemporaryDirectory() as temp:
+            log = ProcessLog(path=Path(temp) / "process.jsonl")
+            self.assertTrue(
+                log.record(
+                    stage="read",
+                    operation="conversation",
+                    result="undetermined",
+                    reason_code="identity_ambiguous",
+                    error_category="read",
+                )
+            )
+            self.assertFalse(log.degraded)
+
     def test_undetermined_does_not_enter_decision(self) -> None:
         """undetermined 永远不可决策，门禁抛固定错误。"""
         result = ReadResult(
@@ -1341,6 +1740,26 @@ class PixelHeaderTests(unittest.TestCase):
             parse_screen_header(struct.pack("<IIII", 100, 100, 1, 0) + bytes(39999))
         with self.assertRaises(ValueError):
             parse_screen_header(struct.pack("<IIII", 0, 100, 1, 0) + bytes(0))
+
+    def test_header_colorspace_support_domain(self) -> None:
+        """F5：合成头仅支持 colorspace=0，其它值明确拒绝。"""
+        raw = make_raw(100, 100, [])
+        self.assertEqual(parse_screen_header(raw).colorspace, 0)
+        unsupported = struct.pack("<IIII", 100, 100, 1, 1) + bytes(40000)
+        with self.assertRaises(ValueError):
+            parse_screen_header(unsupported)
+
+    def test_calibration_date_and_source_domain(self) -> None:
+        """F5：真实日历日期与 synthetic 来源域严格校验。"""
+        bad_date = calibration()
+        bad_date["calibrated_on"] = "2026-02-30"
+        with self.assertRaises(ValueError):
+            validate_calibration(bad_date)
+        bad_source = calibration()
+        bad_source["source"] = "device_claimed"
+        with self.assertRaises(ValueError):
+            validate_calibration(bad_source)
+        self.assertEqual(validate_calibration(calibration())["source"], "synthetic")
 
 
 if __name__ == "__main__":
