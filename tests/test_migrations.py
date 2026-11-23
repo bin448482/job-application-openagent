@@ -99,6 +99,7 @@ class MigrationTests(unittest.TestCase):
         calls: list[int] = []
 
         def hook(index: int, connection: sqlite3.Connection) -> None:
+            """在第三条 DDL 后注入故障，验证建表事务整体回滚。"""
             calls.append(index)
             if index == 2:
                 raise RuntimeError("injected DDL failure")
@@ -125,6 +126,7 @@ class MigrationTests(unittest.TestCase):
         final_index = len(TABLE_SQL) + len(INDEX_SQL)
 
         def hook(index: int, connection: sqlite3.Connection) -> None:
+            """在版本写入后的最后故障点抛错，验证版本与 DDL 一并回滚。"""
             if index == final_index:
                 raise RuntimeError("injected version failure")
 

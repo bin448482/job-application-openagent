@@ -780,6 +780,7 @@ class StoreTests(unittest.TestCase):
         """任务条件更新未命中时任务、设备与事件全部回滚。"""
 
         def hook(name: str, connection: object) -> None:
+            """在任务条件更新前篡改 nonce，使更新未命中并触发回滚。"""
             if name == "finish_before_task_update":
                 connection.execute(
                     "UPDATE hr_discoveries SET nonce = ? WHERE app = 'boss' AND \"key\" = ?",
@@ -808,6 +809,7 @@ class StoreTests(unittest.TestCase):
         """设备条件更新未命中时已改任务与事件也全部回滚。"""
 
         def hook(name: str, connection: object) -> None:
+            """在设备条件更新前篡改设备 nonce，使更新未命中并触发回滚。"""
             if name == "finish_before_device_update":
                 connection.execute(
                     "UPDATE device_lease SET nonce = ? WHERE device_key = 'primary'",
@@ -834,6 +836,7 @@ class StoreTests(unittest.TestCase):
         """事件写入失败时任务与设备两表变更全部回滚。"""
 
         def hook(name: str, connection: object) -> None:
+            """在事件写入前抛错，验证任务与设备更新一并回滚。"""
             if name == "finish_before_event":
                 raise RuntimeError("injected event failure")
 
