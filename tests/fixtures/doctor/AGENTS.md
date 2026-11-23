@@ -12,8 +12,8 @@
 
 ## 三、期望结果
 
-`python -m app doctor --fixture tests/fixtures/doctor/ready.json` 必须退出 `0`，stderr 为空，输出
-`{"schema_version":1,"status":"ok","reason_code":null,"device_count":1,"selected_alias":"primary","unlocked":true,"foreground_app":"boss"}`，且不新增业务库。
+`python -m app doctor --fixture tests/fixtures/doctor/ready.json` 必须退出 `0`，正常日志可用时 stderr 为空，输出
+`{"schema_version":1,"status":"ok","reason_code":null,"device_count":1,"selected_alias":"primary","unlocked":true,"foreground_app":"boss"}`，且不新增业务库。该命令只追加被忽略的 `data/logs/m0-process.jsonl`；日志写入失败时 stdout/退出码不变，stderr 仅出现固定 `m0_process_log_degraded` 标记。
 
 ## 四、维护要求
 
@@ -25,3 +25,4 @@
 
 - 正例只验证 M0 输出形状与判定，不证明真实设备可用。
 - 当前没有真实设备夹具；真实探针只能另行取得确认后单独记录。
+- 夹具拒绝重复 JSON 对象键与不可 UTF-8 编码的孤立代理字符；负例由测试临时生成。

@@ -7,7 +7,7 @@
 ## 二、当前文件与子目录
 
 - `__init__.py`：声明测试包，支持 `python -m unittest tests.test_doctor`。
-- `test_doctor.py`：M0 CLI 正反例、配置/夹具校验、业务状态映射、窗口解析、调用协议与 fixture 零子进程断言。
+- `test_doctor.py`：M0 CLI 正反例、配置/夹具校验、重复 JSON 键与孤立代理字符、业务状态映射、keyguard token、整条 focus 完整 Window 匹配/单 Window 多组件/前后附加内容解析、设备失败七键映射、stdout 写失败、过程日志白名单/降级故障注入、调用协议与 fixture 零子进程断言。
 - `fixtures/`：纯合成输入夹具；见 `fixtures/AGENTS.md`。
 
 ## 三、范围边界
@@ -16,6 +16,7 @@
 - 负例由测试进程捕获预期退出码；验收命令本身必须退出 `0`。
 - 真实适配器只在测试中 mock `subprocess.run`；不得实际运行 ADB。
 - 测试不把被测输出反推成预期，也不使用真实姓名、序列号、聊天或绝对路径。
+- 日志测试必须同时覆盖正常追加、白名单拒绝、IO 故障注入与 CLI 固定 `m0_process_log_degraded` 标记；fixture 模式只允许写被忽略日志，不得写业务库或启动子进程。
 
 ## 四、运行方式
 
@@ -40,3 +41,4 @@ M0 测试不依赖 Node；`npm test` 验证既有评测判据未被破坏。
 - 当前只有 M0 测试；M1–M2 的 store、migrations、sensor 测试尚未实现。
 - 真实 ADB、真实机型与窗口输出未验证。
 - 独立离线场景测试不在本 Task 范围。
+- 日志测试验证的是本机 best-effort 行为，不代表磁盘故障时仍能保留完整日志。

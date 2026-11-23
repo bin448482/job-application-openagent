@@ -7,18 +7,19 @@
 ## 二、当前文件
 
 - `__init__.py`：声明命令行包。
-- `main.py`：`main(argv)` 入口、严格 argparse、配置/夹具读取、fixture 与 ADB 组合、安全 JSON 输出与退出码。
+- `main.py`：`main(argv, process_log=...)` 入口、严格 argparse、配置校验/夹具读取、共享 JSON 重复键边界、fixture 与 ADB 组合、唯一安全 JSON 输出、退出码与过程日志阶段记录。
 
 ## 三、行为契约
 
 1. 全局 `--config` 必须放在子命令前；`doctor` 的 `--fixture` 与 `--device` 互斥且必须选其一。
 2. `--serial` 只能与 `--device` 同用且此时必填；空白 serial 视为缺失。
 3. 未知选项、选项缩写、重复选项、缺参数、额外位置参数统一输出 `invalid_input` 并退出 `2`。
-4. 配置省略或内容为 `{}` 时使用 `{"schema_version":1,"mode":"read_only"}`；只接受这两个键与固定值。
+4. 配置省略或内容为 `{}` 时保持 `{"schema_version":1,"mode":"read_only"}` 契约；`_validate_config` 只做校验，不返回未使用的对象，只接受这两个键与固定值。
 5. 配置、夹具路径只接受项目内相对路径；拒绝绝对路径、盘符、`~` 和解析后越界。
-6. 参数/配置/夹具错误只输出三键安全对象，不回显输入、异常、绝对路径或命令参数。
-7. fixture 模式不得实例化或调用 ADB 适配器，不得启动子进程。
-8. 成功或业务停止只向 stdout 写一个 JSON 对象；stderr 保持为空。帮助退出 `0`，其余失败退出 `2`，不使用退出 `1`。
+6. 参数/配置/夹具错误只输出三键安全对象，不回显输入、异常、绝对路径或命令参数。共享 JSON 边界拒绝重复对象键（含嵌套）；夹具还拒绝不可 UTF-8 编码的 alias/selected_alias。
+7. fixture 模式不得实例化或调用 ADB 适配器，不得启动子进程；CLI 导入适配器模块本身必须零副作用。
+8. 成功或业务停止只向 stdout 写一个 JSON 对象；正常时 stderr 为空。日志写入失败时 stdout 和退出码不变，stderr 仅写固定 `m0_process_log_degraded`。stdout 自身写失败时安全退出 `2`，不打印 traceback。帮助退出 `0`，其余失败退出 `2`，不使用退出 `1`。
+9. 过程日志阶段覆盖 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/exit`；只写固定原因码/错误类别/耗时，不写原值。
 
 ## 四、测试
 
@@ -26,7 +27,7 @@
 python -m unittest tests.test_doctor
 ```
 
-`tests/test_doctor.py` 覆盖配置/夹具负例、模式冲突、重复/未知选项、帮助、业务失败、窗口解析与 fixture 零子进程断言。
+`tests/test_doctor.py` 覆盖配置/夹具负例、重复 JSON 键、孤立代理字符、模式冲突、重复/未知选项、帮助、业务失败、设备失败七键映射、窗口解析、stdout 写失败、日志降级标记与 fixture 零子进程断言。
 
 ## 五、维护要求
 
@@ -40,3 +41,4 @@ python -m unittest tests.test_doctor
 - 当前只有 `doctor`；`store init`、`sense` 等未实现。
 - 真实设备模式只做离线 mock 验证，尚未在真机执行。
 - 输出键顺序固定为 `schema_version/status/reason_code/device_count/selected_alias/unlocked/foreground_app`，但调用方应按键读取而非依赖顺序。
+- 过程日志为 best-effort；调用端忽略单次 `record` 的 `False`，只通过降级标记暴露不完整，不能当作审计保证。

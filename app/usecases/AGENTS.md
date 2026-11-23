@@ -7,16 +7,17 @@
 ## 二、当前文件
 
 - `__init__.py`：声明用例包。
-- `doctor.py`：严格校验合成探针输入，按“清单 → 选择 → 状态 → 解锁 → 前台”的顺序生成固定字段的 doctor 业务结果。
+- `doctor.py`：严格校验合成探针输入（含 UTF-8 可编码性），按“清单 → 选择 → 状态 → 解锁 → 前台”的顺序判定；`build_result` 是唯一 doctor 业务结果组装点，CLI 与设备失败共用它。
 
 ## 三、行为契约
 
 - 输入必须是恰好包含 `devices/selected_alias/unlocked/foreground_app` 的对象；设备项恰好包含 `alias/state`。
-- `alias` 唯一且非空；`state` 仅 `device/offline/unauthorized`；`selected_alias` 为已有别名或 `null`；`unlocked` 为布尔或 `null`；`foreground_app` 仅 `boss/other/unknown`。
+- `alias` 唯一、非空且可按 UTF-8 编码；`state` 仅 `device/offline/unauthorized`；`selected_alias` 为已有别名或 `null`，且同样拒绝不可 UTF-8 编码的孤立代理字符；`unlocked` 为布尔或 `null`；`foreground_app` 仅 `boss/other/unknown`。
 - 零设备报 `device_disconnected`；多设备未选择报 `device_ambiguous`；单设备未选择时自动选择。
 - 选择后依次判定离线/未授权、锁定或解锁未知、前台不是 BOSS 或未知。
 - 失败保留已知字段，未知字段保持 `null`/`unknown`；不伪造业务成功。
-- 本模块不导入具体适配器，不启动子进程。
+- 本模块不导入具体适配器，不启动子进程。CLI 的设备失败只调用 `build_result`，不得在 CLI 重复组装七键对象。
+- 重复 JSON 对象键在 CLI 共享输入边界拒绝，不在本模块另造解析层。
 
 ## 四、测试
 

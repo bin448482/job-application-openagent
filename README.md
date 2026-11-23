@@ -32,7 +32,7 @@ python -m app doctor --fixture tests/fixtures/doctor/ready.json
 {"schema_version":1,"status":"ok","reason_code":null,"device_count":1,"selected_alias":"primary","unlocked":true,"foreground_app":"boss"}
 ```
 
-fixture 模式只读合成输入，不启动子进程、不连接设备、不调用网络、不写业务库。配置只有在显式传入全局 `--config <相对文件>` 时读取；省略与 `{}` 都取 `{"schema_version":1,"mode":"read_only"}`，不会自动读取根 `config.json`。
+fixture 模式只读合成输入，不启动子进程、不连接设备、不调用网络、不写业务库；每次运行只尝试向被忽略的 `data/logs/m0-process.jsonl` 追加固定字段过程日志，写入失败不影响 stdout 或退出码，但 stderr 会写固定 `m0_process_log_degraded` 表示日志不完整。配置只有在显式传入全局 `--config <相对文件>` 时读取；省略与 `{}` 都取 `{"schema_version":1,"mode":"read_only"}`，不会自动读取根 `config.json`。配置与夹具在共享 JSON 输入边界拒绝重复对象键（含嵌套），夹具还拒绝不可 UTF-8 编码的字符串，错误只输出安全 JSON 且不回显原值。
 
 真实探针必须显式指定：
 

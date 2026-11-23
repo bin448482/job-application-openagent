@@ -22,6 +22,7 @@ from app.adapters.adb.device import (
 )
 from app.cli.main import main
 from app.ports.device import DeviceEntry, ProbeSnapshot
+from app.process_log import EVENT_KEYS, ProcessLog
 from app.usecases.doctor import run_doctor
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -106,6 +107,16 @@ def _completed(stdout: str = "", returncode: int = 0) -> subprocess.CompletedPro
     )
 
 
+def _read_log(path: Path) -> list[dict[str, object]]:
+    """逐行解析过程日志，返回事件对象列表。"""
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def _event_stages(events: list[dict[str, object]]) -> list[str]:
+    """提取事件阶段序列，便于断言固定流程。"""
+    return [str(event["stage"]) for event in events]
+
+
 class DoctorCliTests(unittest.TestCase):
     """覆盖验收命令、配置与参数负例、业务失败和设备状态映射。"""
 
@@ -166,6 +177,7 @@ class DoctorCliTests(unittest.TestCase):
                 "version-string": '{"schema_version":"1"}',
                 "mode-wrong": '{"mode":"draft_only"}',
                 "mode-null": '{"mode":null}',
+                "duplicate-key": '{"schema_version":1,"mode":"read_only","mode":"read_only"}',
                 "not-object": "[]",
                 "invalid-json": "{",
             }
@@ -181,6 +193,7 @@ class DoctorCliTests(unittest.TestCase):
                     )
                     self.assertEqual(completed.returncode, 2)
                     self.assertEqual(completed.stderr, "")
+                    self.assertNotIn('"mode"', completed.stdout)
                     self.assertEqual(
                         json.loads(completed.stdout),
                         {
@@ -372,14 +385,54 @@ class DoctorCliTests(unittest.TestCase):
                     )
 
             invalid_json = _write_text(directory, "invalid.json", "{")
+            duplicate_top = _write_text(
+                directory,
+                "duplicate-top.json",
+                '{"devices":[],"devices":[],"selected_alias":null,'
+                '"unlocked":true,"foreground_app":"boss"}',
+            )
+            duplicate_nested = _write_text(
+                directory,
+                "duplicate-nested.json",
+                '{"devices":[{"alias":"primary","alias":"primary",'
+                '"state":"device"}],"selected_alias":"primary",'
+                '"unlocked":true,"foreground_app":"boss"}',
+            )
+            lone_alias = _write_text(
+                directory,
+                "lone-alias.json",
+                '{"devices":[{"alias":"\\ud800","state":"device"}],'
+                '"selected_alias":null,"unlocked":true,'
+                '"foreground_app":"boss"}',
+            )
+            lone_selected = _write_text(
+                directory,
+                "lone-selected.json",
+                '{"devices":[{"alias":"primary","state":"device"}],'
+                '"selected_alias":"\\ud800","unlocked":true,'
+                '"foreground_app":"boss"}',
+            )
             missing = "does-not-exist-m0.json"
             absolute = str((directory / "absolute.json").resolve())
             escaping = "..\\outside-m0.json"
-            for path in (invalid_json, missing, absolute, escaping):
+            for path in (
+                invalid_json,
+                duplicate_top,
+                duplicate_nested,
+                lone_alias,
+                lone_selected,
+                missing,
+                absolute,
+                escaping,
+            ):
                 with self.subTest(path=path):
                     completed = _run_cli("doctor", "--fixture", path)
                     self.assertEqual(completed.returncode, 2)
                     self.assertEqual(completed.stderr, "")
+                    self.assertEqual(completed.stdout.count("\n"), 1)
+                    self.assertNotIn('"alias"', completed.stdout)
+                    self.assertNotIn('"devices"', completed.stdout)
+                    self.assertNotIn("\\ud800", completed.stdout)
                     self.assertEqual(
                         json.loads(completed.stdout)["reason_code"],
                         "invalid_fixture",
@@ -530,9 +583,14 @@ class DoctorCliTests(unittest.TestCase):
         """fixture 路径在进程内执行时也不得调用任何 subprocess.run。"""
         stdout = io.StringIO()
         stderr = io.StringIO()
-        with patch("subprocess.run") as run_mock:
-            with redirect_stdout(stdout), redirect_stderr(stderr):
-                code = main(["doctor", "--fixture", READY_FIXTURE])
+        with tempfile.TemporaryDirectory() as tmp:
+            log = ProcessLog(path=Path(tmp) / "m0-process.jsonl")
+            with patch("subprocess.run") as run_mock:
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    code = main(
+                        ["doctor", "--fixture", READY_FIXTURE],
+                        process_log=log,
+                    )
         run_mock.assert_not_called()
         self.assertEqual(code, 0)
         self.assertEqual(stderr.getvalue(), "")
@@ -640,6 +698,51 @@ class AdbProbeTests(unittest.TestCase):
                 self.assertEqual(run_mock.call_count, 1)
                 self.assertEqual(caught.exception.reason_code, "device_disconnected")
 
+    def test_adb_failure_log_categories_are_distinct(self) -> None:
+        """过程日志用固定类别区分 ADB 缺失、超时、其它 IO 错误与非零退出。"""
+        cases = {
+            "missing": (FileNotFoundError("missing"), "adb_missing"),
+            "timeout": (subprocess.TimeoutExpired(["adb"], 5), "adb_timeout"),
+            "oserror": (PermissionError("denied"), "adb_oserror"),
+            "nonzero": (
+                lambda *args, **kwargs: _completed(returncode=1),
+                "adb_nonzero",
+            ),
+        }
+        for name, (effect, category) in cases.items():
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / "m0-process.jsonl"
+                    log = ProcessLog(path=path, correlation_id=f"corr-{name}")
+                    with patch("subprocess.run", side_effect=effect):
+                        with self.assertRaises(DeviceProbeError) as caught:
+                            AdbDeviceProbe(process_log=log).probe("synthetic-serial")
+                    self.assertEqual(
+                        caught.exception.reason_code,
+                        "device_disconnected",
+                    )
+                    events = _read_log(path)
+                    log_text = path.read_text(encoding="utf-8")
+                self.assertEqual(len(events), 1)
+                event = events[0]
+                self.assertEqual(event["stage"], "adb_devices")
+                self.assertEqual(event["result"], "failed")
+                self.assertEqual(event["command"], "adb_devices")
+                self.assertEqual(event["reason_code"], "device_disconnected")
+                self.assertEqual(event["error_category"], category)
+                self.assertEqual(event["correlation_id"], f"corr-{name}")
+                self.assertNotIn("synthetic-serial", log_text)
+
+    def test_prompt_line_is_not_counted_as_device(self) -> None:
+        """ADB 提示行不得被当成设备，serial 未命中时计数为 0。"""
+        devices = "List of devices attached\nadb: no devices/emulators found\n"
+        with patch("subprocess.run", return_value=_completed(devices)) as run_mock:
+            with self.assertRaises(DeviceProbeError) as caught:
+                AdbDeviceProbe().probe("synthetic-serial")
+        self.assertEqual(run_mock.call_count, 1)
+        self.assertEqual(caught.exception.reason_code, "device_disconnected")
+        self.assertEqual(caught.exception.device_count, 0)
+
     def test_window_command_failure_is_disconnected(self) -> None:
         """窗口命令失败报告断连，并保留已知清单数量。"""
         devices = "List of devices attached\nsynthetic-serial\tdevice\n"
@@ -662,6 +765,40 @@ class AdbProbeTests(unittest.TestCase):
             "mixed": ("isKeyguardShowing=true\nisKeyguardShowing=false", None),
             "missing": ("", None),
             "unexpected": ("isKeyguardShowing=maybe", None),
+        }
+        for name, (text, expected) in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(_decide_unlocked(text), expected)
+
+    def test_keyguard_malformed_tokens_never_unlock(self) -> None:
+        """畸形布尔 token、缺值和合法/畸形混杂都不得推定解锁。"""
+        cases = {
+            "false123": ("isKeyguardShowing=false123", None),
+            "false_extra": ("isKeyguardShowing=false_extra", None),
+            "false-hyphen": ("isKeyguardShowing=false-extra", None),
+            "false_": ("isKeyguardShowing=false_", None),
+            "missing_value": ("isKeyguardShowing=", None),
+            "missing_equals": ("isKeyguardShowing", None),
+            "malformed_then_false": (
+                "isKeyguardShowing=false123\nisKeyguardShowing=false",
+                None,
+            ),
+            "same_segment_mixed": (
+                "isKeyguardShowing=false123 isKeyguardShowing=false",
+                None,
+            ),
+            "valid_mixed": (
+                "isKeyguardShowing=false\nisKeyguardShowing=true",
+                None,
+            ),
+            "repeat_false": (
+                "isKeyguardShowing=false\nisKeyguardShowing=false",
+                True,
+            ),
+            "repeat_true": (
+                "isKeyguardShowing=true\nisKeyguardShowing=true",
+                False,
+            ),
         }
         for name, (text, expected) in cases.items():
             with self.subTest(name=name):
@@ -692,11 +829,81 @@ class AdbProbeTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(_decide_foreground(text), expected)
 
+    def test_current_focus_rejects_multiple_components_in_one_line(self) -> None:
+        """同一 mCurrentFocus 行出现多个组件或畸形组件时不得取第一个。"""
+        cases = {
+            "two-different": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main} "
+                "Window{b u0 com.example.other/.Main}",
+                "unknown",
+            ),
+            "two-boss": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main} "
+                "Window{b u0 com.hpbr.bosszhipin/.Other}",
+                "unknown",
+            ),
+            "valid-plus-malformed": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main} "
+                "Window{broken}",
+                "unknown",
+            ),
+            "malformed-plus-valid": (
+                "mCurrentFocus=Window{broken} "
+                "Window{b u0 com.example.other/.Main}",
+                "unknown",
+            ),
+            "two-components-inside-one-window": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main "
+                "com.example.other/.Main}",
+                "unknown",
+            ),
+            "two-boss-components-inside-one-window": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main "
+                "com.hpbr.bosszhipin/.Other}",
+                "unknown",
+            ),
+            "suffix-garbage": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main} garbage",
+                "unknown",
+            ),
+            "prefix-garbage": (
+                "mCurrentFocus=prefix Window{a u0 com.hpbr.bosszhipin/.Main}",
+                "unknown",
+            ),
+            "suffix-component": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main} "
+                "com.example.other/.Main",
+                "unknown",
+            ),
+            "single-boss": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main}",
+                "boss",
+            ),
+            "single-other": (
+                "mCurrentFocus=Window{b u0 com.example.other/.Main}",
+                "other",
+            ),
+            "single-boss-surrounding-whitespace": (
+                "mCurrentFocus=  Window{a u0 com.hpbr.bosszhipin/.Main}  ",
+                "boss",
+            ),
+            "single-boss-extra-whitespace": (
+                "mCurrentFocus=Window{abc   u0\t"
+                "com.hpbr.bosszhipin/.Main}",
+                "boss",
+            ),
+        }
+        for name, (text, expected) in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(_decide_foreground(text), expected)
+
     def test_device_list_parsing_ignores_non_device_lines(self) -> None:
         """清单解析忽略标题、守护进程提示和空行。"""
         text = (
             "* daemon not running; starting now at tcp:5037\n"
             "adb server version (41) doesn't match this client (39)\n"
+            "adb: no devices/emulators found\n"
+            "error:\tno devices/emulators found\n"
             "List of devices attached\n"
             "\n"
             "serial-a\tdevice\n"
@@ -706,6 +913,374 @@ class AdbProbeTests(unittest.TestCase):
             _parse_device_list(text),
             [("serial-a", "device"), ("serial-b", "offline")],
         )
+
+
+class ProcessLogTests(unittest.TestCase):
+    """验证本机过程日志的固定字段、白名单与静默失败边界。"""
+
+    def test_appends_whitelisted_json_lines(self) -> None:
+        """合法事件逐行追加，字段集合和关联 ID 保持固定。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path, correlation_id="corr-whitelist")
+            events = [
+                {"stage": "start", "result": "started"},
+                {"stage": "arguments", "result": "ok"},
+                {
+                    "stage": "config",
+                    "result": "ok",
+                    "config_source": "default",
+                },
+                {"stage": "decision", "result": "ok", "device_count": 1},
+                {
+                    "stage": "exit",
+                    "result": "ok",
+                    "exit_code": 0,
+                    "duration_ms": 5,
+                },
+            ]
+            for event in events:
+                self.assertTrue(log.record(**event))
+            parsed = _read_log(path)
+
+        self.assertEqual(len(parsed), len(events))
+        for event in parsed:
+            self.assertEqual(list(event), list(EVENT_KEYS))
+            self.assertEqual(event["schema_version"], 1)
+            self.assertEqual(event["correlation_id"], "corr-whitelist")
+        self.assertEqual(_event_stages(parsed), [event["stage"] for event in events])
+        self.assertEqual(parsed[-1]["exit_code"], 0)
+
+    def test_rejects_non_whitelisted_values(self) -> None:
+        """非固定阶段、原因码、类别、命令或类型都拒绝写入。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path)
+            cases = {
+                "stage": {"stage": "raw", "result": "ok"},
+                "result": {"stage": "start", "result": "done"},
+                "reason": {
+                    "stage": "start",
+                    "result": "ok",
+                    "reason_code": "secret",
+                },
+                "category": {
+                    "stage": "start",
+                    "result": "ok",
+                    "error_category": "secret",
+                },
+                "duration-bool": {
+                    "stage": "start",
+                    "result": "ok",
+                    "duration_ms": True,
+                },
+                "command": {
+                    "stage": "start",
+                    "result": "ok",
+                    "command": "adb devices",
+                },
+                "exit-code": {
+                    "stage": "start",
+                    "result": "ok",
+                    "exit_code": 1,
+                },
+                "mode": {"stage": "start", "result": "ok", "mode": "auto"},
+                "config-source": {
+                    "stage": "start",
+                    "result": "ok",
+                    "config_source": "path",
+                },
+                "count-bool": {
+                    "stage": "start",
+                    "result": "ok",
+                    "device_count": True,
+                },
+                "count-negative": {
+                    "stage": "start",
+                    "result": "ok",
+                    "device_count": -1,
+                },
+            }
+            for name, event in cases.items():
+                with self.subTest(name=name):
+                    self.assertFalse(log.record(**event))
+            self.assertFalse(path.exists())
+
+    def test_append_failure_is_silent_and_returns_false(self) -> None:
+        """日志 IO 失败必须返回 False，且不向 stdout/stderr 泄露异常原值。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with patch.object(
+                ProcessLog,
+                "_append",
+                side_effect=OSError("secret /absolute/path"),
+            ):
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    recorded = log.record(stage="start", result="started")
+            self.assertFalse(recorded)
+            self.assertTrue(log.degraded)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertFalse(path.exists())
+
+
+class DoctorLoggingTests(unittest.TestCase):
+    """验证 doctor 全流程日志可追溯，且不影响既有 JSON 与安全出口。"""
+
+    def test_fixture_run_logs_stages_and_correlation(self) -> None:
+        """fixture 成功流程记录 start 到 exit，且不写夹具路径或业务值。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = main(
+                    ["doctor", "--fixture", READY_FIXTURE],
+                    process_log=ProcessLog(
+                        path=path,
+                        correlation_id="corr-fixture",
+                    ),
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual(json.loads(stdout.getvalue()), READY_OUTPUT)
+            events = _read_log(path)
+            log_text = path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            _event_stages(events),
+            [
+                "start",
+                "arguments",
+                "config",
+                "mode",
+                "fixture",
+                "fixture",
+                "decision",
+                "exit",
+            ],
+        )
+        self.assertTrue(
+            all(event["correlation_id"] == "corr-fixture" for event in events)
+        )
+        self.assertEqual(events[-1]["exit_code"], 0)
+        self.assertEqual(events[-1]["result"], "ok")
+        self.assertEqual(events[-2]["stage"], "decision")
+        self.assertEqual(events[-2]["device_count"], 1)
+        self.assertNotIn("tests/fixtures", log_text)
+        self.assertNotIn("primary", log_text)
+        self.assertNotIn('"boss"', log_text)
+
+    def test_device_run_logs_two_commands_without_raw_values(self) -> None:
+        """显式设备流程记录两条固定命令事件，不写 serial 或窗口原文。"""
+        devices = "List of devices attached\nsynthetic-serial\tdevice\n"
+        window = (
+            "mCurrentFocus=Window{abc u0 com.hpbr.bosszhipin/"
+            "com.hpbr.bosszhipin.ui.MainActivity}\n"
+            "isKeyguardShowing=false\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with patch(
+                "subprocess.run",
+                side_effect=[_completed(devices), _completed(window)],
+            ):
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    code = main(
+                        ["doctor", "--device", "--serial", "synthetic-serial"],
+                        process_log=ProcessLog(
+                            path=path,
+                            correlation_id="corr-device",
+                        ),
+                    )
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual(json.loads(stdout.getvalue()), READY_OUTPUT)
+            events = _read_log(path)
+            log_text = path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            _event_stages(events),
+            [
+                "start",
+                "arguments",
+                "config",
+                "mode",
+                "probe",
+                "adb_devices",
+                "adb_window",
+                "probe",
+                "decision",
+                "exit",
+            ],
+        )
+        commands = [event["command"] for event in events if event["command"]]
+        self.assertEqual(commands, ["adb_devices", "adb_window"])
+        self.assertTrue(
+            all(event["correlation_id"] == "corr-device" for event in events)
+        )
+        self.assertNotIn("synthetic-serial", log_text)
+        self.assertNotIn("com.hpbr", log_text)
+        self.assertNotIn("isKeyguardShowing", log_text)
+        self.assertNotIn("mCurrentFocus", log_text)
+
+    def test_invalid_fixture_logs_fixed_reason_category(self) -> None:
+        """非法夹具记录固定 invalid_fixture/fixture，且不回显原内容。"""
+        with tempfile.TemporaryDirectory(dir=ROOT, prefix=".m0-log-fixture-") as tmp:
+            directory = Path(tmp)
+            fixture_path = _write_text(directory, "bad.json", "{")
+            log_path = Path(tmp) / "m0-process.jsonl"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = main(
+                    ["doctor", "--fixture", fixture_path],
+                    process_log=ProcessLog(
+                        path=log_path,
+                        correlation_id="corr-invalid",
+                    ),
+                )
+            self.assertEqual(code, 2)
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual(
+                json.loads(stdout.getvalue()),
+                {
+                    "schema_version": 1,
+                    "status": "failed",
+                    "reason_code": "invalid_fixture",
+                },
+            )
+            events = _read_log(log_path)
+            log_text = log_path.read_text(encoding="utf-8")
+
+        failed = [
+            event
+            for event in events
+            if event["stage"] == "fixture" and event["result"] == "failed"
+        ]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0]["reason_code"], "invalid_fixture")
+        self.assertEqual(failed[0]["error_category"], "fixture")
+        self.assertEqual(events[-1]["stage"], "exit")
+        self.assertEqual(events[-1]["exit_code"], 2)
+        self.assertEqual(events[-1]["reason_code"], "invalid_fixture")
+        self.assertNotIn("bad.json", log_text)
+
+    def test_log_io_failure_marks_degraded_without_changing_output(self) -> None:
+        """日志写入失败时 stdout/退出码不变，但 stderr 有明显固定降级标记。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with patch.object(
+                ProcessLog,
+                "_append",
+                side_effect=OSError("secret /absolute/path"),
+            ):
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    code = main(
+                        ["doctor", "--fixture", READY_FIXTURE],
+                        process_log=ProcessLog(path=path),
+                    )
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr.getvalue(), "m0_process_log_degraded\n")
+            self.assertEqual(json.loads(stdout.getvalue()), READY_OUTPUT)
+            self.assertFalse(path.exists())
+
+    def test_stdout_write_failures_exit_two_without_traceback(self) -> None:
+        """stdout 写出 UnicodeError/OSError 时安全退出 2，不输出 traceback。"""
+        errors = {
+            "oserror": OSError("secret /absolute/path"),
+            "unicode": UnicodeEncodeError(
+                "utf-8",
+                "\ud800",
+                0,
+                1,
+                "surrogate",
+            ),
+        }
+
+        class _FailingStdout:
+            """模拟已损坏的标准输出通道。"""
+
+            def __init__(self, error: Exception) -> None:
+                """保存要抛出的输出错误。"""
+                self._error = error
+
+            def write(self, text: str) -> int:
+                """模拟写入失败，不产生任何 stdout 内容。"""
+                raise self._error
+
+            def flush(self) -> None:
+                """模拟刷新空操作。"""
+                return None
+
+        for name, error in errors.items():
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / "m0-process.jsonl"
+                    stderr = io.StringIO()
+                    with redirect_stdout(_FailingStdout(error)):
+                        with redirect_stderr(stderr):
+                            code = main(
+                                ["doctor", "--fixture", READY_FIXTURE],
+                                process_log=ProcessLog(path=path),
+                            )
+                    self.assertEqual(code, 2)
+                    self.assertNotIn("Traceback", stderr.getvalue())
+                    self.assertNotIn("secret", stderr.getvalue())
+                    events = _read_log(path)
+                self.assertEqual(events[-1]["stage"], "exit")
+                self.assertEqual(events[-1]["exit_code"], 2)
+                self.assertEqual(events[-1]["result"], "failed")
+                self.assertEqual(events[-1]["error_category"], "internal")
+
+    def test_device_failure_maps_seven_keys_and_keeps_no_business_db(self) -> None:
+        """CLI 设备失败复用唯一组装函数，输出七键且不新增业务库。"""
+        before = _sqlite_files()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with patch("subprocess.run", side_effect=FileNotFoundError("missing")):
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    code = main(
+                        ["doctor", "--device", "--serial", "synthetic-serial"],
+                        process_log=ProcessLog(
+                            path=path,
+                            correlation_id="corr-device-failure",
+                        ),
+                    )
+            self.assertEqual(code, 2)
+            self.assertEqual(stderr.getvalue(), "")
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(list(payload), OUTPUT_KEYS)
+            self.assertEqual(
+                payload,
+                _business_output(
+                    "failed",
+                    "device_disconnected",
+                    0,
+                    None,
+                    None,
+                    "unknown",
+                ),
+            )
+            events = _read_log(path)
+        self.assertEqual(before, _sqlite_files())
+        failed_command = [
+            event for event in events if event["stage"] == "adb_devices"
+        ]
+        self.assertEqual(len(failed_command), 1)
+        self.assertEqual(failed_command[0]["error_category"], "adb_missing")
+        self.assertEqual(failed_command[0]["reason_code"], "device_disconnected")
+        self.assertEqual(events[-1]["exit_code"], 2)
+        self.assertNotIn("synthetic-serial", stdout.getvalue())
 
 
 if __name__ == "__main__":

@@ -7,15 +7,6 @@ from app.ports.device import DeviceEntry, ProbeSnapshot
 SCHEMA_VERSION = 1
 DEVICE_STATES = frozenset({"device", "offline", "unauthorized"})
 FOREGROUND_APPS = frozenset({"boss", "other", "unknown"})
-_OUTPUT_KEYS = (
-    "schema_version",
-    "status",
-    "reason_code",
-    "device_count",
-    "selected_alias",
-    "unlocked",
-    "foreground_app",
-)
 
 
 def parse_probe_input(data: object) -> ProbeSnapshot:
@@ -36,7 +27,7 @@ def parse_probe_input(data: object) -> ProbeSnapshot:
             raise ValueError("device entries are invalid")
         alias = raw_device["alias"]
         state = raw_device["state"]
-        if not isinstance(alias, str) or not alias.strip():
+        if not isinstance(alias, str) or not alias.strip() or not _is_utf8_text(alias):
             raise ValueError("device alias is invalid")
         if alias in aliases:
             raise ValueError("device alias is duplicated")
@@ -47,7 +38,11 @@ def parse_probe_input(data: object) -> ProbeSnapshot:
 
     selected_alias = data["selected_alias"]
     if selected_alias is not None:
-        if not isinstance(selected_alias, str) or selected_alias not in aliases:
+        if (
+            not isinstance(selected_alias, str)
+            or not _is_utf8_text(selected_alias)
+            or selected_alias not in aliases
+        ):
             raise ValueError("selected alias is invalid")
 
     unlocked = data["unlocked"]
@@ -64,6 +59,15 @@ def parse_probe_input(data: object) -> ProbeSnapshot:
         unlocked=unlocked,
         foreground_app=foreground_app,
     )
+
+
+def _is_utf8_text(value: str) -> bool:
+    """判断字符串能否无替代地编码为 UTF-8，拒绝孤立代理字符。"""
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def run_doctor(snapshot: ProbeSnapshot) -> dict[str, object]:
@@ -97,7 +101,35 @@ def run_doctor(snapshot: ProbeSnapshot) -> dict[str, object]:
     if snapshot.foreground_app != "boss":
         return _failure(snapshot, selected_alias, "wrong_page")
 
-    return _result(snapshot, selected_alias, "ok", None)
+    return build_result(
+        status="ok",
+        reason_code=None,
+        device_count=len(snapshot.devices),
+        selected_alias=selected_alias,
+        unlocked=snapshot.unlocked,
+        foreground_app=snapshot.foreground_app,
+    )
+
+
+def build_result(
+    *,
+    status: str,
+    reason_code: str | None,
+    device_count: int,
+    selected_alias: str | None,
+    unlocked: bool | None,
+    foreground_app: str,
+) -> dict[str, object]:
+    """按白名单字段组装唯一的 doctor JSON 业务对象。"""
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "status": status,
+        "reason_code": reason_code,
+        "device_count": device_count,
+        "selected_alias": selected_alias,
+        "unlocked": unlocked,
+        "foreground_app": foreground_app,
+    }
 
 
 def _failure(
@@ -106,22 +138,11 @@ def _failure(
     reason_code: str,
 ) -> dict[str, object]:
     """保留已选逻辑名与已知字段，生成失败业务结果。"""
-    return _result(snapshot, selected_alias, "failed", reason_code)
-
-
-def _result(
-    snapshot: ProbeSnapshot,
-    selected_alias: str | None,
-    status: str,
-    reason_code: str | None,
-) -> dict[str, object]:
-    """按白名单顺序组装唯一的 doctor JSON 业务对象。"""
-    return {
-        _OUTPUT_KEYS[0]: SCHEMA_VERSION,
-        _OUTPUT_KEYS[1]: status,
-        _OUTPUT_KEYS[2]: reason_code,
-        _OUTPUT_KEYS[3]: len(snapshot.devices),
-        _OUTPUT_KEYS[4]: selected_alias,
-        _OUTPUT_KEYS[5]: snapshot.unlocked,
-        _OUTPUT_KEYS[6]: snapshot.foreground_app,
-    }
+    return build_result(
+        status="failed",
+        reason_code=reason_code,
+        device_count=len(snapshot.devices),
+        selected_alias=selected_alias,
+        unlocked=snapshot.unlocked,
+        foreground_app=snapshot.foreground_app,
+    )

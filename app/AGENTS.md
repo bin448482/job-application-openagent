@@ -8,10 +8,11 @@
 
 - `__init__.py`：声明 `app` 包。
 - `__main__.py`：`python -m app` 的进程入口，调用 `app.cli.main.main`。
-- `cli/`：参数解析、配置加载、路径边界、JSON 输出与组合根；见 `cli/AGENTS.md`。
+- `cli/`：参数解析、配置校验、路径边界、JSON 输出与组合根；见 `cli/AGENTS.md`。
 - `ports/`：能力端口与领域快照类型；见 `ports/AGENTS.md`。
-- `usecases/`：单次用例的校验与业务判定；见 `usecases/AGENTS.md`。
+- `usecases/`：单次用例的校验、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。
+- `process_log.py`：追加固定字段的本机 JSON Lines 过程日志，只写被忽略的 `data/logs/m0-process.jsonl`；写失败设置降级标记并返回 `False`，不抛出、不打印原值。
 
 ## 三、依赖与边界
 
@@ -19,8 +20,9 @@
 2. `usecases/` 依赖 `ports/` 与领域对象，不导入具体适配器。
 3. `adapters/` 实现端口，不写业务库、不改调度、不决定策略档位。
 4. `cli/main.py` 是当前唯一组合根；只有它可以把 fixture 输入或 ADB 适配器注入 `doctor` 用例。
-5. M0 的 fixture 模式必须零设备、零网络、零子进程；真实 ADB 适配器只能在显式 `--device --serial` 下调用，且只能在测试中 mock，不在离线验收中执行。
+5. M0 的 fixture 模式必须零设备、零网络、零子进程；CLI 可以导入 ADB 适配器模块，但导入本身必须零副作用，fixture 分支不得实例化或调用探针。真实 ADB 适配器只能在显式 `--device --serial` 下调用，且只能在测试中 mock，不在离线验收中执行。
 6. 不读取根 `config.json`、环境文件、凭据或个人事实；不引入 Python 第三方依赖。
+7. 过程日志是尽力而为的辅助产物：只追加固定字段，不写参数原值、serial、窗口原文、异常、绝对路径或个人事实；入口忽略单次 `record` 的 `False`，但由 `degraded` 标记在 stderr 输出固定降级提示，不能声称磁盘失败时仍有完整日志。fixture 仍只写该被忽略日志，不写业务库。
 
 ## 四、测试与验证
 
@@ -31,7 +33,7 @@ python -m unittest tests.test_doctor
 python -m app doctor --fixture tests/fixtures/doctor/ready.json
 ```
 
-测试覆盖 CLI 正反例、配置与夹具校验、设备状态映射、窗口解析与“fixture 零子进程”断言。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行。
+测试覆盖 CLI 正反例、配置与夹具校验、重复 JSON 键/孤立代理字符、设备状态映射、keyguard token 与单 Window 多组件解析、输出写失败安全退出、过程日志白名单/降级故障注入与“fixture 零子进程”断言。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行。
 
 ## 五、维护要求
 
@@ -46,3 +48,4 @@ python -m app doctor --fixture tests/fixtures/doctor/ready.json
 - 当前只有 M0；`domain/models.py`、`ports/store.py`、`usecases/sense.py` 等 M1–M2 文件尚未创建。
 - 真实 `adb devices` / `dumpsys window` 未在本机执行，真实机型、系统版本、序列号格式与窗口输出差异未验证。
 - `doctor` 只做一次独立探针，不提供业务循环、导航、截图或动作。
+- 过程日志没有轮转、保留期、远程汇聚或审计保证；写入失败时只能通过固定 stderr 降级标记和缺失行发现，磁盘失败时日志不完整。

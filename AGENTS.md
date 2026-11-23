@@ -4,13 +4,13 @@
 
 正式名称为 `job-application-openagent`，依据 `README.md` 与 `pyproject.toml` 的 `project.name`。根目录为本指南所在目录，运行路径相对于项目根目录解析。
 
-本项目面向开源维护的 Android 求职辅助工作流，目前处于分阶段实现阶段。M0 只读探针已实现；旧业务源码、Skills 与业务测试已清理，不恢复旧实现或个人授权。当前已有独立的 promptfoo 合成黄金集，检查记忆与授权决策；M1+ 的业务 CLI 扩展、SQLite 运行时记忆、设备执行器和完整业务范围仍待设计。
+本项目面向开源维护的 Android 求职辅助工作流，目前处于分阶段实现阶段。M0 只读探针与本机白名单过程日志已实现；旧业务源码、Skills 与业务测试已清理，不恢复旧实现或个人授权。当前已有独立的 promptfoo 合成黄金集，检查记忆与授权决策；M1+ 的业务 CLI 扩展、SQLite 运行时记忆、设备执行器和完整业务范围仍待设计。
 
 本仓库自身：业务项目要求 Python >=3.13，Python 依赖保持为空；评测开发工具另需 Node.js >=22.22.0、npm 和固定版本 promptfoo 0.126.0。评测使用 CommonJS、Node 内置测试和 JSON 配置，npm 依赖通过 package-lock.json 锁定。引入 promptfoo 是当前明确的评测需求，不改变 Python 标准库优先约束。
 
 文档所描述的消费方：评测可接受 promptfoo provider ID 连接模型或自定义端点，认证由使用者按 provider 类型配置，不提供默认真实模型。README 约定未来设备功能需要 Android SDK Platform-Tools 的 adb、USB 调试及使用者确认；当前没有业务 Skill 或设备工作流，不推定宿主、机型、包名或发送授权。
 
-主要入口与模块关系：README 提供使用概览；`python -m app` 进入 app/cli/main.py，M0 只分派只读 doctor，fixture 由 CLI 读取，真实探针经 app/ports/device.py 注入 app/adapters/adb/device.py，业务判定在 app/usecases/doctor.py。package.json 的 npm scripts 调用 evals 的断言测试或评测入口，promptfooconfig.json 加载提示词、24 个案例和 JavaScript 断言。smoke 仅回放参考输出，model 才使用显式 provider；case metadata 不渲染进模型提示词。评测产物仅保存到 data/evals。pyproject.toml 为业务元数据，不是已实现的 CLI 或发行包。每个目录的 CLAUDE.md 仅引用同目录 AGENTS.md，全局规则只在根指南保存。
+主要入口与模块关系：README 提供使用概览；`python -m app` 进入 app/cli/main.py，M0 只分派只读 doctor，fixture 由 CLI 读取，真实探针经 app/ports/device.py 注入 app/adapters/adb/device.py，业务判定在 app/usecases/doctor.py，白名单过程日志由 app/process_log.py 追加到 data/logs/m0-process.jsonl。package.json 的 npm scripts 调用 evals 的断言测试或评测入口，promptfooconfig.json 加载提示词、24 个案例和 JavaScript 断言。smoke 仅回放参考输出，model 才使用显式 provider；case metadata 不渲染进模型提示词。评测产物仅保存到 data/evals。pyproject.toml 为业务元数据，不是已实现的 CLI 或发行包。每个目录的 CLAUDE.md 仅引用同目录 AGENTS.md，全局规则只在根指南保存。
 
 新环境自动化部署方案已形成设计文档，建议首批 Windows 11 x64 / Windows PowerShell 5.1，分别验收 Node 合成评测、ADB 工具准备和经本轮确认后的手机环境检测；Python venv、模型认证、Android 与开发编排工具不作为当前评测必需。Android 检测不等待完整业务，但须先实现检查器与共享设备门禁；部署入口、引导发行物与检查器尚未实现，干净机器及手机验收均待执行，本轮仅文档、未运行 ADB；既有本机测试记录不能替代该验收。
 
@@ -44,8 +44,8 @@
 
 - `README.md`：当前范围、M0 只读探针命令、业务和评测环境、npm 安装/自检/模型评测命令、数据边界与未实现部分；可独立阅读的使用概览，不是全局规则母本。
 - `LICENSE`：MIT 许可证，2026 年项目贡献者署名。
-- `app/`：M0 分层程序包。`__main__.py` 提供 `python -m app`；`cli/` 负责严格参数、配置、路径与 JSON 输出；`ports/` 声明设备探针端口；`usecases/` 做输入校验与 doctor 判定；`adapters/adb/` 实现仅显式触发的真实 ADB 探针。M1+ 模块尚未创建。
-- `tests/`：M0 标准库 `unittest` 与纯合成 doctor 夹具；`python -m unittest tests.test_doctor` 覆盖正反例与 fixture 零子进程断言。独立场景协调端维护的 `tests/scenarios/` 与 `tests/test_offline_scenarios.py` 不在本 Task 范围。
+- `app/`：M0 分层程序包。`__main__.py` 提供 `python -m app`；`cli/` 负责严格参数、配置、路径与 JSON 输出，并在共享 JSON 边界拒绝重复对象键；`ports/` 声明设备探针端口；`usecases/` 做输入校验、UTF-8 文本约束与唯一 doctor 结果组装；`adapters/adb/` 实现仅显式触发、只接受 tab 分隔确定清单记录的真实 ADB 探针；`process_log.py` 追加固定字段的本机过程日志。M1+ 模块尚未创建。
+- `tests/`：M0 标准库 `unittest` 与纯合成 doctor 夹具；`python -m unittest tests.test_doctor` 覆盖正反例、畸形 keyguard、整条 focus 完整 Window 匹配/单行多组件/前后附加内容、重复 JSON 键、孤立代理字符、提示行、日志白名单/故障注入、窗口解析与 fixture 零子进程断言。独立场景协调端维护的 `tests/scenarios/` 与 `tests/test_offline_scenarios.py` 不在本 Task 范围。
 - `pyproject.toml`：正式名称、版本 0.1.0、Python >=3.13、MIT 与空 Python 依赖；M0 入口在 `app/`，尚未声明发行包。
 - `requirements.txt`：Python 标准库及无第三方依赖声明，不代表旧业务测试仍存在。
 - `package.json`：评测工具元数据、Node 版本要求、固定 promptfoo 开发依赖和 npm test/eval:smoke/eval:model 入口。
@@ -55,13 +55,13 @@
 - `docs/`：公开文档目录。终稿 `BOSS直聘_手机客户端原始操作_原子化分析.md` 合并旧项目 `scripts/` 的静态阅读结果，按 CORE/JOBS/HRR/HRA 前缀的原子 ID 组织，含 0–9 小节与源码索引；技术结论带 `file:line` 证据，不构成设备执行授权。同目录另有 `BOSS直聘_实机验证偏差与修订建议_20261123.md`（单机型单版本，记录 7 条偏差与 5 条待确认）、`BOSS直聘_求职自动化_简化架构设计说明_20261123.md`（失败证据、简化架构、接口与验收指标）、`BOSS直聘_求职自动化_实施计划_20261123.md`（M0–M8 里程碑、六张图、测试与回滚）、`求职自动化_多应用扩展与分层_设计说明_20261123.md`（分层、端口、多应用共存与接入猎聘步骤）、`求职自动化_公开仓库与策略包_设计说明_20261123.md`（公开/私有资产边界、策略包与黄金集分层）、`求职自动化_新环境自动化部署方案_20261123.md`（新环境现状证据、依赖矩阵、拟议引导与部署入口、权限/恢复/配置保留、ADB 工具准备、手机检查及 A01–A08 独立验收、官方来源与干净机器验收矩阵；尚未实现安装器/检查器或验证初始环境/手机）、本目录 `AGENTS.md` 与只含 `@AGENTS.md` 的 `CLAUDE.md`。
 - `docs/BOSS直聘_求职自动化_场景测试方案_20261123.md`：M0–M8 场景规程与随机未读分支，区分现有自检、未来离线、受控设备与真实观察/写入；含独立判据、证据、指标和发布补测，只做方案不操作设备。
 - `docs/BOSS直聘_场景测试方案_三轮自审记录_20261123.md`：场景方案三轮作者文档自审的发现、修订、复核与阶段提交证据，不代表实机或独立测试人员验收。
-- `docs/operator.md`：M0 操作手册。说明 fixture 命令、最小配置、显式真实设备模式、设备确认要求、JSON 字段、退出码、夹具规则与未实现范围。
+- `docs/operator.md`：M0 操作手册。说明 fixture 命令、最小配置、显式真实设备模式、设备确认要求、JSON 字段、退出码、夹具规则、本机过程日志路径/字段/复核方法与未实现范围。
 - `config.example.json`：示例配置，当前只含 `policy_pack`（指向被忽略的本机策略包）；其余 schema 待设计，当前不是 M0 可消费配置。
 - `config.json`：当前存在、被忽略的本机配置，保留且不读取内容；不是评测配置。
 - `.gitignore`：依赖、缓存、运行产物、个人事实及凭据忽略约定，包含 data/screenshots 指导文档例外。
 - `.agents/`：Codex 工作流入口占位，当前只有双指导文档，Skills 待设计。
 - `.claude/`：Claude 工作流入口占位，当前只有双指导文档，Skills 待设计。
-- `data/`：本机产物目录，含自动生成的 evals 结果/状态子目录；运行产物排除文档覆盖且不提交 Git。
+- `data/`：本机产物目录，含自动生成的 evals 结果/状态子目录与 `logs/m0-process.jsonl` 过程日志；运行产物排除文档覆盖且不提交 Git。过程日志只含固定字段，写入失败不影响 stdout/退出码，但 stderr 固定标记 `m0_process_log_degraded`，不声称完整日志已保存。
 - `screenshots/`：本机截图预留位置，当前只含双指导文档，截图不提交 Git。
 - `AGENTS.md`：项目事实、完整索引、母本规则原文及命令状态；子目录指南引用本文件。
 - `CLAUDE.md`：仅含 `@AGENTS.md`，必须与同目录指南配合使用，不能另存一套规则。
@@ -189,15 +189,17 @@ function normalizeQuote(raw: QuoteRecord): NormalizedQuote {
 ```powershell
 python -m unittest tests.test_doctor
 python -m app doctor --fixture tests/fixtures/doctor/ready.json
+Get-Content data/logs/m0-process.jsonl -Tail 20
+git check-ignore data/logs/m0-process.jsonl
 npm ci
 npm test
 npm run eval:smoke
 npm run eval:model -- "<provider-id>"
 ```
 
-`tests.test_doctor` 覆盖 doctor 正反例；ready 夹具命令退出 0、只输出一个 JSON、stderr 为空且不写业务库。fixture 模式零设备、零网络、零子进程；真实 `doctor --device --serial <serial>` 只在取得本轮设备确认后手动执行，离线验收不运行。npm ci 安装锁定依赖；npm test 运行 Node 内置正反例检查，无需安装 promptfoo；smoke 需先安装依赖，仅回放合成参考答案，不请求模型。model 必须指定真实 provider 并按其类型配置认证，可能产生调用费用；本次未选择或调用实际模型。M1+ 的业务 Python CLI、业务测试或独立构建/lint 命令尚未实现，不执行旧 scripts/main.py/unittest 命令。
+`tests.test_doctor` 覆盖 doctor 正反例、重复 JSON 键、孤立代理字符、畸形 keyguard token、整条 focus 完整 Window 匹配/单 Window 多组件/前后附加内容、提示行清单、设备失败七键映射、stdout 写失败、日志白名单/降级故障注入与 fixture 零子进程断言。ready 夹具命令在日志正常时退出 0、只输出一个 JSON、stderr 为空且不写业务库；每次运行只追加被忽略的 `data/logs/m0-process.jsonl`。日志写入失败时 stdout/退出码不变，stderr 仅写固定 `m0_process_log_degraded`，表示日志不完整，不能声称完整日志已保存。fixture 模式零设备、零网络、零子进程；真实 `doctor --device --serial <serial>` 只在取得本轮设备确认后手动执行，离线验收不运行。npm ci 安装锁定依赖；npm test 运行 Node 内置正反例检查，无需安装 promptfoo；smoke 需先安装依赖，仅回放合成参考答案，不请求模型。model 必须指定真实 provider 并按其类型配置认证，可能产生调用费用；本次未选择或调用实际模型。M1+ 的业务 Python CLI、业务测试或独立构建/lint 命令尚未实现，不执行旧 scripts/main.py/unittest 命令。
 
-本次已执行 `python -m unittest tests.test_doctor`（17 个测试方法，含子测试，退出 0）、`python -m app doctor --fixture tests/fixtures/doctor/ready.json`（退出 0，stderr 为空，未新增业务库）与 `npm test`（52 项通过）。此前另行执行 npm install --no-fund --no-audit 生成锁文件并安装评测依赖；smoke 的 24 个案例回放通过。它们只验证 M0 判据、参数/配置/夹具负例及评测链路，不代表真实模型、运行时记忆或真实设备验证。新增修改后须运行受影响检查，不能沿用该记录当作新版本验证。
+本次已执行 `python -m unittest tests.test_doctor`（30 个测试方法，含子测试，退出 0）、`python -m app doctor --fixture tests/fixtures/doctor/ready.json`（退出 0，stderr 为空，未新增业务库，日志追加成功）、`npm test`（52 项通过）与 `git diff --check`；另完成根 `AGENTS.md` RULES 区逐字比对。此前另行执行 npm install --no-fund --no-audit 生成锁文件并安装评测依赖；smoke 的 24 个案例回放通过。它们只验证 M0 判据、参数/配置/夹具负例、本机日志行为及评测链路，不代表真实模型、运行时记忆或真实设备验证。新增修改后须运行受影响检查，不能沿用该记录当作新版本验证。
 
 文档维护的一次性校验仍按初始化提示词：比较母本规则区两个标记与全文、8 小节顺序、Python/TypeScript 各 2 个示例，并检查自有目录的双指南、精确大小写、引用与直接子项索引；排除 Git、虚拟环境、node_modules 和 data/evals 等自动生成产物。此类校验不是业务测试。
 

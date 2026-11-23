@@ -10,7 +10,7 @@ M0 只提供一次独立的只读探针：
 - 读取当前窗口的 `isKeyguardShowing` 与 `mCurrentFocus`；
 - 输出设备数量、所选逻辑别名、解锁状态和前台应用类别。
 
-M0 不切换应用、不 dump 聊天、不截图、不点击、不发送、不写 SQLite 业务库、不调用网络或模型。`fixture` 模式只读取合成 JSON，永远不启动子进程。
+M0 不切换应用、不 dump 聊天、不截图、不点击、不发送、不写 SQLite 业务库、不调用网络或模型。`fixture` 模式只读取合成 JSON，永远不启动子进程；每次运行只追加被忽略的 `data/logs/m0-process.jsonl` 本机过程日志（见第七节）。
 
 ## 二、离线 fixture 模式（默认推荐）
 
@@ -20,7 +20,7 @@ M0 不切换应用、不 dump 聊天、不截图、不点击、不发送、不�
 python -m app doctor --fixture tests/fixtures/doctor/ready.json
 ```
 
-成功时退出 `0`，向 stdout 写一个 UTF-8 JSON 对象，stderr 为空：
+成功时退出 `0`，向 stdout 写一个 UTF-8 JSON 对象；本机日志正常时 stderr 为空（日志降级时只出现固定 `m0_process_log_degraded` 一行）：
 
 ```json
 {"schema_version":1,"status":"ok","reason_code":null,"device_count":1,"selected_alias":"primary","unlocked":true,"foreground_app":"boss"}
@@ -101,7 +101,7 @@ python -m app doctor --device --serial <serial>
 {"schema_version":1,"status":"failed","reason_code":"invalid_input"}
 ```
 
-`reason_code` 只取 `invalid_input`、`invalid_config` 或 `invalid_fixture`。所有失败退出 `2`；成功退出 `0`；帮助退出 `0`。程序不使用退出 `1` 表示可重试失败。
+`reason_code` 只取 `invalid_input`、`invalid_config` 或 `invalid_fixture`。所有失败退出 `2`；成功退出 `0`；帮助退出 `0`。程序不使用退出 `1` 表示可重试失败。若 stdout 本身写入失败（`UnicodeError`/`OSError`），程序安全退出 `2`，不回显 traceback，也不要求再次写 JSON。本机日志降级不是业务失败，退出码仍按业务结果；stderr 只多一行固定 `m0_process_log_degraded`。
 
 ## 六、fixture 输入规则
 
@@ -122,12 +122,34 @@ python -m app doctor --device --serial <serial>
 - `unlocked` 是布尔值或 `null`；
 - `foreground_app` 只能是 `boss`、`other`、`unknown`；
 - 任何额外键、重复别名、不存在的选择、非法类型或读取失败都输出 `invalid_fixture`。
+- 配置与夹具在共享 JSON 输入边界拒绝顶层或嵌套对象的重复键；夹具还拒绝不可 UTF-8 编码的 `alias`/`selected_alias`（例如孤立代理字符），按 `invalid_fixture` 安全退出且不回显键值。
 
-## 七、尚未实现
+## 七、本机过程日志与复核
+
+每次 `python -m app doctor` 运行（fixture 或显式 device）都会尝试向 `data/logs/m0-process.jsonl` 追加 JSON Lines 过程日志。该路径被根 `.gitignore` 的 `/data/**` 覆盖，不提交 Git；不写业务库、不调用网络、不启动后台任务，也不与 M1 事件表重复。
+
+每行固定包含 `schema_version/ts/correlation_id/stage/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`：
+
+- `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、两条 ADB 命令、业务判定和出口。
+- `result` 固定为 `started/ok/failed`；`reason_code` 沿用计划词表，不新增业务原因；`error_category` 固定为 `argument/config/fixture/probe/business/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
+- `command` 只写 `adb_devices` 或 `adb_window`；ADB 缺失、超时、其它 IO 错误和非零退出分别记录固定错误类别，业务 `reason_code` 仍为 `device_disconnected`。
+- 不写参数原值、serial、窗口原文、异常消息、绝对路径或个人事实。
+- 日志是尽力而为的辅助产物：调用端忽略单次 `record` 的 `False`，写入失败时设置内部 `degraded` 标记；CLI 在出口向 stderr 写固定 `m0_process_log_degraded`，stdout JSON 与退出码不变，也不伪造成功行。没有日志行不等于命令成功；该标记表示日志不完整，不能声称磁盘失败时完整日志已保存。
+
+复核方式：
+
+```powershell
+Get-Content data/logs/m0-process.jsonl -Tail 20
+git check-ignore data/logs/m0-process.jsonl
+```
+
+需要按单次运行核对时，从输出或日志中取同一 `correlation_id` 过滤；fixture 模式仍保持零设备、零网络、零子进程和零业务库。
+
+## 八、尚未实现
 
 M1 的状态库与租约、M2 的传感器、M3 的读取阶梯、M4 的决策契约、M5 的动作护栏以及 M6–M8 的调度、清理和灰度都尚未实现。不要用 M0 的 fixture 结果推断真实设备支持范围，也不要把合成 `can_send` 或探针成功当作发送授权。
 
-## 八、安全与隐私
+## 九、安全与隐私
 
 - fixture 只用合成别名与状态，不放真实序列号、聊天、联系人、公司、截图或绝对路径。
 - 真实模式输出不含真实序列号、窗口原文或异常命令参数。

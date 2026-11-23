@@ -5,15 +5,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import NoReturn
 
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
 from app.ports.device import ProbeSnapshot
-from app.usecases.doctor import parse_probe_input, run_doctor
+from app.process_log import ProcessLog, elapsed_ms
+from app.usecases.doctor import build_result, parse_probe_input, run_doctor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = {"schema_version": 1, "mode": "read_only"}
 
 
 class _CliArgumentError(Exception):
@@ -148,13 +149,28 @@ def _resolve_project_path(value: str) -> Path:
     return resolved
 
 
-def _load_config(value: str | None) -> dict[str, object]:
-    """读取并校验最小配置；省略或空对象都收敛为只读默认值。"""
+def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """把 JSON 对象转为字典，并在任意层级遇到重复键时拒绝。"""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate key")
+        result[key] = value
+    return result
+
+
+def _load_json_object(text: str) -> object:
+    """在共享输入边界解析 JSON，并拒绝顶层或嵌套对象的重复键。"""
+    return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
+
+
+def _validate_config(value: str | None) -> None:
+    """只校验最小只读配置；省略或空对象保持固定 read_only 默认契约。"""
     if value is None:
-        return dict(DEFAULT_CONFIG)
+        return
     try:
         path = _resolve_project_path(value)
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = _load_json_object(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError):
         raise _ConfigError from None
 
@@ -170,14 +186,13 @@ def _load_config(value: str | None) -> dict[str, object]:
         mode = data["mode"]
         if not isinstance(mode, str) or mode != "read_only":
             raise _ConfigError
-    return {**DEFAULT_CONFIG, **data}
 
 
 def _load_fixture(value: str) -> ProbeSnapshot:
-    """读取并严格校验合成探针输入，不启动子进程也不写任何文件。"""
+    """读取并严格校验合成探针输入，不启动子进程也不写业务库。"""
     try:
         path = _resolve_project_path(value)
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = _load_json_object(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError):
         raise _FixtureError from None
     try:
@@ -197,34 +212,64 @@ def _mode_is_valid(args: argparse.Namespace) -> bool:
     return args.fixture is not None and args.serial is None
 
 
-def _device_failure(error: DeviceProbeError) -> dict[str, object]:
-    """把真实探针失败转成保留已知数量的安全 doctor 结果。"""
-    return {
-        "schema_version": 1,
-        "status": "failed",
-        "reason_code": error.reason_code,
-        "device_count": max(0, error.device_count),
-        "selected_alias": error.selected_alias,
-        "unlocked": None,
-        "foreground_app": "unknown",
-    }
+def _requested_mode(args: argparse.Namespace) -> str | None:
+    """返回参数请求的 fixture/device 模式；冲突或缺失时为 null。"""
+    if args.fixture is not None and not args.device:
+        return "fixture"
+    if args.device and args.fixture is None:
+        return "device"
+    return None
 
 
-def _emit(payload: dict[str, object]) -> None:
-    """把白名单 JSON 对象以单行 UTF-8 写入 stdout。"""
-    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
-    buffer = getattr(sys.stdout, "buffer", None)
-    if buffer is not None:
-        buffer.write(text.encode("utf-8"))
-        buffer.flush()
-    else:
-        sys.stdout.write(text)
-        sys.stdout.flush()
+def _finish(
+    log: ProcessLog,
+    started: float,
+    exit_code: int,
+    reason_code: str | None,
+    error_category: str | None,
+) -> int:
+    """追加 exit 事件并返回退出码；日志降级时用固定 stderr 提示不完整。"""
+    log.record(
+        stage="exit",
+        result="ok" if exit_code == 0 else "failed",
+        reason_code=reason_code,
+        error_category=error_category,
+        duration_ms=elapsed_ms(started),
+        exit_code=exit_code,
+    )
+    if getattr(log, "degraded", False):
+        _emit_log_degraded()
+    return exit_code
 
 
-def _emit_error(reason_code: str) -> None:
-    """输出参数、配置或夹具错误的安全固定对象。"""
-    _emit(
+def _emit_log_degraded() -> None:
+    """在不改变 stdout JSON 与退出码的前提下，提示本机日志不完整。"""
+    try:
+        sys.stderr.write("m0_process_log_degraded\n")
+        sys.stderr.flush()
+    except Exception:
+        return
+
+
+def _emit(payload: dict[str, object]) -> bool:
+    """把白名单 JSON 对象以单行 UTF-8 写入 stdout；写出失败返回 False。"""
+    try:
+        text = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+        buffer = getattr(sys.stdout, "buffer", None)
+        if buffer is not None:
+            buffer.write(text.encode("utf-8"))
+            buffer.flush()
+        else:
+            sys.stdout.write(text)
+            sys.stdout.flush()
+    except Exception:
+        return False
+    return True
+
+
+def _emit_error(reason_code: str) -> bool:
+    """输出参数、配置或夹具错误的安全固定对象，并返回是否写出成功。"""
+    return _emit(
         {
             "schema_version": 1,
             "status": "failed",
@@ -233,47 +278,220 @@ def _emit_error(reason_code: str) -> None:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    process_log: ProcessLog | None = None,
+) -> int:
     """执行一次 doctor 调用并返回 0 或 2，不向 stderr 回显输入或异常。"""
+    log = process_log if process_log is not None else ProcessLog()
+    started = time.perf_counter()
+    log.record(stage="start", result="started")
+
     try:
         args = _build_parser().parse_args(argv)
     except _CliArgumentError:
-        _emit_error("invalid_input")
-        return 2
+        log.record(
+            stage="arguments",
+            result="failed",
+            reason_code="invalid_input",
+            error_category="argument",
+        )
+        if not _emit_error("invalid_input"):
+            return _finish(log, started, 2, None, "internal")
+        return _finish(log, started, 2, "invalid_input", "argument")
+    except SystemExit as error:
+        code = error.code if isinstance(error.code, int) else 2
+        reason_code = None if code == 0 else "invalid_input"
+        error_category = None if code == 0 else "argument"
+        log.record(
+            stage="arguments",
+            result="ok" if code == 0 else "failed",
+            reason_code=reason_code,
+            error_category=error_category,
+            exit_code=code,
+        )
+        _finish(log, started, code, reason_code, error_category)
+        raise
 
+    log.record(stage="arguments", result="ok")
+    config_source = "file" if args.config is not None else "default"
     try:
-        _load_config(args.config)
+        _validate_config(args.config)
     except _ConfigError:
-        _emit_error("invalid_config")
-        return 2
+        log.record(
+            stage="config",
+            result="failed",
+            reason_code="invalid_config",
+            error_category="config",
+            config_source=config_source,
+        )
+        if not _emit_error("invalid_config"):
+            return _finish(log, started, 2, None, "internal")
+        return _finish(log, started, 2, "invalid_config", "config")
     except Exception:
-        _emit_error("invalid_config")
-        return 2
+        log.record(
+            stage="config",
+            result="failed",
+            reason_code=None,
+            error_category="internal",
+            config_source=config_source,
+        )
+        if not _emit_error("invalid_config"):
+            return _finish(log, started, 2, None, "internal")
+        return _finish(log, started, 2, "invalid_config", "internal")
+    log.record(stage="config", result="ok", config_source=config_source)
 
+    mode = _requested_mode(args)
     if not _mode_is_valid(args):
-        _emit_error("invalid_input")
-        return 2
+        log.record(
+            stage="mode",
+            result="failed",
+            reason_code="invalid_input",
+            error_category="argument",
+            mode=mode,
+            config_source=config_source,
+        )
+        if not _emit_error("invalid_input"):
+            return _finish(log, started, 2, None, "internal")
+        return _finish(log, started, 2, "invalid_input", "argument")
+    log.record(stage="mode", result="ok", mode=mode, config_source=config_source)
 
     snapshot: ProbeSnapshot
-    try:
-        if args.fixture is not None:
+    if args.fixture is not None:
+        stage_started = time.perf_counter()
+        log.record(
+            stage="fixture",
+            result="started",
+            mode=mode,
+            config_source=config_source,
+        )
+        try:
             snapshot = _load_fixture(args.fixture)
-        else:
-            snapshot = AdbDeviceProbe().probe(args.serial)
-    except _FixtureError:
-        _emit_error("invalid_fixture")
-        return 2
-    except DeviceProbeError as error:
-        _emit(_device_failure(error))
-        return 2
-    except Exception:
-        _emit_error("invalid_input")
-        return 2
+        except _FixtureError:
+            log.record(
+                stage="fixture",
+                result="failed",
+                reason_code="invalid_fixture",
+                error_category="fixture",
+                duration_ms=elapsed_ms(stage_started),
+                mode=mode,
+                config_source=config_source,
+            )
+            if not _emit_error("invalid_fixture"):
+                return _finish(log, started, 2, None, "internal")
+            return _finish(log, started, 2, "invalid_fixture", "fixture")
+        except Exception:
+            log.record(
+                stage="fixture",
+                result="failed",
+                reason_code=None,
+                error_category="internal",
+                duration_ms=elapsed_ms(stage_started),
+                mode=mode,
+                config_source=config_source,
+            )
+            if not _emit_error("invalid_input"):
+                return _finish(log, started, 2, None, "internal")
+            return _finish(log, started, 2, "invalid_input", "internal")
+        log.record(
+            stage="fixture",
+            result="ok",
+            duration_ms=elapsed_ms(stage_started),
+            mode=mode,
+            config_source=config_source,
+        )
+    else:
+        stage_started = time.perf_counter()
+        log.record(
+            stage="probe",
+            result="started",
+            mode=mode,
+            config_source=config_source,
+        )
+        try:
+            snapshot = AdbDeviceProbe(process_log=log).probe(args.serial)
+        except DeviceProbeError as error:
+            device_count = max(0, error.device_count)
+            log.record(
+                stage="probe",
+                result="failed",
+                reason_code=error.reason_code,
+                error_category="probe",
+                duration_ms=elapsed_ms(stage_started),
+                mode=mode,
+                config_source=config_source,
+            )
+            log.record(
+                stage="decision",
+                result="failed",
+                reason_code=error.reason_code,
+                error_category="probe",
+                mode=mode,
+                config_source=config_source,
+                device_count=device_count,
+            )
+            if not _emit(
+                build_result(
+                    status="failed",
+                    reason_code=error.reason_code,
+                    device_count=device_count,
+                    selected_alias=error.selected_alias,
+                    unlocked=None,
+                    foreground_app="unknown",
+                )
+            ):
+                return _finish(log, started, 2, None, "internal")
+            return _finish(log, started, 2, error.reason_code, "probe")
+        except Exception:
+            log.record(
+                stage="probe",
+                result="failed",
+                reason_code=None,
+                error_category="internal",
+                duration_ms=elapsed_ms(stage_started),
+                mode=mode,
+                config_source=config_source,
+            )
+            if not _emit_error("invalid_input"):
+                return _finish(log, started, 2, None, "internal")
+            return _finish(log, started, 2, "invalid_input", "internal")
+        log.record(
+            stage="probe",
+            result="ok",
+            duration_ms=elapsed_ms(stage_started),
+            mode=mode,
+            config_source=config_source,
+        )
 
     try:
         result = run_doctor(snapshot)
     except Exception:
-        _emit_error("invalid_input")
-        return 2
-    _emit(result)
-    return 0 if result["status"] == "ok" else 2
+        log.record(
+            stage="decision",
+            result="failed",
+            reason_code=None,
+            error_category="internal",
+            mode=mode,
+            config_source=config_source,
+        )
+        if not _emit_error("invalid_input"):
+            return _finish(log, started, 2, None, "internal")
+        return _finish(log, started, 2, "invalid_input", "internal")
+
+    status = result["status"]
+    exit_code = 0 if status == "ok" else 2
+    reason_code = result["reason_code"]
+    error_category = None if status == "ok" else "business"
+    log.record(
+        stage="decision",
+        result=status,
+        reason_code=reason_code,
+        error_category=error_category,
+        mode=mode,
+        config_source=config_source,
+        device_count=result["device_count"],
+    )
+    if not _emit(result):
+        return _finish(log, started, 2, None, "internal")
+    return _finish(log, started, exit_code, reason_code, error_category)
