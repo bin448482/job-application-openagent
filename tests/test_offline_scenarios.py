@@ -1114,6 +1114,118 @@ class M1DriverBoundaryTests(unittest.TestCase):
         differences = compare_invocation(invocation, oracle)
         self.assertTrue(any("source_names" in item for item in differences), differences)
 
+    def _run_u13_running_with_defer_mutant(self, mutate) -> list[str]:
+        """用真实 seed/CLI/inspect 执行 SC-U13 running 三步并返回 oracle 差异。"""
+        from app.adapters.sqlite.repo import SqliteStore
+        from app.cli.main import main as cli_main
+        from app.process_log import ProcessLog
+
+        assets = load_assets()
+        steps = assets.oracles["variants"]["SC-U13/running_blocked_new_fingerprint"]["acceptance"]["steps"]
+        project = SCENARIO_ROOT.parent.parent
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m2/probe/seed_running.json").read_text(encoding="utf-8")
+        )
+        original = SqliteStore._defer_sources
+
+        def mutant(store, *args, **kwargs):
+            """先调用生产 defer，再注入合成缺陷。"""
+            result = original(store, *args, **kwargs)
+            mutate(store)
+            return result
+
+        with tempfile.TemporaryDirectory(dir=project) as temporary:
+            folder = Path(temporary)
+            db = folder / "runtime.sqlite3"
+            db_arg = f"{folder.name}/runtime.sqlite3"
+            with mock.patch.object(m2_probe, "ROOT", project):
+                seeded = m2_probe._seed(request, db)
+            log = ProcessLog(path=folder / "mutant.jsonl")
+            with mock.patch.object(SqliteStore, "_defer_sources", mutant), mock.patch(
+                "app.cli.main.PROJECT_ROOT", project
+            ):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    code = cli_main(
+                        [
+                            "sense",
+                            "--fixture",
+                            "tests/scenarios/fixtures/m2/sensor/new_fingerprint/manifest.json",
+                            "--db",
+                            db_arg,
+                        ],
+                        process_log=log,
+                    )
+            inspected = m2_probe._inspect(db)
+
+        invocations = [
+            {
+                "exit_code": 0,
+                "stdout_json": {"schema_version": 1, "status": "ok", **seeded},
+                "stdout_json_ok": True,
+                "stdout_text": "",
+                "stderr": "",
+            },
+            {
+                "exit_code": code,
+                "stdout_json": json.loads(output.getvalue()),
+                "stdout_json_ok": True,
+                "stdout_text": "",
+                "stderr": "",
+            },
+            {
+                "exit_code": 0,
+                "stdout_json": {"schema_version": 1, "status": "ok", **inspected},
+                "stdout_json_ok": True,
+                "stdout_text": "",
+                "stderr": "",
+            },
+        ]
+        differences: list[str] = []
+        for index, (invocation, step) in enumerate(zip(invocations, steps)):
+            differences.extend(f"第{index + 1}步: {item}" for item in compare_invocation(invocation, step))
+        return differences
+
+    def test_real_m2_u13_lease_nonce_mutant_is_caught(self) -> None:
+        """真实 defer 后同步篡改任务/设备 nonce 时，SC-U13 租约断言必须拒绝。"""
+        replacement = "00000000-0000-4000-8000-0000000000ff"
+
+        def mutate(store):
+            """同步改写 running 任务与 held 设备的 nonce，保持非空和关系。"""
+            store._connection.execute(
+                "UPDATE hr_discoveries SET nonce = ? WHERE state = 'running'", (replacement,)
+            )
+            store._connection.execute(
+                "UPDATE device_lease SET nonce = ? WHERE device_key = 'primary'", (replacement,)
+            )
+
+        differences = self._run_u13_running_with_defer_mutant(mutate)
+        self.assertTrue(
+            any(
+                "nonce" in item or "stable_unchanged" in item or "protected_task" in item
+                for item in differences
+            ),
+            differences,
+        )
+
+    def test_real_m2_u13_payload_mutant_is_caught(self) -> None:
+        """真实 defer 后篡改 kind/snapshot/opened 时，SC-U13 保护签名必须拒绝。"""
+        replacement = "00000000-0000-4000-8000-0000000000ee"
+
+        def mutate(store):
+            """保持 key/fingerprint/owner，只改合同规定不得变化的负载字段。"""
+            store._connection.execute(
+                "UPDATE hr_discoveries SET kind = 'new_message', snapshot_id = ?, opened = 1 "
+                "WHERE state = 'running'",
+                (replacement,),
+            )
+
+        differences = self._run_u13_running_with_defer_mutant(mutate)
+        self.assertTrue(
+            any("protected_task" in item or "snapshot_id" in item or "kind" in item for item in differences),
+            differences,
+        )
+
     def test_real_m2_extra_message_row_changes_rollback_signature(self) -> None:
         """合成库新增合法 hr_messages 行时，SC-U14 回滚签名必须变为未保持。"""
         import sqlite3

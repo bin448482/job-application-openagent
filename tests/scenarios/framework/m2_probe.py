@@ -114,10 +114,30 @@ def _stable_signature(connection: sqlite3.Connection) -> str:
     return canonical_hash([conversations, messages, devices])
 
 
-def _write_baseline(db: Path, signature: str, stable: str) -> None:
-    """把完整回滚签名与成功路径稳定签名写为后续只读比较基线。"""
+def _protected_task_signature(connection: sqlite3.Connection) -> str:
+    """对成功或 defer 场景不得改变的任务负载与全部租约字段做前后签名。
+
+    `source_names_json` 与 `updated_at` 是冻结合同允许合并变化的字段，故排除。
+    """
+    rows = [
+        list(row)
+        for row in connection.execute(
+            "SELECT app,\"key\",conversation_key,kind,fingerprint,snapshot_id,opened,"
+            "priority,created_at,attempt,reason_code,lease_owner,owner_pid,"
+            "lease_expires_at,owner_host,nonce FROM hr_discoveries ORDER BY app,\"key\""
+        ).fetchall()
+    ]
+    return canonical_hash(rows)
+
+
+def _write_baseline(db: Path, signature: str, stable: str, protected: str) -> None:
+    """把完整回滚签名、成功路径稳定签名与被保护任务签名写为比较基线。"""
     _baseline_path(db).write_text(
-        json.dumps({"signature": signature, "stable": stable}, sort_keys=True), encoding="utf-8"
+        json.dumps(
+            {"signature": signature, "stable": stable, "protected": protected},
+            sort_keys=True,
+        ),
+        encoding="utf-8",
     )
 
 
@@ -129,13 +149,15 @@ def _record_baseline(db: Path) -> dict:
     try:
         signature = _signature(connection)
         stable = _stable_signature(connection)
+        protected = _protected_task_signature(connection)
     finally:
         connection.close()
-    _write_baseline(db, signature, stable)
+    _write_baseline(db, signature, stable, protected)
     return {
         "baseline_recorded": True,
         "state_signature": signature,
         "stable_signature": stable,
+        "protected_task_signature": protected,
     }
 
 
@@ -239,9 +261,10 @@ def _seed(request: dict, db: Path) -> dict:
         connection.commit()
         signature = _signature(connection)
         stable = _stable_signature(connection)
+        protected = _protected_task_signature(connection)
     finally:
         connection.close()
-    _write_baseline(db, signature, stable)
+    _write_baseline(db, signature, stable, protected)
     return {
         "seeded": len(fixtures),
         "state": state,
@@ -337,10 +360,12 @@ def _inspect(db: Path) -> dict:
         baseline_path = _baseline_path(db)
         unchanged = None
         stable_unchanged = None
+        protected_unchanged = None
         if baseline_path.is_file():
             baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
             unchanged = baseline.get("signature") == signature
             stable_unchanged = baseline.get("stable") == _stable_signature(connection)
+            protected_unchanged = baseline.get("protected") == _protected_task_signature(connection)
         return {
             "task_count": len(rows),
             "states": [str(row[0]) for row in rows],
@@ -356,10 +381,16 @@ def _inspect(db: Path) -> dict:
             "owner_pid": [row[9] for row in rows],
             "owner_host": [row[10] for row in rows],
             "nonce_present": [row[11] is not None for row in rows],
+            "nonces": [row[11] for row in rows],
             "lease_expires_at": [row[12] for row in rows],
             "device_present": device is not None,
             "device_count": int(device_count),
             "device_reservation_state": None if device is None else device[0],
+            "device_lease_owner": None if device is None else device[1],
+            "device_owner_pid": None if device is None else device[2],
+            "device_owner_host": None if device is None else device[3],
+            "device_nonce": None if device is None else device[4],
+            "device_lease_expires_at": None if device is None else device[5],
             "conversation_count": len(conversations),
             "baseline_preview_hashes": [row[0] for row in conversations],
             "baseline_time_hints": [row[1] for row in conversations],
@@ -380,6 +411,7 @@ def _inspect(db: Path) -> dict:
             "state_signature": signature,
             "unchanged_since_seed": unchanged,
             "stable_unchanged_since_baseline": stable_unchanged,
+            "protected_task_unchanged_since_baseline": protected_unchanged,
         }
     finally:
         connection.close()

@@ -9231,8 +9231,20 @@
                     "equals": true
                   },
                   {
+                    "path": "nonces.0",
+                    "equals": "00000000-0000-4000-8000-000000000032"
+                  },
+                  {
                     "path": "lease_expires_at.0",
                     "equals": "2026-11-24T00:01:00.000Z"
+                  },
+                  {
+                    "path": "stable_unchanged_since_baseline",
+                    "equals": true
+                  },
+                  {
+                    "path": "protected_task_unchanged_since_baseline",
+                    "equals": true
                   },
                   {
                     "path": "device_present",
@@ -9245,6 +9257,26 @@
                   {
                     "path": "device_reservation_state",
                     "equals": "held"
+                  },
+                  {
+                    "path": "device_lease_owner",
+                    "equals": "00000000-0000-4000-8000-000000000031"
+                  },
+                  {
+                    "path": "device_owner_pid",
+                    "equals": 1
+                  },
+                  {
+                    "path": "device_owner_host",
+                    "equals": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  {
+                    "path": "device_nonce",
+                    "equals": "00000000-0000-4000-8000-000000000032"
+                  },
+                  {
+                    "path": "device_lease_expires_at",
+                    "equals": "2026-11-24T00:01:00.000Z"
                   },
                   {
                     "path": "device_owner_matches_task",
@@ -9368,6 +9400,18 @@
                     "equals": false
                   },
                   {
+                    "path": "nonces.0",
+                    "equals": null
+                  },
+                  {
+                    "path": "stable_unchanged_since_baseline",
+                    "equals": true
+                  },
+                  {
+                    "path": "protected_task_unchanged_since_baseline",
+                    "equals": true
+                  },
+                  {
                     "path": "device_present",
                     "equals": true
                   },
@@ -9378,6 +9422,26 @@
                   {
                     "path": "device_reservation_state",
                     "equals": "quarantined"
+                  },
+                  {
+                    "path": "device_lease_owner",
+                    "equals": "00000000-0000-4000-8000-000000000031"
+                  },
+                  {
+                    "path": "device_owner_pid",
+                    "equals": 1
+                  },
+                  {
+                    "path": "device_owner_host",
+                    "equals": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  },
+                  {
+                    "path": "device_nonce",
+                    "equals": "00000000-0000-4000-8000-000000000032"
+                  },
+                  {
+                    "path": "device_lease_expires_at",
+                    "equals": "2026-11-24T00:01:00.000Z"
                   },
                   {
                     "path": "event_counts.candidate_deferred",
