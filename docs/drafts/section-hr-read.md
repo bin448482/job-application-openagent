@@ -186,7 +186,7 @@
 
 ### R13 未读像素判定
 - 目的：用红像素阈值替代不可靠的角标层级。
-- 代码位置：`scripts/core/message_list.py:270-279` 调用 `219`（`count_red_pixels`）；阈值 `19`。
+- 代码位置：`scripts/core/message_list.py:270-279` 调用 `219`（`count_red_pixels`）；阈值常量 `UNREAD_RED_PIXEL_THRESHOLD`=100，定义在同文件第 19 行（`scripts/core/message_list.py:19`）。
 - 前置条件：R14 已取得同视口 RGBA 像素，且行内角标 bounds 可解析。
 - 原子动作：纯内存统计角标矩形内红色像素。
 - 输入：pixels、width、badge bounds。
