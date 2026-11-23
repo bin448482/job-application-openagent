@@ -48,6 +48,7 @@
 - `package-lock.json`：npm 依赖完整锁文件，使用 npm ci 重现安装；依赖更新时同步维护。
 - `promptfooconfig.json`：根评测配置，引用 evals 提示词、案例和断言；echo 为占位，不当作真实模型，默认关闭分享、并发 1。
 - `evals/`：24 个合成黄金案例、单次决策提示词、断言、正反例自检、参考 provider 及 smoke/model 运行入口。
+- `docs/`：公开文档目录。终稿 `BOSS直聘_手机客户端原始操作_原子化分析.md` 合并旧项目 `scripts/` 的静态阅读结果，按 CORE/JOBS/HRR/HRA 前缀的原子 ID 组织，含 0–9 小节与源码索引；技术结论带 `file:line` 证据，不构成设备执行授权。同目录另有 `BOSS直聘_实机验证偏差与修订建议_20261123.md`（单机型单版本，记录 7 条偏差与 5 条待确认）、`BOSS直聘_求职自动化_简化架构设计说明_20261123.md`（失败证据、简化架构、接口与验收指标）、`BOSS直聘_求职自动化_实施计划_20261123.md`（M0–M8 里程碑、六张图、测试与回滚）、本目录 `AGENTS.md` 与只含 `@AGENTS.md` 的 `CLAUDE.md`。
 - `config.example.json`：空对象业务配置示例，正式 schema 待设计。
 - `config.json`：当前存在、被忽略的本机配置，保留且不读取内容；不是评测配置。
 - `.gitignore`：依赖、缓存、运行产物、个人事实及凭据忽略约定，包含 data/screenshots 指导文档例外。
@@ -61,7 +62,7 @@
 - `.venv/`：本机 Python 虚拟环境，被忽略且排除指导文档覆盖。
 - `node_modules/`：npm 自动安装的第三方评测依赖，被忽略且排除指导文档覆盖。
 
-`scripts/`、`tests/`、`docs/`、`skills/`、`.agents/skills/`、`.claude/skills/` 当前不存在，按规则不创建；Node 回归测试实际放在 evals。旧 scripts/main.py 与业务 unittest 约定不适用当前仓库。`.promptfoo/`、`build/`、`dist/`、`.test-artifacts/`、`test-evidence/` 当前不存在，按规则不创建；未来产生的依赖、缓存和自动生成产物也不补指导文档。
+`scripts/`、`tests/`、`skills/`、`.agents/skills/`、`.claude/skills/` 当前不存在，按规则不创建；Node 回归测试实际放在 evals。旧 scripts/main.py 与业务 unittest 约定不适用当前仓库。`docs/` 当前已存在，只存放公开分析文档与目录指南（见根目录索引），不承载业务代码或测试。`.promptfoo/`、`build/`、`dist/`、`.test-artifacts/`、`test-evidence/` 当前不存在，按规则不创建；未来产生的依赖、缓存和自动生成产物也不补指导文档。
 
 ## 三、全局工作规则与编码规范
 
