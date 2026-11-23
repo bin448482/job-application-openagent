@@ -46,6 +46,7 @@
 ### 0.4 脱敏与占位符约定
 
 - 所有路径一律相对仓库根（如 `scripts/core/adb.py`、`data/jobs.sqlite3`、`screenshots/<本地日期>/…`）；不写本机绝对路径。
+- `<设备临时XML>` 表示旧实现固定使用的设备侧层级文件，保留固定文件会被覆盖的语义；具体设备绝对路径不写入公开文档。
 - 设备标识一律写作 `<serial>`；包名 `com.hpbr.bosszhipin` 与输入法 `com.android.adbkeyboard/.AdbIME` 是公开常量，不是凭据。
 - 四份草稿合并前已逐份扫描本机绝对路径、用户名、设备序列号、真实姓名/联系方式、公司-聊天关联、密钥与令牌：**均未发现**，故无需替换原文；本次仍统一了占位符写法（见 0.4 前两条）。
 - 第 7 节的数据库/日志/截图只描述结构与本机相对位置，不复述任何业务原文。
@@ -62,7 +63,7 @@
 - 手机已开启 USB 调试并由使用者在手机上授权本机；`unauthorized`/`offline` 分别映射 `device_unauthorized`/`device_disconnected`（`scripts/core/adb.py:127-141`）。
 - 解锁只认 Android 窗口服务明确报告 `isKeyguardShowing=false`；未出现该字段也按未解锁处理（`scripts/core/adb.py:162-164, 180-184`）。
 - 普通 ADB 命令超时 15 秒（`scripts/core/adb.py:91`），设备清单 5 秒（`:114`），截图类 3 秒（`:281, :302, :363`）。
-- 层级 dump 依赖 `uiautomator dump` 与 `/sdcard/job_tracker_ui.xml` 可写（`scripts/core/adb.py:212-216`）。
+- 层级 dump 依赖 `uiautomator dump` 与 `<设备临时XML>` 可写（`scripts/core/adb.py:212-216`）。
 - 包名硬编码 `com.hpbr.bosszhipin`（`scripts/core/adb.py:19`；`scripts/core/obs.py:14` 另有同名常量）；启动组件每次解析，不写死（`scripts/core/adb.py:187-202`）。
 - `adb` 与 `workspace` 命令执行前都经过设备占用闸门：`scripts/main.py:1609-1633`（`_dispatch`）→ `scripts/hr/scan.py:750-801`（`device_command`），占用冲突以退出码 2 拒绝。
 
@@ -130,19 +131,19 @@
 
 #### CORE-A10 删除旧层级 dump 文件
 - 代码：`scripts/core/adb.py:212-213`（`read_hierarchy`）
-- 动作：`adb -s <serial> shell rm -f /sdcard/job_tracker_ui.xml`。
+- 动作：`adb -s <serial> shell rm -f <设备临时XML>`。
 - 判据/失败：退出码 0（文件不存在时 `rm -f` 仍为 0）；错误上抛。
 - 副作用：删除手机侧固定路径临时文件；幂等。
 
 #### CORE-A11 生成 UI 层级 dump
 - 代码：`scripts/core/adb.py:214-222`（`read_hierarchy`）
-- 动作：`adb -s <serial> shell uiautomator dump /sdcard/job_tracker_ui.xml`。
+- 动作：`adb -s <serial> shell uiautomator dump <设备临时XML>`。
 - 判据/失败：退出码 0；仅退出码 137 时最多重试一次（总 2 次），第二次仍 137 抛 `RuntimeError`，其他退出码立即抛出。
 - 副作用：覆盖手机侧固定路径文件；重试覆盖同文件，视为幂等。
 
 #### CORE-A12 读取 dump XML 文本
 - 代码：`scripts/core/adb.py:225-229`（`read_hierarchy`）
-- 动作：`adb -s <serial> shell cat /sdcard/job_tracker_ui.xml`。
+- 动作：`adb -s <serial> shell cat <设备临时XML>`。
 - 判据/失败：退出码 0；错误上抛，不重试。
 - 副作用：只读，幂等。
 
@@ -848,7 +849,7 @@
 - `data/job-work/recommend-<时间戳>.jsonl`：推荐机会契约，单行、拒绝覆盖（`scripts/jobs/recommend.py:13`、`:144-156`）。
 - `data/operations.log` 与 `.lock`：脱敏事件日志（`CORE-L03`）。
 - `screenshots/<本地日期>/…`：推荐卡与弹层截图（`CORE-E06`）。
-- 设备侧临时文件 `/sdcard/job_tracker_ui.xml`（`CORE-A10`/`CORE-A11` 每次覆盖）。
+- 设备侧临时文件 `<设备临时XML>`（`CORE-A10`/`CORE-A11` 每次覆盖）。
 
 **幂等性结论**：读操作（`读屏` 与 `JOBS-P`/`CORE-M` 判定）可重复；写库靠唯一键与状态条件收敛（`reserve_job` 唯一、`mark_tap_started` 只从 `reserved`、`complete_job` 只从 `pending`、`record_discovery` 唯一）；点击类操作（`JOBS-A02`–`JOBS-A11`）不可幂等，必须靠 `pending`/`sent` 状态与人工核对阻断重放。
 
@@ -1814,7 +1815,7 @@
 | `screenshots/<本地日期>/<round\|transaction-id>/*-effects.jsonl/.before.xml/.after.xml` | 脱敏观测归档 | `CORE-O03` |
 | `screenshots/hr-cleanup-<time_ns>.png` | 清理停止现场 | `HRA-A41` |
 | `screenshots/heartbeat-preflight-<timestamp>.png` | 心跳预检失败现场 | `HRA-A29` |
-| `/sdcard/job_tracker_ui.xml`（设备） | 每轮先删后写的层级 dump | `CORE-A10`/`CORE-A11` |
+| `<设备临时XML>`（设备） | 每轮先删后写的层级 dump | `CORE-A10`/`CORE-A11` |
 
 数据库连接：`scripts/core/db.py:13-37` 只读打开（`mode=ro`，可加 `immutable=1`），不建库、不迁移；业务库固定 `data/jobs.sqlite3`（`scripts/core/db.py:10`）。设备占用存于 `hr_device_commands`，含 serial/token/dispatch_nonce/owner_pid/owner_host/cancelled（`scripts/hr/store.py:1003-1037`）。
 
@@ -1868,7 +1869,7 @@
 4. **`screen_action` 把“变化但未稳定”当成功**：`if not observed["stable"] or observed["changed"]: return True`（`scripts/core/adb.py:350-351`），画面仍在动画时也可能返回 True；重试边界只有 2 次。
 5. **`wait_for_screen` 的 `changed` 依赖旧摘要**：未传 `previous_hash` 时永远为 False（`scripts/core/adb.py:328`）；超时返回 `stable=False` 与 `changed` 的组合语义需调用方自行解释。
 6. **长按与同点短滑通道未验证真实响应**：`tap_bounds` 的 `long_press` 用同点 `swipe` 800 ms、`input_swipe` 用同点 60 ms（`scripts/core/adb.py:258-262`），代码注释明确“不保证 BOSS 控件响应”；清理另用 1200 ms。实际 UI 行为未知（原 core 第 6 条与 hr-act 第 3 条合并）。
-7. **层级 dump 使用固定路径**：`/sdcard/job_tracker_ui.xml` 是全局固定文件（`scripts/core/adb.py:212`），绕过 CLI 直接调用 core 的两个进程会互相覆盖；`uiautomator dump` 退出码 137 只重试一次（`:214-222`）。
+7. **层级 dump 使用固定路径**：`<设备临时XML>` 是全局固定文件（`scripts/core/adb.py:212`），绕过 CLI 直接调用 core 的两个进程会互相覆盖；`uiautomator dump` 退出码 137 只重试一次（`:214-222`）。
 8. **文本输入实现不在 core 包**：core 没有 `input text`/粘贴函数，文本输入完全位于 `scripts/hr/actions.py` 并依赖外装 ADBKeyboard 广播（`scripts/hr/actions.py:705`、`733-735`、`755-768`）。本文把 `CORE-I01`–`CORE-I08` 归入 CORE 域只是编号归属，不改变实现位置；重新设计时需决定输入层归属与失败恢复策略。
 9. **旧未读判定有层级/像素两源，版本观察增加未覆盖形态**：层级角标存在即 `yes`（`scripts/core/message_list.py:269`），与像素阈值 `>=100`（`:278-279`）可能不一致；`unread_filter_verified=True` 时所有行都被标 `yes`（`:269`），无法区分个别已读行。V1/V2 观察到无 id 的头像区数字与“新招呼”`tv_count`，但不同机型的位置、数字语义、首次招呼覆盖和筛选等价性仍未确认，不能关闭本项。
 10. **无名字但可点击的消息行**：会被写成空字段占位记录并标 `kind=unknown`（`scripts/core/message_list.py:252-257`），其真实含义（分隔符/系统卡/加载占位）未在代码中说明。
