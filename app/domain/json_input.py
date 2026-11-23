@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Callable
 
 JsonPairs = list[tuple[str, object]]
 
@@ -18,10 +17,6 @@ def reject_duplicate_keys(pairs: JsonPairs) -> dict[str, object]:
     return result
 
 
-def load_json_object(
-    text: str,
-    *,
-    object_pairs_hook: Callable[[JsonPairs], dict[str, object]] = reject_duplicate_keys,
-) -> object:
-    """解析严格 UTF-8 JSON 文本，由调用方保留文件 IO 与错误分类。"""
-    return json.loads(text, object_pairs_hook=object_pairs_hook)
+def load_json_object(text: str) -> object:
+    """解析严格 JSON 文本，固定使用共享重复键校验，不负责文件 IO。"""
+    return json.loads(text, object_pairs_hook=reject_duplicate_keys)

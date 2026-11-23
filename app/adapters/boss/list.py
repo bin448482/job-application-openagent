@@ -9,12 +9,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from xml.etree import ElementTree
 
-from app.domain.json_input import (
-    load_json_object as _load_strict_json,
-)
-from app.domain.json_input import (
-    reject_duplicate_keys as _reject_strict_pairs,
-)
+from app.domain.json_input import load_json_object as _load_strict_json
 from app.domain.models import (
     APP,
     Candidate,
@@ -1042,15 +1037,10 @@ def _read_xml_text(path: Path) -> str:
         raise _FixtureXmlError("xml encoding is invalid") from None
 
 
-def reject_duplicates(items: list[tuple[str, object]]) -> dict[str, object]:
-    """把适配器 JSON 对象键值对交给共享严格重复键校验。"""
-    return _reject_strict_pairs(items)
-
-
 def _read_json_file(path: Path) -> object:
     """读取严格 UTF-8 JSON，并复用共享重复对象键校验。"""
     text = path.read_text(encoding="utf-8")
-    return _load_strict_json(text, object_pairs_hook=reject_duplicates)
+    return _load_strict_json(text)
 
 
 def _resolve_fixture_reference(base: Path, value: str) -> Path:

@@ -16,12 +16,7 @@ from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
 from app.ports.device import ProbeSnapshot
 from app.ports.store import StoreError
-from app.domain.json_input import (
-    load_json_object as _load_strict_json,
-)
-from app.domain.json_input import (
-    reject_duplicate_keys as _reject_strict_pairs,
-)
+from app.domain.json_input import load_json_object as _load_json_object
 from app.process_log import ProcessLog, elapsed_ms
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
 from app.usecases.sense import build_sense_payload, persist_and_aggregate
@@ -205,16 +200,6 @@ def _resolve_project_path(value: str) -> Path:
     if not resolved.is_relative_to(PROJECT_ROOT):
         raise ValueError("path escapes project root")
     return resolved
-
-
-def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    """把 CLI JSON 对象键值对交给共享严格重复键校验。"""
-    return _reject_strict_pairs(pairs)
-
-
-def _load_json_object(text: str) -> object:
-    """在 CLI 输入边界解析严格 JSON，复用共享重复键校验。"""
-    return _load_strict_json(text, object_pairs_hook=_reject_duplicate_keys)
 
 
 def _validate_config(value: str | None) -> None:
