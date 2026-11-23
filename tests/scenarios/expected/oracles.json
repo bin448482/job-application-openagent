@@ -15,6 +15,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
         "F 使用假设备边界"
@@ -41,6 +42,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
         "F 使用假设备边界"
@@ -68,6 +70,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
         "F 使用假设备边界"
@@ -94,6 +97,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
         "F 使用假设备边界"
@@ -121,6 +125,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
         "F 使用假设备边界"
@@ -147,6 +152,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
         "F 使用假设备边界"
@@ -172,6 +178,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
         "F 使用假设备边界"
@@ -197,6 +204,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 文本动作",
         "F 使用假设备边界"
@@ -223,6 +231,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
         "F 使用假设备边界"
@@ -249,6 +258,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
         "F 使用假设备边界"
@@ -276,6 +286,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
         "F 使用假设备边界"
@@ -302,6 +313,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
         "F 使用假设备边界"
@@ -329,6 +341,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
         "F 使用假设备边界"
@@ -355,6 +368,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
         "F 使用假设备边界"
@@ -380,6 +394,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
         "F 使用假设备边界"
@@ -405,6 +420,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 附件动作",
         "F 使用假设备边界"
@@ -431,6 +447,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权"
@@ -457,6 +474,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权"
@@ -484,6 +502,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权"
@@ -510,6 +529,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权"
@@ -537,6 +557,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权"
@@ -563,6 +584,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权"
@@ -588,6 +610,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权"
@@ -613,6 +636,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权"
@@ -639,6 +663,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权，不复用微信授权"
@@ -665,6 +690,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权，不复用微信授权"
@@ -692,6 +718,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权，不复用微信授权"
@@ -718,6 +745,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权，不复用微信授权"
@@ -745,6 +773,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权，不复用微信授权"
@@ -771,6 +800,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权，不复用微信授权"
@@ -796,6 +826,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权，不复用微信授权"
@@ -820,6 +851,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 联系方式动作",
         "独立授权，不复用微信授权"
@@ -846,6 +878,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
         "G01–G04 已通过的合成候选"
@@ -872,6 +905,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
         "G01–G04 已通过的合成候选"
@@ -899,6 +933,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
         "G01–G04 已通过的合成候选"
@@ -925,6 +960,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
         "G01–G04 已通过的合成候选"
@@ -952,6 +988,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
         "G01–G04 已通过的合成候选"
@@ -978,6 +1015,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 删除动作",
         "G01–G04 已通过的合成候选"
@@ -1004,6 +1042,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
         "处理中到达未读仍按安全点"
@@ -1030,6 +1069,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
         "处理中到达未读仍按安全点"
@@ -1057,6 +1097,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
         "处理中到达未读仍按安全点"
@@ -1083,6 +1124,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
         "处理中到达未读仍按安全点"
@@ -1110,6 +1152,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
         "处理中到达未读仍按安全点"
@@ -1136,6 +1179,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
         "处理中到达未读仍按安全点"
@@ -1161,6 +1205,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 人工核对卡",
         "每个 pending/unknown 都有卡"
@@ -1186,6 +1231,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 人工核对卡",
         "每个 pending/unknown 都有卡"
@@ -1211,6 +1257,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 人工核对卡",
         "每个 pending/unknown 都有卡"
@@ -1236,6 +1283,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 人工核对卡",
         "每个 pending/unknown 都有卡"
@@ -1260,6 +1308,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
       ],
@@ -1283,6 +1332,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
       ],
@@ -1306,6 +1356,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
       ],
@@ -1330,6 +1381,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
       ],
@@ -1354,6 +1406,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
       ],
@@ -1377,6 +1430,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M5 Evidence 校验"
       ],
@@ -1417,6 +1471,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1458,6 +1513,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1499,6 +1555,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1540,6 +1597,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1581,6 +1639,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1622,6 +1681,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1663,6 +1723,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1704,6 +1765,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1729,6 +1791,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1770,6 +1833,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "fixture 模式不启动子进程"
@@ -1810,6 +1874,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -1849,6 +1914,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -1889,6 +1955,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -1929,6 +1996,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -1969,6 +2037,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -2009,6 +2078,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -2045,6 +2115,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -2081,6 +2152,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -2114,6 +2186,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -2150,6 +2223,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -2186,6 +2260,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -2222,6 +2297,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "省略配置不得读取根 config.json"
@@ -2258,6 +2334,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "真实模式不进入离线自检"
@@ -2294,6 +2371,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "真实模式不进入离线自检"
@@ -2330,6 +2408,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "真实模式不进入离线自检"
@@ -2355,6 +2434,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "真实模式不进入离线自检"
@@ -2392,6 +2472,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "真实模式不进入离线自检"
@@ -2418,6 +2499,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "真实模式不进入离线自检"
@@ -2444,6 +2526,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "真实模式不进入离线自检"
@@ -2480,6 +2563,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M0 doctor 已交付",
         "真实模式不进入离线自检"
@@ -2507,6 +2591,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 Decision 契约",
         "保留原 24 例判据"
@@ -2533,6 +2618,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 Decision 契约",
         "保留原 24 例判据"
@@ -2559,6 +2645,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2584,6 +2671,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2609,6 +2697,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2635,6 +2724,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2661,6 +2751,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2687,6 +2778,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2712,6 +2804,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2738,6 +2831,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2764,6 +2858,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2789,6 +2884,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2814,6 +2910,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2839,6 +2936,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 校验器已交付",
         "合成 envelope"
@@ -2865,6 +2963,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 桥超时契约",
         "假桥不连接真实模型"
@@ -2892,6 +2991,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 桥超时契约",
         "假桥不连接真实模型"
@@ -2918,6 +3018,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 桥超时契约",
         "假桥不连接真实模型"
@@ -2944,6 +3045,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
         "v1 固定 C"
@@ -2970,6 +3072,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
         "v1 固定 C"
@@ -2996,6 +3099,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
         "v1 固定 C"
@@ -3022,6 +3126,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
         "v1 固定 C"
@@ -3048,6 +3153,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
         "v1 固定 C"
@@ -3074,6 +3180,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 策略与事实门禁",
         "v1 固定 C"
@@ -3099,6 +3206,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3125,6 +3233,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3150,6 +3259,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3176,6 +3286,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3201,6 +3312,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3227,6 +3339,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3252,6 +3365,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3278,6 +3392,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3303,6 +3418,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3329,6 +3445,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3354,6 +3471,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3379,6 +3497,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3404,6 +3523,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3430,6 +3550,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 包校验已交付",
         "合成包不含真实内容"
@@ -3457,6 +3578,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 policy 工具已交付"
       ],
@@ -3482,6 +3604,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 policy 工具已交付"
       ],
@@ -3507,6 +3630,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 policy 工具已交付"
       ],
@@ -3532,6 +3656,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 桥固定 system/developer/user",
         "假桥"
@@ -3559,6 +3684,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 桥固定 system/developer/user",
         "假桥"
@@ -3585,6 +3711,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 桥固定 system/developer/user",
         "假桥"
@@ -3611,6 +3738,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
         "base 文件尚未交付"
@@ -3637,6 +3765,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
         "base 文件尚未交付"
@@ -3662,6 +3791,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
         "base 文件尚未交付"
@@ -3687,6 +3817,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
         "base 文件尚未交付"
@@ -3713,6 +3844,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 确定性渲染",
         "base 文件尚未交付"
@@ -3739,6 +3871,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
       ],
@@ -3764,6 +3897,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
       ],
@@ -3789,6 +3923,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
       ],
@@ -3814,6 +3949,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
       ],
@@ -3839,6 +3975,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
       ],
@@ -3864,6 +4001,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 共享门禁未交付前真实 run BLOCKED"
       ],
@@ -3889,6 +4027,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
         "合成包"
@@ -3915,6 +4054,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
         "合成包"
@@ -3941,6 +4081,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
         "合成包"
@@ -3967,6 +4108,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
         "合成包"
@@ -3993,6 +4135,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
         "合成包"
@@ -4019,6 +4162,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
         "合成包"
@@ -4045,6 +4189,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 snapshot/restore 已交付",
         "合成包"
@@ -4071,6 +4216,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
         "无合规本机 provider 即未测"
@@ -4098,6 +4244,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
         "无合规本机 provider 即未测"
@@ -4124,6 +4271,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
         "无合规本机 provider 即未测"
@@ -4151,6 +4299,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
         "无合规本机 provider 即未测"
@@ -4177,6 +4326,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M4 eval 已交付",
         "无合规本机 provider 即未测"
@@ -4203,6 +4353,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
         "归档天数未配置则禁用"
@@ -4228,6 +4379,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
         "归档天数未配置则禁用"
@@ -4253,6 +4405,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
         "归档天数未配置则禁用"
@@ -4278,6 +4431,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
         "归档天数未配置则禁用"
@@ -4303,6 +4457,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 清理规则",
         "归档天数未配置则禁用"
@@ -4328,6 +4483,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 保护项"
       ],
@@ -4351,6 +4507,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 保护项"
       ],
@@ -4374,6 +4531,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 保护项"
       ],
@@ -4397,6 +4555,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 保护项"
       ],
@@ -4420,6 +4579,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 保护项"
       ],
@@ -4444,6 +4604,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 双重身份核验"
       ],
@@ -4468,6 +4629,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 双重身份核验"
       ],
@@ -4492,6 +4654,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 双重身份核验"
       ],
@@ -4516,6 +4679,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
       ],
@@ -4541,6 +4705,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
       ],
@@ -4564,6 +4729,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
       ],
@@ -4588,6 +4754,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
       ],
@@ -4612,6 +4779,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M7 双阶段删除"
       ],
@@ -4637,6 +4805,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 store init 已交付",
         "只使用临时合成库"
@@ -4695,6 +4864,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 store init 已交付",
         "只使用临时合成库"
@@ -4720,6 +4890,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 store init 已交付",
         "只使用临时合成库"
@@ -4745,6 +4916,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 store init 已交付",
         "只使用临时合成库"
@@ -4788,6 +4960,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 store init 已交付",
         "只使用临时合成库"
@@ -4813,6 +4986,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 store init 已交付",
         "只使用临时合成库"
@@ -4838,6 +5012,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort claim 已交付",
         "只访问合成 DB，单独计数测试进程"
@@ -4863,6 +5038,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort claim 已交付",
         "只访问合成 DB，单独计数测试进程"
@@ -4889,6 +5065,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort claim 已交付",
         "只访问合成 DB，单独计数测试进程"
@@ -4915,6 +5092,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort claim 已交付",
         "只访问合成 DB，单独计数测试进程"
@@ -4940,6 +5118,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort renew/start/finish 已交付"
       ],
@@ -4964,6 +5143,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort renew/start/finish 已交付"
       ],
@@ -4988,6 +5168,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort renew/start/finish 已交付"
       ],
@@ -5012,6 +5193,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort renew/start/finish 已交付"
       ],
@@ -5036,6 +5218,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort renew/start/finish 已交付"
       ],
@@ -5061,6 +5244,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 StorePort renew/start/finish 已交付"
       ],
@@ -5085,6 +5269,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "注入三值停止检查器，不读取真实 PID"
@@ -5110,6 +5295,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "注入三值停止检查器，不读取真实 PID"
@@ -5135,6 +5321,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "注入三值停止检查器，不读取真实 PID"
@@ -5161,6 +5348,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "注入三值停止检查器，不读取真实 PID"
@@ -5186,6 +5374,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "注入三值停止检查器，不读取真实 PID"
@@ -5212,6 +5401,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "注入三值停止检查器，不读取真实 PID"
@@ -5237,6 +5427,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "注入三值停止检查器，不读取真实 PID"
@@ -5261,6 +5452,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
         "proof 只使用合成 ReadResult/Evidence"
@@ -5286,6 +5478,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
         "proof 只使用合成 ReadResult/Evidence"
@@ -5311,6 +5504,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
         "proof 只使用合成 ReadResult/Evidence"
@@ -5337,6 +5531,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
         "proof 只使用合成 ReadResult/Evidence"
@@ -5362,6 +5557,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
         "proof 只使用合成 ReadResult/Evidence"
@@ -5387,6 +5583,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 finish 已交付",
         "proof 只使用合成 ReadResult/Evidence"
@@ -5412,6 +5609,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "M0–M2 无解除隔离命令"
@@ -5437,6 +5635,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "M0–M2 无解除隔离命令"
@@ -5463,6 +5662,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "M0–M2 无解除隔离命令"
@@ -5488,6 +5688,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 recover 已交付",
         "M0–M2 无解除隔离命令"
@@ -5513,6 +5714,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
         "不输出 SQL 或路径"
@@ -5538,6 +5740,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
         "不输出 SQL 或路径"
@@ -5563,6 +5766,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
         "不输出 SQL 或路径"
@@ -5588,6 +5792,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
         "不输出 SQL 或路径"
@@ -5613,6 +5818,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
         "不输出 SQL 或路径"
@@ -5638,6 +5844,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
         "不输出 SQL 或路径"
@@ -5663,6 +5870,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
         "不输出 SQL 或路径"
@@ -5688,6 +5896,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1 仓储入口校验已交付",
         "不输出 SQL 或路径"
@@ -5713,6 +5922,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
         "真实执行需本轮确认"
@@ -5738,6 +5948,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
         "真实执行需本轮确认"
@@ -5763,6 +5974,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
         "真实执行需本轮确认"
@@ -5788,6 +6000,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
         "真实执行需本轮确认"
@@ -5813,6 +6026,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
         "真实执行需本轮确认"
@@ -5839,6 +6053,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 真机只读",
         "最多 3 份列表快照"
@@ -5865,6 +6080,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 真机只读",
         "最多 3 份列表快照"
@@ -5891,6 +6107,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 定向核对",
         "依赖 M2 unknown 出口"
@@ -5916,6 +6133,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 定向核对",
         "依赖 M2 unknown 出口"
@@ -5942,6 +6160,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 定向核对",
         "M2 needs_targeted_verification"
@@ -5967,6 +6186,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 定向核对",
         "M2 needs_targeted_verification"
@@ -5993,6 +6213,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 列表读取",
         "进入需另行授权"
@@ -6018,6 +6239,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 列表读取",
         "进入需另行授权"
@@ -6044,6 +6266,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 预保存发现",
         "单独进入授权"
@@ -6069,6 +6292,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 预保存发现",
         "单独进入授权"
@@ -6095,6 +6319,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 实时采集",
         "F 用 S01–S03 补时序"
@@ -6120,6 +6345,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 实时采集",
         "F 用 S01–S03 补时序"
@@ -6145,6 +6371,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 独占观察"
       ],
@@ -6169,6 +6396,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "observations_ref": null,
       "preconditions": [
         "M3 独占观察"
       ],
@@ -6193,6 +6421,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 真机观察",
         "V §4 语义待确认"
@@ -6218,6 +6447,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 真机观察",
         "V §4 语义待确认"
@@ -6243,6 +6473,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 真机观察",
         "V §4 语义待确认"
@@ -6269,6 +6500,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 完整读取",
         "不写入"
@@ -6294,6 +6526,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 完整读取",
         "不写入"
@@ -6320,6 +6553,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "observations_ref": null,
       "preconditions": [
         "M3 导航",
         "另轮确认"
@@ -6345,6 +6579,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 导航",
         "另轮确认"
@@ -6370,6 +6605,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "observations_ref": null,
       "preconditions": [
         "M3 profile 标定",
         "版本门禁"
@@ -6395,6 +6631,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 profile 标定",
         "版本门禁"
@@ -6421,6 +6658,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
         "视觉默认关闭"
@@ -6446,6 +6684,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "O",
+      "observations_ref": null,
       "preconditions": [
         "M3 读取阶梯",
         "视觉默认关闭"
@@ -6472,6 +6711,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "observations_ref": null,
       "preconditions": [
         "仅在有真实 T 条件时建立"
       ],
@@ -6496,6 +6736,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M1/M2/M5 离线门槛",
         "固定事件脚本与单调时钟"
@@ -6511,18 +6752,20 @@
     "SC-S01/safe_point_preempts": {
       "acceptance": null,
       "assertions": [
+        "刺激不含 first_observed/handling/pause 等产品结果",
         "安全点前不切换",
         "取任务前刷新后未读优先",
         "arrival 不冒充 first_observed",
         "开始处理才写 stage_preempted"
       ],
       "device_gate": false,
-      "expected_summary": "安全点前不切换",
+      "expected_summary": "刺激不含 first_observed/handling/pause 等产品结果",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": "expected/m6-observations.json",
       "preconditions": [
         "M1/M2/M5 离线门槛",
         "固定事件脚本与单调时钟"
@@ -6548,6 +6791,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M6 安全点向量"
       ],
@@ -6572,6 +6816,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M6 安全点向量"
       ],
@@ -6586,18 +6831,21 @@
     "SC-S03/five_then_pause": {
       "acceptance": null,
       "assertions": [
-        "前五次按安全点处理",
-        "第六次保存游标并 preemption_limit 暂停",
+        "仅实际 job→unread 切换累加",
+        "观察到但未切换不累加",
+        "前五次实际切换后第 6 次需求暂停",
+        "保存游标并记 preemption_limit",
         "未切换不伪造 stage_preempted",
         "不降低未读优先级"
       ],
       "device_gate": false,
-      "expected_summary": "前五次按安全点处理",
+      "expected_summary": "仅实际 job→unread 切换累加",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": "expected/m6-observations.json",
       "preconditions": [
         "M6 抢占上限 5"
       ],
@@ -6622,6 +6870,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M6 调度",
         "M2 unknown 出口"
@@ -6648,6 +6897,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M6 调度",
         "M2 unknown 出口"
@@ -6673,6 +6923,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M6 游标"
       ],
@@ -6698,6 +6949,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M6 游标"
       ],
@@ -6724,6 +6976,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": "expected/m6-observations.json",
       "preconditions": [
         "M6 预算判定",
         "可注入时钟/计数器"
@@ -6750,6 +7003,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M6 租约续租",
         "墙钟与单调时钟"
@@ -6776,6 +7030,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M6 租约续租",
         "墙钟与单调时钟"
@@ -6791,18 +7046,20 @@
     "SC-S08/three_hooks": {
       "acceptance": null,
       "assertions": [
+        "刺激不含 first_observed",
         "前两者优先处理",
         "第三种不伪造 first_observed",
         "最多一条职位事务再加检测/切页",
         "记录 arrival/observed 分离"
       ],
       "device_gate": false,
-      "expected_summary": "前两者优先处理",
+      "expected_summary": "刺激不含 first_observed",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": "expected/m6-observations.json",
       "preconditions": [
         "M6 安全点/刷新顺序"
       ],
@@ -6961,6 +7218,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 XML/profile/临时空库",
@@ -7062,6 +7320,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 XML/profile/临时空库",
@@ -7159,6 +7418,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "仅合成 profile/XML"
@@ -7255,6 +7515,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "仅合成 profile/XML"
@@ -7351,6 +7612,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "仅合成 profile/XML"
@@ -7447,6 +7709,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "仅合成 profile/XML"
@@ -7544,6 +7807,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "新招呼语义未验证"
@@ -7640,6 +7904,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "新招呼语义未验证"
@@ -7736,6 +8001,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "新招呼语义未验证"
@@ -7832,6 +8098,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "新招呼语义未验证"
@@ -7928,6 +8195,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "新招呼语义未验证"
@@ -8024,6 +8292,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "profile 显式声明不适用源"
@@ -8120,6 +8389,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "profile 显式声明不适用源"
@@ -8145,6 +8415,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "未关闭发现需合成库预置"
@@ -8170,6 +8441,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "未关闭发现需合成库预置"
@@ -8266,6 +8538,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "未关闭发现需合成库预置"
@@ -8291,6 +8564,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "未关闭发现需合成库预置"
@@ -8387,6 +8661,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 baseline_rows"
@@ -8488,6 +8763,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 baseline_rows"
@@ -8584,6 +8860,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 baseline_rows"
@@ -8610,6 +8887,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 baseline_rows"
@@ -8710,6 +8988,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 baseline_rows"
@@ -8735,6 +9014,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 baseline_rows"
@@ -8760,6 +9040,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 baseline_rows"
@@ -8861,6 +9142,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 baseline_rows"
@@ -8943,6 +9225,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "多页 XML 与 coverage_proof"
@@ -9039,6 +9322,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "多页 XML 与 coverage_proof"
@@ -9139,6 +9423,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "多页 XML 与 coverage_proof"
@@ -9235,6 +9520,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "多页 XML 与 coverage_proof"
@@ -9260,6 +9546,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "observed_at 注入为合成时间"
@@ -9342,6 +9629,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "observed_at 注入为合成时间"
@@ -9424,6 +9712,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "observed_at 注入为合成时间"
@@ -9506,6 +9795,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "坏输入不得写任何候选"
@@ -9588,6 +9878,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "坏输入不得写任何候选"
@@ -9670,6 +9961,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "坏输入不得写任何候选"
@@ -9752,6 +10044,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "坏输入不得写任何候选"
@@ -9777,6 +10070,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "坏输入不得写任何候选"
@@ -9859,6 +10153,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "坏输入不得写任何候选"
@@ -9955,6 +10250,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "最小 profile 不定义空态"
@@ -9980,6 +10276,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "最小 profile 不定义空态"
@@ -10077,6 +10374,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "同名同机构同职位"
@@ -10186,6 +10484,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "同名同机构同职位"
@@ -10212,6 +10511,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "同名同机构同职位"
@@ -10238,6 +10538,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 upsert 已交付",
         "保留合成库与状态"
@@ -10264,6 +10565,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 upsert 已交付",
         "保留合成库与状态"
@@ -10290,6 +10592,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 upsert 已交付",
         "保留合成库与状态"
@@ -10316,6 +10619,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense/upsert 已交付",
         "预置未关闭发现"
@@ -10341,6 +10645,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense/upsert 已交付",
         "预置未关闭发现"
@@ -10437,6 +10742,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 profile 显式声明依据"
@@ -10533,6 +10839,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 profile 显式声明依据"
@@ -10558,6 +10865,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 profile 显式声明依据"
@@ -10654,6 +10962,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M2 sense 已交付",
         "合成 profile 显式声明依据"
@@ -10681,6 +10990,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M8 指标汇总",
         "F 合成原始计数"
@@ -10707,6 +11017,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M8 指标汇总",
         "F 合成原始计数"
@@ -10733,6 +11044,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "observations_ref": null,
       "preconditions": [
         "M8 灰度",
         "v1 固定 C，无 A 前置判据"
@@ -10759,6 +11071,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "observations_ref": null,
       "preconditions": [
         "M8 灰度",
         "v1 固定 C，无 A 前置判据"
@@ -10785,6 +11098,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "T",
+      "observations_ref": null,
       "preconditions": [
         "M8 灰度",
         "v1 固定 C，无 A 前置判据"
@@ -10811,6 +11125,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M8 灰度",
         "v1 固定 C，无 A 前置判据"
@@ -10837,6 +11152,7 @@
         "未执行时不得记 PASS"
       ],
       "layer": "W",
+      "observations_ref": null,
       "preconditions": [
         "M8 回滚开关",
         "W 需逐条确认"
@@ -10865,6 +11181,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
+      "observations_ref": null,
       "preconditions": [
         "M8 回滚开关",
         "W 需逐条确认"

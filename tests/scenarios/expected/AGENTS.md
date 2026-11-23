@@ -6,6 +6,7 @@
 
 ## 二、文件清单
 
+- `m6-observations.json`：M6 S01/S03/S06/S08 的只读期望轨迹，明确 `expected_observation_only_not_sut_input`；不复制进 SUT，不作为刺激喂给产品。
 - `oracles.json`：以 `SC-.../变体` 为键，逐项记录层、摘要、断言、可执行 acceptance、禁止结果、源契约与前置。T/O/W 变体的 acceptance 固定为 null，保留未验收。
 - `AGENTS.md`：本文件。
 - `CLAUDE.md`：只包含 `@AGENTS.md`。

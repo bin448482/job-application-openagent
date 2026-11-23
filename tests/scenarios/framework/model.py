@@ -309,6 +309,57 @@ def _safe_asset_target(root: Path, relative: str) -> tuple[Path | None, list[str
     return resolved, []
 
 
+M6_PROHIBITED_KEYS = {
+    "expected",
+    "first_observed_at",
+    "handling_started_at",
+    "stage_preempted",
+    "pause_preemption_limit",
+    "preemption_limit",
+}
+M6_PROHIBITED_EVENTS = {
+    "unread_handling_started",
+    "pause_preemption_limit",
+    "stage_preempted",
+    "preemption_observed",
+    "job_started",
+}
+
+
+def _walk_keys(value: Any, trail: str = "") -> list[tuple[str, str]]:
+    """递归列出对象键路径与事件名，用于刺激/结果分离检查。"""
+    found: list[tuple[str, str]] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            found.append((trail, str(key)))
+            found.extend(_walk_keys(item, f"{trail}.{key}" if trail else str(key)))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            found.extend(_walk_keys(item, f"{trail}[{index}]"))
+    elif isinstance(value, str):
+        found.append((trail, value))
+    return found
+
+
+def _validate_m6_stimuli(path: Path) -> list[str]:
+    """M6 events 只允许外部刺激，禁止把产品观察或暂停结果当输入。"""
+    try:
+        value = load_json(path)
+    except AssetError as exc:
+        return [str(exc)]
+    if not isinstance(value, dict):
+        return [f"{path.name}: M6 刺激必须是 JSON 对象"]
+    errors: list[str] = []
+    if value.get("role") != "driver_stimuli_only":
+        errors.append(f"{path.name}: role 必须为 driver_stimuli_only")
+    for trail, token in _walk_keys(value):
+        if token in M6_PROHIBITED_KEYS:
+            errors.append(f"{path.name}:{trail} 含产品结果字段 {token}")
+        if trail.endswith(".event") and token in M6_PROHIBITED_EVENTS:
+            errors.append(f"{path.name}:{trail} 含产品结果事件 {token}")
+    return errors
+
+
 def _validate_fixture_files(root: Path, fixture: str) -> list[str]:
     """检查夹具是否存在且只读取测试目录内的普通文件。"""
     path, errors = _safe_asset_target(root, fixture)
@@ -344,6 +395,8 @@ def _validate_fixture_files(root: Path, fixture: str) -> list[str]:
     for trail, text in _scan_strings(value):
         if "expected/oracles.json" in text or "expected_ref" in text:
             errors.append(f"{fixture}:{trail} 引用了独立答案路径")
+    if "m6" in path.parts and "events" in path.parts:
+        errors.extend(_validate_m6_stimuli(path))
     if "doctor" in path.parts:
         errors.extend(_validate_doctor_fixture(path))
     elif path.name == "manifest.json":

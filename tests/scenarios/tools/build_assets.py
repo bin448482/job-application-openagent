@@ -1138,65 +1138,123 @@ def build_support_fixtures() -> None:
         },
     )
     write_json(
-        "fixtures/m6/events/s01-preemption.json",
+        "fixtures/m6/events/s01-preemption.stimuli.json",
         {
             "script_id": "SC-S01/safe-point-preemption",
+            "role": "driver_stimuli_only",
             "clock_start_ms": 0,
             "events": [
-                {"seq": 1, "virtual_ms": 0, "event": "job_started", "note": "J甲 running，未回列表"},
+                {"seq": 1, "virtual_ms": 0, "event": "job_task_started", "note": "J甲 running，未回列表"},
                 {"seq": 2, "virtual_ms": 8000, "event": "synthetic_unread_arrives", "arrival_at": 8000},
-                {"seq": 3, "virtual_ms": 10000, "event": "snapshot_observed", "first_observed_at": 10000},
+                {"seq": 3, "virtual_ms": 10000, "event": "snapshot_available"},
                 {"seq": 4, "virtual_ms": 20020, "event": "safe_point_reached"},
-                {"seq": 5, "virtual_ms": 20200, "event": "unread_handling_started", "handling_started_at": 20200},
             ],
         },
     )
-    write_json(
-        "fixtures/m6/events/s03-preemption-limit.json",
-        {
-            "script_id": "SC-S03/sixth-preemption",
-            "events": [
-                {"seq": index * 2 - 1, "virtual_ms": index * 1000, "event": "preemption_observed", "first_observed_at": index * 1000}
-                for index in range(1, 7)
+    s03_events = [
+        {"seq": 1, "virtual_ms": 0, "event": "job_task_started", "note": "J1 running"},
+        {"seq": 2, "virtual_ms": 1000, "event": "synthetic_unread_arrives", "arrival_at": 1000, "note": "U1 到达"},
+        {"seq": 3, "virtual_ms": 1500, "event": "snapshot_available", "note": "U1 可用但未到安全点"},
+        {"seq": 4, "virtual_ms": 1800, "event": "safe_point_not_reached", "note": "输入中，不可抢占"},
+        {"seq": 5, "virtual_ms": 2000, "event": "safe_point_reached", "note": "J1 回列表"},
+    ]
+    seq = 6
+    for cycle in range(2, 7):
+        base = cycle * 1000
+        s03_events.extend(
+            [
+                {"seq": seq, "virtual_ms": base, "event": "job_task_started", "note": f"J{cycle} running"},
+                {"seq": seq + 1, "virtual_ms": base + 200, "event": "synthetic_unread_arrives", "arrival_at": base + 200, "note": f"U{cycle} 到达"},
+                {"seq": seq + 2, "virtual_ms": base + 400, "event": "snapshot_available"},
+                {"seq": seq + 3, "virtual_ms": base + 600, "event": "safe_point_reached"},
             ]
-            + [
-                {"seq": 13, "virtual_ms": 7000, "event": "sixth_switch_required"},
-                {"seq": 14, "virtual_ms": 7001, "event": "pause_preemption_limit"},
-            ],
+        )
+        seq += 4
+    write_json(
+        "fixtures/m6/events/s03-preemption-limit.stimuli.json",
+        {
+            "script_id": "SC-S03/five-switches-then-limit",
+            "role": "driver_stimuli_only",
+            "clock_start_ms": 0,
+            "events": s03_events,
         },
     )
     write_json(
-        "fixtures/m6/events/s06-budget-boundaries.json",
+        "fixtures/m6/events/s06-budget-boundaries.stimuli.json",
         {
             "script_id": "SC-S06/budget-boundaries",
+            "role": "driver_stimuli_only",
             "limits": {
                 "round_seconds": [899.999, 900, 900.001],
                 "device_calls": [199, 200, 201],
                 "candidates": [19, 20, 21],
                 "job_seconds": [29.999, 30, 30.001],
             },
-            "expected": {
-                "check_before_new_action": True,
-                "at_limit_start_no_new_action": True,
-                "in_flight_result_still_reconciled": True,
-                "overrun_separately_reported": True,
-            },
         },
     )
     write_json(
-        "fixtures/m6/events/s08-observation-boundaries.json",
+        "fixtures/m6/events/s08-observation-boundaries.stimuli.json",
         {
             "script_id": "SC-S08/three-hooks",
+            "role": "driver_stimuli_only",
+            "clock_start_ms": 0,
             "events": [
-                {"seq": 1, "virtual_ms": 0, "event": "hook_before_safe_point_observed", "first_observed_at": 0},
-                {"seq": 2, "virtual_ms": 1000, "event": "hook_after_checkpoint_before_refresh_visible", "arrival_at": 900, "first_observed_at": 1100},
-                {"seq": 3, "virtual_ms": 2000, "event": "hook_after_refresh_unobserved", "arrival_at": 1900},
+                {"seq": 1, "virtual_ms": 0, "event": "arrival_before_safe_point", "arrival_at": 0},
+                {"seq": 2, "virtual_ms": 1000, "event": "arrival_after_checkpoint_visible_at_refresh", "arrival_at": 900},
+                {"seq": 3, "virtual_ms": 2000, "event": "arrival_after_refresh_not_yet_observed", "arrival_at": 1900},
             ],
-            "expected": {
-                "observed_before_safe_point_preempts": True,
-                "visible_at_refresh_preempts": True,
-                "unobserved_not_fabricated": True,
-                "no_arrival_latency_claim": True,
+        },
+    )
+    write_json(
+        "expected/m6-observations.json",
+        {
+            "schema_version": 1,
+            "role": "expected_observation_only_not_sut_input",
+            "cases": {
+                "SC-S01/safe_point_preempts": {
+                    "stimulus_ref": "fixtures/m6/events/s01-preemption.stimuli.json",
+                    "observation": {
+                        "first_observed_at": 10000,
+                        "handling_started_at": 20200,
+                        "waited_ms": 10200,
+                        "stage_preempted_after_safe_point": True,
+                        "preempted_before_safe_point": False,
+                    },
+                },
+                "SC-S03/five_then_pause": {
+                    "stimulus_ref": "fixtures/m6/events/s03-preemption-limit.stimuli.json",
+                    "observation": {
+                        "unsafe_observations": 1,
+                        "unsafe_observation_incremented": False,
+                        "actual_stage_preempted_count": 5,
+                        "sixth_switch_required": True,
+                        "sixth_stage_preempted": False,
+                        "pause_reason": "preemption_limit",
+                        "cursor_preserved": True,
+                        "per_cycle_switch_count": [1, 1, 1, 1, 1, 0],
+                    },
+                },
+                "SC-S06/boundaries": {
+                    "stimulus_ref": "fixtures/m6/events/s06-budget-boundaries.stimuli.json",
+                    "observation": {
+                        "check_before_new_action": True,
+                        "at_limit_start_no_new_action": True,
+                        "in_flight_result_still_reconciled": True,
+                        "overrun_separately_reported": True,
+                    },
+                },
+                "SC-S08/three_hooks": {
+                    "stimulus_ref": "fixtures/m6/events/s08-observation-boundaries.stimuli.json",
+                    "observation": {
+                        "first_hook_first_observed_at": 0,
+                        "second_hook_first_observed_at": 1000,
+                        "third_hook_first_observed_at": None,
+                        "observed_before_safe_point_preempts": True,
+                        "visible_at_refresh_preempts": True,
+                        "unobserved_not_fabricated": True,
+                        "no_arrival_latency_claim": True,
+                    },
+                },
             },
         },
     )
@@ -1297,6 +1355,7 @@ def variant(
     acceptance: dict[str, Any] | None = None,
     forbidden: list[str] | None = None,
     expected_missing_inputs: list[str] | None = None,
+    observations_ref: str | None = None,
 ) -> dict[str, Any]:
     """构造一个场景变体；READY 必须有 frozen 步骤与可执行预期。"""
     if layer in ("T", "O", "W"):
@@ -1329,6 +1388,7 @@ def variant(
         "acceptance": acceptance,
         "forbidden": forbidden or default_forbidden,
         "expected_missing_inputs": expected_missing_inputs or [],
+        "observations_ref": observations_ref,
     }
 
 
@@ -2940,7 +3000,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "职位运行中到达未读的安全点抢占",
         ["M1/M2/M5 离线门槛", "固定事件脚本与单调时钟"],
         [
-            variant("safe_point_preempts", "F", label="安全点后优先未读", fixture="fixtures/m6/events/s01-preemption.json", setup="复用 §11.2 合成事件", required_api="M6 调度", assertions=["安全点前不切换", "取任务前刷新后未读优先", "arrival 不冒充 first_observed", "开始处理才写 stage_preempted"]),
+            variant("safe_point_preempts", "F", label="安全点后优先未读", fixture="fixtures/m6/events/s01-preemption.stimuli.json", observations_ref="expected/m6-observations.json", setup="仅外部刺激；产品观察在独立 expected", required_api="M6 调度", assertions=["刺激不含 first_observed/handling/pause 等产品结果", "安全点前不切换", "取任务前刷新后未读优先", "arrival 不冒充 first_observed", "开始处理才写 stage_preempted"]),
             variant("arrival_after_commit", "F", label="检查点提交后到达", setup="在 checkpoint 后、下次取任务前注入到达", required_api="M6 调度", assertions=["下次正常检查观察后优先", "不伪造 first_observed"]),
         ],
     )
@@ -2960,7 +3020,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "连续抢占与第 6 次暂停",
         ["M6 抢占上限 5"],
         [
-            variant("five_then_pause", "F", label="第 6 次需求暂停", fixture="fixtures/m6/events/s03-preemption-limit.json", setup="五次切换后再需第六次", required_api="M6 调度", assertions=["前五次按安全点处理", "第六次保存游标并 preemption_limit 暂停", "未切换不伪造 stage_preempted", "不降低未读优先级"]),
+            variant("five_then_pause", "F", label="五次实际切换后第 6 次需求暂停", fixture="fixtures/m6/events/s03-preemption-limit.stimuli.json", observations_ref="expected/m6-observations.json", setup="六轮外部 job/未读/快照/安全点刺激；结果只在独立 expected", required_api="M6 调度", assertions=["仅实际 job→unread 切换累加", "观察到但未切换不累加", "前五次实际切换后第 6 次需求暂停", "保存游标并记 preemption_limit", "未切换不伪造 stage_preempted", "不降低未读优先级"]),
         ],
     )
     add(
@@ -2989,7 +3049,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "预算边界 899.999/900/900.001",
         ["M6 预算判定", "可注入时钟/计数器"],
         [
-            variant("boundaries", "F", label="时间/调用/候选/单职位边界", fixture="fixtures/m6/events/s06-budget-boundaries.json", setup="逐项注入等于/超 1", required_api="M6 预算", assertions=["达到上限前检查可启动性", "等于上限不发起新动作", "在途核验并单列超支", "不强杀"]),
+            variant("boundaries", "F", label="时间/调用/候选/单职位边界", fixture="fixtures/m6/events/s06-budget-boundaries.stimuli.json", observations_ref="expected/m6-observations.json", setup="逐项注入等于/超 1；产品结果单列 expected", required_api="M6 预算", assertions=["达到上限前检查可启动性", "等于上限不发起新动作", "在途核验并单列超支", "不强杀"]),
         ],
     )
     add(
@@ -3008,7 +3068,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "三个事件钩子的观察边界",
         ["M6 安全点/刷新顺序"],
         [
-            variant("three_hooks", "F", label="安全点前/刷新前/刷新后到达", fixture="fixtures/m6/events/s08-observation-boundaries.json", setup="每次只推进一个事件", required_api="M6 调度", assertions=["前两者优先处理", "第三种不伪造 first_observed", "最多一条职位事务再加检测/切页", "记录 arrival/observed 分离"]),
+            variant("three_hooks", "F", label="安全点前/刷新前/刷新后到达", fixture="fixtures/m6/events/s08-observation-boundaries.stimuli.json", observations_ref="expected/m6-observations.json", setup="每次只推进一个外部到达/快照刺激；产品观察单列 expected", required_api="M6 调度", assertions=["刺激不含 first_observed", "前两者优先处理", "第三种不伪造 first_observed", "最多一条职位事务再加检测/切页", "记录 arrival/observed 分离"]),
         ],
     )
 
@@ -3212,6 +3272,7 @@ def build_catalogue() -> dict[str, Any]:
                 "source": scenario["source"],
                 "preconditions": scenario["preconditions"],
                 "device_gate": item["device_gate"],
+                "observations_ref": item.get("observations_ref"),
             }
     return {"catalogue": catalogue, "oracles": oracles}
 

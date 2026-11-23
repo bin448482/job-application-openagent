@@ -6,10 +6,10 @@
 
 ## 二、直接子项
 
-- `s01-preemption.json`：合成输入文件。
-- `s03-preemption-limit.json`：合成输入文件。
-- `s06-budget-boundaries.json`：合成输入文件。
-- `s08-observation-boundaries.json`：合成输入文件。
+- `s01-preemption.stimuli.json`：合成输入文件。
+- `s03-preemption-limit.stimuli.json`：合成输入文件。
+- `s06-budget-boundaries.stimuli.json`：合成输入文件。
+- `s08-observation-boundaries.stimuli.json`：合成输入文件。
 
 ## 三、维护要求
 

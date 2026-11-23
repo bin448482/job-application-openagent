@@ -1,5 +1,6 @@
 {
   "script_id": "SC-S06/budget-boundaries",
+  "role": "driver_stimuli_only",
   "limits": {
     "round_seconds": [
       899.999,
@@ -21,11 +22,5 @@
       30,
       30.001
     ]
-  },
-  "expected": {
-    "check_before_new_action": true,
-    "at_limit_start_no_new_action": true,
-    "in_flight_result_still_reconciled": true,
-    "overrun_separately_reported": true
   }
 }

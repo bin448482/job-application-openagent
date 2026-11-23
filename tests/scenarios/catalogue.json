@@ -79,7 +79,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "no_device",
@@ -120,7 +121,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "ambiguous",
@@ -161,7 +163,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "offline",
@@ -202,7 +205,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unauthorized",
@@ -243,7 +247,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "locked_unknown",
@@ -284,7 +289,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "locked_true",
@@ -325,7 +331,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "foreground_other",
@@ -366,7 +373,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "foreground_unknown",
@@ -407,7 +415,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_probe",
@@ -430,7 +439,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -501,7 +511,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "config_empty_object",
@@ -540,7 +551,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "config_null_mode",
@@ -580,7 +592,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "config_bool_version",
@@ -620,7 +633,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "config_extra_key",
@@ -660,7 +674,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "config_missing_file",
@@ -702,7 +717,8 @@
           ],
           "expected_missing_inputs": [
             "tests/scenarios/fixtures/m0/config/missing.json"
-          ]
+          ],
+          "observations_ref": null
         },
         {
           "id": "fixture_device_conflict",
@@ -738,7 +754,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_mode",
@@ -774,7 +791,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_serial",
@@ -810,7 +828,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "duplicate_option",
@@ -846,7 +865,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unknown_option",
@@ -882,7 +902,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "help",
@@ -915,7 +936,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -978,7 +1000,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "duplicate_alias",
@@ -1014,7 +1037,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "selected_missing",
@@ -1050,7 +1074,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "extra_key",
@@ -1086,7 +1111,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "io_failure",
@@ -1123,7 +1149,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "probe_timeout_protocol",
@@ -1147,7 +1174,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "probe_nonzero_protocol",
@@ -1171,7 +1199,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "fixture_subprocess_zero",
@@ -1194,7 +1223,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -1278,7 +1308,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "path_traversal",
@@ -1321,7 +1352,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "init_midway_failure",
@@ -1345,7 +1377,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unknown_version",
@@ -1368,7 +1401,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "nonempty_no_version",
@@ -1391,7 +1425,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_index",
@@ -1414,7 +1449,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -1461,7 +1497,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "different_task_claim",
@@ -1484,7 +1521,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "ttl_expiry_only",
@@ -1508,7 +1546,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "device_row_present",
@@ -1531,7 +1570,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -1579,7 +1619,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "old_lease_after_renew",
@@ -1602,7 +1643,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "old_nonce",
@@ -1625,7 +1667,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "expired_lease",
@@ -1648,7 +1691,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "duplicate_start",
@@ -1671,7 +1715,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "duplicate_finish",
@@ -1694,7 +1739,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -1744,7 +1790,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "running_expired_stopped",
@@ -1768,7 +1815,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "alive",
@@ -1791,7 +1839,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unknown",
@@ -1814,7 +1863,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "permission_denied",
@@ -1837,7 +1887,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "different_host",
@@ -1860,7 +1911,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "confirm_false",
@@ -1883,7 +1935,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -1932,7 +1985,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "finish_evidence_unknown",
@@ -1955,7 +2009,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "task_update_miss",
@@ -1978,7 +2033,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "device_update_miss",
@@ -2000,7 +2056,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "event_write_fail",
@@ -2023,7 +2080,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "rollback_then_claim_busy",
@@ -2046,7 +2104,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -2093,7 +2152,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "abandon_task",
@@ -2116,7 +2176,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "change_owner",
@@ -2139,7 +2200,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "ttl_expired",
@@ -2162,7 +2224,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -2212,7 +2275,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "bool_integer",
@@ -2235,7 +2299,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "invalid_lease_state",
@@ -2258,7 +2323,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_foreign_key",
@@ -2281,7 +2347,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "duplicate_nonterminal",
@@ -2304,7 +2371,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "busy_timeout",
@@ -2327,7 +2395,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "io_error",
@@ -2350,7 +2419,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "leased_no_start_device_call",
@@ -2373,7 +2443,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -2495,7 +2566,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "replay_idempotent",
@@ -2655,7 +2727,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -2774,7 +2847,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "two_badge_nodes",
@@ -2870,7 +2944,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "invalid_bounds",
@@ -2966,7 +3041,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "region_null",
@@ -3062,7 +3138,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -3183,7 +3260,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "nine_plus",
@@ -3279,7 +3357,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "zero_plus",
@@ -3375,7 +3454,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "new_greeting_positive",
@@ -3471,7 +3551,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "new_greeting_zero",
@@ -3567,7 +3648,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -3684,7 +3766,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "viewport_only",
@@ -3780,7 +3863,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -3826,7 +3910,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "partial_unknown",
@@ -3922,7 +4007,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unresolved_discovery",
@@ -3945,7 +4031,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "identity_unknown",
@@ -3968,7 +4055,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -4093,7 +4181,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "same_preview_time_changed",
@@ -4193,7 +4282,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "same_preview_missing_time",
@@ -4289,7 +4379,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "no_baseline",
@@ -4385,7 +4476,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "same_preview_same_time",
@@ -4409,7 +4501,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -4532,7 +4625,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "same_fingerprint_cross_source",
@@ -4555,7 +4649,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "new_fingerprint",
@@ -4578,7 +4673,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -4701,7 +4797,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_bottom",
@@ -4797,7 +4894,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "corrupt_page",
@@ -4879,7 +4977,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "tab_count_changes",
@@ -4975,7 +5074,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -5079,7 +5179,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "future",
@@ -5161,7 +5262,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "exactly_five_seconds",
@@ -5184,7 +5286,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -5291,7 +5394,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "version_mismatch",
@@ -5314,7 +5418,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "wrong_page",
@@ -5396,7 +5501,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "multi_list",
@@ -5478,7 +5584,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "invalid_xml",
@@ -5560,7 +5667,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "path_traversal",
@@ -5642,7 +5750,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -5759,7 +5868,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "global_zero_preview_no_baseline",
@@ -5782,7 +5892,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -5913,7 +6024,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "ambiguous_only",
@@ -6010,7 +6122,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_identity_field",
@@ -6034,7 +6147,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -6080,7 +6194,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "queued_new_key",
@@ -6104,7 +6219,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "running_blocked_new_fingerprint",
@@ -6128,7 +6244,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -6173,7 +6290,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "observed_at_backwards",
@@ -6196,7 +6314,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -6315,7 +6434,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "global_zero_verified",
@@ -6411,7 +6531,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "global_zero_unverified",
@@ -6507,7 +6628,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "global_zero_verified_but_positive",
@@ -6530,7 +6652,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -6576,7 +6699,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "list_only",
@@ -6599,7 +6723,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "enter_once",
@@ -6622,7 +6747,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "ignore_path_check",
@@ -6645,7 +6771,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_authorization",
@@ -6668,7 +6795,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -6712,7 +6840,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "safe_stop_evidence",
@@ -6736,7 +6865,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -6780,7 +6910,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unknown_not_detected",
@@ -6803,7 +6934,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -6847,7 +6979,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_no_target",
@@ -6870,7 +7003,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -6914,7 +7048,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_unique_positive",
@@ -6937,7 +7072,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -6981,7 +7117,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_enter_once",
@@ -7004,7 +7141,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7048,7 +7186,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_arrival",
@@ -7071,7 +7210,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7111,7 +7251,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "second_reader",
@@ -7134,7 +7275,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7177,7 +7319,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "new_greeting_zero",
@@ -7200,7 +7343,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "offline_semantics",
@@ -7223,7 +7367,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7267,7 +7412,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_incomplete",
@@ -7290,7 +7436,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7332,7 +7479,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "window_expired",
@@ -7355,7 +7503,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7398,7 +7547,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_drift",
@@ -7421,7 +7571,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7465,7 +7616,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_conflict",
@@ -7488,7 +7640,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7529,7 +7682,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7576,7 +7730,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "no_false_coverage",
@@ -7599,7 +7754,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7654,7 +7810,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_key",
@@ -7677,7 +7834,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "extra_key",
@@ -7700,7 +7858,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "fenced_json",
@@ -7723,7 +7882,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "array",
@@ -7746,7 +7906,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "bool_version",
@@ -7768,7 +7929,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "long_reply",
@@ -7790,7 +7952,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "evidence_not_substring",
@@ -7812,7 +7975,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "wrong_task",
@@ -7834,7 +7998,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "wrong_nonce",
@@ -7856,7 +8021,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "wrong_hash",
@@ -7878,7 +8044,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "expired_nonce",
@@ -7901,7 +8068,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -7947,7 +8115,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "post_submit_timeout",
@@ -7971,7 +8140,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "input_too_large",
@@ -7994,7 +8164,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -8043,7 +8214,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unconfirmed_source",
@@ -8066,7 +8238,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_fact",
@@ -8089,7 +8262,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "hr_instruction_injection",
@@ -8112,7 +8286,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "uncertain",
@@ -8135,7 +8310,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "tier_a_without_gate",
@@ -8158,7 +8334,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -8215,7 +8392,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_key",
@@ -8238,7 +8416,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "extra_key",
@@ -8260,7 +8439,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "bool_integer",
@@ -8282,7 +8462,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "tier_overlap",
@@ -8304,7 +8485,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "tier_gap",
@@ -8326,7 +8508,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unsafe_a",
@@ -8348,7 +8531,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "disclosure_missing",
@@ -8370,7 +8554,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "path_in_style",
@@ -8392,7 +8577,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "size_limits",
@@ -8414,7 +8600,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "encoding_and_nul",
@@ -8437,7 +8624,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "symlink_pack",
@@ -8460,7 +8648,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "contact_fact_conflict",
@@ -8483,7 +8672,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "runtime_changed",
@@ -8506,7 +8696,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -8552,7 +8743,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_fact_entry",
@@ -8575,7 +8767,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "operator_docs",
@@ -8598,7 +8791,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -8645,7 +8839,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "injection_no_escalation",
@@ -8668,7 +8863,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "subject_required",
@@ -8691,7 +8887,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -8739,7 +8936,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "nonce_only",
@@ -8761,7 +8959,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "directory_rename",
@@ -8784,7 +8983,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "rendered_tamper",
@@ -8806,7 +9006,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "size_limits",
@@ -8829,7 +9030,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -8877,7 +9079,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "business_failure",
@@ -8900,7 +9103,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "crash_unknown",
@@ -8923,7 +9127,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "normal_release",
@@ -8946,7 +9151,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "ttl_not_release",
@@ -8969,7 +9175,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "run_read_only_covered",
@@ -8992,7 +9199,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -9042,7 +9250,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_manifest",
@@ -9065,7 +9274,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "target_exists",
@@ -9088,7 +9298,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "interrupted_copy",
@@ -9111,7 +9322,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "quota_preserved",
@@ -9134,7 +9346,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "base_mismatch",
@@ -9157,7 +9370,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "old_acceptance_invalid",
@@ -9180,7 +9394,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -9229,7 +9444,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "holdout_freeze",
@@ -9252,7 +9468,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "no_provider",
@@ -9276,7 +9493,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unknown_case",
@@ -9299,7 +9517,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "provider_error",
@@ -9322,7 +9541,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -9373,7 +9593,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A01_FA",
@@ -9397,7 +9618,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A01_FB",
@@ -9421,7 +9643,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A01_FC",
@@ -9446,7 +9669,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A01_FD",
@@ -9470,7 +9694,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A01_FE",
@@ -9495,7 +9720,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A01_input_method_shift",
@@ -9518,7 +9744,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A01_no_send_control",
@@ -9541,7 +9768,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -9592,7 +9820,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A02_FA",
@@ -9616,7 +9845,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A02_FB",
@@ -9640,7 +9870,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A02_FC",
@@ -9665,7 +9896,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A02_FD",
@@ -9689,7 +9921,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A02_FE",
@@ -9714,7 +9947,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A02_request_only",
@@ -9737,7 +9971,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A02_delivered",
@@ -9760,7 +9995,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -9811,7 +10047,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A03_FA",
@@ -9835,7 +10072,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A03_FB",
@@ -9859,7 +10097,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A03_FC",
@@ -9884,7 +10123,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A03_FD",
@@ -9908,7 +10148,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A03_FE",
@@ -9933,7 +10174,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A03_confirm_dialog",
@@ -9956,7 +10198,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A03_direct_send",
@@ -9979,7 +10222,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -10030,7 +10274,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A04_FA",
@@ -10054,7 +10299,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A04_FB",
@@ -10078,7 +10324,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A04_FC",
@@ -10103,7 +10350,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A04_FD",
@@ -10127,7 +10375,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A04_FE",
@@ -10152,7 +10401,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A04_confirm_dialog",
@@ -10175,7 +10425,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A04_direct_send",
@@ -10197,7 +10448,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -10246,7 +10498,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A05_FA",
@@ -10270,7 +10523,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A05_FB",
@@ -10294,7 +10548,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A05_FC",
@@ -10319,7 +10574,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A05_FD",
@@ -10343,7 +10599,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A05_FE",
@@ -10368,7 +10625,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -10417,7 +10675,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A06_FA",
@@ -10441,7 +10700,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A06_FB",
@@ -10465,7 +10725,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A06_FC",
@@ -10490,7 +10751,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A06_FD",
@@ -10514,7 +10776,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "A06_FE",
@@ -10539,7 +10802,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -10585,7 +10849,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "confirm_not_performed",
@@ -10608,7 +10873,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "abandon",
@@ -10631,7 +10897,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "reconnect",
@@ -10654,7 +10921,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -10701,7 +10969,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "missing_snapshot",
@@ -10723,7 +10992,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "performed_none",
@@ -10745,7 +11015,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "not_performed_sent",
@@ -10767,7 +11038,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "read_ok_no_action_delta",
@@ -10790,7 +11062,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "screenshot_only",
@@ -10812,7 +11085,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -10842,12 +11116,13 @@
           "asset_status": "ASSET_ONLY",
           "entry_state": "unfrozen",
           "steps": [],
-          "fixture": "fixtures/m6/events/s01-preemption.json",
-          "setup": "复用 §11.2 合成事件",
+          "fixture": "fixtures/m6/events/s01-preemption.stimuli.json",
+          "setup": "仅外部刺激；产品观察在独立 expected",
           "required_api": "M6 调度",
           "expected_ref": "SC-S01/safe_point_preempts",
           "device_gate": false,
           "assertions": [
+            "刺激不含 first_observed/handling/pause 等产品结果",
             "安全点前不切换",
             "取任务前刷新后未读优先",
             "arrival 不冒充 first_observed",
@@ -10858,7 +11133,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": "expected/m6-observations.json"
         },
         {
           "id": "arrival_after_commit",
@@ -10881,7 +11157,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -10924,7 +11201,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "all_true",
@@ -10947,7 +11225,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -10970,19 +11249,21 @@
       "variants": [
         {
           "id": "five_then_pause",
-          "label": "第 6 次需求暂停",
+          "label": "五次实际切换后第 6 次需求暂停",
           "layer": "F",
           "asset_status": "ASSET_ONLY",
           "entry_state": "unfrozen",
           "steps": [],
-          "fixture": "fixtures/m6/events/s03-preemption-limit.json",
-          "setup": "五次切换后再需第六次",
+          "fixture": "fixtures/m6/events/s03-preemption-limit.stimuli.json",
+          "setup": "六轮外部 job/未读/快照/安全点刺激；结果只在独立 expected",
           "required_api": "M6 调度",
           "expected_ref": "SC-S03/five_then_pause",
           "device_gate": false,
           "assertions": [
-            "前五次按安全点处理",
-            "第六次保存游标并 preemption_limit 暂停",
+            "仅实际 job→unread 切换累加",
+            "观察到但未切换不累加",
+            "前五次实际切换后第 6 次需求暂停",
+            "保存游标并记 preemption_limit",
             "未切换不伪造 stage_preempted",
             "不降低未读优先级"
           ],
@@ -10991,7 +11272,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": "expected/m6-observations.json"
         }
       ]
     },
@@ -11036,7 +11318,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "count_no_target",
@@ -11059,7 +11342,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -11103,7 +11387,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "budget_not_reset",
@@ -11126,7 +11411,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -11155,8 +11441,8 @@
           "asset_status": "ASSET_ONLY",
           "entry_state": "unfrozen",
           "steps": [],
-          "fixture": "fixtures/m6/events/s06-budget-boundaries.json",
-          "setup": "逐项注入等于/超 1",
+          "fixture": "fixtures/m6/events/s06-budget-boundaries.stimuli.json",
+          "setup": "逐项注入等于/超 1；产品结果单列 expected",
           "required_api": "M6 预算",
           "expected_ref": "SC-S06/boundaries",
           "device_gate": false,
@@ -11171,7 +11457,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": "expected/m6-observations.json"
         }
       ]
     },
@@ -11216,7 +11503,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "clock_changed",
@@ -11240,7 +11528,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -11268,12 +11557,13 @@
           "asset_status": "ASSET_ONLY",
           "entry_state": "unfrozen",
           "steps": [],
-          "fixture": "fixtures/m6/events/s08-observation-boundaries.json",
-          "setup": "每次只推进一个事件",
+          "fixture": "fixtures/m6/events/s08-observation-boundaries.stimuli.json",
+          "setup": "每次只推进一个外部到达/快照刺激；产品观察单列 expected",
           "required_api": "M6 调度",
           "expected_ref": "SC-S08/three_hooks",
           "device_gate": false,
           "assertions": [
+            "刺激不含 first_observed",
             "前两者优先处理",
             "第三种不伪造 first_observed",
             "最多一条职位事务再加检测/切页",
@@ -11284,7 +11574,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": "expected/m6-observations.json"
         }
       ]
     },
@@ -11331,7 +11622,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "expiry_unset",
@@ -11354,7 +11646,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "last_activity_unknown",
@@ -11377,7 +11670,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "keeps_contact",
@@ -11400,7 +11694,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "model_only_rejected",
@@ -11423,7 +11718,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -11468,7 +11764,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unread_unknown",
@@ -11490,7 +11787,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "draft",
@@ -11512,7 +11810,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "pending_action",
@@ -11534,7 +11833,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "arrival_cancels",
@@ -11557,7 +11857,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -11601,7 +11902,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "unique_with_anchor",
@@ -11624,7 +11926,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "no_ledger",
@@ -11647,7 +11950,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -11694,7 +11998,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "wrong_confirm_target",
@@ -11717,7 +12022,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "target_still_present",
@@ -11740,7 +12046,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "anchor_missing",
@@ -11763,7 +12070,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "success",
@@ -11785,7 +12093,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -11832,7 +12141,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "no_layer_substitution",
@@ -11855,7 +12165,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -11899,7 +12210,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "draft_only",
@@ -11922,7 +12234,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "tier_a",
@@ -11945,7 +12258,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "v1_fixed_c",
@@ -11968,7 +12282,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     },
@@ -12014,7 +12329,8 @@
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         },
         {
           "id": "real_rollback",
@@ -12037,7 +12353,8 @@
             "不得以 F 资产自检、smoke 或跳过替代本层执行",
             "未执行时不得记 PASS"
           ],
-          "expected_missing_inputs": []
+          "expected_missing_inputs": [],
+          "observations_ref": null
         }
       ]
     }

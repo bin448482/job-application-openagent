@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "role": "expected_observation_only_not_sut_input",
+  "cases": {
+    "SC-S01/safe_point_preempts": {
+      "stimulus_ref": "fixtures/m6/events/s01-preemption.stimuli.json",
+      "observation": {
+        "first_observed_at": 10000,
+        "handling_started_at": 20200,
+        "waited_ms": 10200,
+        "stage_preempted_after_safe_point": true,
+        "preempted_before_safe_point": false
+      }
+    },
+    "SC-S03/five_then_pause": {
+      "stimulus_ref": "fixtures/m6/events/s03-preemption-limit.stimuli.json",
+      "observation": {
+        "unsafe_observations": 1,
+        "unsafe_observation_incremented": false,
+        "actual_stage_preempted_count": 5,
+        "sixth_switch_required": true,
+        "sixth_stage_preempted": false,
+        "pause_reason": "preemption_limit",
+        "cursor_preserved": true,
+        "per_cycle_switch_count": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          0
+        ]
+      }
+    },
+    "SC-S06/boundaries": {
+      "stimulus_ref": "fixtures/m6/events/s06-budget-boundaries.stimuli.json",
+      "observation": {
+        "check_before_new_action": true,
+        "at_limit_start_no_new_action": true,
+        "in_flight_result_still_reconciled": true,
+        "overrun_separately_reported": true
+      }
+    },
+    "SC-S08/three_hooks": {
+      "stimulus_ref": "fixtures/m6/events/s08-observation-boundaries.stimuli.json",
+      "observation": {
+        "first_hook_first_observed_at": 0,
+        "second_hook_first_observed_at": 1000,
+        "third_hook_first_observed_at": null,
+        "observed_before_safe_point_preempts": true,
+        "visible_at_refresh_preempts": true,
+        "unobserved_not_fabricated": true,
+        "no_arrival_latency_claim": true
+      }
+    }
+  }
+}

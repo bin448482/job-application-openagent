@@ -191,16 +191,52 @@ class ReplayTests(unittest.TestCase):
         script = {"clock_start_ms": 0, "events": [{"seq": 1, "virtual_ms": -1, "event": "x"}]}
         self.assertTrue(replay.validate_script(script))
 
-    def test_valid_timeline_keeps_three_instants_separate(self) -> None:
-        """合法脚本应保留 arrival/first_observed/handling 与 waited_ms。"""
-        script = json.loads((SCENARIO_ROOT / "fixtures/m6/events/s01-preemption.json").read_text(encoding="utf-8"))
-        timeline = replay.replay_events(script)
-        invariants = replay.timing_invariants(timeline)
+    def test_stimulus_timeline_does_not_fabricate_product_observations(self) -> None:
+        """外部刺激只给 arrival；first_observed/handling 只能来自独立 expected。"""
+        script = json.loads(
+            (SCENARIO_ROOT / "fixtures/m6/events/s01-preemption.stimuli.json").read_text(encoding="utf-8")
+        )
+        invariants = replay.timing_invariants(replay.replay_events(script))
         self.assertEqual(invariants["first_arrival_at"], 8000)
-        self.assertEqual(invariants["first_observed_at"], 10000)
-        self.assertEqual(invariants["first_handling_started_at"], 20200)
-        self.assertEqual(invariants["waited_ms"], 10200)
-        self.assertTrue(invariants["arrival_before_observation"])
+        self.assertIsNone(invariants["first_observed_at"])
+        self.assertIsNone(invariants["first_handling_started_at"])
+        self.assertIsNone(invariants["waited_ms"])
+        observations = json.loads(
+            (SCENARIO_ROOT / "expected/m6-observations.json").read_text(encoding="utf-8")
+        )
+        case = observations["cases"]["SC-S01/safe_point_preempts"]["observation"]
+        self.assertEqual(case["first_observed_at"], 10000)
+        self.assertEqual(case["handling_started_at"], 20200)
+        self.assertEqual(case["waited_ms"], 10200)
+
+    def test_m6_stimuli_do_not_embed_product_outcomes(self) -> None:
+        """S01/S03/S06/S08 刺激不得含 first_observed、pause、expected 等结果。"""
+        event_dir = SCENARIO_ROOT / "fixtures/m6/events"
+        for path in sorted(event_dir.glob("*.json")):
+            self.assertEqual(model._validate_m6_stimuli(path), [], path.name)
+        sample = json.loads((event_dir / "s01-preemption.stimuli.json").read_text(encoding="utf-8"))
+        sample["events"].append({"seq": 99, "virtual_ms": 99, "event": "pause_preemption_limit"})
+        sample["expected"] = {"handling_started_at": 1}
+        sample["first_observed_at"] = 1
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "bad.json"
+            path.write_text(json.dumps(sample), encoding="utf-8")
+            errors = model._validate_m6_stimuli(path)
+        self.assertTrue(any("pause_preemption_limit" in item or "产品结果" in item for item in errors))
+
+    def test_s03_expected_counts_only_actual_switches(self) -> None:
+        """6 轮刺激只在 expected 中得到 5 次实际切换，第 6 次暂停且游标保留。"""
+        observations = json.loads(
+            (SCENARIO_ROOT / "expected/m6-observations.json").read_text(encoding="utf-8")
+        )
+        case = observations["cases"]["SC-S03/five_then_pause"]["observation"]
+        self.assertEqual(case["actual_stage_preempted_count"], 5)
+        self.assertEqual(case["per_cycle_switch_count"], [1, 1, 1, 1, 1, 0])
+        self.assertFalse(case["unsafe_observation_incremented"])
+        self.assertTrue(case["sixth_switch_required"])
+        self.assertFalse(case["sixth_stage_preempted"])
+        self.assertEqual(case["pause_reason"], "preemption_limit")
+        self.assertTrue(case["cursor_preserved"])
 
     def test_missing_handling_is_not_fabricated(self) -> None:
         """未开始处理时 handling/waited 必须为 null，不能由观察时间补造。"""
