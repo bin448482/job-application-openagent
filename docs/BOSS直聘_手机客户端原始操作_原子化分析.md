@@ -1,13 +1,13 @@
 # BOSS直聘手机客户端原始操作原子化分析
 
 > 文件用途：把旧项目 `scripts/` 的四份静态阅读章节（设备与页面、职位、HR 读取、HR 动作）合并为一份按原子 ID 组织的操作手册。
-> 本稿只做编辑、去重、编号与交叉引用整理，不新增章节以外的技术断言；所有技术结论均保留原章节的 `file:line` 证据。
+> 旧实现结论保留原章节的 `file:line` 证据；标为“版本观察”的补注另引实机验证文档，不能反写成旧代码已支持。新实现契约以简化架构设计说明为准，本稿不定义新业务 schema。
 
 ## 0 阅读说明与范围
 
 ### 0.1 来源与未做的事
 
-- 本文全部结论来自对旧项目 `scripts/` 的**静态阅读**：`scripts/main.py`、`scripts/core/`、`scripts/jobs/`、`scripts/hr/`、`scripts/heartbeat/`。
+- 本文旧实现结论来自对旧项目 `scripts/` 的**静态阅读**：`scripts/main.py`、`scripts/core/`、`scripts/jobs/`、`scripts/hr/`、`scripts/heartbeat/`。另附的 14.200 版本观察来自[实机验证偏差文档](BOSS直聘_实机验证偏差与修订建议_20261123.md) §2，限单台设备；此次文档修订没有复测设备。
 - 本次合并**未运行任何 Python 代码、未执行任何 ADB 命令、未连接手机**，也未读取旧项目的 `config.json`、`data/`、`screenshots/`、数据库、日志或任何凭据。
 - 行号以本次阅读时的文件副本为准；旧项目后续变更后需重新定位函数名再核对行号。
 - 本文是**操作语义与判据的整理**，不构成对真实手机的执行授权。当前仓库没有业务 CLI、SQLite 运行时记忆或设备执行器；任何真实发送、删除、清理、心跳都必须另行取得授权并按本机规则确认。
@@ -21,6 +21,7 @@
 - 为避免每次重复长链，本文定义两个**固定序列**（成员 ID 固定，不构成新原子）：
   - **读屏序列** = `CORE-A10` → `CORE-A11` → `CORE-A12` → `CORE-A13` → `CORE-A14`。正文中“读屏”一律指该五步串联。
   - **返回列表序列** = 判定 `CORE-M01`；失败则 `CORE-A18` + 等待 0.6 秒 + 读屏序列 + `CORE-M01`，最多 3 轮。正文中“返回列表序列”一律指该链。
+- 版本观察 V7：一次返回可能只关闭输入法或弹层；必须以重判页面为成功条件，不能把按键返回码或按键次数当作回列表证据。上述限次耗尽仍未到达列表即停止。
 - 其余组合（批次循环、推荐流程、清理流程、心跳轮次）在**第 6 节**按用户可见任务给出完整 ID 链。
 
 ### 0.3 ID 域与唯一权威
@@ -206,7 +207,7 @@
 #### CORE-A15 计算节点中心坐标
 - 代码：`scripts/core/adb.py:249-255`（`tap_bounds`）
 - 动作：`x=(left+right)//2`、`y=(top+bottom)//2`（一次计算）。
-- 判据：坐标落在 bounds 内（整数除法天然满足，除非输入异常）；不校验 `right>left`/`top<bottom`，由 `CORE-U01` 兜底。
+- 判据：正尺寸 bounds 的中心落在矩形内；本函数不校验 `right>left`/`bottom>top`，`CORE-U01` 也只校验格式与非负整数（`scripts/core/uitree.py:9-14`），不能兜底零宽、高或反向 bounds。新实现需在点击前拒绝非正尺寸，不把该建议当成旧实现已有校验。
 - 副作用：纯计算，幂等。
 
 #### CORE-A16 点击坐标
@@ -226,6 +227,7 @@
 - 动作：`adb -s <serial> shell input keyevent <code>`；现有唯一调用为返回键 `4`。
 - 判据/失败：退出码 0；错误上抛不重试；连发会产生额外层级回退，调用方必须限额。
 - 副作用：可能返回页面/关闭弹层/触发“再按一次退出”；不可假定幂等。
+- 版本观察 V7：14.200 下曾出现第一次返回后仍在聊天页；调用方按 `CORE-W14`/前台焦点核验，失败不宣称已回列表。
 
 ### 1.4 截图、画面判定与证据
 
@@ -269,6 +271,7 @@
 - 输出：行字典列表（`name/position/message/time/unread/unread_count/kind/preview_event`）；无姓名但可点击的行输出占位记录。
 - 失败：列表数量不为 1 抛 `RuntimeError`；像素尺寸不符抛 `ValueError`。纯本地，幂等。
 - 未读证据：无像素时仅“本轮已证实未读筛选”或角标存在（有子节点或数字文本）判 `yes`，否则 `unknown`（`scripts/core/message_list.py:264-269`）。
+- 版本观察 V1：14.200 出现行内头像区无 id 的数字 TextView，旧代码不会识别为 `badge_view`。新解析器建议按已标定行区域识别该数字，不扫描任意数字；未标定返回未知。这里不修改旧函数的上述真实行为，也不把缺角标判为 `no`。
 
 #### CORE-M02 判定筛选面板可见
 - 代码：`scripts/core/message_list.py:60-62`（`_filter_panel_visible`）
@@ -279,6 +282,7 @@
 - 代码：`scripts/core/message_list.py:219-236`（`count_red_pixels`）
 - 判定：逐像素比较 `(255,71,83)`，每通道容差默认 30；矩形可越界，函数会裁剪。
 - 输出/判据：命中像素数；`>=100`（常量 `UNREAD_RED_PIXEL_THRESHOLD`，同文件第 19 行）由 `CORE-M01` 判为未读。
+- 新实现边界：该阈值属于旧标定，换版本/分辨率不能直接沿用；V1 的无 id 节点也不能自动提供旧像素区域。未标定为未知，不因未命中旧阈值证明无未读。
 - 失败：宽度 ≤0 或长度不整除 `width*4` 抛 `ValueError`。纯本地，幂等。
 
 #### CORE-M04 核验唯一可读消息列表
@@ -315,6 +319,7 @@
 - 判据：“取消筛选”出现、“确定”消失，且 `CORE-M01(unread_filter_verified=True)` 成功（`:173-181`）。
 - 失败：`FilterEntryAbsent` 由调用方降级为底部角标兜底（`scripts/hr/scan.py:2166-2184`）；`FilterActionUnchanged` 直接 `paused/filter_unverified`（`2135-2136`）；其余 RuntimeError 最多重试 2 轮（`2097-2142`）。
 - 副作用：改变列表筛选状态并重排列表；成功后入口已变，不可重复点击。**合并说明**：取代原 core F04 与 HR 读取草稿 R21。
+- 版本观察 V2：14.200 顶部另有“新招呼”及 `tv_count`；不等价于本 ID 的“筛选→未读→确定”。新实现仅把它作为独立候选信号，未验证语义前不设 `unread_filter_verified=True`，也不以其为零证明全列表无未读。
 
 #### CORE-M09 清除筛选
 - 代码：`scripts/core/message_list.py:187`（`clear_filter_from_root`），便捷入口 `204`（`clear_unread_filter`）；HR 复核侧 `scripts/hr/review.py:460-465`
@@ -363,6 +368,7 @@
 - 动作：调用 `CORE-A15` + `CORE-A16`，坐标取输入框 bounds 中心。
 - 判据/失败：点击本身不构成成功证据，由后续回读判定；输入框不唯一时按调用阶段返回 `needs_send_control`，不点击。
 - 副作用：切换输入焦点；不产生对外消息。
+- 版本观察 V3：切换 IME 后 bounds 会随键盘移动；新实现须重新读屏取当前输入框 bounds，再点中心。旧首次点击使用旧层级（`scripts/hr/actions.py:736-738`），补点才重读（`:756-768`）；正文回读相等仍是放行门槛。
 
 #### CORE-I07 判定唯一输入框
 - 代码：`scripts/hr/actions.py:727-730`、`741-753`
@@ -375,6 +381,8 @@
 - 判定：从输入框父节点逐层向上，在“位于输入框右侧且纵向重叠”的可点击节点中优先 `Button` 类，其次文本/描述含“发送”，最后 `ImageView`；同一层取最深且唯一者。
 - 失败：`None` 时返回 `not_sent`，不点击。
 - 副作用：只读判定，幂等。
+
+版本观察 V4（对应 `CORE-I08`）：14.200 仅 ImageView 分支可用，是单版本实现依赖；新实现的合成夹具必须覆盖 0 个和多个候选时不点击，不保证其它版本仍可用。
 
 ### 1.7 事务、观测与日志
 
@@ -593,7 +601,6 @@
 - 判据：标题与按钮文本同时存在、唯一可点击祖先存在、点击命令成功返回。
 - 失败：不匹配/无祖先/点击异常返回 False 且不点击；弹窗消失后重复调用返回 False，可重入。
 - 副作用：一次点击；**不得用于白名单以外的弹窗**，未知弹窗应按 `popup` 暂停人工处理。
-</content>
 
 
 ## 3 职位浏览与沟通（JOBS）
@@ -863,6 +870,8 @@
 - 数据库已建表（`scripts/main.py:861`、`900` 调用 `ensure_hr_schema`）。
 - 全局无未核实动作：`pending_actions` 非 0 时 scan 直接 `paused/pending_action`（`scripts/hr/scan.py:1989-1990`、`scripts/hr/sync.py:82-83`），判定见 `HRA-P06`。
 - 设备独占：scan/sync 都在 `scripts/hr/scan.py:750-801`（`device_command`）上下文内执行（`scripts/main.py:862-864`、`901-902`），内联入口拒绝与活派发并行占用（`scripts/hr/scan.py:720-747`），对应 `CORE-P01`–`CORE-P03`。
+
+版本观察 V1/V2：新实现的发现来源还需纳入头像区数字角标与“新招呼”计数；旧 scan 是否覆盖首次招呼、`tv_count` 是否等于未读 HR 数均未确认。它们只产生保守候选，不能据此认定消息方向；具体合并与未知出口见[设计说明](BOSS直聘_求职自动化_简化架构设计说明_20261123.md) §5.3。
 
 ### 4.1 读取侧判定与去重映射
 
@@ -1330,6 +1339,7 @@
 - 判据：出现“请求交换微信/电话已发送”系统提示，或槽位变为“请求中”，或出现交换确认弹层（`:297-311`）。
 - 失败：效果未知且无确认框返回 `unknown`；确认框缺失仅在证据证明无变化时 `not_sent`，否则 `unknown`。
 - 副作用：**对外请求不可撤回**；已处理状态可防重，但仍可能向 HR 发出交换请求。
+- 版本观察 V5：14.200 的微信/电话均出现二次确认，确认后为“请求中”；旧版本可能直接发送的分支仍保留。未知版本不能因“预期有确认框”而把第一次点击当作无对外副作用。
 
 #### HRA-A05 确认交换（点击“确认”）
 - 代码：`scripts/hr/actions.py:302-307`、`321-330`
@@ -1827,8 +1837,10 @@
 | `JOBS-A11` | 发送资源消息正文 | `claim_resource_share` 先落 `pending` | `unknown`，禁止重发（`HRA-P02` 同口径） |
 | `HRA-A02` | 发送文本消息 | `HRA-A09` 先落 `pending` | `HRA-P02`：`unknown`，人工核对 |
 | `HRA-A04`/`HRA-A05` | 交换微信/电话请求与确认 | 槽位“请求中/查看”判已处理 | `unknown`，不重试 |
-| `HRA-A07`/`HRA-A08` | 交付附件简历 | `claim_action` + `HRA-P10` 交付证据 | `unknown`，不重试 |
+| `HRA-A07`/`HRA-A08` | 发起附件简历请求或交付附件；仅请求不等于交付，后续接受状态须另核对 | `claim_action` + `HRA-P10` 区分 `request_sent/sent` | `unknown`，不重试 |
 | `HRA-A25` | 删除手机端会话 | `HRA-A27` 台账先归档；`HRA-A24` 点名核对 | `delete_unverified`，`HRA-A28` 记 `unknown`，不重试 |
+
+版本观察 V6：简历确认框中的“直接发送”不证明附件已经交付。新实现不以确认框或 Toast 文案作为交付证据，只取本次系统行、槽位变化与附件节点；`HRA-P14` 的旧无锚点 Toast 分支仍作为历史行为保留，新设计删除核验须有目标消失与锚点保留两项证据。
 
 ### 7.4 门禁与阻断状态
 
@@ -1857,12 +1869,12 @@
 6. **长按与同点短滑通道未验证真实响应**：`tap_bounds` 的 `long_press` 用同点 `swipe` 800 ms、`input_swipe` 用同点 60 ms（`scripts/core/adb.py:258-262`），代码注释明确“不保证 BOSS 控件响应”；清理另用 1200 ms。实际 UI 行为未知（原 core 第 6 条与 hr-act 第 3 条合并）。
 7. **层级 dump 使用固定路径**：`/sdcard/job_tracker_ui.xml` 是全局固定文件（`scripts/core/adb.py:212`），绕过 CLI 直接调用 core 的两个进程会互相覆盖；`uiautomator dump` 退出码 137 只重试一次（`:214-222`）。
 8. **文本输入实现不在 core 包**：core 没有 `input text`/粘贴函数，文本输入完全位于 `scripts/hr/actions.py` 并依赖外装 ADBKeyboard 广播（`scripts/hr/actions.py:705`、`733-735`、`755-768`）。本文把 `CORE-I01`–`CORE-I08` 归入 CORE 域只是编号归属，不改变实现位置；重新设计时需决定输入层归属与失败恢复策略。
-9. **未读判定存在两种证据源**：层级角标存在即 `yes`（`scripts/core/message_list.py:269`），与像素阈值 `>=100`（`:278-279`）可能不一致；`unread_filter_verified=True` 时所有行都被标 `yes`（`:269`），无法区分个别已读行。
+9. **旧未读判定有层级/像素两源，版本观察增加未覆盖形态**：层级角标存在即 `yes`（`scripts/core/message_list.py:269`），与像素阈值 `>=100`（`:278-279`）可能不一致；`unread_filter_verified=True` 时所有行都被标 `yes`（`:269`），无法区分个别已读行。V1/V2 观察到无 id 的头像区数字与“新招呼”`tv_count`，但不同机型的位置、数字语义、首次招呼覆盖和筛选等价性仍未确认，不能关闭本项。
 10. **无名字但可点击的消息行**：会被写成空字段占位记录并标 `kind=unknown`（`scripts/core/message_list.py:252-257`），其真实含义（分隔符/系统卡/加载占位）未在代码中说明。
 11. **页面分类可能误判**：`_dialog_signal` 把“同意/允许/确定”等通用按钮文案当作弹窗信号（`scripts/core/workspace.py:31-34`、`207-209`），虽有“排除消息正文”保护（`:189-210`），职位详情等页面出现同名按钮时仍可能归类为 `popup`。
 12. **`workspace` 在 chat_list 分支上再次导航**：从聊天详情返回后若已是 `chat_list`，代码仍定位“消息”目标并调用 `_navigate_from_main`（`scripts/core/workspace.py:549-552`），即在列表页再点一次“消息”tab；真实 UI 效果与必要性无法从代码确认。
 13. **`_navigate_from_main` 的页面变更比较较宽**：`confirmed.kind != page.kind` 在 `recommend_feed` 归为 `unknown` 时比较的是 `unknown` 与后续 `chat_list`，推荐页路径依赖额外分支（`scripts/core/workspace.py:393-399`）；实际机型表现未验证。
-14. **屏幕几何依赖顶层节点 `top==0`**：`_screen_bounds` 要求候选 bounds 左上为 (0,0) 且唯一（`scripts/core/workspace.py:65-78`）；带刘海/状态栏偏移或根节点非全屏的层级会直接放弃底部导航定位。
+14. **屏幕几何依赖顶层节点 `top==0`**：`_screen_bounds` 要求候选 bounds 左上为 (0,0) 且唯一（`scripts/core/workspace.py:65-78`）；带刘海/状态栏偏移或根节点非全屏的层级会直接放弃底部导航定位。V3/V7 的 IME 位移及返回被吞已在单版本观察到，其余机型/弹层下的位置与返回次数仍未验证；不能据此固定“一次或两次返回”。
 15. **`obs.difference` 的“同卡”扩展规则**：只有父节点满足 `card` 命名或同时含“同意/拒绝”、且非 recycler 时才扩展到父级边界（`scripts/core/obs.py:62-79`）；不满足时只按目标 bounds 比较，可能把同卡其他字段变化判为 `changed_elsewhere`。
 16. **`tasks`/`status`/`errors` 与设备层无直接调用关系**：`report_status` 只是把停止原因映射为四态（`scripts/core/tasks.py:176-186`），`status.py` 提供词表（如 `NON_HR_NAMES` 被 `message_list.py:281` 使用），`errors.py` 的 `UiUnverified` 在 core/命令路径中未被引用（`scripts/core/errors.py:16-22`）；它们对设备动作的约束只体现在上层流程。
 17. **`adb continue` 缺少独立确认开关**：该命令只要求 `--batch-id` 与 `--db`（`scripts/main.py:234-236`），点击“继续沟通”是直接设备动作；是否有上层批次/派发门控不在本节范围内，重新设计时需明确确认边界。
@@ -1875,7 +1887,7 @@
 4. **“新职位”tab 选中态属性不固定**：代码同时尝试 `selected`、`isSelected`、`is-selected`（`scripts/jobs/batch.py:230-233`），三者都缺失时返回 None，此时会直接点击一次 tab，真机行为未验证。
 5. **推荐弹层关闭控件顺序是经验性兜底**：`iv_close_job_panel` → `btn_confirm` → 文本“我知道了”/“知道了”（`scripts/jobs/recommend.py:273-287`），注释提到真机底部为“我知道了”，但未给出各机型差异证据。
 6. **发送依赖外部输入法 ADBKeyboard**（`com.android.adbkeyboard/.AdbIME`）：仓库内没有该 APK 或安装步骤；设备未安装时 `CORE-I02` 会失败并归为 `not_sent`。
-7. **资源消息是否发送的最终证据只有“正文节点计数增加”**（`scripts/hr/actions.py:818-825`）：若聊天页做了节点复用或正文被折叠，计数可能不增加而消息已发出，此时按 `unknown` 处理，需人工核对。
+7. **资源消息是否发送的最终证据只有“正文节点计数增加”**（`scripts/hr/actions.py:818-825`）：若聊天页做了节点复用或正文被折叠，计数可能不增加而消息已发出，此时按 `unknown` 处理，需人工核对。V4 只证明 14.200 的无 id ImageView 分支可用，其它版本控件类型和同层多候选仍待确认。
 8. **批次主循环的时限/次数是硬编码**：外层 80 轮（`scripts/jobs/batch.py:386`）、通知搜索 80 轮（`:290`）、等待列表 5 屏/12 秒（`:239-263`）、身份滚动 20 次（`:527`）、打开重试 5 次（`scripts/jobs/enroll.py:412`）、沟通确认 3 次/1 秒（`scripts/jobs/enroll.py:562-563`）；真机延迟下的合理值未在本仓库论证。
 9. **`store.set_hr_status` 引用了 `jobs.hr_status` 列**（`scripts/jobs/store.py:502-505`），但 `jobs` 建表与迁移都没有该列（`:136-169`）。按当前 schema 调用会报 `no such column`；是否由 HR 域另行加列未在只读范围内确认，属疑似不一致。
 10. **推荐候选的 `index` 语义依赖列表顺序稳定**（`scripts/jobs/recommend.py:319-330`）：代码只校验同位置标题相等，不校验公司；弹层若插入新行导致整体位移，可能命中同标题不同公司的职位。
