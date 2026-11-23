@@ -879,6 +879,27 @@ def build_sensor_cases() -> dict[str, dict[str, Any]]:
         baseline="different",
         expected=sensor_expectation(0, "ok", "present", None, ["new_message"], 1),
     )
+    cases["positive_other"] = sensor_case(
+        "positive_other",
+        rows=[{**row_b, "badge": "1"}],
+        expected=sensor_expectation(0, "ok", "present", None, ["unread"], 1),
+    )
+    cases["cross_badge_only"] = sensor_case(
+        "cross_badge_only",
+        rows=[{**row_a, "badge": "1"}],
+        profile=all_absent_profile,
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        baseline="matching",
+        expected=sensor_expectation(0, "ok", "present", None, ["unread"], 1),
+    )
+    cases["cross_badge_preview"] = sensor_case(
+        "cross_badge_preview",
+        rows=[{**row_a, "badge": "1"}],
+        profile=all_absent_profile,
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        baseline="different",
+        expected=sensor_expectation(0, "ok", "present", None, ["unread"], 1),
+    )
     cases["no_badge_same"] = sensor_case(
         "no_badge_same",
         rows=[{**row_a, "badge": None}],
@@ -2592,6 +2613,37 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
     # ---- M2 ----
+    def sensor_key_values(case: dict[str, Any], unread_count: int) -> tuple[str, str, str]:
+        """返回独立计算的会话键、发现键与指纹。"""
+        row = case["rows"][0]
+        conversation = "boss:conv:" + digest([row["name"], row["company"], row["position"]])
+        preview = digest(row["preview"])
+        fingerprint = digest([preview, row["time"], unread_count])
+        return conversation, "boss:discovery:" + digest([conversation, fingerprint]), fingerprint
+
+    def sensor_candidate_paths(
+        case: dict[str, Any], *, kind: str, sources: list[str], unread_count: int
+    ) -> list[dict[str, Any]]:
+        """按合成行独立计算候选键/指纹/来源与行身份的 oracle 路径。"""
+        row = case["rows"][0]
+        conversation = "boss:conv:" + digest([row["name"], row["company"], row["position"]])
+        preview = digest(row["preview"])
+        fingerprint = digest([preview, row["time"], unread_count])
+        candidate_key = "boss:discovery:" + digest([conversation, fingerprint])
+        paths = [
+            {"path": "result.value.rows.0.conversation_key", "equals": conversation},
+            {"path": "result.value.candidates.0.candidate_key", "equals": candidate_key},
+            {"path": "result.value.candidates.0.conversation_key", "equals": conversation},
+            {"path": "result.value.candidates.0.fingerprint", "equals": fingerprint},
+            {"path": "result.value.candidates.0.kind", "equals": kind},
+            {"path": "result.value.candidates.0.source_names", "length_equals": len(sources)},
+        ]
+        for index, source in enumerate(sources):
+            paths.append(
+                {"path": f"result.value.candidates.0.source_names.{index}", "equals": source}
+            )
+        return paths
+
     def m2_cmd(name: str) -> str:
         """返回 M2 探针命令；请求 fixture 由隔离层按引用复制。"""
         return (
@@ -2645,6 +2697,19 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 sensor["positive"],
                 label="唯一行角标 1",
                 assertions=["ok/present，唯一 unread 候选", "其它源 unknown 不阻断可定位正目标"],
+                extra_paths=[
+                    {"path": "result.value.signals.row_badge.state", "equals": "present"},
+                    {"path": "result.value.signals.row_badge.count", "equals": 1},
+                    {"path": "result.value.signals.row_badge.reason_code", "equals": None},
+                    {"path": "result.value.signals.new_greeting.state", "equals": "unknown"},
+                    {"path": "result.value.signals.new_greeting.reason_code", "equals": "missing_signal"},
+                    {"path": "result.value.signals.tab_badge.state", "equals": "unknown"},
+                    {"path": "result.value.signals.preview_delta.state", "equals": "unknown"},
+                    {"path": "result.value.signals.preview_delta.reason_code", "equals": "no_baseline"},
+                    *sensor_candidate_paths(
+                        sensor["positive"], kind="unread", sources=["row_badge"], unread_count=1
+                    ),
+                ],
             ),
             ready_variant(
                 "replay_idempotent",
@@ -2743,7 +2808,22 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "预览变化、时间比较与无基线",
         ["M2 sense 已交付", "合成 baseline_rows"],
         [
-            sensor_ready("preview_change", sensor["preview_change_with_baseline"], label="预览摘要变化", assertions=["preview_delta=present", "候选 new_message", "不证明方向"]),
+            sensor_ready(
+                "preview_change",
+                sensor["preview_change_with_baseline"],
+                label="预览摘要变化",
+                assertions=["preview_delta=present", "候选 new_message", "不证明方向"],
+                extra_paths=[
+                    {"path": "result.value.signals.preview_delta.state", "equals": "present"},
+                    {"path": "result.value.signals.preview_delta.count", "equals": 1},
+                    *sensor_candidate_paths(
+                        sensor["preview_change_with_baseline"],
+                        kind="new_message",
+                        sources=["preview_delta"],
+                        unread_count=0,
+                    ),
+                ],
+            ),
             sensor_ready("same_preview_time_changed", sensor["same_preview_new_time"], label="摘要同时间变", assertions=["可证明变化", "候选 new_message"]),
             sensor_ready("same_preview_missing_time", sensor["same_preview_missing_time"], label="摘要同但缺时间", assertions=["unknown/no_baseline 或对应原因", "不得 absent"]),
             sensor_ready("no_baseline", sensor["preview_no_baseline"], label="无基线", assertions=["unknown/no_baseline", "不得声称无新消息"]),
@@ -2766,14 +2846,49 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 sensor["row_unread_plus_preview"],
                 label="同一行未读与预览同时正",
                 assertions=["合成一个 unread", "source_names 保留实际行来源", "不把全局计数拆成虚构消息"],
+                extra_paths=sensor_candidate_paths(
+                    sensor["row_unread_plus_preview"],
+                    kind="unread",
+                    sources=["row_badge", "preview_delta"],
+                    unread_count=1,
+                ),
             ),
-            sensor_ready(
+            ready_variant(
                 "same_fingerprint_cross_source",
-                sensor["row_unread_plus_preview"],
-                label="同指纹跨源重放",
-                assertions=["不新增第二条发现", "不续租"],
-                steps=2,
-                extra_checks=[{"kind": "table_count", "table": "hr_discoveries", "equals": 1, "path": "{db}"}],
+                label="同指纹跨源合并",
+                steps=[
+                    f"python -m app sense --fixture tests/scenarios/{sensor['cross_badge_only']['manifest']} --db {{db}}",
+                    f"python -m app sense --fixture tests/scenarios/{sensor['cross_badge_preview']['manifest']} --db {{db}}",
+                ],
+                fixture=sensor["cross_badge_only"]["fixture"],
+                assertions=["同指纹同发现键不新增行", "第二次预览源合并到同候选", "不续租"],
+                acceptance={
+                    "steps": [
+                        {
+                            **sensor_acceptance(sensor["cross_badge_only"])["steps"][0],
+                            "stdout_paths": [
+                                *sensor_acceptance(sensor["cross_badge_only"])["steps"][0]["stdout_paths"],
+                                {"path": "result.value.candidates.0.source_names", "length_equals": 1},
+                                {"path": "result.value.candidates.0.source_names.0", "equals": "row_badge"},
+                            ],
+                        },
+                        {
+                            **sensor_acceptance(sensor["cross_badge_preview"])["steps"][0],
+                            "stdout_paths": [
+                                *sensor_acceptance(sensor["cross_badge_preview"])["steps"][0]["stdout_paths"],
+                                *sensor_candidate_paths(
+                                    sensor["cross_badge_preview"],
+                                    kind="unread",
+                                    sources=["row_badge", "preview_delta"],
+                                    unread_count=1,
+                                ),
+                            ],
+                        },
+                    ],
+                    "db_checks": [
+                        {"kind": "table_count", "table": "hr_discoveries", "equals": 1, "path": "{db}"}
+                    ],
+                },
             ),
             ready_variant(
                 "new_fingerprint",
@@ -2846,6 +2961,17 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     {"path": "payload.stop_reason", "equals": None},
                 ],
             ),
+            m2_parse_ready(
+                "over_five_seconds",
+                label="超过 5 秒 1ms",
+                request="parse_over_five",
+                assertions=["5001ms 拒绝为 stale_snapshot", "不写库"],
+                paths=[
+                    {"path": "payload.result.status", "equals": "undetermined"},
+                    {"path": "payload.result.reason_code", "equals": "stale_snapshot"},
+                    {"path": "payload.result.value", "equals": None},
+                ],
+            ),
         ],
     )
     add(
@@ -2908,6 +3034,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
             ),
         ],
     )
+    positive_conversation, positive_key, positive_fingerprint = sensor_key_values(
+        sensor["positive"], 1
+    )
     add(
         "SC-U13",
         "M2",
@@ -2931,6 +3060,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                         m2_probe_ok(
                             {"path": "task_count", "equals": 1},
                             {"path": "states.0", "equals": "done"},
+                            {"path": "keys.0", "equals": positive_key},
+                            {"path": "conversation_keys.0", "equals": positive_conversation},
+                            {"path": "fingerprints.0", "equals": positive_fingerprint},
                             {"path": "event_counts.task_claimed", "equals": 0},
                         ),
                     ]
@@ -2940,20 +3072,20 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 "queued_new_key",
                 label="queued 旧键与新键并存",
                 steps=[
-                    m2_cmd("seed_queued"),
+                    m2_cmd("seed_queued_extra"),
                     f"python -m app sense --fixture tests/scenarios/{sensor['new_fingerprint']['manifest']} --db {{db}}",
                     m2_cmd("inspect"),
                 ],
-                fixture="fixtures/m2/probe/seed_queued.json",
-                assertions=["旧 queued 可 superseded", "不取消其它 queued", "事件 candidate_superseded"],
+                fixture="fixtures/m2/probe/seed_queued_extra.json",
+                assertions=["旧 queued 可 superseded", "不取消无关 queued", "事件 candidate_superseded"],
                 acceptance={
                     "steps": [
                         m2_probe_ok(),
                         sensor_acceptance(sensor["new_fingerprint"])["steps"][0],
                         m2_probe_ok(
-                            {"path": "task_count", "equals": 2},
-                            {"path": "states.0", "equals": "cancelled"},
-                            {"path": "states.1", "equals": "queued"},
+                            {"path": "task_count", "equals": 3},
+                            {"path": "state_counts.cancelled", "equals": 1},
+                            {"path": "state_counts.queued", "equals": 2},
                             {"path": "event_counts.candidate_superseded", "equals": 1},
                         ),
                     ]
@@ -2976,6 +3108,32 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                         m2_probe_ok(
                             {"path": "task_count", "equals": 1},
                             {"path": "states.0", "equals": "running"},
+                            {"path": "keys.0", "equals": positive_key},
+                            {"path": "fingerprints.0", "equals": positive_fingerprint},
+                            {"path": "event_counts.candidate_deferred", "equals": 1},
+                        ),
+                    ]
+                },
+            ),
+            ready_variant(
+                "blocked_new_fingerprint",
+                label="blocked 旧键观察新指纹",
+                steps=[
+                    m2_cmd("seed_blocked"),
+                    f"python -m app sense --fixture tests/scenarios/{sensor['new_fingerprint']['manifest']} --db {{db}}",
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m2/probe/seed_blocked.json",
+                assertions=["仅 deferred", "blocked 原负载与身份不变", "无新增发现"],
+                acceptance={
+                    "steps": [
+                        m2_probe_ok(),
+                        m2_cli_stop("needs_targeted_verification"),
+                        m2_probe_ok(
+                            {"path": "task_count", "equals": 1},
+                            {"path": "states.0", "equals": "blocked"},
+                            {"path": "keys.0", "equals": positive_key},
+                            {"path": "fingerprints.0", "equals": positive_fingerprint},
                             {"path": "event_counts.candidate_deferred", "equals": 1},
                         ),
                     ]
@@ -2994,15 +3152,25 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 label="未关闭发现后角标消失",
                 steps=[
                     m2_cmd("seed_blocked"),
-                    f"python -m app sense --fixture tests/scenarios/{sensor['no_badge_same']['manifest']} --db {{db}}",
+                    f"python -m app sense --fixture tests/scenarios/{sensor['full_all_absent']['manifest']} --db {{db}}",
                     m2_cmd("inspect"),
                 ],
                 fixture="fixtures/m2/probe/seed_blocked.json",
-                assertions=["聚合用 upsert 后 unresolved", "不缓存空集合关闭发现", "不以消失宣称读全"],
+                assertions=[
+                    "全覆盖全部适用源 absent 的干净快照在无未关闭发现时可 absent",
+                    "有 blocked 未关闭发现时必须 unknown，证明查询参与聚合",
+                ],
                 acceptance={
                     "steps": [
                         m2_probe_ok(),
-                        sensor_acceptance(sensor["no_badge_same"])["steps"][0],
+                        {
+                            "exit_code": 2,
+                            "stdout_paths": [
+                                {"path": "result.status", "equals": "ok"},
+                                {"path": "result.value.unread_state", "equals": "unknown"},
+                                {"path": "stop_reason", "equals": "unread_unverified"},
+                            ],
+                        },
                         m2_probe_ok(
                             {"path": "task_count", "equals": 1},
                             {"path": "states.0", "equals": "blocked"},
@@ -3035,6 +3203,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                             {"path": "task_count", "equals": 1},
                             {"path": "states.0", "equals": "queued"},
                             {"path": "updated_at.0", "equals": "2026-11-24T00:02:00.000Z"},
+                            {"path": "unchanged_since_seed", "equals": True},
+                            {"path": "event_counts.task_claimed", "equals": 0},
+                            {"path": "event_counts.task_started", "equals": 0},
                         ),
                     ]
                 },

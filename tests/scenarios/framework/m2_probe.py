@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
 from app.adapters.boss.list import load_and_parse_snapshot
 from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
+from app.domain.models import canonical_hash
 from app.process_log import ProcessLog
 from app.usecases.sense import build_sense_payload, persist_and_aggregate
 
@@ -40,14 +41,42 @@ def _within(child: Path, parent: Path) -> bool:
         return False
 
 
+def _is_link_like(path: Path) -> bool:
+    """识别 symlink 与 Windows junction。"""
+    if path.is_symlink():
+        return True
+    is_junction = getattr(path, "is_junction", None)
+    return bool(callable(is_junction) and is_junction())
+
+
+def _reject_links_on_path(path: Path, root: Path, label: str) -> None:
+    """先检查原始 leaf/祖先，再检查根祖先；不得先 resolve。"""
+    current = path
+    while True:
+        if _is_link_like(current):
+            raise ProbeError(f"{label} 路径含链接或 junction")
+        if current == root or current.parent == current:
+            break
+        current = current.parent
+    current = root
+    while True:
+        if _is_link_like(current):
+            raise ProbeError(f"{label} 根的祖先含链接或 junction")
+        if current.parent == current:
+            break
+        current = current.parent
+
+
 def _relative(value: object, label: str, *, must_exist: bool) -> Path:
-    """只接受隔离根内相对路径，拒绝绝对/.. 与越界。"""
+    """只接受隔离根内相对路径，先查链接再 resolve/containment。"""
     if not isinstance(value, str) or not value:
         raise ProbeError(f"{label} 必须是非空相对路径")
     candidate = Path(value)
     if candidate.is_absolute() or ".." in candidate.parts:
         raise ProbeError(f"{label} 不得绝对或包含 ..")
-    resolved = (ROOT / candidate).resolve()
+    lexical = ROOT / candidate
+    _reject_links_on_path(lexical, ROOT, label)
+    resolved = lexical.resolve()
     if not _within(resolved, ROOT):
         raise ProbeError(f"{label} 越出隔离根")
     if must_exist and not resolved.is_file():
@@ -83,13 +112,19 @@ def _seed(request: dict, db: Path) -> dict:
     if state in {"queued", "running", "done"} and reason is not None:
         raise ProbeError("非 blocked seed reason 必须为 null")
     initialize_database(db)
-    result = load_and_parse_snapshot(fixture, snapshot_id, now)
-    if result.status != "ok" or result.value is None:
-        raise ProbeError("seed 解析结果非 ok")
+    fixtures = [fixture]
+    extra = request.get("extra_fixture")
+    if extra is not None:
+        fixtures.append(_relative(extra, "extra_fixture", must_exist=True))
     log = ProcessLog(path=db.parent / f"m2-probe-{uuid.uuid4().hex}.jsonl")
     store = SqliteStore(db, process_log=log)
     try:
-        store.upsert_snapshot(result)
+        for index, active_fixture in enumerate(fixtures):
+            active_snapshot = snapshot_id if index == 0 else str(uuid.uuid4())
+            result = load_and_parse_snapshot(active_fixture, active_snapshot, now)
+            if result.status != "ok" or result.value is None:
+                raise ProbeError("seed 解析结果非 ok")
+            store.upsert_snapshot(result)
     finally:
         store.close()
     updated_at = request.get("updated_at", now)
@@ -117,9 +152,52 @@ def _seed(request: dict, db: Path) -> dict:
                 (state, reason, updated_at),
             )
         connection.commit()
+        signature = _signature(connection)
     finally:
         connection.close()
-    return {"seeded": 1, "state": state, "reason_code": reason, "updated_at": updated_at}
+    (db.parent / f"{db.name}.baseline.json").write_text(
+        json.dumps({"signature": signature}, sort_keys=True), encoding="utf-8"
+    )
+    return {
+        "seeded": len(fixtures),
+        "state": state,
+        "reason_code": reason,
+        "updated_at": updated_at,
+        "state_signature": signature,
+    }
+
+
+def _signature(connection: sqlite3.Connection) -> str:
+    """对四张合成表与事件做只读完整签名，用于整批回滚/基线不推进断言。"""
+    conversations = [
+        list(row)
+        for row in connection.execute(
+            "SELECT app,key,identity_hash,baseline_preview_hash,baseline_time_hint,verified_at "
+            "FROM hr_conversations ORDER BY key"
+        ).fetchall()
+    ]
+    discoveries = [
+        list(row)
+        for row in connection.execute(
+            'SELECT app,key,conversation_key,kind,fingerprint,source_names_json,snapshot_id,'
+            'opened,state,priority,created_at,updated_at,lease_owner,nonce,lease_expires_at,'
+            'owner_host,owner_pid,attempt,reason_code FROM hr_discoveries ORDER BY "key"'
+        ).fetchall()
+    ]
+    devices = [
+        list(row)
+        for row in connection.execute(
+            "SELECT device_key,lease_owner,owner_pid,owner_host,nonce,lease_expires_at,reservation_state "
+            "FROM device_lease ORDER BY device_key"
+        ).fetchall()
+    ]
+    events = [
+        list(row)
+        for row in connection.execute(
+            "SELECT app,subject_key,event,reason_code,created_at,payload_json FROM events ORDER BY event_id"
+        ).fetchall()
+    ]
+    return canonical_hash([conversations, discoveries, devices, events])
 
 
 def _inspect(db: Path) -> dict:
@@ -128,7 +206,8 @@ def _inspect(db: Path) -> dict:
     connection.row_factory = sqlite3.Row
     try:
         rows = connection.execute(
-            'SELECT state, reason_code, updated_at, attempt FROM hr_discoveries ORDER BY "key"'
+            'SELECT state, reason_code, updated_at, attempt, "key", conversation_key, fingerprint '
+            'FROM hr_discoveries ORDER BY "key"'
         ).fetchall()
         events = [
             str(row[0])
@@ -149,13 +228,28 @@ def _inspect(db: Path) -> dict:
         }
         for event in events:
             counts[event] = counts.get(event, 0) + 1
+        signature = _signature(connection)
+        state_counts: dict[str, int] = {}
+        for row in rows:
+            state_counts[str(row[0])] = state_counts.get(str(row[0]), 0) + 1
+        baseline_path = db.parent / f"{db.name}.baseline.json"
+        unchanged = None
+        if baseline_path.is_file():
+            baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+            unchanged = baseline.get("signature") == signature
         return {
             "task_count": len(rows),
             "states": [str(row[0]) for row in rows],
+            "state_counts": state_counts,
             "reasons": [row[1] for row in rows],
             "updated_at": [str(row[2]) for row in rows],
             "attempt": [int(row[3]) for row in rows],
+            "keys": [str(row[4]) for row in rows],
+            "conversation_keys": [row[5] for row in rows],
+            "fingerprints": [row[6] for row in rows],
             "event_counts": counts,
+            "state_signature": signature,
+            "unchanged_since_seed": unchanged,
         }
     finally:
         connection.close()

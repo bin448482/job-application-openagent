@@ -52,6 +52,14 @@ def build_m2_requests() -> dict[str, str]:
             "now": T5,
         },
     )
+    add(
+        "parse_over_five",
+        {
+            "mode": "parse",
+            "fixture": "tests/scenarios/fixtures/m2/sensor/positive/manifest.json",
+            "now": "2026-11-24T00:00:05.001Z",
+        },
+    )
     positive = "tests/scenarios/fixtures/m2/sensor/positive/manifest.json"
     for name, state, reason, updated in (
         ("seed_queued", "queued", None, T0),
@@ -72,6 +80,18 @@ def build_m2_requests() -> dict[str, str]:
             },
         )
     add("inspect", {"mode": "inspect"})
+    add(
+        "seed_queued_extra",
+        {
+            "mode": "seed",
+            "fixture": positive,
+            "extra_fixture": "tests/scenarios/fixtures/m2/sensor/positive_other/manifest.json",
+            "now": T0,
+            "state": "queued",
+            "reason_code": None,
+            "updated_at": T0,
+        },
+    )
     return names
 
 

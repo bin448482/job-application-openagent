@@ -252,6 +252,8 @@ def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path
                 probe_request = None
             if isinstance(probe_request, dict) and isinstance(probe_request.get("fixture"), str):
                 queue.append(target / probe_request["fixture"])
+            if isinstance(probe_request, dict) and isinstance(probe_request.get("extra_fixture"), str):
+                queue.append(target / probe_request["extra_fixture"])
         if resolved.name == "manifest.json":
             try:
                 manifest = json.loads(resolved.read_text(encoding="utf-8"))

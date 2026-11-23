@@ -23,7 +23,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from scenarios.framework import m0_protocol_probe, m1_probe, model, replay, runner  # noqa: E402
+from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, model, replay, runner  # noqa: E402
 from scenarios.framework.compare import compare_invocation, compare_step, strict_equal  # noqa: E402
 
 SCENARIO_ROOT = TESTS_DIR / "scenarios"
@@ -980,6 +980,92 @@ class M1DriverBoundaryTests(unittest.TestCase):
                 result = runner._execute_variant(custom, scenario, variant, SCENARIO_ROOT.parent.parent, "run-test")
             self.assertEqual(result["result"], "FAIL")
             concurrent.assert_not_called()
+
+    def test_m2_probe_real_junction_is_rejected(self) -> None:
+        """M2 原始路径祖先为真实 junction 时必须拒绝，不先 resolve。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            real = root / "real"
+            real.mkdir()
+            linked = root / "linked"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(linked), str(real)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if created.returncode != 0 or not runner._is_link_like(linked):
+                self.skipTest("当前平台/账户不能创建 junction")
+            with mock.patch.object(m2_probe, "ROOT", root):
+                with self.assertRaises(Exception):
+                    m2_probe._relative("linked/request.json", "request", must_exist=False)
+
+    def test_real_m2_serializer_mutant_is_caught_by_u01_oracle(self) -> None:
+        """真实 sense serializer 篡改候选键/身份/指纹时 SC-U01 oracle 必须失败。"""
+        from app.adapters.boss.list import load_and_parse_snapshot
+        from app.usecases import sense
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-U01/unique_row_badge"]["acceptance"]["steps"][0]
+        manifest = SCENARIO_ROOT / "fixtures/m2/sensor/positive/manifest.json"
+
+        def bad_snapshot(snapshot):
+            """保持结构但篡改候选键、会话键与指纹，模拟 serializer 缺陷。"""
+            payload = {
+                "app": snapshot.app,
+                "profile_id": snapshot.profile_id,
+                "coverage": snapshot.coverage,
+                "signals": {
+                    name: {
+                        "state": snapshot.signals[name].state,
+                        "count": snapshot.signals[name].count,
+                        "reason_code": snapshot.signals[name].reason_code,
+                    }
+                    for name in snapshot.signals
+                },
+                "rows": [
+                    {
+                        "conversation_key": row.conversation_key,
+                        "identity_hash": row.identity_hash,
+                        "preview_hash": row.preview_hash,
+                        "time_hint": row.time_hint,
+                        "unread_count": row.unread_count,
+                    }
+                    for row in snapshot.rows
+                ],
+                "candidates": [
+                    {
+                        "candidate_key": "wrong",
+                        "conversation_key": "wrong",
+                        "kind": candidate.kind,
+                        "source_names": list(candidate.source_names),
+                        "fingerprint": "wrong",
+                    }
+                    for candidate in snapshot.candidates
+                ],
+                "unread_state": snapshot.unread_state,
+            }
+            return payload
+
+        result = load_and_parse_snapshot(
+            manifest,
+            "00000000-0000-4000-8000-0000000000c1",
+            "2026-11-24T00:00:00.000Z",
+        )
+        with mock.patch.object(sense, "_snapshot_payload", side_effect=bad_snapshot):
+            payload = sense.build_sense_payload(result, None)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": payload,
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(
+            any("candidate_key" in item or "fingerprint" in item or "conversation_key" in item for item in differences),
+            differences,
+        )
 
     def test_real_m2_sut_mutant_coverage_is_caught(self) -> None:
         """真实 M2 解析器把 coverage 降为 viewport 时，SC-U04 oracle 必须失败。"""

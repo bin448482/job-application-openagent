@@ -4145,6 +4145,66 @@
                   {
                     "path": "result.value.candidates.0.kind",
                     "equals": "unread"
+                  },
+                  {
+                    "path": "result.value.signals.row_badge.state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value.signals.row_badge.count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.value.signals.row_badge.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.signals.new_greeting.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.signals.new_greeting.reason_code",
+                    "equals": "missing_signal"
+                  },
+                  {
+                    "path": "result.value.signals.tab_badge.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.signals.preview_delta.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.signals.preview_delta.reason_code",
+                    "equals": "no_baseline"
+                  },
+                  {
+                    "path": "result.value.rows.0.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.candidates.0.candidate_key",
+                    "equals": "boss:discovery:604c278040fb03b6b0aadf443218a5a2ee2534c353ede5e57f26c7f0c769d396"
+                  },
+                  {
+                    "path": "result.value.candidates.0.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.candidates.0.fingerprint",
+                    "equals": "22418700c9b682edfbc78bf595361b62c546e753f8718fc14dbde1896327a5a2"
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names.0",
+                    "equals": "row_badge"
                   }
                 ]
               }
@@ -5991,6 +6051,42 @@
                   {
                     "path": "result.value.candidates.0.kind",
                     "equals": "new_message"
+                  },
+                  {
+                    "path": "result.value.signals.preview_delta.state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value.signals.preview_delta.count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.value.rows.0.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.candidates.0.candidate_key",
+                    "equals": "boss:discovery:4b2512056f9e229c865360b0d2d24cb6e912ebea7ed19a6c99eb658f08f50d61"
+                  },
+                  {
+                    "path": "result.value.candidates.0.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.candidates.0.fingerprint",
+                    "equals": "7e4e5619e7f7833ed0a71b518bb7f6c4ba1b68ca41655c607982d1943f6ffe2b"
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "new_message"
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names.0",
+                    "equals": "preview_delta"
                   }
                 ]
               }
@@ -6518,6 +6614,38 @@
                   {
                     "path": "result.value.candidates.0.kind",
                     "equals": "unread"
+                  },
+                  {
+                    "path": "result.value.rows.0.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.candidates.0.candidate_key",
+                    "equals": "boss:discovery:604c278040fb03b6b0aadf443218a5a2ee2534c353ede5e57f26c7f0c769d396"
+                  },
+                  {
+                    "path": "result.value.candidates.0.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.candidates.0.fingerprint",
+                    "equals": "22418700c9b682edfbc78bf595361b62c546e753f8718fc14dbde1896327a5a2"
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names",
+                    "length_equals": 2
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names.0",
+                    "equals": "row_badge"
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names.1",
+                    "equals": "preview_delta"
                   }
                 ]
               }
@@ -6542,25 +6670,23 @@
         },
         {
           "id": "same_fingerprint_cross_source",
-          "label": "同指纹跨源重放",
+          "label": "同指纹跨源合并",
           "layer": "F",
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/row_unread_plus_preview/manifest.json --db {db}",
-            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/row_unread_plus_preview/manifest.json --db {db}"
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/cross_badge_only/manifest.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/cross_badge_preview/manifest.json --db {db}"
           ],
-          "fixture": "fixtures/m2/sensor/row_unread_plus_preview",
+          "fixture": "fixtures/m2/sensor/cross_badge_only",
           "setup": null,
           "required_api": null,
           "expected_ref": "SC-U07/same_fingerprint_cross_source",
           "device_gate": false,
           "assertions": [
-            "不新增第二条发现",
-            "不续租",
-            "退出码 0，result.status=ok",
-            "stop_reason=None，候选类型=['unread']",
-            "生产实现只读夹具与临时库，不连接设备或模型"
+            "同指纹同发现键不新增行",
+            "第二次预览源合并到同候选",
+            "不续租"
           ],
           "acceptance": {
             "steps": [
@@ -6622,6 +6748,14 @@
                   {
                     "path": "result.value.candidates.0.kind",
                     "equals": "unread"
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names.0",
+                    "equals": "row_badge"
                   }
                 ]
               },
@@ -6683,17 +6817,43 @@
                   {
                     "path": "result.value.candidates.0.kind",
                     "equals": "unread"
+                  },
+                  {
+                    "path": "result.value.rows.0.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.candidates.0.candidate_key",
+                    "equals": "boss:discovery:604c278040fb03b6b0aadf443218a5a2ee2534c353ede5e57f26c7f0c769d396"
+                  },
+                  {
+                    "path": "result.value.candidates.0.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.candidates.0.fingerprint",
+                    "equals": "22418700c9b682edfbc78bf595361b62c546e753f8718fc14dbde1896327a5a2"
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names",
+                    "length_equals": 2
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names.0",
+                    "equals": "row_badge"
+                  },
+                  {
+                    "path": "result.value.candidates.0.source_names.1",
+                    "equals": "preview_delta"
                   }
                 ]
               }
             ],
             "db_checks": [
-              {
-                "kind": "table_count",
-                "table": "hr_discoveries",
-                "equals": 1,
-                "path": "{db}"
-              },
               {
                 "kind": "table_count",
                 "table": "hr_discoveries",
@@ -7300,7 +7460,8 @@
       "offline_subscenarios": [
         "stale",
         "future",
-        "exactly_five_seconds"
+        "exactly_five_seconds",
+        "over_five_seconds"
       ],
       "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
@@ -7461,6 +7622,64 @@
                   },
                   {
                     "path": "payload.stop_reason",
+                    "equals": null
+                  }
+                ]
+              }
+            ],
+            "db_checks": [
+              {
+                "kind": "file_absent",
+                "path": "{db}"
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
+        },
+        {
+          "id": "over_five_seconds",
+          "label": "超过 5 秒 1ms",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/parse_over_five.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/probe/parse_over_five.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-U09/over_five_seconds",
+          "device_gate": false,
+          "assertions": [
+            "5001ms 拒绝为 stale_snapshot",
+            "不写库"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "payload.result.status",
+                    "equals": "undetermined"
+                  },
+                  {
+                    "path": "payload.result.reason_code",
+                    "equals": "stale_snapshot"
+                  },
+                  {
+                    "path": "payload.result.value",
                     "equals": null
                   }
                 ]
@@ -8596,7 +8815,8 @@
       "offline_subscenarios": [
         "terminal_not_reopened",
         "queued_new_key",
-        "running_blocked_new_fingerprint"
+        "running_blocked_new_fingerprint",
+        "blocked_new_fingerprint"
       ],
       "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
@@ -8660,6 +8880,18 @@
                     "equals": "done"
                   },
                   {
+                    "path": "keys.0",
+                    "equals": "boss:discovery:604c278040fb03b6b0aadf443218a5a2ee2534c353ede5e57f26c7f0c769d396"
+                  },
+                  {
+                    "path": "conversation_keys.0",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "fingerprints.0",
+                    "equals": "22418700c9b682edfbc78bf595361b62c546e753f8718fc14dbde1896327a5a2"
+                  },
+                  {
                     "path": "event_counts.task_claimed",
                     "equals": 0
                   }
@@ -8683,18 +8915,18 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_queued.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_queued_extra.json --db {db}",
             "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/new_fingerprint/manifest.json --db {db}",
             "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
           ],
-          "fixture": "fixtures/m2/probe/seed_queued.json",
+          "fixture": "fixtures/m2/probe/seed_queued_extra.json",
           "setup": null,
           "required_api": null,
           "expected_ref": "SC-U13/queued_new_key",
           "device_gate": false,
           "assertions": [
             "旧 queued 可 superseded",
-            "不取消其它 queued",
+            "不取消无关 queued",
             "事件 candidate_superseded"
           ],
           "acceptance": {
@@ -8778,15 +9010,15 @@
                   },
                   {
                     "path": "task_count",
+                    "equals": 3
+                  },
+                  {
+                    "path": "state_counts.cancelled",
+                    "equals": 1
+                  },
+                  {
+                    "path": "state_counts.queued",
                     "equals": 2
-                  },
-                  {
-                    "path": "states.0",
-                    "equals": "cancelled"
-                  },
-                  {
-                    "path": "states.1",
-                    "equals": "queued"
                   },
                   {
                     "path": "event_counts.candidate_superseded",
@@ -8866,6 +9098,99 @@
                     "equals": "running"
                   },
                   {
+                    "path": "keys.0",
+                    "equals": "boss:discovery:604c278040fb03b6b0aadf443218a5a2ee2534c353ede5e57f26c7f0c769d396"
+                  },
+                  {
+                    "path": "fingerprints.0",
+                    "equals": "22418700c9b682edfbc78bf595361b62c546e753f8718fc14dbde1896327a5a2"
+                  },
+                  {
+                    "path": "event_counts.candidate_deferred",
+                    "equals": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
+        },
+        {
+          "id": "blocked_new_fingerprint",
+          "label": "blocked 旧键观察新指纹",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_blocked.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/new_fingerprint/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m2/probe/seed_blocked.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-U13/blocked_new_fingerprint",
+          "device_gate": false,
+          "assertions": [
+            "仅 deferred",
+            "blocked 原负载与身份不变",
+            "无新增发现"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "needs_targeted_verification"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "blocked"
+                  },
+                  {
+                    "path": "keys.0",
+                    "equals": "boss:discovery:604c278040fb03b6b0aadf443218a5a2ee2534c353ede5e57f26c7f0c769d396"
+                  },
+                  {
+                    "path": "fingerprints.0",
+                    "equals": "22418700c9b682edfbc78bf595361b62c546e753f8718fc14dbde1896327a5a2"
+                  },
+                  {
                     "path": "event_counts.candidate_deferred",
                     "equals": 1
                   }
@@ -8911,7 +9236,7 @@
           "entry_state": "frozen",
           "steps": [
             "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/seed_blocked.json --db {db}",
-            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/no_badge_same/manifest.json --db {db}",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/full_all_absent/manifest.json --db {db}",
             "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
           ],
           "fixture": "fixtures/m2/probe/seed_blocked.json",
@@ -8920,9 +9245,8 @@
           "expected_ref": "SC-U14/badge_disappears_after_discovery",
           "device_gate": false,
           "assertions": [
-            "聚合用 upsert 后 unresolved",
-            "不缓存空集合关闭发现",
-            "不以消失宣称读全"
+            "全覆盖全部适用源 absent 的干净快照在无未关闭发现时可 absent",
+            "有 blocked 未关闭发现时必须 unknown，证明查询参与聚合"
           ],
           "acceptance": {
             "steps": [
@@ -8939,56 +9263,16 @@
                 "exit_code": 2,
                 "stdout_paths": [
                   {
-                    "path": "",
-                    "keys": [
-                      "schema_version",
-                      "result",
-                      "stop_reason"
-                    ]
-                  },
-                  {
-                    "path": "schema_version",
-                    "equals": 1
-                  },
-                  {
                     "path": "result.status",
                     "equals": "ok"
-                  },
-                  {
-                    "path": "result",
-                    "keys": [
-                      "status",
-                      "value",
-                      "reason_code",
-                      "snapshot_id",
-                      "observed_at",
-                      "source",
-                      "confidence"
-                    ]
-                  },
-                  {
-                    "path": "stop_reason",
-                    "equals": "unread_unverified"
                   },
                   {
                     "path": "result.value.unread_state",
                     "equals": "unknown"
                   },
                   {
-                    "path": "result.value",
-                    "keys": [
-                      "app",
-                      "profile_id",
-                      "coverage",
-                      "signals",
-                      "rows",
-                      "candidates",
-                      "unread_state"
-                    ]
-                  },
-                  {
-                    "path": "result.value.candidates",
-                    "length_equals": 0
+                    "path": "stop_reason",
+                    "equals": "unread_unverified"
                   }
                 ]
               },
@@ -9077,6 +9361,18 @@
                   {
                     "path": "updated_at.0",
                     "equals": "2026-11-24T00:02:00.000Z"
+                  },
+                  {
+                    "path": "unchanged_since_seed",
+                    "equals": true
+                  },
+                  {
+                    "path": "event_counts.task_claimed",
+                    "equals": 0
+                  },
+                  {
+                    "path": "event_counts.task_started",
+                    "equals": 0
                   }
                 ]
               }

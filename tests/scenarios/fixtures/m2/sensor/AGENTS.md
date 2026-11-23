@@ -11,6 +11,8 @@
 - `badge_ambiguous/`：子目录，见其自身指南。
 - `badge_invalid_bounds/`：子目录，见其自身指南。
 - `badge_outside/`：子目录，见其自身指南。
+- `cross_badge_only/`：子目录，见其自身指南。
+- `cross_badge_preview/`：子目录，见其自身指南。
 - `duplicate_identity_only/`：子目录，见其自身指南。
 - `empty_list/`：子目录，见其自身指南。
 - `full_all_absent/`：子目录，见其自身指南。
@@ -33,6 +35,7 @@
 - `page_tab_conflict/`：子目录，见其自身指南。
 - `path_traversal/`：子目录，见其自身指南。
 - `positive/`：子目录，见其自身指南。
+- `positive_other/`：子目录，见其自身指南。
 - `preview_change_with_baseline/`：子目录，见其自身指南。
 - `preview_no_baseline/`：子目录，见其自身指南。
 - `region_null/`：子目录，见其自身指南。
