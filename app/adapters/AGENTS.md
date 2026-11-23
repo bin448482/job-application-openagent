@@ -2,22 +2,22 @@
 
 ## 一、目录用途
 
-实现 `app/ports/` 声明的具体通道。当前包含 M0 的 ADB 只读探针、M1 的本机 SQLite 仓储与 M2 的 BOSS 合成列表解析；fixture 输入由 CLI 读取，不属于设备适配器。
+实现 `app/ports/` 声明的具体通道。当前包含 M0 的 ADB 只读探针、M1 的本机 SQLite 仓储、M2 的 BOSS 合成列表解析与 M3 的 BOSS 页面/职位/未读/会话读取、像素纯解析和 ADB 层级/截图采集；fixture 输入由 CLI 读取，不属于设备适配器。
 
 ## 二、当前文件与子目录
 
 - `__init__.py`：声明适配器包。
-- `adb/`：真实 ADB 探针实现；见 `adb/AGENTS.md`。
-- `boss/`：M2 合成 profile/manifest、XML、四源判定与分页合并；见 `boss/AGENTS.md`。
+- `adb/`：真实 ADB 探针与 M3 层级/截图采集；见 `adb/AGENTS.md`。
+- `boss/`：M2 合成 profile/manifest、XML、四源判定与分页合并，以及 M3 页面/职位/未读/会话读取、像素纯解析与共享夹具 IO；见 `boss/AGENTS.md`。
 - `sqlite/`：M1 五表 v1、初始化/核验、事务仓储与租约；见 `sqlite/AGENTS.md`。
 
 ## 三、边界
 
 - 适配器只返回领域对象或携带安全原因码的失败，不改调度、不决定策略档位、不重试。
-- 真实 ADB 适配器只能由显式 `--device --serial` 触发；fixture 模式不得实例化或调用其探针，适配器模块导入必须零副作用。
-- BOSS 列表适配器只解析合成 XML/profile 并返回 `ReadResult`，不连接设备、不读数据库、不执行导航或动作；M2 不读取 `expected.json`。
+- 真实 ADB 适配器只能由显式 `--device --serial` 触发；fixture 模式不得实例化或调用其探针，适配器模块导入必须零副作用。M3 `read` 当前不暴露真实设备入口，真实采集在共享门禁交付前拒绝。
+- BOSS 列表适配器只解析合成 XML/profile 并返回 `ReadResult`；M3 读取适配器同样只解析合成 XML/像素并返回登记值类型，不连接设备、不读数据库、不执行导航或动作；M2/M3 都不读取 `expected.json`。
 - SQLite 适配器只写项目内本机库；不读取旧库、根 `config.json` 或个人事实；不连接设备或外部服务。
-- ADB 命令过程日志只用固定 `adb_devices`/`adb_window`、固定错误类别和耗时；SQLite 只记 `store` 阶段与固定错误码，不写 serial、窗口原文、SQL 参数、绝对路径或异常；BOSS 解析不写 XML、身份、正文或夹具路径。
+- ADB 命令过程日志只用固定 `adb_devices`/`adb_window`/`adb_hierarchy_dump`/`adb_hierarchy_cat`/`adb_screencap`、固定错误类别和耗时；SQLite 只记 `store` 阶段与固定错误码，不写 serial、窗口原文、SQL 参数、绝对路径或异常；BOSS 解析不写 XML、身份、正文、像素、原始稳定 ID 或夹具路径。
 - 不预建模型桥、猎聘等未实现适配器目录。
 
 ## 四、维护要求
@@ -28,5 +28,5 @@
 
 ## 五、已知限制
 
-- 只有 M0 设备清单、解锁与前台组件读取，M1 本机 SQLite 五表/租约，以及 M2 合成 XML 四源解析/分页合并。
-- 真实设备输出格式、机型差异与时序未验证；M1 的停止检查器只用注入值或 mock ctypes 验证；M2 合成 profile 不代表真实版本已标定。
+- 只有 M0 设备清单、解锁与前台组件读取，M1 本机 SQLite 五表/租约，M2 合成 XML 四源解析/分页合并，以及 M3 合成页面/职位/未读/会话读取、像素纯解析与 ADB 层级/截图采集。
+- 真实设备输出格式、机型差异与时序未验证；M1 的停止检查器只用注入值或 mock ctypes 验证；M2/M3 合成 profile 不代表真实版本已标定；M3 真实 ADB 未执行。

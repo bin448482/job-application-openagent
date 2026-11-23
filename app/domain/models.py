@@ -1,4 +1,4 @@
-"""定义 M1 的任务、读取、证据与租约领域模型，并提供无 IO 的严格校验和键算法。"""
+"""定义任务、读取、证据与租约领域模型，并按值类型分派 M2/M3 严格校验。"""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ class ReadResult:
     """表示读取三态结果；失败与未决时 value 必须为空且原因非空。"""
 
     status: str
-    value: UnreadSnapshot | None
+    value: object | None
     reason_code: str | None
     snapshot_id: str | None
     observed_at: str
@@ -456,7 +456,9 @@ def validate_read_result(result: object) -> None:
     if result.status == "ok":
         if result.value is None or result.reason_code is not None:
             raise ValueError("ok result is invalid")
-        validate_unread_snapshot(result.value)
+        from app.domain.reading import validate_read_value
+
+        validate_read_value(result.value)
         return
     if result.value is not None:
         raise ValueError("failed result must not carry a value")

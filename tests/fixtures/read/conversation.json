@@ -1,0 +1,15 @@
+{
+  "profile_path": "profile.json",
+  "app_version": "14.200-synthetic",
+  "observed_at": "2026-11-24T00:00:00.000Z",
+  "kind": "conversation",
+  "hierarchy_paths": ["conversation-0.xml", "conversation-1.xml"],
+  "coverage_proof": {"kind": "full_traversal", "top_proven": true, "bottom_proven": true},
+  "conversation_context": {
+    "contact": "合成联系人甲",
+    "company": "合成公司甲",
+    "position": "合成职位甲",
+    "source_snapshot_id": "00000000-0000-4000-8000-000000000201"
+  },
+  "pixel": null
+}

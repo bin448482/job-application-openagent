@@ -1,0 +1,11 @@
+<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.hpbr.bosszhipin" bounds="[0,0][1080,2400]">
+    <node text="合成岗位甲" resource-id="com.hpbr.bosszhipin:id/tv_position_name" class="android.widget.TextView" bounds="[40,100][600,160]" />
+    <node text="20-30K" resource-id="com.hpbr.bosszhipin:id/tv_salary_statue" class="android.widget.TextView" bounds="[620,100][900,160]" />
+    <node text="合成公司甲" resource-id="com.hpbr.bosszhipin:id/tv_company_name" class="android.widget.TextView" bounds="[40,170][600,220]" />
+    <node text="合成招聘者" resource-id="com.hpbr.bosszhipin:id/tv_recruiter" class="android.widget.TextView" bounds="[40,230][600,280]" />
+    <node text="合成城市" resource-id="com.hpbr.bosszhipin:id/tv_location" class="android.widget.TextView" bounds="[40,290][600,340]" />
+    <node text="合成职位正文，包含职责与要求。" resource-id="com.hpbr.bosszhipin:id/tv_description" class="android.widget.TextView" bounds="[40,360][1040,1600]" />
+    <node text="立即沟通" resource-id="com.hpbr.bosszhipin:id/btn_chat" class="android.widget.Button" clickable="true" bounds="[700,2100][1040,2300]" />
+  </node>
+</hierarchy>

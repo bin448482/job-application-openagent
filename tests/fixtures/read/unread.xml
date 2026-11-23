@@ -1,0 +1,12 @@
+<hierarchy rotation="0">
+  <node class="android.widget.FrameLayout" package="com.hpbr.bosszhipin" bounds="[0,0][1080,2400]">
+    <node resource-id="com.hpbr.bosszhipin:id/recyclerView" class="androidx.recyclerview.widget.RecyclerView" scrollable="true" bounds="[0,200][1080,2200]">
+      <node resource-id="com.hpbr.bosszhipin:id/message_row" class="android.widget.LinearLayout" bounds="[0,200][1000,400]">
+        <node text="合成联系人甲" resource-id="com.hpbr.bosszhipin:id/tv_name" class="android.widget.TextView" bounds="[220,220][600,270]" />
+        <node text="合成公司甲" resource-id="com.hpbr.bosszhipin:id/tv_company" class="android.widget.TextView" bounds="[220,280][600,320]" />
+        <node text="合成职位甲" resource-id="com.hpbr.bosszhipin:id/tv_position" class="android.widget.TextView" bounds="[220,330][600,370]" />
+        <node text="1" class="android.widget.TextView" bounds="[20,220][80,280]" />
+      </node>
+    </node>
+  </node>
+</hierarchy>

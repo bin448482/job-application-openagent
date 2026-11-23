@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-承载 M0 起的业务程序。当前已实现 `python -m app` 入口、只读 `doctor` 探针、M1 本机状态库（`store init` 和 SQLite 仓储）与 M2 合成传感器（`sense` 未读四源解析/入库）；按“CLI 组合根 → usecase → port ← adapter”的依赖方向组织，`domain/` 只放无 IO 模型与校验。M3+ 的读取阶梯、决策、动作与调度尚未实现。
+承载 M0 起的业务程序。当前已实现 `python -m app` 入口、只读 `doctor` 探针、M1 本机状态库（`store init` 和 SQLite 仓储）、M2 合成传感器（`sense` 未读四源解析/入库）与 M3 离线读取（`read` 页面/职位/未读/会话、字段阶梯、像素与跨屏身份）；按“CLI 组合根 → usecase → port ← adapter”的依赖方向组织，`domain/` 只放无 IO 模型与校验。M4+ 的决策、动作与调度尚未实现。
 
 ## 二、当前文件与子目录
 
@@ -13,7 +13,7 @@
 - `ports/`：能力端口与领域快照/租约类型；见 `ports/AGENTS.md`。
 - `usecases/`：单次用例的校验、持久化编排、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。
-- `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值；唯一 `emit_degraded_warning` 每次运行只写一次固定 stderr 标记，CLI 与仓储 API 共用。阶段已扩展到 `store` 与 `sense`，并以 `operation` 记录 init/parse/aggregate/stop_reason/open/upsert/claim/start/renew/finish/recover/unresolved_conversations，仍复用唯一日志器。
+- `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值；唯一 `emit_degraded_warning` 每次运行只写一次固定 stderr 标记，CLI 与仓储 API 共用。阶段已扩展到 `store/sense/read/adb_hierarchy/adb_screen/adb_evidence`，结果含 `started/ok/undetermined/failed`，并以 `operation` 记录 init/parse/aggregate/stop_reason/load/page/job_list/job_detail/unread/conversation/merge/pixel/gate/open/upsert/claim/start/renew/finish/recover/unresolved_conversations，仍复用唯一日志器。
 
 ## 三、依赖与边界
 
@@ -27,19 +27,22 @@
 8. 不读取根 `config.json`、环境文件、凭据或个人事实；不引入 Python 第三方依赖。
 9. 过程日志是尽力而为的辅助产物：只追加固定字段，不写参数原值、serial、窗口原文、XML、身份键、正文、DB 绝对路径、异常或个人事实；入口忽略单次 `record` 的 `False`，但写失败或白名单拒绝会置 `degraded`，由 CLI 在 stderr 输出固定降级提示，不能声称日志完整。JSON 输出统一记录 `output` 成功/失败；ADB 命令与 store 调用记录 `started` 后再记 `ok/failed`；sense 解析也记录固定 `sense` 阶段。
 10. M2 `sense` 必须先完成 manifest/profile/XML 校验与合并，结果 ok 后才初始化/打开本机库；复用 CLI 的同一 `ProcessLog`/correlation 记录 store open/upsert/unresolved，不预建或另造日志平台。
+11. M3 `read` 只读合成 M3 manifest/profile/XML/像素，不连接设备、业务库、模型或网络，不 claim/start/finish、不关闭发现、不写正文或 verified 基线；真实采集适配器由测试以 mock subprocess 验证，真实 read 在共享 OS 设备门禁交付前拒绝。
 
 ## 四、测试与验证
 
 在项目根执行：
 
 ```powershell
-python -m unittest tests.test_doctor tests.test_store tests.test_migrations tests.test_sensor tests.test_sensor_store tests.test_process_log_concurrency
+python -m unittest tests.test_doctor tests.test_store tests.test_migrations tests.test_sensor tests.test_sensor_store tests.test_process_log_concurrency tests.test_read tests.test_screen
 python -m app doctor --fixture tests/fixtures/doctor/ready.json
 python -m app store init --db data/runtime/m1-acceptance.sqlite3
 python -m app sense --fixture tests/fixtures/sensor/positive.json --db data/runtime/m2-acceptance.sqlite3
+python -m app read --fixture tests/fixtures/read/page.json
+python -m app read --fixture tests/fixtures/read/conversation.json
 ```
 
-`tests.test_doctor` 覆盖 M0 CLI、配置与夹具校验、设备解析、日志与 fixture 零子进程；`tests.test_process_log_concurrency` 用两个独立进程验证默认与显式日志路径的隔离和完整关联；`tests.test_store` 覆盖候选入库、竞争、TTL、三态收敛、恢复、clock_changed、严格输入与事务回滚；`tests.test_migrations` 覆盖空库建表/核验、幂等、初始化回滚、schema 篡改与 `store init` CLI；`tests.test_sensor` 覆盖 M2 解析/合并/聚合/停止原因，`tests.test_sensor_store` 覆盖 sense 落库、重放、终态与仓储错误。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行；M1/M2 测试只用合成库与注入检查器，M2 只用合成 XML。
+`tests.test_doctor` 覆盖 M0 CLI、配置与夹具校验、设备解析、日志与 fixture 零子进程；`tests.test_process_log_concurrency` 用两个独立进程验证默认与显式日志路径的隔离和完整关联；`tests.test_store` 覆盖候选入库、竞争、TTL、三态收敛、恢复、clock_changed、严格输入与事务回滚；`tests.test_migrations` 覆盖空库建表/核验、幂等、初始化回滚、schema 篡改与 `store init` CLI；`tests.test_sensor` 覆盖 M2 解析/合并/聚合/停止原因，`tests.test_sensor_store` 覆盖 sense 落库、重放、终态与仓储错误；`tests.test_read` 覆盖 M3 页面/职位/未读/会话、字段阶梯、像素、稳定消息身份、跨屏合并、门禁与 CLI，`tests.test_screen` 覆盖 mock ADB 采集与共享门禁。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行；M1/M2 测试只用合成库与注入检查器，M2/M3 只用合成 XML/RGBA。
 
 ## 五、维护要求
 
@@ -51,9 +54,9 @@ python -m app sense --fixture tests/fixtures/sensor/positive.json --db data/runt
 
 ## 六、已知限制
 
-- M1 只实现设计说明 §6 的五表 v1、任务租约与 `store init`；M2 只实现合成 XML 解析/未读快照入库，不 claim/start/finish、不推进已读基线；M3+ 的读取阶梯、真实设备页面与设备动作尚未创建。
-- 真实 `adb devices` / `dumpsys window` 未在本机执行，真实机型、系统版本、序列号格式与窗口输出差异未验证。
-- `doctor` 只做一次独立探针，不提供业务循环、导航、截图或动作；`store init` 不做真实业务调度；`sense` 只读合成夹具。
+- M1 只实现设计说明 §6 的五表 v1、任务租约与 `store init`；M2 只实现合成 XML 解析/未读快照入库，不 claim/start/finish、不推进已读基线；M3 只实现离线页面/职位/未读/会话读取、字段阶梯、像素与跨屏身份，不调用仓储、不导航、不执行动作。
+- 真实 `adb devices` / `dumpsys window` / `uiautomator dump` / `screencap` 未在本机执行，真实机型、系统版本、序列号格式、窗口/截图输出差异未验证。
+- `doctor` 只做一次独立探针，不提供业务循环、导航、截图或动作；`store init` 不做真实业务调度；`sense` 只读合成夹具；`read` 只读合成输入且真实采集在共享门禁前拒绝。
 - M1 的 v1 只允许 app=boss；第二应用启用时需后续版本迁移，不预建迁移框架。
-- M2 合成 profile 不是已验证真实版本；像素/几何、新招呼真实语义与滚动分页仍待 M3 标定。
+- M2 合成 profile 与 M3 合成 profile 不是已验证真实版本；像素阈值、稳定消息标识、新招呼真实语义与滚动分页仍待真机标定。
 - 过程日志没有轮转、保留期、远程汇聚或审计保证；写入失败时只能通过固定 stderr 降级标记和缺失行发现，磁盘失败时日志不完整。

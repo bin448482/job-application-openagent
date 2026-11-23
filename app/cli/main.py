@@ -12,6 +12,7 @@ from typing import NoReturn
 
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
 from app.adapters.boss.list import load_and_parse_snapshot
+from app.adapters.boss.read import load_and_read_fixture
 from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
 from app.ports.device import ProbeSnapshot
@@ -19,6 +20,7 @@ from app.ports.store import StoreError
 from app.domain.json_input import load_json_object as _load_json_object
 from app.process_log import ProcessLog, elapsed_ms
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
+from app.usecases.read import build_read_payload
 from app.usecases.sense import build_sense_payload, persist_and_aggregate
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -98,8 +100,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = _StrictArgumentParser(
         prog="python -m app",
         description=(
-            "M0 只读 doctor、M1 store init 与 M2 sense 合成传感器；"
-            "默认不连接设备、不调用网络。"
+            "M0 只读 doctor、M1 store init、M2 sense 与 M3 read；"
+            "默认不连接设备、不调用网络或模型。"
         ),
         allow_abbrev=False,
     )
@@ -180,6 +182,19 @@ def _build_parser() -> argparse.ArgumentParser:
         action=_UniqueStore,
         metavar="<项目内相对文件>",
         help=f"本机 SQLite 路径；省略为 {DEFAULT_DB_PATH}。",
+    )
+    read = subparsers.add_parser(
+        "read",
+        allow_abbrev=False,
+        help="读取 M3 合成页面、职位、未读或会话。",
+        description="必须提供合成 read fixture；不连接设备、库、模型或网络。",
+    )
+    read.add_argument(
+        "--fixture",
+        action=_UniqueStore,
+        required=True,
+        metavar="<相对文件>",
+        help="读取 read manifest 及其同目录 profile/XML/像素文件。",
     )
     return parser
 
@@ -563,6 +578,103 @@ def _run_sense(log: ProcessLog, started: float, args: argparse.Namespace) -> int
 
 
 
+def _run_read(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
+    """加载 M3 合成读取夹具，输出唯一 JSON 并按决策门禁返回退出码。"""
+    try:
+        fixture_path = _resolve_project_path(args.fixture)
+    except ValueError:
+        log.record(
+            stage="read",
+            operation="load",
+            result="failed",
+            reason_code="invalid_input",
+            error_category="argument",
+        )
+        return _finalize_output(
+            log, started, _error_payload("invalid_input"), 2, "invalid_input", "argument"
+        )
+    load_started = time.perf_counter()
+    log.record(stage="read", operation="load", result="started")
+    try:
+        result = load_and_read_fixture(
+            fixture_path, str(uuid.uuid4()), process_log=log
+        )
+    except (OSError, UnicodeError, ValueError):
+        log.record(
+            stage="read",
+            operation="load",
+            result="failed",
+            reason_code="invalid_fixture",
+            error_category="fixture",
+            duration_ms=elapsed_ms(load_started),
+        )
+        return _finalize_output(
+            log, started, _error_payload("invalid_fixture"), 2, "invalid_fixture", "fixture"
+        )
+    except Exception:
+        log.record(
+            stage="read",
+            operation="load",
+            result="failed",
+            reason_code=None,
+            error_category="internal",
+            duration_ms=elapsed_ms(load_started),
+        )
+        return _finalize_output(
+            log, started, _error_payload("invalid_fixture"), 2, "invalid_fixture", "internal"
+        )
+    log.record(
+        stage="read",
+        operation="load",
+        result=result.status,
+        reason_code=result.reason_code,
+        error_category="read" if result.status == "failed" else None,
+        duration_ms=elapsed_ms(load_started),
+    )
+    gate_started = time.perf_counter()
+    log.record(stage="read", operation="gate", result="started")
+    try:
+        payload = build_read_payload(result)
+    except Exception:
+        log.record(
+            stage="read",
+            operation="gate",
+            result="failed",
+            reason_code=None,
+            error_category="internal",
+            duration_ms=elapsed_ms(gate_started),
+        )
+        return _finalize_output(
+            log, started, _error_payload("invalid_fixture"), 2, "invalid_fixture", "internal"
+        )
+    actionable = bool(payload["actionable"])
+    gate_reason = payload["gate_reason"]
+    exit_code = 0 if actionable else 2
+    error_category = None if actionable else "read"
+    log.record(
+        stage="read",
+        operation="gate",
+        result="ok" if actionable else "failed",
+        reason_code=gate_reason,
+        error_category=error_category,
+        duration_ms=elapsed_ms(gate_started),
+    )
+    log.record(
+        stage="decision",
+        result="ok" if actionable else "failed",
+        reason_code=result.reason_code if result.reason_code is not None else gate_reason,
+        error_category=error_category,
+    )
+    return _finalize_output(
+        log,
+        started,
+        payload,
+        exit_code,
+        result.reason_code if result.reason_code is not None else gate_reason,
+        error_category,
+    )
+
+
 def _finish_output_failure(log: ProcessLog, started: float) -> int:
     """输出通道不可用时记录 output=failed，并安全完成 exit。"""
     log.record(
@@ -686,6 +798,8 @@ def main(
         return _run_store_init(log, started, args)
     if args.command == "sense":
         return _run_sense(log, started, args)
+    if args.command == "read":
+        return _run_read(log, started, args)
 
     mode = _requested_mode(args)
     if not _mode_is_valid(args):

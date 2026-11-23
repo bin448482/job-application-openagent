@@ -32,6 +32,7 @@ from app.domain.models import (
     Owner,
     ReadResult,
     UnreadRow,
+    UnreadSnapshot,
     add_seconds,
     canonical_hash,
     canonical_source_names,
@@ -820,6 +821,8 @@ def _prepare_upsert(
         validate_read_result(result)
         if result.status != "ok" or result.value is None or result.snapshot_id is None:
             raise ValueError("snapshot is not persistable")
+        if not isinstance(result.value, UnreadSnapshot):
+            raise ValueError("snapshot value is not unread")
         snapshot = result.value
         rows: dict[str, UnreadRow] = {}
         for row in snapshot.rows:

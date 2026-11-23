@@ -1,0 +1,36 @@
+{
+  "page.json": {
+    "status": "ok",
+    "actionable": true,
+    "page": "chat_list",
+    "gate_reason": null
+  },
+  "job_list.json": {
+    "status": "ok",
+    "actionable": true,
+    "card_count": 2,
+    "gate_reason": null
+  },
+  "job_detail.json": {
+    "status": "ok",
+    "actionable": true,
+    "job_key_prefix": "boss:job:",
+    "gate_reason": null
+  },
+  "unread.json": {
+    "status": "ok",
+    "actionable": true,
+    "unread_state": "present",
+    "row_source": "hierarchy",
+    "gate_reason": null
+  },
+  "conversation.json": {
+    "status": "ok",
+    "actionable": true,
+    "contact": "合成联系人甲",
+    "inbound_state": "known",
+    "message_kinds": ["text", "text", "text", "system_tip"],
+    "direction_evidence": ["avatar", "bubble", "sent_status"],
+    "gate_reason": null
+  }
+}
