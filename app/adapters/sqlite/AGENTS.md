@@ -15,7 +15,8 @@
 - 表：`hr_conversations`、`hr_discoveries`、`hr_messages`、`device_lease`、`events`，全部 STRICT；app 固定 boss，业务键必须带应用前缀；外键 `ON DELETE RESTRICT`。
 - `hr_discoveries` 复用公共状态列，租约五字段与 leased/running 联动；queued/leased/running/done 的 reason 必须为空，其余状态必须非空。
 - 唯一约束/索引：会话 `(app,identity_hash)`；发现活跃会话唯一（queued/leased/running/blocked）、nonce 唯一（非空）；领取索引按 `priority DESC,created_at,key`；事件审计 `(app,subject_key,event_id)`。
-- 空库初始化只在 `user_version=0` 且无用户对象时建表并设版本 1；已有完整 v1 只核验、不改业务行；未知版本、非空无版本或结构篡改拒绝，绝不覆盖重建。
+- 空库初始化只在 `user_version=0` 且无用户对象时建表并设版本 1；已有完整 v1 只核验、不改业务行；未知版本、非空无版本或结构篡改拒绝，绝不覆盖重建。初始化/打开遇到另一连接持写锁且等待耗尽时映射 `store_busy`，非 SQLite/IO 才是 `store_io_error`。
+- 会话键必须精确等于 `app:conv:identity_hash`；仓储入口拒绝伪造会话键与不匹配的发现键，整批回滚且不留下事务。
 - 写入口均 `BEGIN IMMEDIATE`，失败整体回滚。`claim` 见任一 primary 设备行（含过期或 quarantined）即 `lease_busy`；任务与设备共享同一 owner/pid/host/nonce/截止时间。`finish` 与 running 的 `recover` 进入 blocked 时清任务租约，但保留设备原身份并只置 `quarantined`；TTL 到期不释放占用。
 - 事件只写 `snapshot_upserted/candidate_superseded/candidate_deferred/task_claimed/task_started/lease_renewed/task_finished/lease_recovered`，payload 固定 `from_state/to_state/nonce/candidate_count`，不写正文。
 - 所有入口严格校验类型、枚举、UUID、摘要与 UTC；bool 不冒充整数；跨 app 键与非 discovery 租约键拒绝；枚举集合校验前先做类型检查，不把 `TypeError` 当成合法输入错误。仓储错误只抛 `StoreError` 固定原因码，不输出 SQL 参数或原始异常。

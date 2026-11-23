@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Iterator
 
-from app.adapters.sqlite.schema import connect_database
+from app.adapters.sqlite.schema import connect_database, map_locked_error
 from app.domain.models import (
     APP,
     CLOCK_TOLERANCE_SECONDS,
@@ -521,7 +521,7 @@ class SqliteStore:
         try:
             self._connection.execute("BEGIN IMMEDIATE")
         except sqlite3.OperationalError as error:
-            raise _map_locked_error(error) from None
+            raise map_locked_error(error) from None
         except sqlite3.Error:
             raise StoreError("store_io_error") from None
         try:
@@ -538,7 +538,7 @@ class SqliteStore:
             raise StoreError("invalid_input") from None
         except sqlite3.OperationalError as error:
             _safe_rollback(self._connection)
-            raise _map_locked_error(error) from None
+            raise map_locked_error(error) from None
         except (sqlite3.Error, OSError, RuntimeError):
             _safe_rollback(self._connection)
             raise StoreError("store_io_error") from None
@@ -868,14 +868,6 @@ def _require_time_order(observed_at: str, existing_updated_at: str) -> None:
     """拒绝用更早的观察时间倒写已有发现。"""
     if parse_utc(observed_at) < parse_utc(existing_updated_at):
         raise StoreError("invalid_input")
-
-
-def _map_locked_error(error: sqlite3.OperationalError) -> StoreError:
-    """把锁等待耗尽归一为 store_busy，其余操作错误为 store_io_error。"""
-    message = str(error).lower()
-    if "locked" in message or "busy" in message:
-        return StoreError("store_busy")
-    return StoreError("store_io_error")
 
 
 def _safe_rollback(connection: sqlite3.Connection) -> None:

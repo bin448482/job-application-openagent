@@ -13,6 +13,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from app.adapters.sqlite import schema as schema_module
 from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import (
     EXPECTED_OBJECTS,
@@ -141,6 +142,41 @@ class MigrationTests(unittest.TestCase):
             )
         finally:
             connection.close()
+
+    def test_init_maps_write_lock_to_store_busy(self) -> None:
+        """另一连接持写锁时初始化报 store_busy；释放后幂等成功且数据不变。"""
+        path = self._path()
+        initialize_database(path)
+        before = database_dump(path)
+        holder = sqlite3.connect(str(path))
+        holder.execute("BEGIN IMMEDIATE")
+        try:
+            with patch.object(schema_module, "BUSY_TIMEOUT_MS", 5):
+                with self.assertRaises(StoreError) as context:
+                    initialize_database(path)
+            self.assertEqual(context.exception.reason_code, "store_busy")
+        finally:
+            holder.rollback()
+            holder.close()
+        initialize_database(path)
+        self.assertEqual(database_dump(path), before)
+
+    def test_open_maps_exclusive_lock_to_store_busy(self) -> None:
+        """打开/核验遇到独占写锁且等待耗尽时同样报 store_busy。"""
+        path = self._path()
+        initialize_database(path)
+        holder = sqlite3.connect(str(path))
+        holder.execute("BEGIN EXCLUSIVE")
+        try:
+            with patch.object(schema_module, "BUSY_TIMEOUT_MS", 5):
+                with self.assertRaises(StoreError) as context:
+                    connect_database(path)
+            self.assertEqual(context.exception.reason_code, "store_busy")
+        finally:
+            holder.rollback()
+            holder.close()
+        connection = connect_database(path)
+        connection.close()
 
     def test_unknown_version_is_rejected(self) -> None:
         """user_version 不是 1 的库拒绝打开或初始化。"""

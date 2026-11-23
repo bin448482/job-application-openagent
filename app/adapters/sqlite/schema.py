@@ -126,6 +126,14 @@ EXPECTED_OBJECTS = {
 _FAULT_HOOK = Callable[[int, sqlite3.Connection], None]
 
 
+def map_locked_error(error: sqlite3.Error) -> StoreError:
+    """把锁等待耗尽映射为 store_busy，其余 SQLite/IO 错误映射为 store_io_error。"""
+    message = str(error).lower()
+    if "locked" in message or "busy" in message:
+        return StoreError("store_busy")
+    return StoreError("store_io_error")
+
+
 def connect_database(path: Path) -> sqlite3.Connection:
     """打开现有库并设置外键与忙等待；结构不是完整 v1 时拒绝使用。"""
     if not path.is_file():
@@ -135,6 +143,8 @@ def connect_database(path: Path) -> sqlite3.Connection:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    except sqlite3.OperationalError as error:
+        raise map_locked_error(error) from None
     except (sqlite3.Error, OSError):
         raise StoreError("store_io_error") from None
     try:
@@ -155,6 +165,8 @@ def initialize_database(
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    except sqlite3.OperationalError as error:
+        raise map_locked_error(error) from None
     except (sqlite3.Error, OSError):
         raise StoreError("store_io_error") from None
 
@@ -172,6 +184,9 @@ def _initialize_in_transaction(
         connection.execute("BEGIN IMMEDIATE")
         version = int(connection.execute("PRAGMA user_version").fetchone()[0])
         names = _user_object_names(connection)
+    except sqlite3.OperationalError as error:
+        _rollback(connection)
+        raise map_locked_error(error) from None
     except sqlite3.DatabaseError:
         _rollback(connection)
         raise StoreError("store_io_error") from None
@@ -217,6 +232,8 @@ def verify_v1(connection: sqlite3.Connection) -> None:
                 "WHERE name NOT LIKE 'sqlite_%'"
             )
         }
+    except sqlite3.OperationalError as error:
+        raise map_locked_error(error) from None
     except (sqlite3.Error, TypeError):
         raise StoreError("store_io_error") from None
     if version != SCHEMA_VERSION or set(objects) != set(EXPECTED_OBJECTS):

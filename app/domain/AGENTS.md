@@ -14,7 +14,7 @@
 1. `ReadResult` 为 `ok/failed/undetermined` 三态；ok 必须带完整 `UnreadSnapshot` 且无原因，failed/undetermined 必须 `value=null` 且原因属于各自固定词表。
 2. `snapshot_id` 为规范 UUID 或 null，`observed_at` 为 `YYYY-MM-DDTHH:mm:ss.sssZ`。读取来源只取 `hierarchy/pixel/vision/human/fixture`，置信度只取 `low/medium/high`。
 3. 未读四源固定为 `row_badge/new_greeting/tab_badge/preview_delta`；present/absent 无原因，unknown 与 not_applicable 的原因及计数组合按设计说明 §5.3 校验。
-4. 会话键 `app:conv:H([联系人,公司,职位])`、指纹 `H([preview_hash,time_hint,unread_count])`、发现键 `app:discovery:H([conversation_key,fingerprint])`；H 使用键排序、`ensure_ascii=false`、紧凑分隔符和 SHA-256 小写十六进制。
+4. 会话键 `app:conv:H([联系人,公司,职位])`、指纹 `H([preview_hash,time_hint,unread_count])`、发现键 `app:discovery:H([conversation_key,fingerprint])`；H 使用键排序、`ensure_ascii=false`、紧凑分隔符和 SHA-256 小写十六进制。会话键必须精确等于 `app + ':conv:' + identity_hash`，发现键必须精确由会话键与指纹重算；伪造/替换任一侧都 `invalid_input`，不能靠“两个对象相等”证明身份一致。
 5. `Evidence` 的 performed 必须有不同且非空的 before/after 快照、effect 非 none 且无原因；not_performed/unknown 必须 effect=none 且原因在各自词表。
 6. `Owner.id` 为规范 UUID（本次进程启动 UUID），`Owner.host` 为 64 位小写十六进制本机摘要；`Lease.key` 必须是当前 app 的 discovery 键。枚举/集合入口先做类型检查，非法类型仍抛 `ValueError` 供仓储映射 `invalid_input`。
 7. 本目录不保存正文、不解密身份、不连接设备；M1 只用合成对象。M2 的 XML 解析与四源聚合不在本目录实现。

@@ -357,6 +357,12 @@ def validate_unread_snapshot(snapshot: object) -> None:
         raise ValueError("rows are invalid")
     for row in snapshot.rows:
         _validate_row(row)
+        if row.conversation_key is not None:
+            if (
+                row.identity_hash is None
+                or row.conversation_key != f"{snapshot.app}:conv:{row.identity_hash}"
+            ):
+                raise ValueError("row conversation key is invalid")
     if not isinstance(snapshot.candidates, (tuple, list)):
         raise ValueError("candidates are invalid")
     seen: set[str] = set()

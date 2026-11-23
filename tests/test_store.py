@@ -27,6 +27,7 @@ from tests.m1_helpers import (
     HOST_B,
     OWNER_ID,
     OWNER_ID_2,
+    database_dump,
     event_count,
     fetch_all,
     fetch_one,
@@ -196,6 +197,33 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(
             fetch_one(self.path, "SELECT state FROM hr_discoveries")["state"], "queued"
         )
+
+    def test_forged_conversation_key_is_rejected_atomically(self) -> None:
+        """会话键必须精确等于 app:conv:identity_hash；伪造键整批回滚五表。"""
+        base = make_result(observed_at=self.clock.now())
+        snapshot = base.value
+        row = snapshot.rows[0]
+        candidate = snapshot.candidates[0]
+        forged_key = "boss:conv:" + "0" * 64
+        forged_candidate = replace(
+            candidate,
+            conversation_key=forged_key,
+            candidate_key=discovery_key_for("boss", forged_key, candidate.fingerprint),
+        )
+        forged = replace(
+            base,
+            value=replace(
+                snapshot,
+                rows=(replace(row, conversation_key=forged_key),),
+                candidates=(forged_candidate,),
+            ),
+        )
+        before = database_dump(self.path)
+        with self.assertRaises(StoreError) as context:
+            self.store.upsert_snapshot(forged)
+        self.assertEqual(context.exception.reason_code, "invalid_input")
+        self.assertEqual(database_dump(self.path), before)
+        self.assertEqual(event_count(self.path), 0)
 
     def test_new_fingerprint_supersedes_queued_discovery(self) -> None:
         """同会话新键在旧发现仍 queued 时取消旧行并插入新行。"""
