@@ -1711,29 +1711,76 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     ]
                 },
             ),
-            variant(
+            ready_variant(
                 "probe_timeout_protocol",
-                "F",
                 label="真实探针 5 秒超时协议",
-                setup="代码审查/注入 subprocess 边界，不运行实际命令",
-                required_api="M0 真实探针命令数组与 shell=false 的可注入子进程边界",
-                assertions=["每条 adb 命令超时 5 秒且不重试", "参数数组、shell=false", "超时归 device_disconnected"],
+                steps=["python tests/scenarios/framework/m0_protocol_probe.py --case timeout"],
+                assertions=[
+                    "只替换 subprocess 设备边界，调用已交付 AdbDeviceProbe",
+                    "每条 adb 命令超时 5 秒且不重试",
+                    "参数数组、shell=false",
+                    "超时归 device_disconnected",
+                ],
+                acceptance={
+                    "steps": [
+                        {
+                            "exit_code": 0,
+                            "stdout_paths": [
+                                {"path": "status", "equals": "ok"},
+                                {"path": "reason_code", "equals": "device_disconnected"},
+                                {"path": "call_count", "equals": 1},
+                                {"path": "shell", "equals": False},
+                                {"path": "timeout_seconds", "equals": 5},
+                                {"path": "retried", "equals": False},
+                            ],
+                        }
+                    ]
+                },
             ),
-            variant(
+            ready_variant(
                 "probe_nonzero_protocol",
-                "F",
                 label="真实探针非零退出协议",
-                setup="注入非零退出，不运行实际命令",
-                required_api="M0 可注入子进程边界",
-                assertions=["远端非零退出归 device_disconnected", "不重放原命令", "不输出原始命令参数"],
+                steps=["python tests/scenarios/framework/m0_protocol_probe.py --case nonzero"],
+                assertions=[
+                    "注入非零退出，不运行实际命令",
+                    "远端非零退出归 device_disconnected",
+                    "不重放原命令",
+                    "不输出原始命令参数",
+                ],
+                acceptance={
+                    "steps": [
+                        {
+                            "exit_code": 0,
+                            "stdout_paths": [
+                                {"path": "status", "equals": "ok"},
+                                {"path": "reason_code", "equals": "device_disconnected"},
+                                {"path": "call_count", "equals": 1},
+                                {"path": "shell", "equals": False},
+                                {"path": "timeout_seconds", "equals": 5},
+                                {"path": "retried", "equals": False},
+                            ],
+                        }
+                    ]
+                },
             ),
-            variant(
+            ready_variant(
                 "fixture_subprocess_zero",
-                "F",
                 label="fixture 模式子进程为零",
-                setup="统计 doctor fixture 路径的子进程启动次数",
-                required_api="M0 子进程启动计数注入",
-                assertions=["fixture 模式所有子进程启动次数为 0", "不以真实 ADB 存在与否改变结论"],
+                steps=[doctor_command("ready")],
+                fixture="fixtures/m0/doctor/ready.json",
+                assertions=[
+                    "fixture 模式所有子进程启动次数为 0",
+                    "隔离 tripwire 为空",
+                    "不以真实 ADB 存在与否改变结论",
+                ],
+                acceptance={
+                    "steps": [
+                        {
+                            "exit_code": 0,
+                            "stdout_json_equals": doctor_success(DOCTOR_FIXTURES["ready"]),
+                        }
+                    ]
+                },
             ),
         ],
     )

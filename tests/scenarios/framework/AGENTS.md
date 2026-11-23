@@ -10,7 +10,8 @@
 - `model.py`：加载 catalogue/oracles，校验 73 场景、变体引用、设备门槛、夹具结构与路径边界；错误不带绝对路径。
 - `compare.py`：JSON 类型严格比较（bool≠整数）、路径/键集合/长度断言、普通业务 stdout 必须是单个 JSON 对象。
 - `replay.py`：虚拟时钟与固定事件序列重放，校验起点/单调/非 bool 非负，保留 arrival/first_observed/handling_started 为独立字段。
-- `runner.py`：`assets`/`acceptance` 分流；acceptance 先校验资产，再在隔离根复制真实 app 与命令/manifest 选定的合成输入（排除 expected/oracle），使用最小环境白名单和 tripwire 拒绝网络/子进程，缺 app 记 BLOCKED。
+- `m0_protocol_probe.py`：在隔离根仅替换 `subprocess.run` 设备边界，调用已交付 `AdbDeviceProbe` 验证超时/非零/不重试；不启动真实 ADB。
+- `runner.py`：`assets`/`acceptance` 分流，含 `IMPLEMENTED_MILESTONES` 门禁；acceptance 先校验资产，再在隔离根复制真实 app 与命令/manifest 选定的合成输入（排除 expected/oracle），使用最小环境白名单和 tripwire 拒绝网络/子进程，缺 app 记 BLOCKED。
 - `AGENTS.md`：本文件。
 - `CLAUDE.md`：只包含 `@AGENTS.md`。
 
@@ -22,7 +23,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --target .
 ```
 
 - assets 只看测试资产，退出 0 不是产品 PASS。
-- acceptance 缺 `app/__main__.py` 退 3；任一执行差异退 1；只有全部 F 变体执行通过才退 0，且报告仍标记设备门槛未验收。
+- acceptance 缺 `app/__main__.py`、里程碑未实现或入口未冻结退 3；任一执行差异退 1；只有全部 F 变体执行通过才退 0，且报告仍标记设备门槛未验收。当前门禁为 M0；新增里程碑须先更新常量与指南。
 - 报告只写 `data/evals/scenario-runs/<run>/report.json`；隔离根同在其下，含 app 副本、夹具副本、tripwire 日志与临时库。
 
 ## 四、维护要求

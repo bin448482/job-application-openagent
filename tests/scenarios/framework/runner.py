@@ -35,6 +35,8 @@ EXIT_PASS = 0
 EXIT_FAIL = 1
 EXIT_BLOCKED = 3
 RUN_ROOT = Path("data") / "evals" / "scenario-runs"
+# 只有已独立验收并进入稳定 main 的里程碑才允许执行；扩展前先更新指南。
+IMPLEMENTED_MILESTONES = {"M0"}
 
 
 def _utc_stamp() -> str:
@@ -177,6 +179,7 @@ def _validate_source_tree(source: Path, stop: Path, label: str) -> None:
 
 
 FIXTURE_TOKEN = re.compile(r"tests/scenarios/fixtures/[A-Za-z0-9_./-]+")
+M0_PROBE_PATH = "tests/scenarios/framework/m0_protocol_probe.py"
 EXPECTED_FILE_NAMES = {"expected.json", "oracles.json"}
 
 
@@ -262,6 +265,13 @@ def _prepare_isolation(
         shutil.rmtree(root)
     root.mkdir(parents=True)
     shutil.copytree(source_app, root / "app", symlinks=False)
+    if any(M0_PROBE_PATH in str(step) for step in variant.get("steps", [])):
+        source_probe = target / M0_PROBE_PATH
+        if not source_probe.is_file():
+            raise IsolationError("M0 探针边界替身不存在")
+        destination = root / M0_PROBE_PATH
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source_probe, destination)
     for source in selected:
         relative = source.relative_to((target / "tests" / "scenarios" / "fixtures").resolve())
         destination = root / "tests" / "scenarios" / "fixtures" / relative
@@ -414,16 +424,20 @@ def _db_check(root: Path, check: dict[str, Any]) -> str | None:
     return None
 
 
-def _variant_status(variant: dict[str, Any], target: Path) -> str:
+def _variant_status(scenario: dict[str, Any], variant: dict[str, Any], target: Path) -> str:
     """判定变体在当前目标仓库可达到的执行状态。"""
     if variant["layer"] in ("T", "O", "W"):
         return "DEVICE_GATE_UNVERIFIED"
     if variant["asset_status"] == "ASSET_ONLY" or variant["entry_state"] != "frozen":
         return "BLOCKED_ENTRY_UNFROZEN"
+    if scenario["milestone"] not in IMPLEMENTED_MILESTONES:
+        return "BLOCKED_MILESTONE_UNIMPLEMENTED"
     if not (target / "app" / "__main__.py").is_file():
         return "BLOCKED_MISSING_APP"
     for step in variant.get("steps", []):
-        if not isinstance(step, str) or not step.startswith("python -m app "):
+        if not isinstance(step, str) or not (
+            step.startswith("python -m app ") or step.startswith(f"python {M0_PROBE_PATH} ")
+        ):
             return "BLOCKED_ENTRY_UNFROZEN"
     return "READY"
 
@@ -510,6 +524,7 @@ def run_acceptance(
         "FAIL": 0,
         "BLOCKED_MISSING_APP": 0,
         "BLOCKED_ENTRY_UNFROZEN": 0,
+        "BLOCKED_MILESTONE_UNIMPLEMENTED": 0,
         "DEVICE_GATE_UNVERIFIED": 0,
         "SKIPPED_BY_FILTER": 0,
     }
@@ -519,7 +534,7 @@ def run_acceptance(
             counts["SKIPPED_BY_FILTER"] += 1
             results.append({"ref": ref, "result": "SKIPPED_BY_FILTER"})
             continue
-        status = _variant_status(variant, target)
+        status = _variant_status(scenario, variant, target)
         if status == "READY":
             outcome = _execute_variant(assets, scenario, variant, target, run_id)
         else:
@@ -537,7 +552,11 @@ def run_acceptance(
         if variant["layer"] == "F"
         and (not only or f"{scenario['id']}/{variant['id']}".startswith(only) or scenario["id"] == only)
     )
-    offline_blocked = counts["BLOCKED_MISSING_APP"] + counts["BLOCKED_ENTRY_UNFROZEN"]
+    offline_blocked = (
+        counts["BLOCKED_MISSING_APP"]
+        + counts["BLOCKED_ENTRY_UNFROZEN"]
+        + counts["BLOCKED_MILESTONE_UNIMPLEMENTED"]
+    )
     if counts["FAIL"]:
         overall = "FAIL"
     elif counts["PASS"] == 0 or offline_blocked:
@@ -557,7 +576,8 @@ def run_acceptance(
         "asset_check": asset_summary,
         "overall": overall,
         "product_acceptance": product,
-        "layer_note": "只汇总 F 离线结果；T/O/W 保留未验收，离线 PASS 不等于产品通过。",
+        "layer_note": "只汇总已实现里程碑的 F 结果；未实现里程碑与 T/O/W 保留未验收，离线 PASS 不等于产品通过。",
+        "implemented_milestones": sorted(IMPLEMENTED_MILESTONES),
         "counts": counts,
         "offline_variants": offline_total,
         "results": results,

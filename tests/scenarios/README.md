@@ -16,12 +16,12 @@
 ## 2. 当前事实
 
 - 场景 73、变体 313：F 291、T 9、O 12、W 1。
-- READY_FOR_APP 64、ASSET_ONLY 227、DEVICE_GATE 22。
-- 当前仓库没有 `app/`，也没有稳定 M0–M8 接口。因此：
-  - 资产自检可通过；
-  - 严格验收会为 READY 变体逐项返回 `BLOCKED_MISSING_APP`，总体 `BLOCKED`，退出 3；
-  - 没有执行过任何真实业务 CLI、设备、模型或网络；
-  - 不能声称任何场景或里程碑已通过。
+- READY_FOR_APP 67、ASSET_ONLY 224、DEVICE_GATE 22。
+- M0 已由稳定 main `51333d8` 接入；M1–M8 稳定接口尚未交付。
+  - M0 实际执行：C01 9 PASS + 1 T 门槛、C02 12 PASS、C03 8 PASS，共 29 PASS、0 FAIL。
+  - 全量验收仍有 38 个 M1–M8 READY 被里程碑门禁阻塞、224 个 ASSET_ONLY 入口未冻结、22 个设备门槛未验收；总体 BLOCKED、退出 3。
+  - `--only SC-C` 的 M0 子集退出 0，但 `product_acceptance` 仍是 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`。
+  - 未运行真实 ADB、设备、模型或网络。
 
 ## 3. 命令与退出码
 
@@ -34,12 +34,12 @@ python -m tests.scenarios.framework.runner --mode acceptance --target .
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-C01 --target .
 ```
 
-- unittest：44 项，验证资产完整性、严格比较反例、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝与 CLI 安全失败。
+- unittest：47 项，验证资产完整性、严格比较反例、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝与 CLI 安全失败。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；
   - 1 = 至少一个真实执行差异；
-  - 3 = 资产非法、缺 app、入口未冻结或零执行；不会以零项/全 skip 报 PASS。
+  - 3 = 资产非法、缺 app、入口未冻结、里程碑未实现或零执行；不会以零项/全 skip 报 PASS。
 - 报告只写 `data/evals/scenario-runs/<run>/report.json`，不提交生成产物。
 
 ## 4. 验收隔离
@@ -76,7 +76,7 @@ acceptance 对每个可执行变体：
 
 ## 7. 未完成与下一步
 
-- P2 需等业务方稳定 M0–M8 提交后，逐一绑定真实 CLI/StorePort/设备门禁/动作执行接口；不得合并未验收业务分支。
-- 227 个 ASSET_ONLY 变体的机器可执行判据仍缺接口；64 个 READY 变体尚未真实执行。
+- P2 已接入 M0；M1–M8 需等业务方稳定提交后，逐一绑定真实 CLI/StorePort/设备门禁/动作执行接口；不得合并未验收业务分支。
+- 224 个 ASSET_ONLY 变体仍缺接口；38 个 M1–M8 READY 被里程碑门禁阻塞。
 - 纯实机门槛、真实模型/provider、真实写入与设备证据全部未执行。
 - 根 `tests/AGENTS.md`、根 `AGENTS.md` 索引与 README 由业务方串行更新；本目录只提供待同步条目。

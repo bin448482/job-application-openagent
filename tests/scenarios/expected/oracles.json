@@ -2422,9 +2422,25 @@
       "variant_id": "extra_key"
     },
     "SC-C03/fixture_subprocess_zero": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_json_equals": {
+              "device_count": 1,
+              "foreground_app": "boss",
+              "reason_code": null,
+              "schema_version": 1,
+              "selected_alias": "primary",
+              "status": "ok",
+              "unlocked": true
+            }
+          }
+        ]
+      },
       "assertions": [
         "fixture 模式所有子进程启动次数为 0",
+        "隔离 tripwire 为空",
         "不以真实 ADB 存在与否改变结论"
       ],
       "device_gate": false,
@@ -2486,14 +2502,47 @@
       "variant_id": "io_failure"
     },
     "SC-C03/probe_nonzero_protocol": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "device_disconnected",
+                "path": "reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "call_count"
+              },
+              {
+                "equals": false,
+                "path": "shell"
+              },
+              {
+                "equals": 5,
+                "path": "timeout_seconds"
+              },
+              {
+                "equals": false,
+                "path": "retried"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
+        "注入非零退出，不运行实际命令",
         "远端非零退出归 device_disconnected",
         "不重放原命令",
         "不输出原始命令参数"
       ],
       "device_gate": false,
-      "expected_summary": "远端非零退出归 device_disconnected",
+      "expected_summary": "注入非零退出，不运行实际命令",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -2513,14 +2562,47 @@
       "variant_id": "probe_nonzero_protocol"
     },
     "SC-C03/probe_timeout_protocol": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "device_disconnected",
+                "path": "reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "call_count"
+              },
+              {
+                "equals": false,
+                "path": "shell"
+              },
+              {
+                "equals": 5,
+                "path": "timeout_seconds"
+              },
+              {
+                "equals": false,
+                "path": "retried"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
+        "只替换 subprocess 设备边界，调用已交付 AdbDeviceProbe",
         "每条 adb 命令超时 5 秒且不重试",
         "参数数组、shell=false",
         "超时归 device_disconnected"
       ],
       "device_gate": false,
-      "expected_summary": "每条 adb 命令超时 5 秒且不重试",
+      "expected_summary": "只替换 subprocess 设备边界，调用已交付 AdbDeviceProbe",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"

@@ -23,7 +23,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from scenarios.framework import model, replay, runner  # noqa: E402
+from scenarios.framework import model, m0_protocol_probe, replay, runner  # noqa: E402
 from scenarios.framework.compare import compare_invocation, compare_step, strict_equal  # noqa: E402
 
 SCENARIO_ROOT = TESTS_DIR / "scenarios"
@@ -676,6 +676,40 @@ class IsolationTripwireTests(unittest.TestCase):
         self.assertIn("RuntimeError", completed.stderr)
         self.assertIn("scenario boundary blocked: subprocess.Popen", completed.stderr)
         self.assertIn("subprocess.Popen", completed.tripwire_log)
+
+
+class P2M0BindingTests(unittest.TestCase):
+    """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
+
+    def test_milestone_gate_blocks_unimplemented_m1(self) -> None:
+        """M1 虽 READY，但未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
+        assets = load_assets()
+        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0"})
+        m1_scenario = next(item for item in assets.catalogue["scenarios"] if item["milestone"] == "M1")
+        m1_ready = next(
+            item for item in m1_scenario["variants"] if item["asset_status"] == "READY_FOR_APP"
+        )
+        target = SCENARIO_ROOT.parent.parent
+        self.assertEqual(
+            runner._variant_status(m1_scenario, m1_ready, target),
+            "BLOCKED_MILESTONE_UNIMPLEMENTED",
+        )
+
+    def test_m0_protocol_timeout_uses_device_boundary_only(self) -> None:
+        """超时用例只替换 subprocess.run，返回同一原因码且不重试。"""
+        result = m0_protocol_probe._run_case("timeout")
+        self.assertEqual(result["status"], "ok", result["errors"])
+        self.assertEqual(result["reason_code"], "device_disconnected")
+        self.assertEqual(result["call_count"], 1)
+        self.assertFalse(result["retried"])
+
+    def test_m0_protocol_nonzero_does_not_retry(self) -> None:
+        """非零退出同样只调用一次并归 device_disconnected。"""
+        result = m0_protocol_probe._run_case("nonzero")
+        self.assertEqual(result["status"], "ok", result["errors"])
+        self.assertEqual(result["reason_code"], "device_disconnected")
+        self.assertEqual(result["call_count"], 1)
+        self.assertFalse(result["retried"])
 
 
 class BuilderProvenanceTests(unittest.TestCase):

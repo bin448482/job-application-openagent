@@ -4,7 +4,7 @@
 
 本目录存放 BOSS 直聘离线场景测试资产：按《BOSS直聘_求职自动化_场景测试方案_20261123》登记的 73 个场景及其全部变体、独立 expected、纯合成夹具、标准库执行辅助、使用说明与三轮作者自审记录。它服务于“测试资产/判据自检”和“对真实交付 app 的离线场景验收”两条不同链路，不实现未读解析、调度、动作执行或任何业务替代实现。
 
-当前仓库尚未交付 `app/` 或稳定 M0–M8 接口。本目录的 READY 变体只表示“入口已按冻结计划写好、夹具和独立预期齐备、等待真实 app 联调”，不表示产品通过；ASSET_ONLY 变体保留输入与契约判据但接口未冻结；T/O/W 变体是纯实机门槛，保持未验收。
+M0 已通过稳定 main `51333d8` 接入并在隔离框架实际执行；M1–M8 接口尚未交付。READY 变体表示入口、夹具和独立预期齐备，实际执行仍受里程碑门禁限制；ASSET_ONLY 变体保留输入与契约判据但接口未冻结；T/O/W 是纯实机门槛，保持未验收。M0 的 29 个离线变体已 PASS，但不等于产品整体通过。
 
 ## 二、文件与子目录索引
 
@@ -24,9 +24,9 @@
 
 - 场景 73 个：M0 3、M1 7、M2 15、M3 14、M4 11、M5 8、M6 8、M7 4、M8 3。
 - 变体 313 个：F 291、T 9、O 12、W 1。
-- 资产状态：READY_FOR_APP 64、ASSET_ONLY 227、DEVICE_GATE 22。
-- READY 仅代表冻结入口 + 夹具 + 独立预期齐备；当前没有 `app/`，严格验收会逐项 BLOCKED_MISSING_APP，总体 BLOCKED，不会出现 PASS。
-- ASSET_ONLY 表示接口未冻结或需要 StorePort/共享门禁/动作执行等未交付 API；只登记输入、前置和判据，不臆造 Python 接口，也不得在报告中算作 PASS。
+- 资产状态：READY_FOR_APP 67、ASSET_ONLY 224、DEVICE_GATE 22。
+- M0 已执行：C01 9 PASS + 1 T 门槛、C02 12 PASS、C03 8 PASS；共 29 PASS、0 FAIL。C01 real_probe 仍是未验收 T 门槛。
+- 其余 38 个 READY 属于 M1–M8，当前里程碑门禁记 `BLOCKED_MILESTONE_UNIMPLEMENTED`；224 个 ASSET_ONLY 记 `BLOCKED_ENTRY_UNFROZEN`，均不得算 PASS。
 - DEVICE_GATE 是 T/O/W 纯实机门槛，保留未验收；F 通过不能替代。
 
 ## 四、入口与验证命令
@@ -40,9 +40,9 @@ python -m tests.scenarios.framework.runner --mode acceptance --target .
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-C01 --target .
 ```
 
-- unittest：资产完整性、严格比较、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝等 44 项检查；只证明判据能抓错误。
+- unittest：资产完整性、严格比较、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝等 47 项检查；只证明判据能抓错误。
 - `--mode assets`：只读清单/预期/夹具并校验；退出 0 仅表示资产自洽，不表示产品通过。
-- `--mode acceptance`：先校验资产，失败即拒绝执行；随后只为 READY 且目标含 `app/__main__.py` 的 F 变体创建隔离根并运行真实 `python -m app`。缺 app 退出 3；有 FAIL 退出 1；仅当全部 F 变体执行通过才退出 0，且 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`。
+- `--mode acceptance`：先校验资产，失败即拒绝执行；只为已实现里程碑的 READY F 变体创建隔离根并运行真实 `python -m app` 或 M0 协议边界替身。全量当前为 29 PASS、0 FAIL，但其余里程碑/ASSET_ONLY/设备门槛使总体 BLOCKED、退出 3；`--only SC-C` 的 M0 子集退出 0，`product_acceptance` 仍不是 PASS。
 - 报告 JSON 写入被忽略的 `data/evals/scenario-runs/`；不提交生成报告，不修改 `.gitignore`。
 
 ## 五、维护要求

@@ -1156,20 +1156,55 @@
           "id": "probe_timeout_protocol",
           "label": "真实探针 5 秒超时协议",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m0_protocol_probe.py --case timeout"
+          ],
           "fixture": null,
-          "setup": "代码审查/注入 subprocess 边界，不运行实际命令",
-          "required_api": "M0 真实探针命令数组与 shell=false 的可注入子进程边界",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-C03/probe_timeout_protocol",
           "device_gate": false,
           "assertions": [
+            "只替换 subprocess 设备边界，调用已交付 AdbDeviceProbe",
             "每条 adb 命令超时 5 秒且不重试",
             "参数数组、shell=false",
             "超时归 device_disconnected"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "device_disconnected"
+                  },
+                  {
+                    "path": "call_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "shell",
+                    "equals": false
+                  },
+                  {
+                    "path": "timeout_seconds",
+                    "equals": 5
+                  },
+                  {
+                    "path": "retried",
+                    "equals": false
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -1181,20 +1216,55 @@
           "id": "probe_nonzero_protocol",
           "label": "真实探针非零退出协议",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m0_protocol_probe.py --case nonzero"
+          ],
           "fixture": null,
-          "setup": "注入非零退出，不运行实际命令",
-          "required_api": "M0 可注入子进程边界",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-C03/probe_nonzero_protocol",
           "device_gate": false,
           "assertions": [
+            "注入非零退出，不运行实际命令",
             "远端非零退出归 device_disconnected",
             "不重放原命令",
             "不输出原始命令参数"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "device_disconnected"
+                  },
+                  {
+                    "path": "call_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "shell",
+                    "equals": false
+                  },
+                  {
+                    "path": "timeout_seconds",
+                    "equals": 5
+                  },
+                  {
+                    "path": "retried",
+                    "equals": false
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -1206,19 +1276,37 @@
           "id": "fixture_subprocess_zero",
           "label": "fixture 模式子进程为零",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "统计 doctor fixture 路径的子进程启动次数",
-          "required_api": "M0 子进程启动计数注入",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app doctor --fixture tests/scenarios/fixtures/m0/doctor/ready.json"
+          ],
+          "fixture": "fixtures/m0/doctor/ready.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-C03/fixture_subprocess_zero",
           "device_gate": false,
           "assertions": [
             "fixture 模式所有子进程启动次数为 0",
+            "隔离 tripwire 为空",
             "不以真实 ADB 存在与否改变结论"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_json_equals": {
+                  "schema_version": 1,
+                  "status": "ok",
+                  "reason_code": null,
+                  "device_count": 1,
+                  "selected_alias": "primary",
+                  "unlocked": true,
+                  "foreground_app": "boss"
+                }
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
