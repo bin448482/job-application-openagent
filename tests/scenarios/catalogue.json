@@ -1793,7 +1793,19 @@
                     "equals": 1
                   },
                   {
+                    "path": "steps.1.attempt_total",
+                    "equals": 1
+                  },
+                  {
+                    "path": "steps.1.event_counts.task_claimed",
+                    "equals": 1
+                  },
+                  {
                     "path": "steps.1.device.present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.1.device.owner_matches_task",
                     "equals": true
                   },
                   {
@@ -1896,7 +1908,19 @@
                     "equals": 2
                   },
                   {
+                    "path": "steps.1.attempt_total",
+                    "equals": 1
+                  },
+                  {
+                    "path": "steps.1.event_counts.task_claimed",
+                    "equals": 1
+                  },
+                  {
                     "path": "steps.1.device.present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.1.device.owner_matches_task",
                     "equals": true
                   },
                   {
@@ -1953,7 +1977,19 @@
                     "equals": "leased"
                   },
                   {
+                    "path": "steps.5.attempt_total",
+                    "equals": 1
+                  },
+                  {
+                    "path": "steps.5.event_counts.task_claimed",
+                    "equals": 1
+                  },
+                  {
                     "path": "steps.5.device.present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.5.device.owner_matches_task",
                     "equals": true
                   }
                 ]
@@ -2007,6 +2043,14 @@
                   {
                     "path": "steps.5.task.state",
                     "equals": "leased"
+                  },
+                  {
+                    "path": "steps.5.attempt_total",
+                    "equals": 1
+                  },
+                  {
+                    "path": "steps.5.device.owner_matches_task",
+                    "equals": true
                   }
                 ]
               }
@@ -2041,7 +2085,8 @@
         "old_nonce",
         "expired_lease",
         "duplicate_start",
-        "duplicate_finish"
+        "duplicate_finish",
+        "clock_changed"
       ],
       "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
@@ -2078,8 +2123,24 @@
                     "equals": true
                   },
                   {
+                    "path": "steps.5.expires_at",
+                    "equals": "2026-11-24T00:01:20.000Z"
+                  },
+                  {
+                    "path": "steps.6.task.lease_expires_at",
+                    "equals": "2026-11-24T00:01:20.000Z"
+                  },
+                  {
+                    "path": "steps.6.device.lease_expires_at",
+                    "equals": "2026-11-24T00:01:20.000Z"
+                  },
+                  {
                     "path": "steps.6.device.deadline_matches_task",
                     "equals": true
+                  },
+                  {
+                    "path": "steps.6.event_counts.lease_renewed",
+                    "equals": 1
                   }
                 ]
               }
@@ -2345,6 +2406,59 @@
           "observations_ref": null,
           "deferred_to": null,
           "module_evidence": null
+        },
+        {
+          "id": "clock_changed",
+          "label": "墙钟与单调钟偏差",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l03_clock_changed.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l03_clock_changed.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-L03/clock_changed",
+          "device_gate": false,
+          "assertions": [
+            "墙钟前进 20 秒但单调钟不动",
+            "clock_changed 停新动作",
+            "不改任务/设备"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.5.error",
+                    "equals": "clock_changed"
+                  },
+                  {
+                    "path": "steps.6.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.6.device.reservation_state",
+                    "equals": "held"
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
         }
       ]
     },
@@ -2368,7 +2482,8 @@
         "unknown",
         "permission_denied",
         "different_host",
-        "confirm_false"
+        "confirm_false",
+        "confirm_string_rejected"
       ],
       "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
@@ -2466,12 +2581,32 @@
                     "equals": "recovery_requires_reconciliation"
                   },
                   {
+                    "path": "steps.9.task.lease_fields_all_null",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.task.lease_fields_all_null",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.reservation_state",
                     "equals": "quarantined"
                   },
                   {
+                    "path": "steps.9.device.identity_fields_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.device.identity_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.identity_unchanged",
                     "equals": true
+                  },
+                  {
+                    "path": "steps.9.event_counts.lease_recovered",
+                    "equals": 1
                   }
                 ]
               }
@@ -2522,8 +2657,16 @@
                     "equals": "running"
                   },
                   {
+                    "path": "steps.9.task.lease_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.reservation_state",
                     "equals": "held"
+                  },
+                  {
+                    "path": "steps.9.device.identity_fields_present",
+                    "equals": true
                   },
                   {
                     "path": "steps.9.device.identity_unchanged",
@@ -2578,8 +2721,16 @@
                     "equals": "running"
                   },
                   {
+                    "path": "steps.9.task.lease_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.reservation_state",
                     "equals": "held"
+                  },
+                  {
+                    "path": "steps.9.device.identity_fields_present",
+                    "equals": true
                   },
                   {
                     "path": "steps.9.device.identity_unchanged",
@@ -2634,8 +2785,16 @@
                     "equals": "running"
                   },
                   {
+                    "path": "steps.9.task.lease_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.reservation_state",
                     "equals": "held"
+                  },
+                  {
+                    "path": "steps.9.device.identity_fields_present",
+                    "equals": true
                   },
                   {
                     "path": "steps.9.device.identity_unchanged",
@@ -2691,6 +2850,10 @@
                     "equals": "running"
                   },
                   {
+                    "path": "steps.9.task.lease_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.identity_unchanged",
                     "equals": true
                   }
@@ -2741,6 +2904,59 @@
                   {
                     "path": "steps.6.task.state",
                     "equals": "running"
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
+        },
+        {
+          "id": "confirm_string_rejected",
+          "label": "字符串 confirm_stopped 被拒绝",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m1_probe.py --request tests/scenarios/fixtures/m1/l04_confirm_string.json --db {db}"
+          ],
+          "fixture": "fixtures/m1/l04_confirm_string.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-L04/confirm_string_rejected",
+          "device_gate": false,
+          "assertions": [
+            "confirm_stopped 必须是 bool",
+            "invalid_input",
+            "不得强制转换后成功恢复"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "steps.5.error",
+                    "equals": "invalid_input"
+                  },
+                  {
+                    "path": "steps.6.task.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "steps.6.task.lease_fields_present",
+                    "equals": true
                   }
                 ]
               }
@@ -2817,16 +3033,28 @@
                     "equals": "blocked"
                   },
                   {
-                    "path": "steps.7.task.lease_fields_present",
-                    "equals": false
+                    "path": "steps.7.task.lease_fields_all_null",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.7.task.reason_code",
+                    "equals": "incomplete_snapshot"
                   },
                   {
                     "path": "steps.7.device.reservation_state",
                     "equals": "quarantined"
                   },
                   {
+                    "path": "steps.7.device.identity_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.7.device.identity_unchanged",
                     "equals": true
+                  },
+                  {
+                    "path": "steps.7.event_counts.task_finished",
+                    "equals": 1
                   }
                 ]
               }
@@ -2873,12 +3101,28 @@
                     "equals": "blocked"
                   },
                   {
+                    "path": "steps.7.task.lease_fields_all_null",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.7.task.reason_code",
+                    "equals": "result_unverified"
+                  },
+                  {
                     "path": "steps.7.device.reservation_state",
                     "equals": "quarantined"
                   },
                   {
+                    "path": "steps.7.device.identity_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.7.device.identity_unchanged",
                     "equals": true
+                  },
+                  {
+                    "path": "steps.7.event_counts.task_finished",
+                    "equals": 1
                   }
                 ]
               }
@@ -2938,8 +3182,32 @@
                     "equals": "held"
                   },
                   {
+                    "path": "steps.9.device.identity_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.identity_unchanged",
                     "equals": true
+                  },
+                  {
+                    "path": "steps.9.task_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.device_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.events_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.event_counts.task_finished",
+                    "equals": 0
+                  },
+                  {
+                    "path": "steps.9.event_counts.lease_recovered",
+                    "equals": 0
                   }
                 ]
               }
@@ -2999,8 +3267,32 @@
                     "equals": "held"
                   },
                   {
+                    "path": "steps.9.device.identity_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.identity_unchanged",
                     "equals": true
+                  },
+                  {
+                    "path": "steps.9.task_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.device_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.events_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.event_counts.task_finished",
+                    "equals": 0
+                  },
+                  {
+                    "path": "steps.9.event_counts.lease_recovered",
+                    "equals": 0
                   }
                 ]
               }
@@ -3060,8 +3352,32 @@
                     "equals": "held"
                   },
                   {
+                    "path": "steps.9.device.identity_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.identity_unchanged",
                     "equals": true
+                  },
+                  {
+                    "path": "steps.9.task_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.device_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.events_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.9.event_counts.task_finished",
+                    "equals": 0
+                  },
+                  {
+                    "path": "steps.9.event_counts.lease_recovered",
+                    "equals": 0
                   }
                 ]
               }
@@ -3116,7 +3432,23 @@
                     "equals": "running"
                   },
                   {
+                    "path": "steps.10.task.lease_fields_present",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.10.device.identity_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.10.task_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.10.device_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.10.events_unchanged_since_remember",
                     "equals": true
                   }
                 ]
@@ -3192,8 +3524,20 @@
                     "equals": "lease_busy"
                   },
                   {
+                    "path": "steps.10.task.lease_fields_all_null",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.10.device.reservation_state",
                     "equals": "quarantined"
+                  },
+                  {
+                    "path": "steps.10.device.identity_fields_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.10.event_counts.lease_recovered",
+                    "equals": 1
                   }
                 ]
               }
@@ -3314,8 +3658,16 @@
                     "equals": "lease_busy"
                   },
                   {
+                    "path": "steps.9.task.lease_fields_all_null",
+                    "equals": true
+                  },
+                  {
                     "path": "steps.9.device.reservation_state",
                     "equals": "quarantined"
+                  },
+                  {
+                    "path": "steps.9.device.identity_fields_present",
+                    "equals": true
                   }
                 ]
               }
@@ -3385,16 +3737,28 @@
                     "equals": "ok"
                   },
                   {
-                    "path": "steps.2.error",
+                    "path": "steps.3.error",
                     "equals": "invalid_input"
                   },
                   {
-                    "path": "steps.3.task_count",
+                    "path": "steps.4.task_count",
                     "equals": 0
                   },
                   {
-                    "path": "steps.3.device.present",
+                    "path": "steps.4.device.present",
                     "equals": false
+                  },
+                  {
+                    "path": "steps.4.task_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.4.device_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.4.events_unchanged_since_remember",
+                    "equals": true
                   }
                 ]
               }
@@ -3437,16 +3801,32 @@
                     "equals": "ok"
                   },
                   {
-                    "path": "steps.3.error",
+                    "path": "steps.4.error",
                     "equals": "invalid_input"
                   },
                   {
-                    "path": "steps.4.task.state",
+                    "path": "steps.5.task.state",
                     "equals": "queued"
                   },
                   {
-                    "path": "steps.4.task.attempt",
+                    "path": "steps.5.task.attempt",
                     "equals": 0
+                  },
+                  {
+                    "path": "steps.5.attempt_total",
+                    "equals": 0
+                  },
+                  {
+                    "path": "steps.5.task_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.5.device_unchanged_since_remember",
+                    "equals": true
+                  },
+                  {
+                    "path": "steps.5.events_unchanged_since_remember",
+                    "equals": true
                   }
                 ]
               }

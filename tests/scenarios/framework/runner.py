@@ -468,80 +468,130 @@ def _run_concurrent(
     run_id: str,
     timeout: int = 30,
 ) -> list[dict[str, Any]]:
-    """父 runner 只并发启动两个隔离探针；子进程 tripwire 仍禁设备/网络/孙进程。"""
+    """父 runner 只并发启动两个隔离探针；任何失败都必须显式 FAIL 并清理。"""
     if len(commands) != 2:
         raise IsolationError("并发组只允许恰好两个子进程")
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 120:
+        raise IsolationError("并发超时必须为 1–120 秒整数")
+    for command in commands:
+        if not (
+            command.startswith("python -m app ")
+            or command.startswith(f"python {M0_PROBE_PATH} ")
+            or command.startswith(f"python {M1_PROBE_PATH} ")
+        ):
+            raise IsolationError("并发子进程命令不在白名单")
     barrier = root / "barrier"
     if barrier.exists():
         shutil.rmtree(barrier)
     barrier.mkdir()
-    processes = []
-    for index, command in enumerate(commands):
-        tokens = shlex.split(command, posix=True)
-        if not tokens or tokens[0] != "python":
-            raise IsolationError("并发子进程必须以 python 入口")
-        env = _isolation_env(root, f"-c{index}")
-        env.update({"M1_BARRIER_DIR": str(barrier), "M1_BARRIER_NAME": str(index)})
-        processes.append(
-            subprocess.Popen(
-                [sys.executable] + tokens[1:],
-                cwd=root,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                shell=False,
-            )
-        )
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if all((barrier / f"{index}.ready").is_file() for index in range(len(processes))):
-            break
-        if any(process.poll() is not None for process in processes):
-            break
-        time.sleep(0.02)
-    (barrier / "go").write_text("go", encoding="utf-8")
+    processes: list[subprocess.Popen] = []
     results: list[dict[str, Any]] = []
-    for index, process in enumerate(processes):
-        try:
-            stdout, stderr = process.communicate(timeout=max(1, deadline - time.monotonic()))
-        except subprocess.TimeoutExpired:
-            process.kill()
-            stdout, stderr = process.communicate()
+    failure: str | None = None
+    try:
+        for index, command in enumerate(commands):
+            tokens = shlex.split(command, posix=True)
+            env = _isolation_env(root, f"-c{index}")
+            env.update({"M1_BARRIER_DIR": str(barrier), "M1_BARRIER_NAME": str(index)})
+            try:
+                processes.append(
+                    subprocess.Popen(
+                        [sys.executable] + tokens[1:],
+                        cwd=root,
+                        env=env,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        shell=False,
+                    )
+                )
+            except OSError as error:
+                failure = f"spawn_failed:{type(error).__name__}"
+                break
+        if failure is None:
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                if all((barrier / f"{index}.ready").is_file() for index in range(2)):
+                    break
+                if any(process.poll() is not None for process in processes):
+                    failure = "barrier_incomplete"
+                    break
+                time.sleep(0.02)
+            else:
+                failure = "barrier_timeout"
+            if len(processes) != 2:
+                failure = failure or "spawn_failed"
+            if failure is not None:
+                for process in processes:
+                    if process.poll() is None:
+                        process.terminate()
+            else:
+                (barrier / "go").write_text("go", encoding="utf-8")
+        for index, command in enumerate(commands):
+            if index >= len(processes):
+                results.append(
+                    {
+                        "command": command,
+                        "exit_code": None,
+                        "stdout_json": None,
+                        "stdout_json_ok": False,
+                        "stdout_text": "",
+                        "stderr": "",
+                        "error": failure or "spawn_failed",
+                    }
+                )
+                continue
+            process = processes[index]
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+                results.append(
+                    {
+                        "command": command,
+                        "exit_code": None,
+                        "stdout_json": None,
+                        "stdout_json_ok": False,
+                        "stdout_text": stdout,
+                        "stderr": stderr,
+                        "error": "TimeoutExpired",
+                    }
+                )
+                continue
+            payload, ok = _parse_stdout(stdout)
             results.append(
                 {
-                    "command": commands[index],
-                    "exit_code": None,
-                    "stdout_json": None,
-                    "stdout_json_ok": False,
+                    "command": command,
+                    "exit_code": process.returncode,
+                    "stdout_json": payload,
+                    "stdout_json_ok": ok,
                     "stdout_text": stdout,
                     "stderr": stderr,
-                    "error": "TimeoutExpired",
+                    "error": failure if failure is not None else None,
                 }
             )
-            continue
-        payload, ok = _parse_stdout(stdout)
-        results.append(
-            {
-                "command": commands[index],
-                "exit_code": process.returncode,
-                "stdout_json": payload,
-                "stdout_json_ok": ok,
-                "stdout_text": stdout,
-                "stderr": stderr,
-                "error": None,
-            }
-        )
-    for index in range(len(processes)):
-        tripwire = root / f"tripwire-c{index}.log"
-        if tripwire.is_file() and tripwire.read_text(encoding="utf-8").strip():
-            kinds = sorted(
-                {line.strip() for line in tripwire.read_text(encoding="utf-8").splitlines() if line.strip()}
-            )
-            results[index]["error"] = f"意外边界调用: {', '.join(kinds)}"
-    return results
+        for index in range(len(processes)):
+            tripwire = root / f"tripwire-c{index}.log"
+            if tripwire.is_file() and tripwire.read_text(encoding="utf-8").strip():
+                kinds = sorted(
+                    {line.strip() for line in tripwire.read_text(encoding="utf-8").splitlines() if line.strip()}
+                )
+                if index < len(results):
+                    results[index]["error"] = f"意外边界调用: {', '.join(kinds)}"
+        return results
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+            try:
+                process.communicate(timeout=2)
+            except Exception:
+                pass
 
 
 def _variant_status(scenario: dict[str, Any], variant: dict[str, Any], target: Path) -> str:

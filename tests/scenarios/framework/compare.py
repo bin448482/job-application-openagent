@@ -114,6 +114,8 @@ def compare_invocation(
 ) -> list[str]:
     """比较一次子进程调用的退出码、JSON 类型与 stdout 断言。"""
     errors: list[str] = []
+    if result.get("error"):
+        errors.append(f"执行错误: {result['error']}")
     exit_expectation = acceptance.get("exit_code")
     if exit_expectation is not None and result.get("exit_code") != exit_expectation:
         errors.append(f"退出码期望 {exit_expectation}，实际 {result.get('exit_code')}")

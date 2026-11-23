@@ -1967,7 +1967,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
 
     l02_verify = m1_ok(
         step(1, "leased_count", 1),
+        step(1, "attempt_total", 1),
+        step(1, "event_counts.task_claimed", 1),
         step(1, "device.present", True),
+        step(1, "device.owner_matches_task", True),
         step(1, "device.deadline_matches_task", True),
     )
     l02_child_ok = {
@@ -2006,7 +2009,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     step(1, "leased_count", 1),
                     step(1, "queued_count", 1),
                     step(1, "task_count", 2),
+                    step(1, "attempt_total", 1),
+                    step(1, "event_counts.task_claimed", 1),
                     step(1, "device.present", True),
+                    step(1, "device.owner_matches_task", True),
                     step(1, "device.deadline_matches_task", True),
                 ),
             ),
@@ -2019,7 +2025,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     m1_ok(
                         step(4, "error", "lease_busy"),
                         step(5, "task.state", "leased"),
+                        step(5, "attempt_total", 1),
+                        step(5, "event_counts.task_claimed", 1),
                         step(5, "device.present", True),
+                        step(5, "device.owner_matches_task", True),
                     )
                 ],
             ),
@@ -2033,6 +2042,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                         step(4, "error", "lease_busy"),
                         step(5, "device.present", True),
                         step(5, "task.state", "leased"),
+                        step(5, "attempt_total", 1),
+                        step(5, "device.owner_matches_task", True),
                     )
                 ],
             ),
@@ -2053,7 +2064,11 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 acceptance_steps=[
                     m1_ok(
                         step(5, "advanced", True),
+                        step(5, "expires_at", "2026-11-24T00:01:20.000Z"),
+                        step(6, "task.lease_expires_at", "2026-11-24T00:01:20.000Z"),
+                        step(6, "device.lease_expires_at", "2026-11-24T00:01:20.000Z"),
                         step(6, "device.deadline_matches_task", True),
+                        step(6, "event_counts.lease_renewed", 1),
                     )
                 ],
             ),
@@ -2120,6 +2135,19 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     )
                 ],
             ),
+            m1_ready(
+                "clock_changed",
+                label="墙钟与单调钟偏差",
+                names=["l03_clock_changed"],
+                assertions=["墙钟前进 20 秒但单调钟不动", "clock_changed 停新动作", "不改任务/设备"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(5, "error", "clock_changed"),
+                        step(6, "task.state", "running"),
+                        step(6, "device.reservation_state", "held"),
+                    )
+                ],
+            ),
         ],
     )
 
@@ -2152,8 +2180,13 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                         step(8, "task_state", "blocked"),
                         step(9, "task.state", "blocked"),
                         step(9, "task.reason_code", "recovery_requires_reconciliation"),
+                        step(9, "task.lease_fields_all_null", True),
+                        step(9, "task.lease_fields_all_null", True),
                         step(9, "device.reservation_state", "quarantined"),
+                        step(9, "device.identity_fields_present", True),
+                        step(9, "device.identity_fields_present", True),
                         step(9, "device.identity_unchanged", True),
+                        step(9, "event_counts.lease_recovered", 1),
                     )
                 ],
             ),
@@ -2167,7 +2200,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                         m1_ok(
                             step(8, "error", "owner_not_stopped"),
                             step(9, "task.state", "running"),
+                            step(9, "task.lease_fields_present", True),
                             step(9, "device.reservation_state", "held"),
+                            step(9, "device.identity_fields_present", True),
                             step(9, "device.identity_unchanged", True),
                         )
                     ],
@@ -2187,6 +2222,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     m1_ok(
                         step(8, "error", "owner_not_stopped"),
                         step(9, "task.state", "running"),
+                        step(9, "task.lease_fields_present", True),
                         step(9, "device.identity_unchanged", True),
                     )
                 ],
@@ -2200,6 +2236,19 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     m1_ok(
                         step(5, "error", "owner_not_stopped"),
                         step(6, "task.state", "running"),
+                    )
+                ],
+            ),
+            m1_ready(
+                "confirm_string_rejected",
+                label="字符串 confirm_stopped 被拒绝",
+                names=["l04_confirm_string"],
+                assertions=["confirm_stopped 必须是 bool", "invalid_input", "不得强制转换后成功恢复"],
+                acceptance_steps=[
+                    m1_ok(
+                        step(5, "error", "invalid_input"),
+                        step(6, "task.state", "running"),
+                        step(6, "task.lease_fields_present", True),
                     )
                 ],
             ),
@@ -2221,9 +2270,12 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     m1_ok(
                         step(6, "result", "updated"),
                         step(7, "task.state", "blocked"),
-                        step(7, "task.lease_fields_present", False),
+                        step(7, "task.lease_fields_all_null", True),
+                        step(7, "task.reason_code", "incomplete_snapshot"),
                         step(7, "device.reservation_state", "quarantined"),
+                        step(7, "device.identity_fields_present", True),
                         step(7, "device.identity_unchanged", True),
+                        step(7, "event_counts.task_finished", 1),
                     )
                 ],
             ),
@@ -2235,8 +2287,12 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 acceptance_steps=[
                     m1_ok(
                         step(7, "task.state", "blocked"),
+                        step(7, "task.lease_fields_all_null", True),
+                        step(7, "task.reason_code", "result_unverified"),
                         step(7, "device.reservation_state", "quarantined"),
+                        step(7, "device.identity_fields_present", True),
                         step(7, "device.identity_unchanged", True),
+                        step(7, "event_counts.task_finished", 1),
                     )
                 ],
             ),
@@ -2252,7 +2308,13 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                             step(9, "task.state", "running"),
                             step(9, "task.lease_fields_present", True),
                             step(9, "device.reservation_state", "held"),
+                            step(9, "device.identity_fields_present", True),
                             step(9, "device.identity_unchanged", True),
+                            step(9, "task_unchanged_since_remember", True),
+                            step(9, "device_unchanged_since_remember", True),
+                            step(9, "events_unchanged_since_remember", True),
+                            step(9, "event_counts.task_finished", 0),
+                            step(9, "event_counts.lease_recovered", 0),
                         )
                     ],
                 )
@@ -2272,7 +2334,11 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                         step(8, "error", "store_io_error"),
                         step(9, "error", "lease_busy"),
                         step(10, "task.state", "running"),
+                        step(10, "task.lease_fields_present", True),
                         step(10, "device.identity_unchanged", True),
+                        step(10, "task_unchanged_since_remember", True),
+                        step(10, "device_unchanged_since_remember", True),
+                        step(10, "events_unchanged_since_remember", True),
                     )
                 ],
             ),
@@ -2294,7 +2360,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                     m1_ok(
                         step(8, "task_state", "blocked"),
                         step(9, "error", "lease_busy"),
+                        step(10, "task.lease_fields_all_null", True),
                         step(10, "device.reservation_state", "quarantined"),
+                        step(10, "device.identity_fields_present", True),
+                        step(10, "event_counts.lease_recovered", 1),
                     )
                 ],
             ),
@@ -2327,7 +2396,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 acceptance_steps=[
                     m1_ok(
                         step(8, "error", "lease_busy"),
+                        step(9, "task.lease_fields_all_null", True),
                         step(9, "device.reservation_state", "quarantined"),
+                        step(9, "device.identity_fields_present", True),
                     )
                 ],
             ),
@@ -2347,9 +2418,12 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 assertions=["invalid_input 整批回滚", "不放宽 app CHECK"],
                 acceptance_steps=[
                     m1_ok(
-                        step(2, "error", "invalid_input"),
-                        step(3, "task_count", 0),
-                        step(3, "device.present", False),
+                        step(3, "error", "invalid_input"),
+                        step(4, "task_count", 0),
+                        step(4, "device.present", False),
+                        step(4, "task_unchanged_since_remember", True),
+                        step(4, "device_unchanged_since_remember", True),
+                        step(4, "events_unchanged_since_remember", True),
                     )
                 ],
             ),
@@ -2360,9 +2434,13 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 assertions=["invalid_input", "STRICT 类型不被 bool 绕过"],
                 acceptance_steps=[
                     m1_ok(
-                        step(3, "error", "invalid_input"),
-                        step(4, "task.state", "queued"),
-                        step(4, "task.attempt", 0),
+                        step(4, "error", "invalid_input"),
+                        step(5, "task.state", "queued"),
+                        step(5, "task.attempt", 0),
+                        step(5, "attempt_total", 0),
+                        step(5, "task_unchanged_since_remember", True),
+                        step(5, "device_unchanged_since_remember", True),
+                        step(5, "events_unchanged_since_remember", True),
                     )
                 ],
             ),

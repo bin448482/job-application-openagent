@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -53,6 +54,65 @@ class ProbeError(RuntimeError):
     """表示脚本或合成输入不满足受控探针协议。"""
 
 
+def _is_link_like(path: Path) -> bool:
+    """识别 symlink 与 Windows junction。"""
+    if path.is_symlink():
+        return True
+    is_junction = getattr(path, "is_junction", None)
+    return bool(callable(is_junction) and is_junction())
+
+
+def _reject_links_to(path: Path, root: Path, label: str) -> None:
+    """拒绝从根到目标的父路径链接/junction，防止越过隔离根。"""
+    current = path
+    while True:
+        if _is_link_like(current):
+            raise ProbeError(f"{label} 路径含链接或 junction")
+        if current == root or current.parent == current:
+            break
+        current = current.parent
+
+
+def _relative_path(value: str, root: Path, label: str, *, must_exist: bool) -> Path:
+    """只接受隔离根内相对路径；拒绝绝对、..、链接与越界。"""
+    if not isinstance(value, str) or not value:
+        raise ProbeError(f"{label} 必须是非空相对路径")
+    candidate = Path(value)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ProbeError(f"{label} 不得是绝对路径或包含 ..")
+    resolved = (root / candidate).resolve()
+    if not _within(resolved, root):
+        raise ProbeError(f"{label} 解析后越出隔离根")
+    _reject_links_to(resolved.parent, root, label)
+    if must_exist and not resolved.is_file():
+        raise ProbeError(f"{label} 不存在")
+    return resolved
+
+
+def _within(child: Path, parent: Path) -> bool:
+    """判断解析后路径是否仍在父目录内。"""
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _barrier_paths(root: Path) -> tuple[Path, str]:
+    """校验父 runner 注入的 barrier 目录与名称；只允许根内绝对目录与 0/1。"""
+    directory_value = os.environ.get("M1_BARRIER_DIR")
+    name = os.environ.get("M1_BARRIER_NAME")
+    if not directory_value or not name:
+        raise ProbeError("barrier 环境缺失")
+    if re.fullmatch(r"[01]", name) is None:
+        raise ProbeError("barrier 名称必须为 0 或 1")
+    directory = Path(directory_value).resolve()
+    if not _within(directory, root) or not directory.is_dir():
+        raise ProbeError("barrier 目录越界或不存在")
+    _reject_links_to(directory, root, "barrier")
+    return directory, name
+
+
 class FakeClock:
     """同时推进墙钟与单调时钟，避免合成 now 被误判 clock_changed。"""
 
@@ -61,10 +121,13 @@ class FakeClock:
         self._wall = parse_utc(start)
         self._mono = 100.0
 
-    def set_now(self, now: str) -> None:
-        """把墙钟设为给定 UTC；单调钟按同一差值推进。"""
+    def set_now(self, now: str, mono_delta: float | None = None) -> None:
+        """推进墙钟；默认单调钟同步，显式 mono_delta 可制造双钟偏差。"""
         target = parse_utc(now)
-        self._mono += (target - self._wall).total_seconds()
+        delta = (target - self._wall).total_seconds()
+        if delta < 0:
+            raise ProbeError("墙钟不得回退")
+        self._mono += delta if mono_delta is None else mono_delta
         self._wall = target
 
     def monotonic(self) -> float:
@@ -227,7 +290,48 @@ def _device_digest(db_path: Path) -> str | None:
         connection.close()
 
 
-def _inspect(store: SqliteStore, db_path: Path, remembered_digest: str | None) -> dict:
+def _capture_state(db_path: Path) -> dict:
+    """只读捕获任务/设备/事件的完整签名，供失败回滚与拒绝调用比较。"""
+    connection = _read_connection(db_path)
+    try:
+        tasks = connection.execute(
+            "SELECT state, attempt, reason_code, lease_owner, owner_pid, owner_host, "
+            'nonce, lease_expires_at, conversation_key FROM hr_discoveries ORDER BY "key"'
+        ).fetchall()
+        device = connection.execute(
+            "SELECT reservation_state, lease_owner, owner_pid, owner_host, nonce, lease_expires_at "
+            "FROM device_lease WHERE device_key='primary'"
+        ).fetchone()
+        events = [
+            [str(row[0]), row[1]]
+            for row in connection.execute(
+                "SELECT event, reason_code FROM events ORDER BY event_id"
+            ).fetchall()
+        ]
+        task_rows = [list(row) for row in tasks]
+        device_row = list(device) if device is not None else None
+        return {
+            "task_signature": canonical_hash(task_rows),
+            "task_count": len(task_rows),
+            "device_signature": None if device_row is None else canonical_hash(device_row),
+            "device_digest": (
+                None
+                if device_row is None
+                else canonical_hash([device_row[1], device_row[2], device_row[3], device_row[4], device_row[5]])
+            ),
+            "event_signature": canonical_hash(events),
+            "event_count": len(events),
+        }
+    finally:
+        connection.close()
+
+
+def _inspect(
+    store: SqliteStore,
+    db_path: Path,
+    remembered_digest: str | None,
+    remembered_state: dict | None,
+) -> dict:
     """按固定只读白名单返回任务/设备/事件摘要，不接受任意 SQL。"""
     connection = _read_connection(db_path)
     try:
@@ -245,32 +349,91 @@ def _inspect(store: SqliteStore, db_path: Path, remembered_digest: str | None) -
                 "SELECT event, reason_code FROM events ORDER BY event_id"
             ).fetchall()
         ]
+        event_counts: dict[str, int] = {
+            name: 0
+            for name in (
+                "snapshot_upserted",
+                "candidate_superseded",
+                "candidate_deferred",
+                "task_claimed",
+                "task_started",
+                "lease_renewed",
+                "task_finished",
+                "lease_recovered",
+            )
+        }
+        for event in events:
+            event_counts[event["event"]] = event_counts.get(event["event"], 0) + 1
         task_views = []
         for task in tasks:
-            fields = [task[3], task[4], task[5], task[6], task[7]]
+            lease_fields = {
+                "lease_owner": task[3] is not None,
+                "owner_pid": task[4] is not None,
+                "owner_host": task[5] is not None,
+                "nonce": task[6] is not None,
+                "lease_expires_at": task[7] is not None,
+            }
             task_views.append(
                 {
                     "state": task[0],
                     "attempt": task[1],
                     "reason_code": task[2],
-                    "lease_fields_present": all(value is not None for value in fields),
+                    "lease_fields": lease_fields,
+                    "lease_fields_present": all(lease_fields.values()),
+                    "lease_fields_all_null": not any(lease_fields.values()),
+                    "lease_expires_at": task[7],
                     "conversation_key_present": task[8] is not None,
                 }
             )
         device_view: dict = {"present": False}
         if device is not None:
-            digest = canonical_hash([device[1], device[2], device[3], device[4], device[5]])
+            device_fields = [device[1], device[2], device[3], device[4], device[5]]
+            digest = canonical_hash(device_fields)
+            owner_matches_task = any(
+                task[3] == device[1]
+                and task[4] == device[2]
+                and task[5] == device[3]
+                and task[6] == device[4]
+                and task[7] == device[5]
+                for task in tasks
+            )
             device_view = {
                 "present": True,
                 "reservation_state": device[0],
                 "identity_digest": digest,
+                "identity_fields_present": all(value is not None for value in device_fields),
                 "identity_unchanged": (
                     None if remembered_digest is None else digest == remembered_digest
                 ),
+                "owner_matches_task": owner_matches_task,
                 "deadline_matches_task": any(
                     task[6] is not None and str(task[7]) == str(device[5])
                     for task in tasks
                 ),
+                "lease_expires_at": device[5],
+            }
+        task_rows = [list(row) for row in tasks]
+        task_signature = canonical_hash(task_rows)
+        event_signature = canonical_hash(
+            [[event["event"], event["reason_code"]] for event in events]
+        )
+        current_state = {
+            "task_signature": task_signature,
+            "device_signature": None if device is None else canonical_hash(list(device)),
+            "event_signature": event_signature,
+            "event_count": len(events),
+        }
+        comparisons = {
+            "task_unchanged_since_remember": None,
+            "device_unchanged_since_remember": None,
+            "events_unchanged_since_remember": None,
+        }
+        if remembered_state is not None:
+            comparisons = {
+                "task_unchanged_since_remember": task_signature == remembered_state["task_signature"],
+                "device_unchanged_since_remember": current_state["device_signature"]
+                == remembered_state["device_signature"],
+                "events_unchanged_since_remember": event_signature == remembered_state["event_signature"],
             }
         unresolved = store.unresolved_conversations("boss")
         return {
@@ -278,21 +441,23 @@ def _inspect(store: SqliteStore, db_path: Path, remembered_digest: str | None) -
             "task_count": len(task_views),
             "queued_count": sum(1 for task in task_views if task["state"] == "queued"),
             "leased_count": sum(1 for task in task_views if task["state"] == "leased"),
+            "attempt_total": sum(int(task["attempt"]) for task in task_views),
             "task": task_views[0] if task_views else None,
             "tasks": task_views,
             "device": device_view,
             "events": events,
+            "event_counts": event_counts,
+            "event_count": len(events),
             "unresolved_count": len(unresolved),
+            **comparisons,
         }
     finally:
         connection.close()
 
 
-def _barrier_wait() -> None:
+def _barrier_wait(root: Path) -> None:
     """写 ready 文件并等待父 runner 的 go 文件，超时则失败。"""
-    directory = Path(os.environ["M1_BARRIER_DIR"])
-    name = os.environ["M1_BARRIER_NAME"]
-    directory.mkdir(parents=True, exist_ok=True)
+    directory, name = _barrier_paths(root)
     (directory / f"{name}.ready").write_text("ready", encoding="utf-8")
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
@@ -302,19 +467,20 @@ def _barrier_wait() -> None:
     raise ProbeError("barrier timeout")
 
 
-def _hold_lock(db_path: Path) -> dict:
+def _hold_lock(db_path: Path, root: Path) -> dict:
     """直接持合成库写锁，供 busy_timeout 场景使用；不改业务行。"""
+    directory, _ = _barrier_paths(root)
     connection = sqlite3.connect(str(db_path), timeout=5)
     try:
-        ready_peer = Path(os.environ["M1_BARRIER_DIR"]) / "1.ready"
+        ready_peer = directory / "1.ready"
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline and not ready_peer.is_file():
             time.sleep(0.02)
         connection.execute("BEGIN IMMEDIATE")
-        _barrier_wait()
+        _barrier_wait(root)
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
-            if (Path(os.environ["M1_BARRIER_DIR"]) / "release").is_file():
+            if (directory / "release").is_file():
                 break
             time.sleep(0.02)
         connection.execute("ROLLBACK")
@@ -364,19 +530,22 @@ def _prepare(db_path: Path, mode: str, value: object) -> dict:
     return {"prepared": mode}
 
 
-def run_request(request: dict, db_path: Path) -> dict:
+def run_request(request: dict, db_path: Path, root: Path) -> dict:
     """按脚本顺序执行受控操作；预期 StoreError 作为数据返回。"""
-    db_path = db_path.resolve()
     steps = request.get("steps")
     if not isinstance(steps, list) or not steps:
         raise ProbeError("steps must be non-empty")
-    log_path = Path(request.get("log_path") or f"{db_path}.probe-{uuid.uuid4().hex}.jsonl")
+    log_value = request.get("log_path")
+    if log_value is None:
+        log_value = f"{db_path.relative_to(root).as_posix()}.probe-{uuid.uuid4().hex}.jsonl"
+    log_path = _relative_path(str(log_value), root, "log_path", must_exist=False)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     clock = FakeClock(request.get("start_at", BASE_TIME))
     store: SqliteStore | None = None
     lease: Lease | None = None
     previous_lease: Lease | None = None
     remembered_digest: str | None = None
+    remembered_state: dict | None = None
     stop_mode = "stopped"
     store_fault = None
     results: list[dict] = []
@@ -400,14 +569,15 @@ def run_request(request: dict, db_path: Path) -> dict:
         op = step["op"]
         now = step.get("now")
         if isinstance(now, str):
-            clock.set_now(now)
+            clock.set_now(now, step.get("mono_delta"))
         try:
             if op == "barrier":
-                _barrier_wait()
+                _barrier_wait(root)
                 result = {"barrier": "passed"}
                 last_outcome = "barrier_passed"
             elif op == "release":
-                (Path(os.environ["M1_BARRIER_DIR"]) / "release").write_text("release", encoding="utf-8")
+                directory, _ = _barrier_paths(root)
+                (directory / "release").write_text("release", encoding="utf-8")
                 result = {"released": True}
                 last_outcome = "released"
             elif op == "init":
@@ -425,7 +595,7 @@ def run_request(request: dict, db_path: Path) -> dict:
                 result = _prepare(db_path, str(step.get("mode")), step.get("value"))
                 last_outcome = "prepared"
             elif op == "hold_lock":
-                result = _hold_lock(db_path)
+                result = _hold_lock(db_path, root)
                 last_outcome = "lock_held"
             elif op == "open":
                 stop_mode = str(step.get("stop_mode", "stopped"))
@@ -563,7 +733,7 @@ def run_request(request: dict, db_path: Path) -> dict:
                         nonce=active.nonce,
                         expires_at=active.expires_at,
                     )
-                result = store.recover(active, bool(step.get("confirm_stopped")), now or BASE_TIME)
+                result = store.recover(active, step.get("confirm_stopped"), now or BASE_TIME)
                 last_outcome = result.get("task_state", "recovered")
                 lease = None
             elif op == "inspect_raw":
@@ -573,10 +743,15 @@ def run_request(request: dict, db_path: Path) -> dict:
                 remembered_digest = _device_digest(db_path)
                 result = {"remembered": remembered_digest is not None}
                 last_outcome = "device_remembered"
+            elif op == "remember_state":
+                remembered_state = _capture_state(db_path)
+                remembered_digest = remembered_state["device_digest"]
+                result = {"remembered": True}
+                last_outcome = "state_remembered"
             elif op == "inspect":
                 if store is None:
                     raise ProbeError("store not open")
-                result = _inspect(store, db_path, remembered_digest)
+                result = _inspect(store, db_path, remembered_digest, remembered_state)
                 last_outcome = "inspected"
             elif op == "close":
                 if store is not None:
@@ -607,8 +782,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", required=True)
     args = parser.parse_args(argv)
     try:
-        request = json.loads(Path(args.request).read_text(encoding="utf-8"))
-        result = run_request(request, Path(args.db))
+        root = Path.cwd().resolve()
+        request_path = _relative_path(args.request, root, "request", must_exist=True)
+        db_path = _relative_path(args.db, root, "db", must_exist=False)
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+        result = run_request(request, db_path, root)
         code = 0
     except Exception as exc:  # noqa: BLE001 - 探针边界不输出 traceback/路径
         result = {

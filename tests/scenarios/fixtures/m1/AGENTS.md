@@ -18,6 +18,7 @@
 - `l02_setup_two.json`：合成输入文件。
 - `l02_ttl.json`：合成输入文件。
 - `l02_verify.json`：合成输入文件。
+- `l03_clock_changed.json`：合成输入文件。
 - `l03_duplicate_finish.json`：合成输入文件。
 - `l03_duplicate_start.json`：合成输入文件。
 - `l03_expired.json`：合成输入文件。
@@ -26,6 +27,7 @@
 - `l03_renew.json`：合成输入文件。
 - `l04_alive.json`：合成输入文件。
 - `l04_confirm_false.json`：合成输入文件。
+- `l04_confirm_string.json`：合成输入文件。
 - `l04_different_host.json`：合成输入文件。
 - `l04_leased_stopped.json`：合成输入文件。
 - `l04_permission.json`：合成输入文件。

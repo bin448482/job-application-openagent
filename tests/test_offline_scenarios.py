@@ -23,7 +23,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from scenarios.framework import model, m0_protocol_probe, replay, runner  # noqa: E402
+from scenarios.framework import m0_protocol_probe, m1_probe, model, replay, runner  # noqa: E402
 from scenarios.framework.compare import compare_invocation, compare_step, strict_equal  # noqa: E402
 
 SCENARIO_ROOT = TESTS_DIR / "scenarios"
@@ -788,6 +788,162 @@ class P2M0BindingTests(unittest.TestCase):
         self.assertEqual(result["reason_code"], "device_disconnected")
         self.assertEqual(result["call_count"], 1)
         self.assertFalse(result["retried"])
+
+
+class M1DriverBoundaryTests(unittest.TestCase):
+    """验证 M1 探针路径边界、并发出错清理与关键判据 mutation。"""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """加载资产供 oracle 结构断言。"""
+        cls.assets = load_assets()
+
+    def test_m1_probe_rejects_parent_path_without_creating_file(self) -> None:
+        """db/request 的 .. 路径必须在读取/写入前拒绝。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self.assertRaises(Exception):
+                m1_probe._relative_path("../escaped.sqlite3", root, "db", must_exist=False)
+            self.assertFalse((root.parent / "escaped.sqlite3").exists())
+
+    def test_fake_clock_rejects_backward_and_allows_independent_mono(self) -> None:
+        """墙钟不得回退；mono_delta 可独立推进以制造 clock_changed 刺激。"""
+        clock = m1_probe.FakeClock("2026-11-24T00:00:00.000Z")
+        with self.assertRaises(Exception):
+            clock.set_now("2026-11-23T23:59:59.000Z")
+        before = clock.monotonic()
+        clock.set_now("2026-11-24T00:00:20.000Z", mono_delta=0.0)
+        self.assertEqual(clock.monotonic(), before)
+
+    def test_concurrent_spawn_failure_cleans_started_child(self) -> None:
+        """第二个 Popen 失败时必须终止/回收第一个子进程且不写 go。"""
+        class FakeProcess:
+            """最小 Popen 替身，记录终止与通信调用。"""
+
+            def __init__(self) -> None:
+                """初始化调用计数。"""
+                self.terminate_calls = 0
+                self.kill_calls = 0
+                self.communicate_calls = 0
+                self.returncode = None
+
+            def poll(self):
+                """模拟子进程仍在运行。"""
+                return None
+
+            def terminate(self) -> None:
+                """记录 terminate。"""
+                self.terminate_calls += 1
+
+            def kill(self) -> None:
+                """记录 kill。"""
+                self.kill_calls += 1
+
+            def communicate(self, timeout=None):
+                """返回空管道，模拟已回收。"""
+                self.communicate_calls += 1
+                return "", ""
+
+        fake = FakeProcess()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch.object(runner.subprocess, "Popen", side_effect=[fake, OSError("spawn")]):
+                results = runner._run_concurrent(
+                    [
+                        "python tests/scenarios/framework/m1_probe.py --request a --db x",
+                        "python tests/scenarios/framework/m1_probe.py --request b --db x",
+                    ],
+                    root,
+                    "run-test",
+                    timeout=5,
+                )
+            self.assertTrue(all(item["error"] for item in results))
+            self.assertTrue(fake.terminate_calls or fake.kill_calls)
+            self.assertGreaterEqual(fake.communicate_calls, 1)
+            self.assertFalse((root / "barrier" / "go").exists())
+
+    def test_concurrent_early_exit_is_fail_without_go(self) -> None:
+        """子进程提前退出且无 ready 文件时不得置 go/返回成功。"""
+        class ExitedProcess:
+            """模拟已退出且没有 ready 文件的 Popen。"""
+
+            def __init__(self) -> None:
+                """初始化通信计数。"""
+                self._communicated = False
+                self.returncode = 0
+
+            def poll(self):
+                """报告进程已退出。"""
+                return 0
+
+            def kill(self) -> None:
+                """已退出时无需 kill。"""
+                return None
+
+            def communicate(self, timeout=None):
+                """返回退出输出。"""
+                if self._communicated:
+                    return "", ""
+                self._communicated = True
+                return "", ""
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            processes = [ExitedProcess(), ExitedProcess()]
+            with mock.patch.object(runner.subprocess, "Popen", side_effect=processes):
+                results = runner._run_concurrent(
+                    [
+                        "python tests/scenarios/framework/m1_probe.py --request a --db x",
+                        "python tests/scenarios/framework/m1_probe.py --request b --db x",
+                    ],
+                    root,
+                    "run-test",
+                    timeout=5,
+                )
+            self.assertTrue(all(item["error"] for item in results))
+            self.assertFalse((root / "barrier" / "go").exists())
+
+    def test_oracles_reject_missing_event_attempt_and_partial_lease(self) -> None:
+        """关键 oracle 必须能抓住漏事件、attempt 误增与部分租约残留。"""
+        l05 = self.assets.oracles["variants"]["SC-L05/finish_undetermined"]["acceptance"]
+        l02 = self.assets.oracles["variants"]["SC-L02/same_task_claim"]["acceptance"]
+        l05_text = json.dumps(l05, ensure_ascii=False)
+        l02_text = json.dumps(l02, ensure_ascii=False)
+        self.assertIn("lease_fields_all_null", l05_text)
+        self.assertIn("task_finished", l05_text)
+        self.assertIn("attempt_total", l02_text)
+        step_expect = {
+            "stdout_paths": [
+                {"path": "steps.7.task.lease_fields_all_null", "equals": True},
+                {"path": "steps.7.event_counts.task_finished", "equals": 1},
+                {"path": "steps.1.attempt_total", "equals": 1},
+            ]
+        }
+        actual = {
+            "steps": [
+                {},
+                {"attempt_total": 1},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {"task": {"lease_fields_all_null": True}, "event_counts": {"task_finished": 1}},
+            ]
+        }
+        self.assertFalse(compare_step(actual, step_expect))
+        for path, wrong in (
+            ("steps.7.event_counts.task_finished", 0),
+            ("steps.7.task.lease_fields_all_null", False),
+            ("steps.1.attempt_total", 2),
+        ):
+            broken = copy.deepcopy(actual)
+            parts = path.split(".")
+            target = broken
+            for part in parts[:-1]:
+                target = target[int(part)] if part.isdigit() else target[part]
+            target[parts[-1]] = wrong
+            self.assertTrue(compare_step(broken, step_expect), path)
 
 
 class BuilderProvenanceTests(unittest.TestCase):

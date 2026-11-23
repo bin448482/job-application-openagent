@@ -104,6 +104,11 @@ def build_m1_fixtures() -> dict[str, str]:
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
         {"op": "start", "now": T0}, {"op": "inspect", "now": T0},
     ])
+    add("l03_clock_changed", [
+        {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
+        {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
+        {"op": "renew", "now": T20, "mono_delta": 0.0}, {"op": "inspect", "now": T20},
+    ])
     add("l03_duplicate_finish", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
@@ -121,31 +126,31 @@ def build_m1_fixtures() -> dict[str, str]:
     add("l04_running_stopped", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-        {"op": "remember_device"}, {"op": "close"}, add_open(stop="stopped"),
+        {"op": "remember_state"}, {"op": "close"}, add_open(stop="stopped"),
         {"op": "recover", "confirm_stopped": True, "now": T61}, {"op": "inspect", "now": T61},
     ])
     add("l04_alive", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-        {"op": "remember_device"}, {"op": "close"}, add_open(stop="alive"),
+        {"op": "remember_state"}, {"op": "close"}, add_open(stop="alive"),
         {"op": "recover", "confirm_stopped": True, "now": T61}, {"op": "inspect", "now": T61},
     ])
     add("l04_unknown", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-        {"op": "remember_device"}, {"op": "close"}, add_open(stop="unknown"),
+        {"op": "remember_state"}, {"op": "close"}, add_open(stop="unknown"),
         {"op": "recover", "confirm_stopped": True, "now": T61}, {"op": "inspect", "now": T61},
     ])
     add("l04_permission", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-        {"op": "remember_device"}, {"op": "close"}, add_open(stop="permission_denied"),
+        {"op": "remember_state"}, {"op": "close"}, add_open(stop="permission_denied"),
         {"op": "recover", "confirm_stopped": True, "now": T61}, {"op": "inspect", "now": T61},
     ])
     add("l04_different_host", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-        {"op": "remember_device"}, {"op": "close"}, add_open(host="other", stop="stopped"),
+        {"op": "remember_state"}, {"op": "close"}, add_open(host="other", stop="stopped"),
         {"op": "recover", "confirm_stopped": True, "now": T61}, {"op": "inspect", "now": T61},
     ])
     add("l04_confirm_false", [
@@ -153,18 +158,23 @@ def build_m1_fixtures() -> dict[str, str]:
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
         {"op": "recover", "confirm_stopped": False, "now": T61}, {"op": "inspect", "now": T61},
     ])
+    add("l04_confirm_string", [
+        {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
+        {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
+        {"op": "recover", "confirm_stopped": "true", "now": T61}, {"op": "inspect", "now": T61},
+    ])
 
     add("l05_undetermined", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-        {"op": "remember_device"},
+        {"op": "remember_state"},
         {"op": "finish", "state": "blocked", "reason_code": "incomplete_snapshot", "proof": "read_undetermined", "now": T0},
         {"op": "inspect", "now": T0},
     ])
     add("l05_evidence_unknown", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-        {"op": "remember_device"},
+        {"op": "remember_state"},
         {"op": "finish", "state": "blocked", "reason_code": "result_unverified", "proof": "evidence_unknown", "now": T0},
         {"op": "inspect", "now": T0},
     ])
@@ -176,14 +186,14 @@ def build_m1_fixtures() -> dict[str, str]:
         add(f"l05_{label}", [
             {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
             {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-            {"op": "remember_device"}, {"op": "close"}, add_open(fault=fault),
+            {"op": "remember_state"}, {"op": "close"}, add_open(fault=fault),
             {"op": "finish", "state": "blocked", "reason_code": "incomplete_snapshot", "proof": "read_undetermined", "now": T0},
             {"op": "inspect", "now": T0},
         ])
     add("l05_rollback_claim_busy", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-        {"op": "remember_device"}, {"op": "close"}, add_open(fault="finish_before_event"),
+        {"op": "remember_state"}, {"op": "close"}, add_open(fault="finish_before_event"),
         {"op": "finish", "state": "blocked", "reason_code": "incomplete_snapshot", "proof": "read_undetermined", "now": T0},
         {"op": "claim", "kind": "unread", "owner_id": "00000000-0000-4000-8000-000000000025", "now": T0},
         {"op": "inspect", "now": T0},
@@ -192,7 +202,7 @@ def build_m1_fixtures() -> dict[str, str]:
     add("l06_parent_child_unknown", [
         {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
         {"op": "claim", "kind": "unread", "now": T0}, {"op": "start", "now": T0},
-        {"op": "remember_device"}, {"op": "close"}, add_open(stop="stopped"),
+        {"op": "remember_state"}, {"op": "close"}, add_open(stop="stopped"),
         {"op": "recover", "confirm_stopped": True, "now": T61},
         {"op": "claim", "kind": "unread", "owner_id": "00000000-0000-4000-8000-000000000026", "now": T61},
         {"op": "inspect", "now": T61},
@@ -213,10 +223,11 @@ def build_m1_fixtures() -> dict[str, str]:
     ])
 
     add("l07_cross_app", [
-        {"op": "init"}, add_open(), {"op": "claim_other_app", "now": T0}, {"op": "inspect", "now": T0},
+        {"op": "init"}, add_open(), {"op": "remember_state"}, {"op": "claim_other_app", "now": T0},
+        {"op": "inspect", "now": T0},
     ])
     add("l07_bool_integer", [
-        {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0},
+        {"op": "init"}, add_open(), {"op": "upsert", "count": 1, "now": T0}, {"op": "remember_state"},
         {"op": "claim", "kind": "unread", "owner_pid": True, "now": T0},
         {"op": "inspect", "now": T0},
     ])
