@@ -8,7 +8,7 @@
 
 - `__init__.py`：声明用例包。
 - `doctor.py`：严格校验合成探针输入（含 UTF-8 可编码性），按“清单 → 选择 → 状态 → 解锁 → 前台”的顺序判定；`build_result` 是唯一 doctor 业务结果组装点，CLI 与设备失败共用它。
-- `sense.py`：`persist_and_aggregate(store, result)` 先 upsert 快照、再查未关闭会话、调用领域 `aggregate_unread` 与 `stop_reason_for`；`build_sense_payload`/`result_payload` 是 M2 唯一 JSON 结果组装点，不读取 XML 或数据库。SQLite 初始化与打开仍由 CLI 在解析/合并 ok 后执行。
+- `sense.py`：`persist_and_aggregate(store, result, process_log=None)` 先 upsert 快照、再查未关闭会话，调用领域 `aggregate_unread` 与 `stop_reason_for`；两步分别以 `sense/aggregate`、`sense/stop_reason` 记 started→ok/failed（内部异常保留 `error_category=internal` 并继续公共安全出口），不记录正文/身份/路径/异常消息。`build_sense_payload`/`result_payload` 是 M2 唯一 JSON 结果组装点，不读取 XML 或数据库。SQLite 初始化与打开仍由 CLI 在解析/合并 ok 后执行。
 
 ## 三、行为契约
 

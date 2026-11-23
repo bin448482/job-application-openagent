@@ -125,6 +125,25 @@ class SenseStoreTests(unittest.TestCase):
             for line in path.read_text(encoding="utf-8").splitlines()
         ]
 
+    def _last_events(self) -> list[dict[str, object]]:
+        """读取最近一次 CLI 运行的独立日志事件。"""
+        return [
+            json.loads(line)
+            for line in self.log_paths[-1].read_text(encoding="utf-8").splitlines()
+        ]
+
+    def _operation_events(
+        self, events: list[dict[str, object]], operation: str
+    ) -> list[tuple[object, object, object]]:
+        """提取指定 sense 操作的终结事件字段。"""
+        return [
+            (event["result"], event["reason_code"], event["error_category"])
+            for event in events
+            if event["stage"] == "sense"
+            and event["operation"] == operation
+            and event["result"] != "started"
+        ]
+
     def test_positive_fixture_contract_and_replay_idempotence(self) -> None:
         """正例退出 0、唯一 unread 候选，重放发现仍为 1 且不追加事件。"""
         expected = json.loads(
@@ -215,6 +234,199 @@ class SenseStoreTests(unittest.TestCase):
         self.assertNotIn("合成", log_text)
         self.assertNotIn("boss:conv:", log_text)
         self.assertNotIn(json.loads(stdout)["result"]["snapshot_id"], log_text)
+
+    def test_parse_trace_follows_read_result_status(self) -> None:
+        """成功、未决与坏 XML 分别记录 parse ok/ok/失败及固定原因。"""
+        directory = self.root / "cases" / "parse-trace"
+        mismatch = make_fixture(
+            directory / "mismatch",
+            "manifest",
+            [positive_xml()],
+            app_version="other-version",
+        )
+        broken = make_fixture(
+            directory / "broken",
+            "manifest",
+            ["<broken"],
+        )
+
+        code, _, stderr = self._run(
+            "sense", "--fixture", FIXTURE_RELATIVE, "--db", "data/runtime/trace-ok.sqlite3"
+        )
+        self.assertEqual((code, stderr), (0, ""))
+        self.assertEqual(
+            self._operation_events(self._last_events(), "parse"),
+            [("ok", None, None)],
+        )
+
+        code, stdout, stderr = self._run(
+            "sense",
+            "--fixture",
+            str(mismatch.relative_to(self.root)),
+            "--db",
+            "data/runtime/trace-undetermined.sqlite3",
+        )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(json.loads(stdout)["stop_reason"], "uncalibrated_profile")
+        self.assertEqual(
+            self._operation_events(self._last_events(), "parse"),
+            [("ok", "uncalibrated_profile", None)],
+        )
+        self.assertFalse((self.root / "data/runtime/trace-undetermined.sqlite3").exists())
+
+        code, stdout, stderr = self._run(
+            "sense",
+            "--fixture",
+            str(broken.relative_to(self.root)),
+            "--db",
+            "data/runtime/trace-broken.sqlite3",
+        )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(json.loads(stdout)["result"]["reason_code"], "invalid_xml")
+        self.assertEqual(
+            self._operation_events(self._last_events(), "parse"),
+            [("failed", "invalid_xml", "sense")],
+        )
+        self.assertFalse((self.root / "data/runtime/trace-broken.sqlite3").exists())
+
+    def test_aggregate_and_stop_traces_distinguish_internal_failures(self) -> None:
+        """聚合与停止判定各有 started/ok/failed，内部异常轨迹可区分且降级安全。"""
+        code, _, stderr = self._run(
+            "sense", "--fixture", FIXTURE_RELATIVE, "--db", "data/runtime/trace-parts.sqlite3"
+        )
+        self.assertEqual((code, stderr), (0, ""))
+        events = self._last_events()
+        self.assertEqual(
+            self._operation_events(events, "aggregate"), [("ok", None, None)]
+        )
+        self.assertEqual(
+            self._operation_events(events, "stop_reason"), [("ok", None, None)]
+        )
+
+        directory = self.root / "cases" / "business-stop"
+        business_stop = make_fixture(
+            directory,
+            "manifest",
+            [
+                build_xml(
+                    [
+                        {
+                            "name": "甲",
+                            "company": "公司甲",
+                            "position": "职位甲",
+                            "preview": "预览",
+                        }
+                    ]
+                )
+            ],
+        )
+        code, stdout, stderr = self._run(
+            "sense",
+            "--fixture",
+            str(business_stop.relative_to(self.root)),
+            "--db",
+            "data/runtime/trace-stop.sqlite3",
+        )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(json.loads(stdout)["stop_reason"], "unread_unverified")
+        events = self._last_events()
+        self.assertEqual(
+            self._operation_events(events, "aggregate"), [("ok", None, None)]
+        )
+        self.assertEqual(
+            self._operation_events(events, "stop_reason"), [("ok", None, None)]
+        )
+
+        traces: dict[str, list[tuple[object, object, object]]] = {}
+        for fault in ("aggregate_unread", "stop_reason_for"):
+            with patch(
+                f"app.usecases.sense.{fault}",
+                side_effect=TypeError("synthetic failure"),
+            ):
+                code, stdout, stderr = self._run(
+                    "sense",
+                    "--fixture",
+                    FIXTURE_RELATIVE,
+                    "--db",
+                    f"data/runtime/trace-{fault}.sqlite3",
+                )
+            self.assertEqual((code, stderr), (2, ""))
+            self.assertEqual(
+                json.loads(stdout)["reason_code"], "store_io_error"
+            )
+            traces[fault] = [
+                (
+                    event["stage"],
+                    event["operation"],
+                    event["result"],
+                    event["error_category"],
+                )
+                for event in self._last_events()
+            ]
+        self.assertNotEqual(traces["aggregate_unread"], traces["stop_reason_for"])
+        self.assertIn(
+            ("sense", "aggregate", "failed", "internal"),
+            traces["aggregate_unread"],
+        )
+        self.assertIn(
+            ("sense", "stop_reason", "failed", "internal"),
+            traces["stop_reason_for"],
+        )
+
+    def test_log_degradation_keeps_business_result_and_fixed_marker(self) -> None:
+        """新增 sense 步骤日志写入失败时业务 JSON/退出码不变，只出现固定标记。"""
+        with patch.object(ProcessLog, "_append", side_effect=OSError("synthetic")):
+            code, stdout, stderr = self._run(
+                "sense",
+                "--fixture",
+                FIXTURE_RELATIVE,
+                "--db",
+                "data/runtime/trace-degraded.sqlite3",
+            )
+        self.assertEqual((code, stderr), (0, "m0_process_log_degraded\n"))
+        self.assertEqual(json.loads(stdout)["stop_reason"], None)
+        self.assertFalse(self.log_paths[-1].exists())
+
+    def test_huge_row_bounds_cli_returns_fixed_json_without_candidates(self) -> None:
+        """超大行坐标经 CLI 返回固定 JSON、无错误候选，不泄漏异常。"""
+        huge_right = "1" + "0" * 400
+        fixture = make_fixture(
+            self.root / "cases" / "huge-bounds",
+            "manifest",
+            [
+                build_xml(
+                    [
+                        {
+                            "name": "甲",
+                            "company": "公司甲",
+                            "position": "职位甲",
+                            "preview": "预览",
+                            "row_bounds": f"[0,0][{huge_right},200]",
+                            "badges": [("1", "[850,30][900,60]")],
+                        }
+                    ]
+                )
+            ],
+        )
+        code, stdout, stderr = self._run(
+            "sense",
+            "--fixture",
+            str(fixture.relative_to(self.root)),
+            "--db",
+            "data/runtime/huge-bounds.sqlite3",
+        )
+        self.assertEqual((code, stderr), (2, ""))
+        payload = json.loads(stdout)
+        self.assertEqual(payload["result"]["status"], "ok")
+        self.assertEqual(payload["result"]["value"]["candidates"], [])
+        self.assertIsNone(
+            payload["result"]["value"]["rows"][0]["unread_count"]
+        )
+        self.assertEqual(
+            payload["result"]["value"]["signals"]["row_badge"]["reason_code"],
+            "uncalibrated_region",
+        )
+        self.assertEqual(payload["stop_reason"], "unread_unverified")
 
     def test_terminal_same_fingerprint_is_not_reopened(self) -> None:
         """同指纹终态仍观察到正信号时只定向核对，不重开或新增入站。"""

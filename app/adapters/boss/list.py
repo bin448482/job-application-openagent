@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import re
 from collections import Counter
@@ -10,6 +9,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from xml.etree import ElementTree
 
+from app.domain.json_input import (
+    load_json_object as _load_strict_json,
+)
+from app.domain.json_input import (
+    reject_duplicate_keys as _reject_strict_pairs,
+)
 from app.domain.models import (
     APP,
     Candidate,
@@ -21,6 +26,7 @@ from app.domain.models import (
     conversation_key_from_identity,
     discovery_key_for,
     fingerprint_for,
+    identity_hash_for,
     is_conversation_key,
     is_hash,
     is_nonempty_text,
@@ -602,8 +608,8 @@ def _parse_row(
         name: _unique_field_text(row_node, str(fields[name])) for name in ROW_FIELD_KEYS
     }
     if all(texts[name] is not None for name in IDENTITY_FIELD_KEYS):
-        identity_hash = canonical_hash(
-            [texts["name"], texts["company"], texts["position"]]
+        identity_hash = identity_hash_for(
+            texts["name"], texts["company"], texts["position"]
         )
         conversation_key = conversation_key_from_identity(APP, identity_hash)
     else:
@@ -661,12 +667,15 @@ def _row_badge(
     left, top, right, bottom = row_bounds
     width = right - left
     height = bottom - top
-    region_rect = (
-        left + float(region[0]) * width,
-        top + float(region[1]) * height,
-        left + float(region[2]) * width,
-        top + float(region[3]) * height,
-    )
+    try:
+        region_rect = (
+            left + float(region[0]) * width,
+            top + float(region[1]) * height,
+            left + float(region[2]) * width,
+            top + float(region[3]) * height,
+        )
+    except OverflowError:
+        return None, "uncalibrated_region"
     values: list[int] = []
     invalid_bounds = False
     field_suffixes = {
@@ -687,12 +696,12 @@ def _row_badge(
         if not _rect_inside(bounds, region_rect):
             continue
         values.append(int(text))
+    if invalid_bounds:
+        return None, "uncalibrated_region"
     if len(values) > 1:
         return None, "ambiguous_signal"
     if len(values) == 1:
         return values[0], None
-    if invalid_bounds:
-        return None, "uncalibrated_region"
     return None, "missing_signal"
 
 
@@ -1033,20 +1042,15 @@ def _read_xml_text(path: Path) -> str:
         raise _FixtureXmlError("xml encoding is invalid") from None
 
 
+def reject_duplicates(items: list[tuple[str, object]]) -> dict[str, object]:
+    """把适配器 JSON 对象键值对交给共享严格重复键校验。"""
+    return _reject_strict_pairs(items)
+
+
 def _read_json_file(path: Path) -> object:
-    """读取严格 UTF-8 JSON，并在任意层级拒绝重复对象键。"""
+    """读取严格 UTF-8 JSON，并复用共享重复对象键校验。"""
     text = path.read_text(encoding="utf-8")
-
-    def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
-        """把 JSON 对象转为字典，重复键直接失败。"""
-        result: dict[str, object] = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError("duplicate key")
-            result[key] = value
-        return result
-
-    return json.loads(text, object_pairs_hook=reject_duplicates)
+    return _load_strict_json(text, object_pairs_hook=reject_duplicates)
 
 
 def _resolve_fixture_reference(base: Path, value: str) -> Path:

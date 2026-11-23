@@ -16,6 +16,12 @@ from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
 from app.ports.device import ProbeSnapshot
 from app.ports.store import StoreError
+from app.domain.json_input import (
+    load_json_object as _load_strict_json,
+)
+from app.domain.json_input import (
+    reject_duplicate_keys as _reject_strict_pairs,
+)
 from app.process_log import ProcessLog, elapsed_ms
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
 from app.usecases.sense import build_sense_payload, persist_and_aggregate
@@ -202,18 +208,13 @@ def _resolve_project_path(value: str) -> Path:
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    """把 JSON 对象转为字典，并在任意层级遇到重复键时拒绝。"""
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate key")
-        result[key] = value
-    return result
+    """把 CLI JSON 对象键值对交给共享严格重复键校验。"""
+    return _reject_strict_pairs(pairs)
 
 
 def _load_json_object(text: str) -> object:
-    """在共享输入边界解析 JSON，并拒绝顶层或嵌套对象的重复键。"""
-    return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
+    """在 CLI 输入边界解析严格 JSON，复用共享重复键校验。"""
+    return _load_strict_json(text, object_pairs_hook=_reject_duplicate_keys)
 
 
 def _validate_config(value: str | None) -> None:
@@ -438,7 +439,9 @@ def _run_sense(log: ProcessLog, started: float, args: argparse.Namespace) -> int
     log.record(
         stage="sense",
         operation="parse",
-        result="ok",
+        result="failed" if result.status == "failed" else "ok",
+        reason_code=result.reason_code,
+        error_category="sense" if result.status == "failed" else None,
         duration_ms=elapsed_ms(parse_started),
     )
 
@@ -531,7 +534,7 @@ def _run_sense(log: ProcessLog, started: float, args: argparse.Namespace) -> int
 
     try:
         try:
-            aggregated, stop_reason = persist_and_aggregate(store, result)
+            aggregated, stop_reason = persist_and_aggregate(store, result, log)
         except StoreError as error:
             return _finalize_output(
                 log,

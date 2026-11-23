@@ -82,6 +82,8 @@ OPERATIONS = frozenset(
     {
         "init",
         "parse",
+        "aggregate",
+        "stop_reason",
         "open_store",
         "upsert_snapshot",
         "claim",

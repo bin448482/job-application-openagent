@@ -179,9 +179,9 @@ def identity_hash_for(contact: str, company: str, position: str) -> str:
 
 def conversation_key_for(app: str, contact: str, company: str, position: str) -> str:
     """生成带应用前缀的会话键；只对身份字段齐全的合成行使用。"""
-    if not isinstance(app, str) or app not in APPS:
-        raise ValueError("app is invalid")
-    return f"{app}:conv:{identity_hash_for(contact, company, position)}"
+    return conversation_key_from_identity(
+        app, identity_hash_for(contact, company, position)
+    )
 
 
 def conversation_key_from_identity(app: str, identity_hash: str) -> str:

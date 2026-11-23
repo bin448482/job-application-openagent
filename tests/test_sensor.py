@@ -804,6 +804,112 @@ class SensorParseTests(unittest.TestCase):
         self.assertEqual(result.reason_code, "invalid_xml")
         self.assertIsNone(result.value)
 
+    def test_invalid_numeric_bounds_override_valid_badge_and_keep_other_rows(self) -> None:
+        """同一行坏 bounds 优先于合法计数；其它独立行正信号仍可保留 present。"""
+        malformed = self._parse(
+            build_xml(
+                [
+                    {
+                        "name": "甲",
+                        "company": "公司甲",
+                        "position": "职位甲",
+                        "preview": "预览",
+                        "badges": [
+                            ("1", "[850,30][900,60]"),
+                            ("2", "bad"),
+                        ],
+                    }
+                ]
+            )
+        )
+        self.assertEqual(malformed.status, "ok")
+        self.assertIsNone(malformed.value.rows[0].unread_count)
+        self.assertEqual(
+            (
+                malformed.value.signals["row_badge"].state,
+                malformed.value.signals["row_badge"].count,
+                malformed.value.signals["row_badge"].reason_code,
+            ),
+            ("unknown", None, "uncalibrated_region"),
+        )
+        self.assertEqual(malformed.value.candidates, ())
+
+        mixed = self._parse(
+            build_xml(
+                [
+                    {
+                        "name": "甲",
+                        "company": "公司甲",
+                        "position": "职位甲",
+                        "preview": "预览甲",
+                        "badges": [
+                            ("1", "[850,30][900,60]"),
+                            ("2", "bad"),
+                        ],
+                    },
+                    {
+                        "name": "乙",
+                        "company": "公司乙",
+                        "position": "职位乙",
+                        "preview": "预览乙",
+                        "badges": [("1", "[850,30][900,60]")],
+                    },
+                ]
+            )
+        )
+        self.assertEqual(mixed.status, "ok")
+        self.assertEqual(mixed.value.signals["row_badge"].state, "present")
+        self.assertEqual(len(mixed.value.candidates), 1)
+
+    def test_huge_row_bounds_do_not_escape_overflow(self) -> None:
+        """合法整数形状的超大行坐标不得让公开纯解析入口抛 OverflowError。"""
+        huge_right = "1" + "0" * 400
+        result = self._parse(
+            build_xml(
+                [
+                    {
+                        "name": "甲",
+                        "company": "公司甲",
+                        "position": "职位甲",
+                        "preview": "预览",
+                        "row_bounds": f"[0,0][{huge_right},200]",
+                        "badges": [("1", "[850,30][900,60]")],
+                    }
+                ]
+            )
+        )
+        self.assertEqual(result.status, "ok")
+        self.assertIsNone(result.value.rows[0].unread_count)
+        self.assertEqual(
+            result.value.signals["row_badge"].reason_code, "uncalibrated_region"
+        )
+        self.assertEqual(result.value.candidates, ())
+
+    def test_duplicate_json_keys_rejected_through_shared_boundary(self) -> None:
+        """manifest 与 profile 的顶层重复键均经共享严格 JSON 边界拒绝。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = make_fixture(root / "manifest-dup", "case", [positive_xml()])
+            text = manifest.read_text(encoding="utf-8")
+            manifest.write_text(
+                text[:-1] + ',"app_version":"duplicate"}', encoding="utf-8"
+            )
+            result = load_and_parse_snapshot(manifest, SNAPSHOT_ID)
+            self.assertEqual(result.status, "failed")
+            self.assertEqual(result.reason_code, "invalid_fixture")
+
+            profile_fixture = make_fixture(
+                root / "profile-dup", "case", [positive_xml()]
+            )
+            profile_path = profile_fixture.parent / "profile.json"
+            profile_text = profile_path.read_text(encoding="utf-8")
+            profile_path.write_text(
+                profile_text[:-1] + ',"calibrated":true}', encoding="utf-8"
+            )
+            profile_result = load_and_parse_snapshot(profile_fixture, SNAPSHOT_ID)
+            self.assertEqual(profile_result.status, "failed")
+            self.assertEqual(profile_result.reason_code, "invalid_fixture")
+
     def test_badge_region_bounds_and_ambiguity(self) -> None:
         """空区域、非法行 bounds、多个整数节点与区域外数字按固定原因处理。"""
         profile = base_profile()
