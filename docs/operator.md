@@ -101,7 +101,7 @@ python -m app doctor --device --serial <serial>
 {"schema_version":1,"status":"failed","reason_code":"invalid_input"}
 ```
 
-`reason_code` 只取 `invalid_input`、`invalid_config` 或 `invalid_fixture`。所有失败退出 `2`；成功退出 `0`；帮助退出 `0`。程序不使用退出 `1` 表示可重试失败。若 stdout 本身写入失败（`UnicodeError`/`OSError`），程序安全退出 `2`，不回显 traceback，也不要求再次写 JSON。本机日志降级不是业务失败，退出码仍按业务结果；stderr 只多一行固定 `m0_process_log_degraded`。
+`reason_code` 只取 `invalid_input`、`invalid_config` 或 `invalid_fixture`。所有失败退出 `2`；成功退出 `0`；帮助退出 `0`。程序不使用退出 `1` 表示可重试失败。若 doctor JSON 的 stdout 写入失败（`UnicodeError`/`OSError`），程序安全退出 `2`，不回显 traceback，也不要求再次写 JSON；日志会记录 `output=failed` 并以 `internal` 收尾。`--help` 仍由 argparse 直接处理、正常退出 `0`，不适用 doctor JSON 契约。本机日志降级不是业务失败，退出码仍按业务结果；stderr 只多一行固定 `m0_process_log_degraded`。
 
 ## 六、fixture 输入规则
 
@@ -130,9 +130,10 @@ python -m app doctor --device --serial <serial>
 
 每行固定包含 `schema_version/ts/correlation_id/stage/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`：
 
-- `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、两条 ADB 命令、业务判定和出口。
+- `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、两条 ADB 命令、业务判定、输出和出口。
 - `result` 固定为 `started/ok/failed`；`reason_code` 沿用计划词表，不新增业务原因；`error_category` 固定为 `argument/config/fixture/probe/business/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
-- `command` 只写 `adb_devices` 或 `adb_window`；ADB 缺失、超时、其它 IO 错误和非零退出分别记录固定错误类别，业务 `reason_code` 仍为 `device_disconnected`。
+- `command` 只写 `adb_devices` 或 `adb_window`；每次命令先记 `started`，完成后再记 `ok` 或固定失败类别。ADB 缺失、超时、其它 IO 错误和非零退出分别记录固定错误类别，业务 `reason_code` 仍为 `device_disconnected`。
+- `output` 只为 doctor JSON 收尾：写出成功记 `ok`，写出失败记 `failed`（`error_category=internal`）并安全退出 `2`；不能据此假称 JSON 已输出。
 - 不写参数原值、serial、窗口原文、异常消息、绝对路径或个人事实。
 - 日志是尽力而为的辅助产物：调用端忽略单次 `record` 的 `False`，写入失败时设置内部 `degraded` 标记；CLI 在出口向 stderr 写固定 `m0_process_log_degraded`，stdout JSON 与退出码不变，也不伪造成功行。没有日志行不等于命令成功；该标记表示日志不完整，不能声称磁盘失败时完整日志已保存。
 
@@ -143,7 +144,7 @@ Get-Content data/logs/m0-process.jsonl -Tail 20
 git check-ignore data/logs/m0-process.jsonl
 ```
 
-需要按单次运行核对时，从输出或日志中取同一 `correlation_id` 过滤；fixture 模式仍保持零设备、零网络、零子进程和零业务库。
+stdout 仍只有七个业务键，不包含 `correlation_id`。需要按单次运行核对时，从本机日志中取该次命令时间附近的 `start`→`exit` 事件（或日志尾部最后一段完整关联）；不要把 ID 加到 stdout 契约。fixture 模式仍保持零设备、零网络、零子进程和零业务库。
 
 ## 八、尚未实现
 

@@ -22,6 +22,7 @@ STAGES = frozenset(
         "adb_devices",
         "adb_window",
         "decision",
+        "output",
         "exit",
     }
 )
@@ -79,7 +80,7 @@ def elapsed_ms(started: float) -> int:
 
 
 class ProcessLog:
-    """尽力追加 JSON Lines 过程日志；拒绝非白名单值，写入失败返回 False。"""
+    """尽力追加 JSON Lines 过程日志；非法值或写入失败都置 degraded 并返回 False。"""
 
     def __init__(self, path: Path | None = None, correlation_id: str | None = None) -> None:
         """保存日志路径、关联 ID 与降级标记，构造阶段不创建目录或打开文件。"""
@@ -101,7 +102,7 @@ class ProcessLog:
         config_source: str | None = None,
         device_count: int | None = None,
     ) -> bool:
-        """追加一条固定白名单事件；非法值或任何 IO 失败都返回 False 且不抛出。"""
+        """追加一条固定白名单事件；非法值或任何 IO 失败都置 degraded 并返回 False。"""
         try:
             if not _valid_event(
                 stage=stage,
@@ -115,6 +116,7 @@ class ProcessLog:
                 config_source=config_source,
                 device_count=device_count,
             ):
+                self.degraded = True
                 return False
 
             payload = {

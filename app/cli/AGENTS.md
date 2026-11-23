@@ -18,8 +18,8 @@
 5. 配置、夹具路径只接受项目内相对路径；拒绝绝对路径、盘符、`~` 和解析后越界。
 6. 参数/配置/夹具错误只输出三键安全对象，不回显输入、异常、绝对路径或命令参数。共享 JSON 边界拒绝重复对象键（含嵌套）；夹具还拒绝不可 UTF-8 编码的 alias/selected_alias。
 7. fixture 模式不得实例化或调用 ADB 适配器，不得启动子进程；CLI 导入适配器模块本身必须零副作用。
-8. 成功或业务停止只向 stdout 写一个 JSON 对象；正常时 stderr 为空。日志写入失败时 stdout 和退出码不变，stderr 仅写固定 `m0_process_log_degraded`。stdout 自身写失败时安全退出 `2`，不打印 traceback。帮助退出 `0`，其余失败退出 `2`，不使用退出 `1`。
-9. 过程日志阶段覆盖 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/exit`；只写固定原因码/错误类别/耗时，不写原值。
+8. JSON 输出统一经过 `_finalize_output`：安全 `emit`、记录 `output` 成功/失败、再记录 `exit`；输出失败时安全退出 `2`、不打印 traceback，日志明确为 `output=failed`，不能假称 JSON 已输出。成功或业务停止正常时 stderr 为空；日志写入失败时 stdout/退出码不变，stderr 仅写固定 `m0_process_log_degraded`。`--help` 保持 argparse 直接输出并退出 `0`，只记录其 output/exit 路径，不伪造 doctor JSON；帮助输出本身由 argparse 管理，不套用 doctor JSON 契约。其余失败退出 `2`，不使用退出 `1`。
+9. 过程日志阶段覆盖 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/output/exit`；只写固定原因码/错误类别/耗时，不写原值。stdout 七键不含 `correlation_id`，单次关联从本机日志的 `start`→`exit` 取。
 
 ## 四、测试
 
@@ -27,7 +27,7 @@
 python -m unittest tests.test_doctor
 ```
 
-`tests/test_doctor.py` 覆盖配置/夹具负例、重复 JSON 键、孤立代理字符、模式冲突、重复/未知选项、帮助、业务失败、设备失败七键映射、窗口解析、stdout 写失败、日志降级标记与 fixture 零子进程断言。
+`tests/test_doctor.py` 覆盖配置/夹具负例、重复 JSON 键、孤立代理字符、模式冲突、重复/未知选项、帮助 output/exit、业务失败、设备失败七键映射、窗口字段边界/解析、stdout 写失败、`output=failed`、白名单拒绝降级提示、日志 started→结束顺序与 fixture 零子进程断言。
 
 ## 五、维护要求
 

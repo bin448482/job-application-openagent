@@ -7,7 +7,7 @@
 ## 二、当前文件与子目录
 
 - `__init__.py`：声明测试包，支持 `python -m unittest tests.test_doctor`。
-- `test_doctor.py`：M0 CLI 正反例、配置/夹具校验、重复 JSON 键与孤立代理字符、业务状态映射、keyguard token、整条 focus 完整 Window 匹配/单 Window 多组件/前后附加内容解析、设备失败七键映射、stdout 写失败、过程日志白名单/降级故障注入、调用协议与 fixture 零子进程断言。
+- `test_doctor.py`：M0 CLI 正反例、配置/夹具校验、重复 JSON 键与孤立代理字符、业务状态映射、keyguard token、`mCurrentFocus` 字段边界/整条 focus 完整 Window/单 Window 多组件/前后附加内容解析、设备失败七键映射、stdout 写失败与 `output=failed`、正常帮助 output/exit、过程日志白名单/降级故障注入、ADB `started→ok/failed` 与中断仅留 started、调用协议与 fixture 零子进程断言。
 - `fixtures/`：纯合成输入夹具；见 `fixtures/AGENTS.md`。
 
 ## 三、范围边界

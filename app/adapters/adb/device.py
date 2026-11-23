@@ -14,7 +14,7 @@ BOSS_PACKAGE = "com.hpbr.bosszhipin"
 
 _KEYGUARD_NAME_RE = re.compile(r"(?<![A-Za-z0-9_])isKeyguardShowing")
 _KEYGUARD_VALUE_RE = re.compile(r"([^\s]*)")
-_FOCUS_RE = re.compile(r"mCurrentFocus=([^\r\n]*)")
+_FOCUS_LINE_RE = re.compile(r"[ \t]*mCurrentFocus=([^\r\n]*)")
 _WINDOW_CONTENT_RE = re.compile(r"Window\{([^}]*)\}")
 _COMPONENT_TOKEN_RE = re.compile(r"([A-Za-z0-9_.]+)/[^\s}]+")
 
@@ -101,6 +101,12 @@ class AdbDeviceProbe:
     ) -> str:
         """执行一条不重试的 ADB 命令，并把缺失、超时或非零退出归一为断连。"""
         started = time.perf_counter()
+        self._record(
+            stage=stage,
+            command=command,
+            result="started",
+            duration_ms=0,
+        )
         try:
             completed = subprocess.run(
                 args,
@@ -242,11 +248,18 @@ def _decide_unlocked(text: str) -> bool | None:
 
 
 def _decide_foreground(text: str) -> str:
-    """仅当 mCurrentFocus 唯一、Window 结构唯一且组件 token 唯一时判定前台。"""
-    matches = _FOCUS_RE.findall(text)
-    if len(matches) != 1:
+    """仅当唯一合法字段行含唯一完整 Window 和唯一组件 token 时判定前台。"""
+    values: list[str] = []
+    for line in text.splitlines():
+        if "mCurrentFocus" not in line:
+            continue
+        match = _FOCUS_LINE_RE.fullmatch(line)
+        if match is None:
+            return "unknown"
+        values.append(match.group(1))
+    if len(values) != 1:
         return "unknown"
-    focus_line = matches[0].strip()
+    focus_line = values[0].strip()
     if focus_line.count("{") != 1 or focus_line.count("}") != 1:
         return "unknown"
     window = _WINDOW_CONTENT_RE.fullmatch(focus_line)

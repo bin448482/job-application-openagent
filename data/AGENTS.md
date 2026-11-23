@@ -13,7 +13,7 @@
 
 ## 入口与接口
 
-evals/run.cjs 将 promptfoo 状态及逐次结果写入 data/evals，smoke 与 model 使用不同目录前缀。M0 的 `app/process_log.py` 将固定白名单事件追加到 `data/logs/m0-process.jsonl`：每行一个 JSON 对象，固定包含 `schema_version/ts/correlation_id/stage/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`。同一 `correlation_id` 串联参数、配置、fixture/探针、两条 ADB 命令、业务判定和出口；只写固定阶段、结果、原因码、错误类别与耗时，不写参数原值、serial、窗口原文、异常、绝对路径或个人事实。日志是尽力而为的本机辅助产物：调用端忽略单次 `record` 的 `False`，写入失败时设置 `degraded`，由 CLI 在 stderr 写固定 `m0_process_log_degraded` 并保持 stdout JSON/退出码不变；程序不宣称磁盘失败时仍有完整日志。业务数据库、契约及 M1 事件表仍待设计，不沿用旧 data/jobs.sqlite3 默认值。
+evals/run.cjs 将 promptfoo 状态及逐次结果写入 data/evals，smoke 与 model 使用不同目录前缀。M0 的 `app/process_log.py` 将固定白名单事件追加到 `data/logs/m0-process.jsonl`：每行一个 JSON 对象，固定包含 `schema_version/ts/correlation_id/stage/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`。同一 `correlation_id` 串联参数、配置、fixture/探针、两条 ADB 命令、业务判定、output 和出口；ADB 命令先记 `started` 再记 `ok/failed`。只写固定阶段、结果、原因码、错误类别与耗时，不写参数原值、serial、窗口原文、异常、绝对路径或个人事实。日志是尽力而为的本机辅助产物：调用端忽略单次 `record` 的 `False`，写入失败或白名单拒绝时设置 `degraded`，由 CLI 在 stderr 写固定 `m0_process_log_degraded` 并保持 stdout JSON/退出码不变；程序不宣称磁盘失败时仍有完整日志。业务数据库、契约及 M1 事件表仍待设计，不沿用旧 data/jobs.sqlite3 默认值。
 
 ## 适用约束
 
@@ -25,7 +25,7 @@ evals/run.cjs 将 promptfoo 状态及逐次结果写入 data/evals，smoke 与 m
 
 ## 已知限制
 
-评测产物不是业务执行、实际记忆持久化或设备验证结果；数据库和业务存储结构仍待设计。M0 过程日志没有轮转、保留期、远程汇聚或审计保证，写入失败时只能观察到业务 JSON 正常、stderr 固定降级标记与日志缺行，不能据此认为日志完整；真实设备日志证据仍待取得确认后的实机运行。
+评测产物不是业务执行、实际记忆持久化或设备验证结果；数据库和业务存储结构仍待设计。M0 过程日志没有轮转、保留期、远程汇聚或审计保证，写入失败或白名单拒绝时只能观察到业务 JSON 正常、stderr 固定降级标记与日志缺行，不能据此认为日志完整；真实设备日志证据仍待取得确认后的实机运行。
 
 ## 同步维护要求
 

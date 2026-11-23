@@ -45,7 +45,7 @@
 - `README.md`：当前范围、M0 只读探针命令、业务和评测环境、npm 安装/自检/模型评测命令、数据边界与未实现部分；可独立阅读的使用概览，不是全局规则母本。
 - `LICENSE`：MIT 许可证，2026 年项目贡献者署名。
 - `app/`：M0 分层程序包。`__main__.py` 提供 `python -m app`；`cli/` 负责严格参数、配置、路径与 JSON 输出，并在共享 JSON 边界拒绝重复对象键；`ports/` 声明设备探针端口；`usecases/` 做输入校验、UTF-8 文本约束与唯一 doctor 结果组装；`adapters/adb/` 实现仅显式触发、只接受 tab 分隔确定清单记录的真实 ADB 探针；`process_log.py` 追加固定字段的本机过程日志。M1+ 模块尚未创建。
-- `tests/`：M0 标准库 `unittest` 与纯合成 doctor 夹具；`python -m unittest tests.test_doctor` 覆盖正反例、畸形 keyguard、整条 focus 完整 Window 匹配/单行多组件/前后附加内容、重复 JSON 键、孤立代理字符、提示行、日志白名单/故障注入、窗口解析与 fixture 零子进程断言。独立场景协调端维护的 `tests/scenarios/` 与 `tests/test_offline_scenarios.py` 不在本 Task 范围。
+- `tests/`：M0 标准库 `unittest` 与纯合成 doctor 夹具；`python -m unittest tests.test_doctor` 覆盖正反例、畸形 keyguard、`mCurrentFocus` 字段边界/整条 focus 完整 Window/单行多组件/前后附加内容、重复 JSON 键、孤立代理字符、提示行、`output` 成功/失败、日志白名单/故障注入、ADB `started→结束` 与 fixture 零子进程断言。独立场景协调端维护的 `tests/scenarios/` 与 `tests/test_offline_scenarios.py` 不在本 Task 范围。
 - `pyproject.toml`：正式名称、版本 0.1.0、Python >=3.13、MIT 与空 Python 依赖；M0 入口在 `app/`，尚未声明发行包。
 - `requirements.txt`：Python 标准库及无第三方依赖声明，不代表旧业务测试仍存在。
 - `package.json`：评测工具元数据、Node 版本要求、固定 promptfoo 开发依赖和 npm test/eval:smoke/eval:model 入口。
@@ -197,9 +197,9 @@ npm run eval:smoke
 npm run eval:model -- "<provider-id>"
 ```
 
-`tests.test_doctor` 覆盖 doctor 正反例、重复 JSON 键、孤立代理字符、畸形 keyguard token、整条 focus 完整 Window 匹配/单 Window 多组件/前后附加内容、提示行清单、设备失败七键映射、stdout 写失败、日志白名单/降级故障注入与 fixture 零子进程断言。ready 夹具命令在日志正常时退出 0、只输出一个 JSON、stderr 为空且不写业务库；每次运行只追加被忽略的 `data/logs/m0-process.jsonl`。日志写入失败时 stdout/退出码不变，stderr 仅写固定 `m0_process_log_degraded`，表示日志不完整，不能声称完整日志已保存。fixture 模式零设备、零网络、零子进程；真实 `doctor --device --serial <serial>` 只在取得本轮设备确认后手动执行，离线验收不运行。npm ci 安装锁定依赖；npm test 运行 Node 内置正反例检查，无需安装 promptfoo；smoke 需先安装依赖，仅回放合成参考答案，不请求模型。model 必须指定真实 provider 并按其类型配置认证，可能产生调用费用；本次未选择或调用实际模型。M1+ 的业务 Python CLI、业务测试或独立构建/lint 命令尚未实现，不执行旧 scripts/main.py/unittest 命令。
+`tests.test_doctor` 覆盖 doctor 正反例、重复 JSON 键、孤立代理字符、畸形 keyguard token、`mCurrentFocus` 字段边界/整条 focus 完整 Window/单 Window 多组件/前后附加内容、提示行清单、设备失败七键映射、stdout 写失败与 `output=failed`、帮助 output/exit、日志白名单/降级故障注入、ADB `started→ok/failed`/中断与 fixture 零子进程断言。ready 夹具命令在日志正常时退出 0、只输出一个 JSON、stderr 为空且不写业务库；每次运行只追加被忽略的 `data/logs/m0-process.jsonl`。日志写入失败时 stdout/退出码不变，stderr 仅写固定 `m0_process_log_degraded`，表示日志不完整，不能声称完整日志已保存。fixture 模式零设备、零网络、零子进程；真实 `doctor --device --serial <serial>` 只在取得本轮设备确认后手动执行，离线验收不运行。npm ci 安装锁定依赖；npm test 运行 Node 内置正反例检查，无需安装 promptfoo；smoke 需先安装依赖，仅回放合成参考答案，不请求模型。model 必须指定真实 provider 并按其类型配置认证，可能产生调用费用；本次未选择或调用实际模型。M1+ 的业务 Python CLI、业务测试或独立构建/lint 命令尚未实现，不执行旧 scripts/main.py/unittest 命令。
 
-本次已执行 `python -m unittest tests.test_doctor`（30 个测试方法，含子测试，退出 0）、`python -m app doctor --fixture tests/fixtures/doctor/ready.json`（退出 0，stderr 为空，未新增业务库，日志追加成功）、`npm test`（52 项通过）与 `git diff --check`；另完成根 `AGENTS.md` RULES 区逐字比对。此前另行执行 npm install --no-fund --no-audit 生成锁文件并安装评测依赖；smoke 的 24 个案例回放通过。它们只验证 M0 判据、参数/配置/夹具负例、本机日志行为及评测链路，不代表真实模型、运行时记忆或真实设备验证。新增修改后须运行受影响检查，不能沿用该记录当作新版本验证。
+本次已执行 `python -m unittest tests.test_doctor`（34 个测试方法，含子测试，退出 0）、`python -m app doctor --fixture tests/fixtures/doctor/ready.json`（退出 0，stderr 为空，未新增业务库，日志追加成功）、`npm test`（52 项通过）与 `git diff --check`；另完成根 `AGENTS.md` RULES 区逐字比对。此前另行执行 npm install --no-fund --no-audit 生成锁文件并安装评测依赖；smoke 的 24 个案例回放通过。它们只验证 M0 判据、参数/配置/夹具负例、本机日志行为及评测链路，不代表真实模型、运行时记忆或真实设备验证。新增修改后须运行受影响检查，不能沿用该记录当作新版本验证。
 
 文档维护的一次性校验仍按初始化提示词：比较母本规则区两个标记与全文、8 小节顺序、Python/TypeScript 各 2 个示例，并检查自有目录的双指南、精确大小写、引用与直接子项索引；排除 Git、虚拟环境、node_modules 和 data/evals 等自动生成产物。此类校验不是业务测试。
 

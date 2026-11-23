@@ -12,7 +12,7 @@
 - `ports/`：能力端口与领域快照类型；见 `ports/AGENTS.md`。
 - `usecases/`：单次用例的校验、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。
-- `process_log.py`：追加固定字段的本机 JSON Lines 过程日志，只写被忽略的 `data/logs/m0-process.jsonl`；写失败设置降级标记并返回 `False`，不抛出、不打印原值。
+- `process_log.py`：追加固定字段的本机 JSON Lines 过程日志，只写被忽略的 `data/logs/m0-process.jsonl`；写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值。
 
 ## 三、依赖与边界
 
@@ -22,7 +22,7 @@
 4. `cli/main.py` 是当前唯一组合根；只有它可以把 fixture 输入或 ADB 适配器注入 `doctor` 用例。
 5. M0 的 fixture 模式必须零设备、零网络、零子进程；CLI 可以导入 ADB 适配器模块，但导入本身必须零副作用，fixture 分支不得实例化或调用探针。真实 ADB 适配器只能在显式 `--device --serial` 下调用，且只能在测试中 mock，不在离线验收中执行。
 6. 不读取根 `config.json`、环境文件、凭据或个人事实；不引入 Python 第三方依赖。
-7. 过程日志是尽力而为的辅助产物：只追加固定字段，不写参数原值、serial、窗口原文、异常、绝对路径或个人事实；入口忽略单次 `record` 的 `False`，但由 `degraded` 标记在 stderr 输出固定降级提示，不能声称磁盘失败时仍有完整日志。fixture 仍只写该被忽略日志，不写业务库。
+7. 过程日志是尽力而为的辅助产物：只追加固定字段，不写参数原值、serial、窗口原文、异常、绝对路径或个人事实；入口忽略单次 `record` 的 `False`，但写失败或白名单拒绝会置 `degraded`，由 CLI 在 stderr 输出固定降级提示，不能声称日志完整。JSON 输出统一记录 `output` 成功/失败；ADB 命令记录 `started` 后再记 `ok/failed`。fixture 仍只写该被忽略日志，不写业务库。
 
 ## 四、测试与验证
 
@@ -33,7 +33,7 @@ python -m unittest tests.test_doctor
 python -m app doctor --fixture tests/fixtures/doctor/ready.json
 ```
 
-测试覆盖 CLI 正反例、配置与夹具校验、重复 JSON 键/孤立代理字符、设备状态映射、keyguard token 与单 Window 多组件解析、输出写失败安全退出、过程日志白名单/降级故障注入与“fixture 零子进程”断言。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行。
+测试覆盖 CLI 正反例、配置与夹具校验、重复 JSON 键/孤立代理字符、设备状态映射、keyguard token、`mCurrentFocus` 字段边界/整条 Window/单 Window 多组件解析、输出 `output` 成功/失败与安全退出、日志白名单/降级故障注入、ADB `started` 中断保留与“fixture 零子进程”断言。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行。
 
 ## 五、维护要求
 

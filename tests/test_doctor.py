@@ -723,15 +723,40 @@ class AdbProbeTests(unittest.TestCase):
                     )
                     events = _read_log(path)
                     log_text = path.read_text(encoding="utf-8")
-                self.assertEqual(len(events), 1)
-                event = events[0]
-                self.assertEqual(event["stage"], "adb_devices")
-                self.assertEqual(event["result"], "failed")
-                self.assertEqual(event["command"], "adb_devices")
-                self.assertEqual(event["reason_code"], "device_disconnected")
-                self.assertEqual(event["error_category"], category)
-                self.assertEqual(event["correlation_id"], f"corr-{name}")
+                self.assertEqual(len(events), 2)
+                started, failed = events
+                self.assertEqual(started["stage"], "adb_devices")
+                self.assertEqual(started["result"], "started")
+                self.assertEqual(started["command"], "adb_devices")
+                self.assertTrue(
+                    all(
+                        event["correlation_id"] == f"corr-{name}"
+                        for event in events
+                    )
+                )
+                self.assertEqual(failed["stage"], "adb_devices")
+                self.assertEqual(failed["result"], "failed")
+                self.assertEqual(failed["command"], "adb_devices")
+                self.assertEqual(failed["reason_code"], "device_disconnected")
+                self.assertEqual(failed["error_category"], category)
                 self.assertNotIn("synthetic-serial", log_text)
+
+    def test_adb_started_event_survives_interruption(self) -> None:
+        """命令在途异常未归一为失败时，日志仍保留 started 事件可定位中断。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path, correlation_id="corr-interrupt")
+            with patch("subprocess.run", side_effect=RuntimeError("interrupt")):
+                with self.assertRaises(RuntimeError):
+                    AdbDeviceProbe(process_log=log).probe("synthetic-serial")
+            events = _read_log(path)
+            log_text = path.read_text(encoding="utf-8")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["stage"], "adb_devices")
+        self.assertEqual(events[0]["result"], "started")
+        self.assertEqual(events[0]["command"], "adb_devices")
+        self.assertEqual(events[0]["correlation_id"], "corr-interrupt")
+        self.assertNotIn("synthetic-serial", log_text)
 
     def test_prompt_line_is_not_counted_as_device(self) -> None:
         """ADB 提示行不得被当成设备，serial 未命中时计数为 0。"""
@@ -744,18 +769,32 @@ class AdbProbeTests(unittest.TestCase):
         self.assertEqual(caught.exception.device_count, 0)
 
     def test_window_command_failure_is_disconnected(self) -> None:
-        """窗口命令失败报告断连，并保留已知清单数量。"""
+        """窗口命令失败报告断连，并保留已知清单数量与 started/failed 顺序。"""
         devices = "List of devices attached\nsynthetic-serial\tdevice\n"
-        with patch(
-            "subprocess.run",
-            side_effect=[_completed(devices), _completed(returncode=1)],
-        ) as run_mock:
-            with self.assertRaises(DeviceProbeError) as caught:
-                AdbDeviceProbe().probe("synthetic-serial")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path, correlation_id="corr-window-fail")
+            with patch(
+                "subprocess.run",
+                side_effect=[_completed(devices), _completed(returncode=1)],
+            ) as run_mock:
+                with self.assertRaises(DeviceProbeError) as caught:
+                    AdbDeviceProbe(process_log=log).probe("synthetic-serial")
+            events = _read_log(path)
         self.assertEqual(run_mock.call_count, 2)
         self.assertEqual(caught.exception.reason_code, "device_disconnected")
         self.assertEqual(caught.exception.device_count, 1)
         self.assertEqual(caught.exception.selected_alias, "primary")
+        self.assertEqual(
+            [(event["stage"], event["result"], event["command"]) for event in events],
+            [
+                ("adb_devices", "started", "adb_devices"),
+                ("adb_devices", "ok", "adb_devices"),
+                ("adb_window", "started", "adb_window"),
+                ("adb_window", "failed", "adb_window"),
+            ],
+        )
+        self.assertEqual(events[-1]["error_category"], "adb_nonzero")
 
     def test_keyguard_parsing(self) -> None:
         """全部 false 才解锁，全部 true 为锁屏，缺失或矛盾为未知。"""
@@ -897,6 +936,45 @@ class AdbProbeTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(_decide_foreground(text), expected)
 
+    def test_current_focus_requires_field_boundary(self) -> None:
+        """mCurrentFocus 字段名前后不得粘连畸形前缀/后缀，缩进字段保持可读。"""
+        cases = {
+            "not-prefix": (
+                "notmCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main}",
+                "unknown",
+            ),
+            "word-prefix": (
+                "prefixmCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main}",
+                "unknown",
+            ),
+            "field-suffix": (
+                "mCurrentFocusExtra=Window{a u0 com.hpbr.bosszhipin/.Main}",
+                "unknown",
+            ),
+            "indented": (
+                "  mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main}",
+                "boss",
+            ),
+            "multiple-fields": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main}\n"
+                "  mCurrentFocus=Window{b u0 com.example.other/.Main}",
+                "unknown",
+            ),
+            "malformed-plus-valid": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main}\n"
+                "notmCurrentFocus=Window{b u0 com.hpbr.bosszhipin/.Main}",
+                "unknown",
+            ),
+            "suffix-field": (
+                "mCurrentFocus=Window{a u0 com.hpbr.bosszhipin/.Main} "
+                "mCurrentFocusExtra=x",
+                "unknown",
+            ),
+        }
+        for name, (text, expected) in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(_decide_foreground(text), expected)
+
     def test_device_list_parsing_ignores_non_device_lines(self) -> None:
         """清单解析忽略标题、守护进程提示和空行。"""
         text = (
@@ -932,6 +1010,7 @@ class ProcessLogTests(unittest.TestCase):
                     "config_source": "default",
                 },
                 {"stage": "decision", "result": "ok", "device_count": 1},
+                {"stage": "output", "result": "ok", "exit_code": 0},
                 {
                     "stage": "exit",
                     "result": "ok",
@@ -1004,6 +1083,7 @@ class ProcessLogTests(unittest.TestCase):
             for name, event in cases.items():
                 with self.subTest(name=name):
                     self.assertFalse(log.record(**event))
+            self.assertTrue(log.degraded)
             self.assertFalse(path.exists())
 
     def test_append_failure_is_silent_and_returns_false(self) -> None:
@@ -1060,6 +1140,7 @@ class DoctorLoggingTests(unittest.TestCase):
                 "fixture",
                 "fixture",
                 "decision",
+                "output",
                 "exit",
             ],
         )
@@ -1068,8 +1149,10 @@ class DoctorLoggingTests(unittest.TestCase):
         )
         self.assertEqual(events[-1]["exit_code"], 0)
         self.assertEqual(events[-1]["result"], "ok")
-        self.assertEqual(events[-2]["stage"], "decision")
-        self.assertEqual(events[-2]["device_count"], 1)
+        self.assertEqual(events[-2]["stage"], "output")
+        self.assertEqual(events[-2]["result"], "ok")
+        self.assertEqual(events[-3]["stage"], "decision")
+        self.assertEqual(events[-3]["device_count"], 1)
         self.assertNotIn("tests/fixtures", log_text)
         self.assertNotIn("primary", log_text)
         self.assertNotIn('"boss"', log_text)
@@ -1113,14 +1196,29 @@ class DoctorLoggingTests(unittest.TestCase):
                 "mode",
                 "probe",
                 "adb_devices",
+                "adb_devices",
+                "adb_window",
                 "adb_window",
                 "probe",
                 "decision",
+                "output",
                 "exit",
             ],
         )
-        commands = [event["command"] for event in events if event["command"]]
-        self.assertEqual(commands, ["adb_devices", "adb_window"])
+        command_events = [
+            (event["stage"], event["result"], event["command"])
+            for event in events
+            if event["command"]
+        ]
+        self.assertEqual(
+            command_events,
+            [
+                ("adb_devices", "started", "adb_devices"),
+                ("adb_devices", "ok", "adb_devices"),
+                ("adb_window", "started", "adb_window"),
+                ("adb_window", "ok", "adb_window"),
+            ],
+        )
         self.assertTrue(
             all(event["correlation_id"] == "corr-device" for event in events)
         )
@@ -1166,6 +1264,8 @@ class DoctorLoggingTests(unittest.TestCase):
         self.assertEqual(len(failed), 1)
         self.assertEqual(failed[0]["reason_code"], "invalid_fixture")
         self.assertEqual(failed[0]["error_category"], "fixture")
+        self.assertEqual(events[-2]["stage"], "output")
+        self.assertEqual(events[-2]["result"], "ok")
         self.assertEqual(events[-1]["stage"], "exit")
         self.assertEqual(events[-1]["exit_code"], 2)
         self.assertEqual(events[-1]["reason_code"], "invalid_fixture")
@@ -1235,6 +1335,13 @@ class DoctorLoggingTests(unittest.TestCase):
                     self.assertNotIn("Traceback", stderr.getvalue())
                     self.assertNotIn("secret", stderr.getvalue())
                     events = _read_log(path)
+                output_events = [
+                    event for event in events if event["stage"] == "output"
+                ]
+                self.assertEqual(len(output_events), 1)
+                self.assertEqual(output_events[0]["result"], "failed")
+                self.assertEqual(output_events[0]["error_category"], "internal")
+                self.assertEqual(output_events[0]["exit_code"], 2)
                 self.assertEqual(events[-1]["stage"], "exit")
                 self.assertEqual(events[-1]["exit_code"], 2)
                 self.assertEqual(events[-1]["result"], "failed")
@@ -1273,14 +1380,82 @@ class DoctorLoggingTests(unittest.TestCase):
             )
             events = _read_log(path)
         self.assertEqual(before, _sqlite_files())
-        failed_command = [
+        device_events = [
             event for event in events if event["stage"] == "adb_devices"
         ]
-        self.assertEqual(len(failed_command), 1)
-        self.assertEqual(failed_command[0]["error_category"], "adb_missing")
-        self.assertEqual(failed_command[0]["reason_code"], "device_disconnected")
+        self.assertEqual(len(device_events), 2)
+        self.assertEqual(device_events[0]["result"], "started")
+        self.assertEqual(device_events[1]["result"], "failed")
+        self.assertEqual(device_events[1]["error_category"], "adb_missing")
+        self.assertEqual(
+            device_events[1]["reason_code"],
+            "device_disconnected",
+        )
+        self.assertEqual(events[-2]["stage"], "output")
+        self.assertEqual(events[-2]["result"], "ok")
         self.assertEqual(events[-1]["exit_code"], 2)
         self.assertNotIn("synthetic-serial", stdout.getvalue())
+
+    def test_help_logs_argparse_output_path(self) -> None:
+        """--help 保持 argparse 标准行为，并记录 output/exit 而不伪造 JSON。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                with self.assertRaises(SystemExit) as caught:
+                    main(
+                        ["--help"],
+                        process_log=ProcessLog(
+                            path=path,
+                            correlation_id="corr-help",
+                        ),
+                    )
+            self.assertEqual(caught.exception.code, 0)
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertIn("usage:", stdout.getvalue())
+            events = _read_log(path)
+        self.assertEqual(
+            _event_stages(events),
+            ["start", "arguments", "output", "exit"],
+        )
+        self.assertEqual(events[2]["result"], "ok")
+        self.assertEqual(events[-1]["exit_code"], 0)
+
+    def test_whitelist_rejection_marks_cli_degraded(self) -> None:
+        """白名单拒绝也置 degraded，CLI 仍输出固定降级提示且不写非法事件。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m0-process.jsonl"
+            log = ProcessLog(path=path, correlation_id="corr-invalid-log")
+            self.assertFalse(log.record(stage="invalid-stage", result="ok"))
+            self.assertTrue(log.degraded)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = main(
+                    ["doctor", "--fixture", READY_FIXTURE],
+                    process_log=log,
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr.getvalue(), "m0_process_log_degraded\n")
+            self.assertEqual(json.loads(stdout.getvalue()), READY_OUTPUT)
+            events = _read_log(path)
+            log_text = path.read_text(encoding="utf-8")
+        self.assertEqual(
+            _event_stages(events),
+            [
+                "start",
+                "arguments",
+                "config",
+                "mode",
+                "fixture",
+                "fixture",
+                "decision",
+                "output",
+                "exit",
+            ],
+        )
+        self.assertNotIn("invalid-stage", log_text)
 
 
 if __name__ == "__main__":

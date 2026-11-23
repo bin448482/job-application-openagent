@@ -267,15 +267,45 @@ def _emit(payload: dict[str, object]) -> bool:
     return True
 
 
-def _emit_error(reason_code: str) -> bool:
-    """输出参数、配置或夹具错误的安全固定对象，并返回是否写出成功。"""
-    return _emit(
-        {
-            "schema_version": 1,
-            "status": "failed",
-            "reason_code": reason_code,
-        }
+def _error_payload(reason_code: str) -> dict[str, object]:
+    """构造参数、配置或夹具错误的安全固定 JSON 对象。"""
+    return {
+        "schema_version": 1,
+        "status": "failed",
+        "reason_code": reason_code,
+    }
+
+
+def _finish_output_failure(log: ProcessLog, started: float) -> int:
+    """输出通道不可用时记录 output=failed，并安全完成 exit。"""
+    log.record(
+        stage="output",
+        result="failed",
+        error_category="internal",
+        exit_code=2,
     )
+    return _finish(log, started, 2, None, "internal")
+
+
+def _finalize_output(
+    log: ProcessLog,
+    started: float,
+    payload: dict[str, object],
+    exit_code: int,
+    reason_code: str | None,
+    error_category: str | None,
+) -> int:
+    """唯一 JSON 输出收尾：安全写出、记录 output 事件并完成 exit。"""
+    output_started = time.perf_counter()
+    if _emit(payload):
+        log.record(
+            stage="output",
+            result="ok",
+            duration_ms=elapsed_ms(output_started),
+            exit_code=exit_code,
+        )
+        return _finish(log, started, exit_code, reason_code, error_category)
+    return _finish_output_failure(log, started)
 
 
 def main(
@@ -297,9 +327,14 @@ def main(
             reason_code="invalid_input",
             error_category="argument",
         )
-        if not _emit_error("invalid_input"):
-            return _finish(log, started, 2, None, "internal")
-        return _finish(log, started, 2, "invalid_input", "argument")
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_input"),
+            2,
+            "invalid_input",
+            "argument",
+        )
     except SystemExit as error:
         code = error.code if isinstance(error.code, int) else 2
         reason_code = None if code == 0 else "invalid_input"
@@ -309,6 +344,14 @@ def main(
             result="ok" if code == 0 else "failed",
             reason_code=reason_code,
             error_category=error_category,
+            exit_code=code,
+        )
+        # argparse 已直接写出帮助/用法；这里只记录其输出路径，不伪造 doctor JSON。
+        log.record(
+            stage="output",
+            result="ok" if code == 0 else "failed",
+            reason_code=None,
+            error_category=None if code == 0 else "internal",
             exit_code=code,
         )
         _finish(log, started, code, reason_code, error_category)
@@ -326,9 +369,14 @@ def main(
             error_category="config",
             config_source=config_source,
         )
-        if not _emit_error("invalid_config"):
-            return _finish(log, started, 2, None, "internal")
-        return _finish(log, started, 2, "invalid_config", "config")
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_config"),
+            2,
+            "invalid_config",
+            "config",
+        )
     except Exception:
         log.record(
             stage="config",
@@ -337,9 +385,14 @@ def main(
             error_category="internal",
             config_source=config_source,
         )
-        if not _emit_error("invalid_config"):
-            return _finish(log, started, 2, None, "internal")
-        return _finish(log, started, 2, "invalid_config", "internal")
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_config"),
+            2,
+            "invalid_config",
+            "internal",
+        )
     log.record(stage="config", result="ok", config_source=config_source)
 
     mode = _requested_mode(args)
@@ -352,9 +405,14 @@ def main(
             mode=mode,
             config_source=config_source,
         )
-        if not _emit_error("invalid_input"):
-            return _finish(log, started, 2, None, "internal")
-        return _finish(log, started, 2, "invalid_input", "argument")
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_input"),
+            2,
+            "invalid_input",
+            "argument",
+        )
     log.record(stage="mode", result="ok", mode=mode, config_source=config_source)
 
     snapshot: ProbeSnapshot
@@ -378,9 +436,14 @@ def main(
                 mode=mode,
                 config_source=config_source,
             )
-            if not _emit_error("invalid_fixture"):
-                return _finish(log, started, 2, None, "internal")
-            return _finish(log, started, 2, "invalid_fixture", "fixture")
+            return _finalize_output(
+                log,
+                started,
+                _error_payload("invalid_fixture"),
+                2,
+                "invalid_fixture",
+                "fixture",
+            )
         except Exception:
             log.record(
                 stage="fixture",
@@ -391,9 +454,14 @@ def main(
                 mode=mode,
                 config_source=config_source,
             )
-            if not _emit_error("invalid_input"):
-                return _finish(log, started, 2, None, "internal")
-            return _finish(log, started, 2, "invalid_input", "internal")
+            return _finalize_output(
+                log,
+                started,
+                _error_payload("invalid_input"),
+                2,
+                "invalid_input",
+                "internal",
+            )
         log.record(
             stage="fixture",
             result="ok",
@@ -431,7 +499,9 @@ def main(
                 config_source=config_source,
                 device_count=device_count,
             )
-            if not _emit(
+            return _finalize_output(
+                log,
+                started,
                 build_result(
                     status="failed",
                     reason_code=error.reason_code,
@@ -439,10 +509,11 @@ def main(
                     selected_alias=error.selected_alias,
                     unlocked=None,
                     foreground_app="unknown",
-                )
-            ):
-                return _finish(log, started, 2, None, "internal")
-            return _finish(log, started, 2, error.reason_code, "probe")
+                ),
+                2,
+                error.reason_code,
+                "probe",
+            )
         except Exception:
             log.record(
                 stage="probe",
@@ -453,9 +524,14 @@ def main(
                 mode=mode,
                 config_source=config_source,
             )
-            if not _emit_error("invalid_input"):
-                return _finish(log, started, 2, None, "internal")
-            return _finish(log, started, 2, "invalid_input", "internal")
+            return _finalize_output(
+                log,
+                started,
+                _error_payload("invalid_input"),
+                2,
+                "invalid_input",
+                "internal",
+            )
         log.record(
             stage="probe",
             result="ok",
@@ -475,9 +551,14 @@ def main(
             mode=mode,
             config_source=config_source,
         )
-        if not _emit_error("invalid_input"):
-            return _finish(log, started, 2, None, "internal")
-        return _finish(log, started, 2, "invalid_input", "internal")
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_input"),
+            2,
+            "invalid_input",
+            "internal",
+        )
 
     status = result["status"]
     exit_code = 0 if status == "ok" else 2
@@ -492,6 +573,11 @@ def main(
         config_source=config_source,
         device_count=result["device_count"],
     )
-    if not _emit(result):
-        return _finish(log, started, 2, None, "internal")
-    return _finish(log, started, exit_code, reason_code, error_category)
+    return _finalize_output(
+        log,
+        started,
+        result,
+        exit_code,
+        reason_code,
+        error_category,
+    )
