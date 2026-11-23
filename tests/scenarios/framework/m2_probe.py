@@ -84,6 +84,61 @@ def _relative(value: object, label: str, *, must_exist: bool) -> Path:
     return resolved
 
 
+def _baseline_path(db: Path) -> Path:
+    """返回与合成库同目录的只读签名基线文件。"""
+    return db.parent / f"{db.name}.baseline.json"
+
+
+def _stable_signature(connection: sqlite3.Connection) -> str:
+    """只对成功 sense 不得改变的基线、消息与设备做前后签名。"""
+    conversations = [
+        list(row)
+        for row in connection.execute(
+            "SELECT app,key,baseline_preview_hash,baseline_time_hint,verified_at "
+            "FROM hr_conversations ORDER BY key"
+        ).fetchall()
+    ]
+    messages = [
+        list(row)
+        for row in connection.execute(
+            "SELECT app,key,conversation_key,inbound_hash,observed_at FROM hr_messages ORDER BY key"
+        ).fetchall()
+    ]
+    devices = [
+        list(row)
+        for row in connection.execute(
+            "SELECT device_key,lease_owner,owner_pid,owner_host,nonce,lease_expires_at,reservation_state "
+            "FROM device_lease ORDER BY device_key"
+        ).fetchall()
+    ]
+    return canonical_hash([conversations, messages, devices])
+
+
+def _write_baseline(db: Path, signature: str, stable: str) -> None:
+    """把完整回滚签名与成功路径稳定签名写为后续只读比较基线。"""
+    _baseline_path(db).write_text(
+        json.dumps({"signature": signature, "stable": stable}, sort_keys=True), encoding="utf-8"
+    )
+
+
+def _record_baseline(db: Path) -> dict:
+    """只读记录当前库签名，供成功 sense 前后不推进断言。"""
+    if not db.is_file():
+        raise ProbeError("db 不存在")
+    connection = sqlite3.connect(f"{db.as_uri()}?mode=ro", uri=True)
+    try:
+        signature = _signature(connection)
+        stable = _stable_signature(connection)
+    finally:
+        connection.close()
+    _write_baseline(db, signature, stable)
+    return {
+        "baseline_recorded": True,
+        "state_signature": signature,
+        "stable_signature": stable,
+    }
+
+
 def _parse(request: dict) -> dict:
     """调用真实 load_and_parse_snapshot；now 缺省时仍由生产契约使用 observed_at。"""
     fixture = _relative(request.get("fixture"), "fixture", must_exist=True)
@@ -146,6 +201,36 @@ def _seed(request: dict, db: Path) -> dict:
                     "2026-11-24T00:01:00.000Z",
                 ),
             )
+            connection.execute(
+                "INSERT OR REPLACE INTO device_lease "
+                "(device_key, lease_owner, owner_pid, owner_host, nonce, lease_expires_at, reservation_state) "
+                "VALUES ('primary', ?, ?, ?, ?, ?, 'held')",
+                (
+                    "00000000-0000-4000-8000-000000000031",
+                    1,
+                    "a" * 64,
+                    "00000000-0000-4000-8000-000000000032",
+                    "2026-11-24T00:01:00.000Z",
+                ),
+            )
+        elif state == "blocked":
+            connection.execute(
+                "UPDATE hr_discoveries SET state=?, reason_code=?, updated_at=?, "
+                "lease_owner=NULL, owner_pid=NULL, owner_host=NULL, nonce=NULL, lease_expires_at=NULL",
+                (state, reason, updated_at),
+            )
+            connection.execute(
+                "INSERT OR REPLACE INTO device_lease "
+                "(device_key, lease_owner, owner_pid, owner_host, nonce, lease_expires_at, reservation_state) "
+                "VALUES ('primary', ?, ?, ?, ?, ?, 'quarantined')",
+                (
+                    "00000000-0000-4000-8000-000000000031",
+                    1,
+                    "a" * 64,
+                    "00000000-0000-4000-8000-000000000032",
+                    "2026-11-24T00:01:00.000Z",
+                ),
+            )
         else:
             connection.execute(
                 "UPDATE hr_discoveries SET state=?, reason_code=?, updated_at=?",
@@ -153,11 +238,10 @@ def _seed(request: dict, db: Path) -> dict:
             )
         connection.commit()
         signature = _signature(connection)
+        stable = _stable_signature(connection)
     finally:
         connection.close()
-    (db.parent / f"{db.name}.baseline.json").write_text(
-        json.dumps({"signature": signature}, sort_keys=True), encoding="utf-8"
-    )
+    _write_baseline(db, signature, stable)
     return {
         "seeded": len(fixtures),
         "state": state,
@@ -191,13 +275,20 @@ def _signature(connection: sqlite3.Connection) -> str:
             "FROM device_lease ORDER BY device_key"
         ).fetchall()
     ]
+    messages = [
+        list(row)
+        for row in connection.execute(
+            "SELECT app,key,conversation_key,inbound_hash,observed_at FROM hr_messages ORDER BY key"
+        ).fetchall()
+    ]
     events = [
         list(row)
         for row in connection.execute(
-            "SELECT app,subject_key,event,reason_code,created_at,payload_json FROM events ORDER BY event_id"
+            "SELECT event_id,app,subject_key,event,reason_code,created_at,payload_json "
+            "FROM events ORDER BY event_id"
         ).fetchall()
     ]
-    return canonical_hash([conversations, discoveries, devices, events])
+    return canonical_hash([conversations, discoveries, devices, messages, events])
 
 
 def _inspect(db: Path) -> dict:
@@ -206,9 +297,20 @@ def _inspect(db: Path) -> dict:
     connection.row_factory = sqlite3.Row
     try:
         rows = connection.execute(
-            'SELECT state, reason_code, updated_at, attempt, "key", conversation_key, fingerprint '
+            'SELECT state, reason_code, updated_at, attempt, "key", conversation_key, fingerprint, '
+            'source_names_json, lease_owner, owner_pid, owner_host, nonce, lease_expires_at '
             'FROM hr_discoveries ORDER BY "key"'
         ).fetchall()
+        device = connection.execute(
+            "SELECT reservation_state, lease_owner, owner_pid, owner_host, nonce, lease_expires_at "
+            "FROM device_lease WHERE device_key='primary'"
+        ).fetchone()
+        device_count = connection.execute("SELECT COUNT(*) FROM device_lease").fetchone()[0]
+        conversations = connection.execute(
+            "SELECT baseline_preview_hash, baseline_time_hint, verified_at "
+            "FROM hr_conversations ORDER BY key"
+        ).fetchall()
+        message_count = connection.execute("SELECT COUNT(*) FROM hr_messages").fetchone()[0]
         events = [
             str(row[0])
             for row in connection.execute("SELECT event FROM events ORDER BY event_id").fetchall()
@@ -232,11 +334,13 @@ def _inspect(db: Path) -> dict:
         state_counts: dict[str, int] = {}
         for row in rows:
             state_counts[str(row[0])] = state_counts.get(str(row[0]), 0) + 1
-        baseline_path = db.parent / f"{db.name}.baseline.json"
+        baseline_path = _baseline_path(db)
         unchanged = None
+        stable_unchanged = None
         if baseline_path.is_file():
             baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
             unchanged = baseline.get("signature") == signature
+            stable_unchanged = baseline.get("stable") == _stable_signature(connection)
         return {
             "task_count": len(rows),
             "states": [str(row[0]) for row in rows],
@@ -247,9 +351,35 @@ def _inspect(db: Path) -> dict:
             "keys": [str(row[4]) for row in rows],
             "conversation_keys": [row[5] for row in rows],
             "fingerprints": [row[6] for row in rows],
+            "source_names": [json.loads(row[7]) for row in rows],
+            "lease_owner": [row[8] for row in rows],
+            "owner_pid": [row[9] for row in rows],
+            "owner_host": [row[10] for row in rows],
+            "nonce_present": [row[11] is not None for row in rows],
+            "lease_expires_at": [row[12] for row in rows],
+            "device_present": device is not None,
+            "device_count": int(device_count),
+            "device_reservation_state": None if device is None else device[0],
+            "conversation_count": len(conversations),
+            "baseline_preview_hashes": [row[0] for row in conversations],
+            "baseline_time_hints": [row[1] for row in conversations],
+            "baseline_verified": [row[2] is not None for row in conversations],
+            "message_count": int(message_count),
+            "device_owner_matches_task": (
+                device is not None
+                and any(
+                    row[8] == device[1]
+                    and row[9] == device[2]
+                    and row[10] == device[3]
+                    and row[11] == device[4]
+                    and row[12] == device[5]
+                    for row in rows
+                )
+            ),
             "event_counts": counts,
             "state_signature": signature,
             "unchanged_since_seed": unchanged,
+            "stable_unchanged_since_baseline": stable_unchanged,
         }
     finally:
         connection.close()
@@ -272,6 +402,8 @@ def main(argv: list[str] | None = None) -> int:
             payload = _parse(request)
         elif mode == "seed":
             payload = _seed(request, db_path)
+        elif mode == "baseline":
+            payload = _record_baseline(db_path)
         elif mode == "inspect":
             payload = _inspect(db_path)
         else:

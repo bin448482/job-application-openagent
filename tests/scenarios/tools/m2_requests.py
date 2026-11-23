@@ -80,6 +80,7 @@ def build_m2_requests() -> dict[str, str]:
             },
         )
     add("inspect", {"mode": "inspect"})
+    add("baseline", {"mode": "baseline"})
     add(
         "seed_queued_extra",
         {

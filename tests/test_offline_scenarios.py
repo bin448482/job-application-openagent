@@ -1067,6 +1067,92 @@ class M1DriverBoundaryTests(unittest.TestCase):
             differences,
         )
 
+    def test_real_m2_source_merge_mutant_is_caught_by_u07_db_oracle(self) -> None:
+        """真实 CLI 持久化丢弃新来源时，SC-U07 的库内来源断言必须拒绝。"""
+        from app.adapters.sqlite.repo import SqliteStore
+        from app.cli.main import main as cli_main
+        from app.process_log import ProcessLog
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-U07/same_fingerprint_cross_source"]["acceptance"]["steps"][3]
+        project = SCENARIO_ROOT.parent.parent
+        manifests = [
+            "tests/scenarios/fixtures/m2/sensor/cross_badge_only/manifest.json",
+            "tests/scenarios/fixtures/m2/sensor/cross_badge_preview/manifest.json",
+        ]
+
+        def drop_new_sources(self, stored_json, new_sources):
+            """只返回库中旧来源，模拟持久化漏合并新来源的缺陷。"""
+            return stored_json
+
+        with tempfile.TemporaryDirectory(dir=project) as temporary:
+            folder = Path(temporary)
+            db = folder / "runtime.sqlite3"
+            db_arg = f"{folder.name}/runtime.sqlite3"
+            log = ProcessLog(path=folder / "mutant.jsonl")
+            with mock.patch.object(SqliteStore, "_merged_sources", drop_new_sources), mock.patch(
+                "app.cli.main.PROJECT_ROOT", project
+            ):
+                for manifest in manifests:
+                    output = io.StringIO()
+                    with redirect_stdout(output):
+                        code = cli_main(
+                            ["sense", "--fixture", manifest, "--db", db_arg],
+                            process_log=log,
+                        )
+                    self.assertEqual(code, 0)
+                    if manifest == manifests[0]:
+                        m2_probe._record_baseline(db)
+            actual = m2_probe._inspect(db)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": "ok", **actual},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("source_names" in item for item in differences), differences)
+
+    def test_real_m2_extra_message_row_changes_rollback_signature(self) -> None:
+        """合成库新增合法 hr_messages 行时，SC-U14 回滚签名必须变为未保持。"""
+        import sqlite3
+
+        assets = load_assets()
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m2/probe/seed_backwards.json").read_text(encoding="utf-8")
+        )
+        oracle = assets.oracles["variants"]["SC-U14/observed_at_backwards"]["acceptance"]["steps"][2]
+        project = SCENARIO_ROOT.parent.parent
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            db = root / "runtime.sqlite3"
+            with mock.patch.object(m2_probe, "ROOT", project):
+                m2_probe._seed(request, db)
+            seeded = m2_probe._inspect(db)
+            self.assertTrue(seeded["unchanged_since_seed"])
+            conversation = seeded["conversation_keys"][0]
+            connection = sqlite3.connect(db)
+            try:
+                connection.execute(
+                    "INSERT INTO hr_messages (app,key,conversation_key,inbound_hash,observed_at) "
+                    "VALUES ('boss','boss:message:mutant',?,?, '2026-11-24T00:00:00.000Z')",
+                    (conversation, "b" * 64),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            actual = m2_probe._inspect(db)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": "ok", **actual},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("unchanged_since_seed" in item for item in differences), differences)
+
     def test_real_m2_sut_mutant_coverage_is_caught(self) -> None:
         """真实 M2 解析器把 coverage 降为 viewport 时，SC-U04 oracle 必须失败。"""
         from app.adapters.boss.list import load_and_parse_snapshot

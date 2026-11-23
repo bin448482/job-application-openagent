@@ -11513,6 +11513,15 @@
             "exit_code": 0,
             "stdout_paths": [
               {
+                "equals": "ok",
+                "path": "status"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
                 "keys": [
                   "schema_version",
                   "result",
@@ -11601,13 +11610,91 @@
                 "path": "result.value.candidates.0.source_names.1"
               }
             ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 1,
+                "path": "task_count"
+              },
+              {
+                "equals": true,
+                "path": "stable_unchanged_since_baseline"
+              },
+              {
+                "equals": "row_badge",
+                "path": "source_names.0.0"
+              },
+              {
+                "equals": "preview_delta",
+                "path": "source_names.0.1"
+              },
+              {
+                "length_equals": 2,
+                "path": "source_names.0"
+              },
+              {
+                "equals": 0,
+                "path": "attempt.0"
+              },
+              {
+                "equals": null,
+                "path": "lease_owner.0"
+              },
+              {
+                "equals": null,
+                "path": "owner_pid.0"
+              },
+              {
+                "equals": false,
+                "path": "nonce_present.0"
+              },
+              {
+                "equals": null,
+                "path": "lease_expires_at.0"
+              },
+              {
+                "equals": false,
+                "path": "device_present"
+              },
+              {
+                "equals": 0,
+                "path": "device_count"
+              },
+              {
+                "equals": 0,
+                "path": "message_count"
+              },
+              {
+                "equals": 1,
+                "path": "conversation_count"
+              },
+              {
+                "equals": null,
+                "path": "baseline_preview_hashes.0"
+              },
+              {
+                "equals": null,
+                "path": "baseline_time_hints.0"
+              },
+              {
+                "equals": false,
+                "path": "baseline_verified.0"
+              }
+            ]
           }
         ]
       },
       "assertions": [
         "同指纹同发现键不新增行",
-        "第二次预览源合并到同候选",
-        "不续租"
+        "第二次预览源持久合并到同候选",
+        "不新增租约或 attempt",
+        "成功 sense 不推进基线、不写消息"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -13466,6 +13553,50 @@
                 "path": "fingerprints.0"
               },
               {
+                "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f",
+                "path": "conversation_keys.0"
+              },
+              {
+                "equals": "row_badge",
+                "path": "source_names.0.0"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "updated_at.0"
+              },
+              {
+                "equals": "recovery_requires_reconciliation",
+                "path": "reasons.0"
+              },
+              {
+                "equals": 0,
+                "path": "attempt.0"
+              },
+              {
+                "equals": null,
+                "path": "lease_owner.0"
+              },
+              {
+                "equals": null,
+                "path": "owner_pid.0"
+              },
+              {
+                "equals": false,
+                "path": "nonce_present.0"
+              },
+              {
+                "equals": true,
+                "path": "device_present"
+              },
+              {
+                "equals": 1,
+                "path": "device_count"
+              },
+              {
+                "equals": "quarantined",
+                "path": "device_reservation_state"
+              },
+              {
                 "equals": 1,
                 "path": "event_counts.candidate_deferred"
               }
@@ -13674,6 +13805,62 @@
               {
                 "equals": "22418700c9b682edfbc78bf595361b62c546e753f8718fc14dbde1896327a5a2",
                 "path": "fingerprints.0"
+              },
+              {
+                "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f",
+                "path": "conversation_keys.0"
+              },
+              {
+                "equals": "row_badge",
+                "path": "source_names.0.0"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "updated_at.0"
+              },
+              {
+                "equals": null,
+                "path": "reasons.0"
+              },
+              {
+                "equals": 0,
+                "path": "attempt.0"
+              },
+              {
+                "equals": "00000000-0000-4000-8000-000000000031",
+                "path": "lease_owner.0"
+              },
+              {
+                "equals": 1,
+                "path": "owner_pid.0"
+              },
+              {
+                "equals": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "path": "owner_host.0"
+              },
+              {
+                "equals": true,
+                "path": "nonce_present.0"
+              },
+              {
+                "equals": "2026-11-24T00:01:00.000Z",
+                "path": "lease_expires_at.0"
+              },
+              {
+                "equals": true,
+                "path": "device_present"
+              },
+              {
+                "equals": 1,
+                "path": "device_count"
+              },
+              {
+                "equals": "held",
+                "path": "device_reservation_state"
+              },
+              {
+                "equals": true,
+                "path": "device_owner_matches_task"
               },
               {
                 "equals": 1,
