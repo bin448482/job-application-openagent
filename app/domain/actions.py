@@ -19,7 +19,7 @@ from app.domain.models import (
     validate_evidence,
 )
 from app.domain.policy import is_profile_id
-from app.domain.reading import is_message_key
+from app.domain.reading import is_job_key, is_message_key
 
 ACTION_KINDS = (
     "send_text",
@@ -27,6 +27,7 @@ ACTION_KINDS = (
     "change_wechat",
     "change_phone",
     "delete_conversation",
+    "apply_job",
 )
 ACTION_KIND_SET = frozenset(ACTION_KINDS)
 ACTION_SUFFIXES = {
@@ -41,6 +42,7 @@ ACTION_EFFECT_BY_KIND = {
     "change_wechat": "request_sent",
     "change_phone": "request_sent",
     "delete_conversation": "deleted",
+    "apply_job": "applied",
 }
 DELIVERED_EFFECT = "sent"
 ACTION_STATES = frozenset(
@@ -75,6 +77,7 @@ ACTION_REASON_CODES = frozenset(
         "action_mismatch",
         "invalid_resolution",
         "policy_changed",
+        "apply_quota_contract_missing",
     }
 )
 
@@ -150,6 +153,8 @@ class ActionObservation:
     target_present_before: bool
     target_present_after: bool
     anchor_present_after: bool
+    apply_available_before: bool = False
+    apply_completed_after: bool = False
 
 
 @dataclass(frozen=True)
@@ -233,6 +238,10 @@ def action_key_for(
         if not is_message_key(message_key):
             raise ActionError("invalid_action")
         return f"{app}:{message_key}:reply"
+    if action_kind == "apply_job":
+        if not is_job_key(message_key):
+            raise ActionError("invalid_action")
+        return f"{app}:{message_key}:apply"
     if not is_conversation_key(app, conversation_key):
         raise ActionError("invalid_action")
     return f"{conversation_key}:{ACTION_SUFFIXES[action_kind]}"
@@ -249,6 +258,13 @@ def is_action_key(action_kind: object, value: object) -> bool:
             return False
         message_key = value[len(prefix): -len(suffix)]
         return is_message_key(message_key) and value == f"{APP}:{message_key}:reply"
+    if action_kind == "apply_job":
+        prefix = f"{APP}:"
+        suffix = ":apply"
+        if not value.startswith(prefix) or not value.endswith(suffix):
+            return False
+        job_key = value[len(prefix): -len(suffix)]
+        return is_job_key(job_key) and value == f"{APP}:{job_key}:apply"
     suffix = ":" + ACTION_SUFFIXES[action_kind]
     if not value.endswith(suffix):
         return False
@@ -268,6 +284,12 @@ def validate_action_target(
     """按唯一 action_key_for 算法核对动作键与实际目标，拒绝错配。"""
     if action_kind == "send_text":
         if not is_message_key(target_key):
+            raise ActionError("invalid_action")
+        expected = action_key_for(
+            action_kind, app=APP, message_key=str(target_key)
+        )
+    elif action_kind == "apply_job":
+        if not is_job_key(target_key):
             raise ActionError("invalid_action")
         expected = action_key_for(
             action_kind, app=APP, message_key=str(target_key)
@@ -323,6 +345,8 @@ def validate_observation(observation: object) -> None:
         "target_present_before",
         "target_present_after",
         "anchor_present_after",
+        "apply_available_before",
+        "apply_completed_after",
     ):
         _require_bool(name, getattr(observation, name))
     if observation.error is not None and observation.error not in OBSERVATION_ERRORS:
@@ -354,6 +378,8 @@ def _precondition_ok(observation: ActionObservation) -> bool:
             and observation.protections_clear
             and observation.target_present_before
         )
+    if kind == "apply_job":
+        return observation.identity_unique and observation.apply_available_before
     return False
 
 
@@ -393,6 +419,14 @@ def _performed_effect(observation: ActionObservation) -> str | None:
             and observation.anchor_present_after
         ):
             return "deleted"
+        return None
+    if kind == "apply_job":
+        if (
+            observation.identity_unique
+            and observation.apply_available_before
+            and observation.apply_completed_after
+        ):
+            return "applied"
         return None
     return None
 
@@ -504,8 +538,9 @@ def validate_authorization(authorization: object) -> None:
     for name in ("base_hash", "pack_hash", "acceptance_base_hash", "acceptance_pack_hash"):
         if not is_hash(getattr(authorization, name)):
             raise ActionError("invalid_authorization")
-    if not isinstance(authorization.task_key, str) or not authorization.task_key.startswith(
-        f"{APP}:discovery:"
+    if not isinstance(authorization.task_key, str) or not (
+        authorization.task_key.startswith(f"{APP}:discovery:")
+        or authorization.task_key.startswith(f"{APP}:job:")
     ):
         raise ActionError("invalid_authorization")
     if not is_action_key(

@@ -8,6 +8,7 @@
 
 - `__init__.py`：声明合成适配器包。
 - `actions.py`：`ScriptedActionExecutor`；固定 `current_ime`、`observation`、`raise` 三种脚本键，严格校验观察字段集合与类型，`raise` 只携带固定失败原因与 `clicked` 事实；返回 `ActionObservation`，由领域纯函数推导三态证据。
+- `runtime.py`：M6 `StimulusRuntimeScene` 按顺序回放场景刺激（安全点、候选、读取状态、任务结果、决策刺激、时序/预算），严格拒绝 `expected/oracle/verdict/answer`；`StimulusDecisionSource` 只返回当前步骤的决策刺激，记录输入/事实摘要，不伪造真实模型调用或授权。
 
 ## 三、边界
 
@@ -17,7 +18,9 @@
 
 ## 四、测试
 
-`python -m unittest tests.test_action_executor tests.test_action_cli`
+`python -m unittest tests.test_action_executor tests.test_action_cli tests.test_runtime_execute`
+
+`tests.test_runtime_execute` 只使用临时项目/OS 根、合成场景与合成凭证，验证调度/安全点/预算/游标/双时钟/read_only/决策记忆；不连接设备或 provider。
 
 ## 五、维护要求
 

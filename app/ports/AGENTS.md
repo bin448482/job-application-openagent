@@ -16,6 +16,7 @@
 - `policy.py`：M4a `PolicyError(reason_code, issues, *, activity_state)`、`PolicyRepositoryPort`（base/示例/活动包/快照/指南/preview 读取、暂存、原字节写、同卷发布、受控清理）与 `PolicyActivityPort.assess_restore(*, profile_id, dest_pack)->stopped|active|unknown`。原因码固定 `invalid_input/invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case/invalid_provider/eval_failed/authorization_required`；M4c 生产注入真实活动/未决检查；`RefusingPolicyActivity` 仅保留为受控拒绝实现。
 - `decision.py`：M4b `BridgeDescriptor`、`BridgeError(reason_code, *, submitted)`、`DecisionBridgePort.complete(*, system_message, developer_message, user_message, echo)->str`、`DecisionSnapshotPort.reload()->(base,pack)`、`DecisionLeasePort.current_expiry()->str|null` 与 `DecisionClockPort.now()->str`；固定 `BRIDGE_TIMEOUT_SECONDS=20`、`BRIDGE_MAX_OUTPUT_BYTES=64KiB`、三角色、A/B 协议与 `bridge_start_failed/unavailable/timeout/protocol/roles/auth/quota/disconnected` 诊断。只有 `bridge_start_failed` 在传输层证明进程未启动时可重试；端口不暴露 argv、端点或凭据。
 - `eval.py`：M4b `EvalStorePort`（公开/回归/留出套件读取、本机报告/凭证原子写入、留出登记锁内更新、无上传合同读取、退役 regression 准入写入）；不存在套件返回 null，路径/链接/坏格式映射固定策略错误。
+- `runtime.py`：M6 `RuntimeScenePort`（按安全点返回场景/读取/决策刺激，不读答案）、`RuntimeDecisionPort`（只返回已校验摘要/回复，不返回授权/nonce/租约）与 `RuntimeStorePort`（批次游标、职位任务、草稿、运行时决策记忆、检查点/暂停/事件与运行租约只读复核）。
 - `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、边界
@@ -30,7 +31,7 @@
 - `EvalStorePort` 只读写项目内合成套件与被忽略的 `data/evals`，不读取真实私有样本内容到公开报告，不下载或上传；`read_acceptance` 只读固定运行目录凭证。
 - `SharedDeviceGatePort` 只允许一个本机 primary 占用；不存在 TTL/PID 自动释放接口，verify/release 必须比较取得时的完整 owner/profile 身份，`recover` 仅用于原 profile/原库的受控对账接管。`ProfileStorePort` 只按 profile 固定库读写事实/元数据并只读现有 M1 状态，不预建 M5 动作表；真实任务租约由 `SqliteStore.current_lease_expiry` 与 `ProfileSessionLease` 组合交付，不使用固定测试租约。
 - `DeviceActionPort` 只接收已渲染/已校验的计划并返回观察；不持有授权、额度、任务状态或 Evidence 判定，不自行重试。
-- 不预建 M6 调度端口。
+- M6 端口不暴露正文、坐标、旧 nonce 或授权；场景/决策刺激只用于同一调度/存储/读取/决策/动作流程，不替代真实设备或 provider 标定。
 
 ## 四、维护要求
 

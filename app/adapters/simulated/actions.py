@@ -125,7 +125,10 @@ class ScriptedActionExecutor:
         if not is_action_key(plan.action_kind, plan.action_key):
             raise ActionExecutionError("executor_interrupted", clicked=False)
         data = dict(self._observation)
-        if set(data) != set(_OBSERVATION_FIELDS):
+        expected_fields = set(_OBSERVATION_FIELDS)
+        if plan.action_kind == "apply_job":
+            expected_fields |= {"apply_available_before", "apply_completed_after"}
+        if set(data) != expected_fields:
             raise ValueError("observation fields are invalid")
         for name in ("before_snapshot_id", "after_snapshot_id"):
             value = data[name]

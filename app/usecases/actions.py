@@ -182,6 +182,8 @@ def perform_action(
     reload_snapshot: Callable[[], dict[str, str]] | None = None,
 ) -> dict[str, object]:
     """在共享占用与运行中租约下原子 pending、执行一次并提交三态证据。"""
+    if action_kind == "apply_job":
+        raise ActionError("apply_quota_contract_missing")
     active_clock = clock if clock is not None else utc_now
     current = {
         "base_hash": current_base_hash,

@@ -13,7 +13,7 @@
 - `files/`：M4a 本机策略包/base/preview 读取、点前缀暂存、同卷发布与受控清理；M4b 套件读取、本机报告/凭证与留出登记；见 `files/AGENTS.md`。
 - `llm/`：M4b A/B 子进程桥、固定三角色分区、20 秒有界超时与固定诊断；见 `llm/AGENTS.md`。
 - `sqlite/`：M1 五表 v1、初始化/核验、事务仓储与租约，以及 M4c profile 事实库/固定 OS 共享门禁/restore 活动检查/真实 profile 会话租约、M5 profile v2 动作表/文本额度与受控对账；见 `sqlite/AGENTS.md`。
-- `simulated/`：M5 脚本化设备动作执行器，只回放合成观察，不连接真实设备、不启动子进程；见 `simulated/AGENTS.md`。
+- `simulated/`：M5 脚本化设备动作执行器与 M6 纯合成场景/决策刺激；只回放合成观察，不连接真实设备、不启动子进程；见 `simulated/AGENTS.md`。
 
 ## 三、边界
 

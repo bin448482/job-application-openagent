@@ -1,4 +1,4 @@
-# M0–M5 探针、状态库、离线读取、策略包、决策桥、profile 事实、共享设备门禁与动作护栏操作手册
+# M0–M6 探针、状态库、离线读取、策略包、决策桥、profile 事实、共享设备门禁、动作护栏与调度运行操作手册
 
 > 文件用途：说明当前已实现的 M0 `doctor`、M1 `store init`、M2 `sense`、M3 `read`、M4a `policy`、M4b `policy eval`/`policy holdout`、M4c `facts`/`policy acceptance`/`run check` 及共享设备门禁、M5 `action` 动作护栏/文本资格/人工卡/受控对账能做什么、怎么运行、如何解读 JSON，以及在执行真实设备探针/采集或模型外发前必须完成的确认与边界；M6 以后的调度与完整运行尚未实现。
 
@@ -16,10 +16,11 @@
 - `policy acceptance check`：只读比较 M4b 验收凭证与当前 base/pack（可选 provider/model 摘要），摘要变化拒绝旧凭证。
 - `run check`：只读预检 mode、设备本轮确认、草稿验收、共享设备占用与 profile 库绑定；不探测设备、不调用模型、不执行动作。
 - `action`：M5 五动作护栏、持久化文本额度/冷却、固定人工卡与受控对账；`perform` 只经合成执行器与真实生产用例运行，`eligibility` 只计算资格，`card` 只读未决卡，`reconcile` 需原 profile 共享身份与本轮确认。
+- `run prepare`/`run execute`：M6 显式准备 profile v3 与有界运行；`execute` 当前只回放纯合成场景刺激，read_only 零业务写，draft_only 不自动 apply/send；`apply_job` 因缺生产配额合同固定拒绝。
 
-M0–M5 的离线入口都不切换真实应用、不 dump 真实聊天、不截图、不点击、不发送、不执行真实 M5 动作。`doctor --fixture` 只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite；`sense`/`read` 只读合成输入，`sense` 可写项目内合成 SQLite，`read` 不写业务库；`policy` 只读写项目内公开 base、示例、固定 preview 案例与本机 `prompts/local`；`policy eval` 只读当前活动包与合成套件、只启动显式本机桥程序并只写 `data/evals`；`facts`、`policy acceptance`、`run check` 与 `action` 的 CLI 入口不连接设备或网络，`action perform` 只使用合成动作脚本与临时 profile 库。每次运行创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl` 本机过程日志（见第十一节），运行之间不共享追加。
+M0–M6 的离线入口都不切换真实应用、不 dump 真实聊天、不截图、不点击、不发送、不执行真实 M5 动作。`doctor --fixture` 只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite；`sense`/`read` 只读合成输入，`sense` 可写项目内合成 SQLite，`read` 不写业务库；`policy` 只读写项目内公开 base、示例、固定 preview 案例与本机 `prompts/local`；`policy eval` 只读当前活动包与合成套件、只启动显式本机桥程序并只写 `data/evals`；`facts`、`policy acceptance`、`run check`/`prepare`/`execute` 与 `action` 的 CLI 入口不连接设备或网络，`action perform` 只使用合成动作脚本与临时 profile 库。每次运行创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl` 本机过程日志（见第十一节），运行之间不共享追加。
 
-M1 的仓储 API 已实现候选入库、任务租约、三态收敛与过期恢复；M2 `sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，**不** claim/start/finish、不消耗发现、不推进已读基线、不打开会话。M3 `read` 不调用仓储、不关闭发现、不写正文或 `verified` 基线；M4a `policy` 不调用桥、仓储或设备；M4b `policy eval` 只做单次决策桥与分层评测，不执行发送、事实写入、动作或设备调用；M4c 增加 profile 事实库与共享设备门禁，但 `run check` 仅预检；M5 `action` 增加五动作护栏/额度/对账，但只接合成执行器与临时 profile 库，不执行真实设备动作。M6+ 的调度、真机执行与完整 MVP 运行仍未实现。
+M1 的仓储 API 已实现候选入库、任务租约、三态收敛与过期恢复；M2 `sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，**不** claim/start/finish、不消耗发现、不推进已读基线、不打开会话。M3 `read` 不调用仓储、不关闭发现、不写正文或 `verified` 基线；M4a `policy` 不调用桥、仓储或设备；M4b `policy eval` 只做单次决策桥与分层评测，不执行发送、事实写入、动作或设备调用；M4c 增加 profile 事实库与共享设备门禁，但 `run check` 仅预检；M5 `action` 增加五动作护栏/额度/对账，但只接合成执行器与临时 profile 库，不执行真实设备动作；M6 增加调度/安全点/预算/游标、profile v3 最小表、草稿/决策记忆与 `apply_job` 边界，但 `run execute` 只接纯合成场景，不导航真实设备、不调用真实 provider，M7 清理与 M8 灰度仍未实现。
 
 ## 二、离线 fixture 模式（默认推荐）
 
@@ -345,7 +346,7 @@ python -m app run check --pack prompts/local/demo --mode draft_only --confirm-de
 python -m app run check --pack prompts/local/demo --mode auto_send_tier_a --confirm-device
 ```
 
-- `run check` 只做预检：不探测设备、不调用模型、不执行 M5 动作、不写动作表。成功输出 `preflight_only=true`、`actions_performed=0`、`decisions=0` 与 `real_device_action_entry_not_delivered`/`m6_scheduling_not_implemented`/`m8_run_not_implemented`/`device_probe_not_run` 限制，**不**表示完整运行、真实设备动作入口或发送授权。
+- `run check` 只做预检：不探测设备、不调用模型、不执行 M5 动作、不写动作表。成功输出 `preflight_only=true`、`actions_performed=0`、`decisions=0` 与 `real_device_action_entry_not_delivered`/`m6_runtime_execute_fixture_only`/`m8_run_not_implemented`/`device_probe_not_run` 限制，**不**表示完整运行、真实设备动作入口或发送授权。
 - read_only 只要求本轮 `--confirm-device`；draft_only 另要求当前验收且 provider/model/model_config_hash 齐全；`auto_send_tier_a` 在 v1 缺独立前置判据且固定 `policy_tier=C` 时始终 `authorization_required`。
 - 预检先取得共享占用，再打开 profile 库；profile 库坏、绑定不符或存在 leased/running/blocked 未决时保留共享占用并置 `quarantined`，不补偿为设备空闲。正常预检结束才释放。门禁与 profile 打开步骤都有配对日志。
 - 实际 CLI 受控合成桥 eval→snapshot→restore→validate/preview→eval 串行闭环已验证：快照/恢复/验证与两次报告 pack_hash 一致，同 profile 既有事实与任务审计不变；模拟/真实 provider 外发边界不变。
@@ -391,6 +392,26 @@ python -m app action reconcile --profile demo --pack prompts/local/demo --mode d
 - 第8轮返修补充：列表覆盖把 `content-desc` 计入可见意义，并按每个有意义节点的真实祖先链逐层核验中间/外层裁剪与 `scrollable` 事实；命令边界在 Popen 前先写账本未闭合事实，assign 失败不恢复执行，assign/resume/首次 PID/二次超时/wait 再超时/OSError 统一走有界 finally 并终止/关闭专属 Job；finish 写失败与空 IME 早退都保持 `command_quiet=false`，未证明全停时动作记录 unknown、任务暂停、profile/共享隔离与人工卡一致保留，已证效果不改写。
 - 第9轮返修补充：唯一账本闭合步骤在真实 complete 写失败时记录 `stage=action/operation=action_finish_command` 的 started→failed 固定安全终态（`reason_code=store_io_error`、`error_category=store`），可由同一 ProcessLog/correlation 关联，不写异常原文、参数、现场或绝对路径；公开仍保持 unknown/隔离、已证效果与人工卡。
 - 第10轮返修补充：真实 ADB `execute` 在无账本、未绑定动作或绑定不一致时零命令拒绝，生产用例无账本只会 pending/blocked/隔离；证据索引失败按真实点击与阶段保守收敛；v1→v2 备份前核验完整 DDL 与 profile 身份，错 profile/坏库零备份；`reconcile` 固定 `draft_only`；`run check` 的 limitations 改为真实设备入口/M6 调度/M8 run 未交付，不再声称 M5 动作未实现。
+
+### 7.9 M6 调度、安全点与有界运行
+
+M6 已交付纯领域调度规则、profile v3 最小持久化、实际 `run prepare|execute` 生命周期、草稿/运行时决策记忆与第六动作 `apply_job` 边界；当前只接纯合成场景刺激，不导航真实设备、不调用真实 provider。
+
+```powershell
+python -m app run prepare --pack prompts/local/demo
+python -m app run execute --pack prompts/local/demo --mode read_only --fixture <合成场景> --confirm-device
+python -m app run execute --pack prompts/local/demo --mode draft_only --fixture <合成场景> --confirm-device --credential <凭证> --provider <provider_id> --model-id <model_id> --model-config-hash <摘要>
+```
+
+- `run prepare` 先取得固定 OS 共享门禁排他，再创建/打开/迁移 profile v3；占用期间返回 `device_busy`，不改 profile。迁移 v1/v2 前先核验身份与完整 DDL，再备份并单事务迁移；失败不覆盖旧库。
+- `run execute` 先校验 mode/本轮设备确认/当前验收，再整轮持有共享门禁、打开现有 profile 与 v3 仓储。`read_only` 只读一次可见观察与过程审计：零导航、零未读消费、零模型、零任务/草稿/决策业务写、零隐式迁移。`draft_only` 走同一调度/存储/读取/决策流程，不自动 apply/send。
+- 固定优先级：可定位未读 → 新消息 → 职位 → 显式清理候选；M7 清理表尚未创建。安全点七条件全部成立才允许切换：回列表、输入空、无确认框、无在途命令、无 pending/unknown 动作、动作状态已提交、checkpoint 已提交。未知未读只允许一次定向核对，仍未知暂停 `unread_unverified`。
+- 预算基线：900 秒 / 200 设备调用 / 20 候选 / 单职位 30 秒 / 5 次抢占；等号停止发起新工作，在途超支单列。第 6 次抢占暂停 `preemption_limit`，不回退职位/清理。设备调用与模型调用分别计数。
+- 批次游标 `job_batches.cursor_json` 保存 `last_job_dedupe_key/visited_keys/remaining_budget/preemptions/first_observed_at`；恢复按当前职位身份顺序，消失跳过、插入/重排不重复；新进程/round 不补预算。
+- `stage_preempted` 只在职位→未读实际切换并开始处理后写入；首次观察保留，`waited_ms` 由单调时钟计算，检测间隔另记。墙钟/单调时钟增量差超过 1 秒停止。
+- 决策记忆只保存摘要/枚举，键含 profile/subject/task/input/base/pack/model/model_config/facts 摘要；命中后仍重读事实、当前验收与运行租约，不把命中当本轮模型成功或授权。草稿是可重审本机件，不携带授权或租约；后续执行仍需全部新鲜复验。
+- `apply_job` 使用规范键 `app:job_key:apply`、`Evidence.effect=applied` 与同一 pending/授权/命令账本/无重放路径。生产 `action perform --action-kind apply_job` 在未定义 apply 配额合同时于任何 profile/门禁/设备写入前固定 `apply_quota_contract_missing` 拒绝；合成契约测试不构成生产授权。
+- 合成场景严格拒绝 `expected/oracle/verdict/answer`；缺键、额外键、坏 JSON 失败关闭。合成通过不构成真实设备、模型、发送或 A 档验收。
 
 ## 八、显式真实设备模式
 只有同时给出 `--device`、`--serial` 与 `--confirm-device` 才启用真实探针：
@@ -521,7 +542,7 @@ stdout 不包含 `correlation_id`。按单次运行核对时，优先读取该�
 
 ## 十二、尚未实现
 
-M3 离线读取（`read`）、M4a 策略包六命令（`policy`）、M4b 本机桥/分层 eval（`policy eval`/`policy holdout`）、M4c profile 事实/共享设备门禁/验收复核/运行预检与 M5 动作护栏/文本资格/人工卡/受控对账已实现；运行时决策记忆、真实事实对账开锁以及 M6–M8 的调度、清理、真机执行和灰度都尚未实现。M1 的完整任务租约 API 已实现，但 M2 `sense` 只调用 upsert 与未关闭会话查询，M3 `read` 不调用仓储、不 claim/start/finish、不关闭发现。M4a `policy preview` 不生成 Decision、不调用模型；生产 `policy restore` 现在接真实活动检查，只允许 stopped，active/unknown/坏库/未决都拒绝且不换目录解锁。M4b 只用合成本机桥桩/模拟 transport，未调用真实 provider、未运行私有留出。M4c `facts`/`run check` 只用临时 OS 根、合成事实与跨进程模拟，`run check` 只是预检，不执行动作。M5 `action` 只用合成动作脚本、mock ADB 与临时 profile 库，未在真机执行任何点击、输入、发送、附件、联系方式或删除，也未验证真实 IME/坐标/附件名/删除保护/恢复时序。不要用 M0 的 fixture 结果、M1 的合成库、M2 的合成 profile、M3 的合成读取、M4a 的 preview、M4b 的模拟 eval、M4c 的预检或 M5 的合成动作/资格推断真实设备/模型支持范围，也不要把合成候选、探针成功、读取 actionable、`store init` 成功、策略 validate/preview/快照、M4b 模拟通过、`run check` 通过或 `action eligibility` 为真当作发送授权、真实版本标定或完整业务验收。
+M3 离线读取（`read`）、M4a 策略包六命令（`policy`）、M4b 本机桥/分层 eval（`policy eval`/`policy holdout`）、M4c profile 事实/共享设备门禁/验收复核/运行预检、M5 动作护栏/文本资格/人工卡/受控对账与 M6 调度/安全点/预算/游标/合成 `run prepare|execute`/草稿与决策记忆/`apply_job` 边界已实现；M7 清理、M8 灰度、真实设备动作循环、真实 provider 与 `apply_job` 生产配额合同尚未实现。M1 的完整任务租约 API 已实现，但 M2 `sense` 只调用 upsert 与未关闭会话查询，M3 `read` 不调用仓储、不 claim/start/finish、不关闭发现。M4a `policy preview` 不生成 Decision、不调用模型；生产 `policy restore` 现在接真实活动检查，只允许 stopped，active/unknown/坏库/未决都拒绝且不换目录解锁。M4b 只用合成本机桥桩/模拟 transport，未调用真实 provider、未运行私有留出。M4c `facts`/`run check` 只用临时 OS 根、合成事实与跨进程模拟，`run check` 只是预检，不执行动作。M5 `action` 只用合成动作脚本、mock ADB 与临时 profile 库，未在真机执行任何点击、输入、发送、附件、联系方式或删除，也未验证真实 IME/坐标/附件名/删除保护/恢复时序。M6 `run execute` 只回放纯合成场景刺激，未导航真实设备、未调用真实 provider，`apply_job` 生产入口因缺配额合同固定拒绝。不要用 M0 的 fixture 结果、M1 的合成库、M2 的合成 profile、M3 的合成读取、M4a 的 preview、M4b 的模拟 eval、M4c 的预检、M5 的合成动作/资格或 M6 的合成调度推断真实设备/模型支持范围，也不要把合成候选、探针成功、读取 actionable、`store init` 成功、策略 validate/preview/快照、M4b 模拟通过、`run check` 通过、`action eligibility` 为真或 `run execute` 合成通过当作发送授权、真实版本标定或完整业务验收。
 
 ## 十三、安全与隐私
 

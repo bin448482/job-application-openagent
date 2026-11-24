@@ -30,6 +30,11 @@
 - `test_action_usecase.py`：M5 生产用例：默认动态 clock、实际 store/profile/gate 绑定、验收四字段缺失/漂移、结构化身份缺失/冲突/调用键与持久任务不符在 pending 前拒绝、公共+真实 ADB 适配器目标职位不符不可逆 tap0、首次 IME 前绑定动作上下文并记录命令族、命令族未证明全停/完成写失败/空 IME 早退时保留已证效果但 unknown/`gate_converged=false`/人工卡、一次真实 complete 写失败准确 hit1 并留下 `action_finish_command` started→failed 安全终态且不降级、任务身份 SELECT 读故障 started→单一失败终态且零设备/pending、leased 未 start 零设备调用、执行中/提交前包/共享身份漂移冻结 unknown、unknown 单次调用且不重放、performed 不改事实、同动作键新任务拒绝、完整七字段证据、坏观察 unknown、持久 IME 绑定/错误原值不收敛/正常恢复、原命令停止恢复门禁、成对 safe 日志与单终态；无账本（含 IME 预读）零子进程、真实合成子进程+真实 Job 账本 performed/done 正例、证据索引 before/after 失败的 tap 数与三态/任务/设备处置。
 - `test_action_executor.py`：M5 ADB 原语参数数组/`shell=False`/5 秒/不重试/每命令门禁复核、唯一姓名+完整身份/唯一目标 editor/真实列表容器整层覆盖（可见后代 text/content-desc 缺失/坏/零面积 bounds、列表内中间与更外层裁剪/滚动三阶段拒绝）/唯一类型槽位/目标子树差分、嵌套槽位单一定位、同分组两个同类型槽位歧义零点击、动作后按钮 disabled 仍证明本类型新状态、另一类型已处理不污染、dialog 同类型槽位状态重核、单 tap 拒绝、既有/无关提示不算新变化、点击前后失败事实、IME 前置后切换/早退恢复/读回、固定命令标签、复用 screen 证据+动作索引、真实 Popen 回调记录命令族、平台 Job 有界未证明/空族/不可用三态、执行起点前未闭合事实中断保留 unknown、assign/resume 失败不执行、二次超时/OSError 有界收尾、真实自有合成 Python 子孙 Job 正常停止、身份写失败/超时有界回收、无账本/未绑定/错绑定与绑定后 IME 预读零命令拒绝、证据索引失败 clicked/phase 收敛、坏 XML 恢复拒绝与合成执行器严格观察。
 - `test_action_cli.py`：M5 实际 CLI 组合根：五动作正例、read_only/未确认/未授权/包漂移拒绝、缺身份拒绝、not_performed 与未收敛、unknown 不重放、资格正例/同动作历史/冷却负例、confirm/abandon 对账、设备现场对账坏 XML 拒绝后再正例、人工卡与 restore unknown；read_only reconcile 在 profile/门禁/设备写入前拒绝且状态不变。
+- `test_runtime_domain.py`：M6 纯规则：安全点七条件逐个为假、默认预算与等号停止/在途超支、游标往返/重排/插入/消失/重复访问、固定优先级、未知未读一次核对、第 6 次抢占、首次观察保留与单调等待、检测间隔与双时钟漂移。
+- `test_runtime_store.py`：M6 仓储：检查点事件故障回滚、`apply_job` performed/applied、unknown 隔离与不重放、typed `job_task_key` 数据库约束、v2→v3 备份迁移保留旧动作行。
+- `test_runtime_execute.py`：M6 实际运行（合成）：职位→未读实际抢占、七安全点逐个阻断、未知未读核对、预算四类边界、第 6 次抢占、重启不回补预算、双时钟、read_only 零业务写、决策记忆命中与事实撤销失效、prepare 共享排他、apply_job 配额合同缺失零写入、坏场景拒绝。
+- `runtime_helpers.py`：M6 测试共用的临时项目、profile 准备、合成发现、场景/决策刺激、CLI 执行与只读行数辅助。
+- `tests/scenarios/`、`tests/test_offline_scenarios.py` 与 `tests/private_regression/` 由独立场景协调端维护；本目录不修改、不把其输出当作本 Task 判据。
 - `action_helpers.py`：M5 测试共用的临时项目根、策略包/验收凭证、profile 匹配 seed、动作/对账脚本、合成观察与 CLI 运行辅助。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。
 - `policy_helpers.py`：M4a/M4b 测试共用仓库原文读取、临时项目根（含公开套件）、CLI 运行、合成包写入与有效 envelope/decision/租约截止构造；不调用模型、设备或网络。
@@ -67,7 +72,7 @@ M0–M4b Python 测试不依赖 Node；`npm test` 验证既有 24 案例判据�
 
 ## 六、已知限制
 
-- 当前覆盖 M0–M5；M6+ 调度、完整 run、真实 provider/真机/真实 OS 门禁目录与真实动作执行测试尚未实现。
+- 当前覆盖 M0–M6；M7 清理、M8 完整 run/灰度、真实 provider/真机/真实 OS 门禁目录与真实动作执行测试尚未实现。M6 场景只含刺激，不含 expected/oracle；测试协调端维护的 `tests/scenarios`、`tests/test_offline_scenarios.py` 与 `tests/private_regression/` 独立判据不属于本目录维护范围。
 - 真实 ADB、真实机型、窗口/截图输出与真实消息稳定标识未验证；M1 停止检查器只用注入值或 mock ctypes；M2 只用合成 XML/profile；M3 只用合成 XML/RGBA 与 mock subprocess；M4a 只用临时项目根、合成 base/包/preview 与真实 stopped 检查；M4b 只用合成本机桥桩/模拟 transport；M4c 只用临时项目/OS 根、合成事实/凭证/桥桩与跨进程模拟；M5 只用合成动作脚本/mock ADB/临时 profile 库，真实 provider、私有留出、真实租约、真实 OS 门禁目录、真机动作与恢复时序未测。
 - 独立离线场景与私有回归测试不在本 Task 范围。
 - 日志测试验证的是本机 best-effort 行为，不代表磁盘故障时仍能保留完整日志。

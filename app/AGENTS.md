@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-承载 M0 起的业务程序。当前已实现 `python -m app` 入口、只读 `doctor` 探针、M1 本机状态库（`store init` 和 SQLite 仓储）、M2 合成传感器（`sense` 未读四源解析/入库）、M3 离线读取（`read` 页面/职位/未读/会话、字段阶梯、像素与跨屏身份）、M4a 策略包离线编辑/校验/预览/快照/恢复（`policy`）、M4b A/B 决策桥/公开评测/留出冻结登记（`policy eval`、`policy holdout`）、M4c profile 独立事实库/本机 `facts`/固定 OS 共享设备门禁/restore 活动检查/验收复核/`run check` 预检，以及 M5 五动作护栏/文本资格/人工卡与受控对账（`action`）；按“CLI 组合根 → usecase → port ← adapter”的依赖方向组织，`domain/` 只放无 IO 模型与校验。M6+ 调度仍待实现。
+承载 M0 起的业务程序。当前已实现 `python -m app` 入口、只读 `doctor` 探针、M1 本机状态库（`store init` 和 SQLite 仓储）、M2 合成传感器（`sense` 未读四源解析/入库）、M3 离线读取（`read` 页面/职位/未读/会话、字段阶梯、像素与跨屏身份）、M4a 策略包离线编辑/校验/预览/快照/恢复（`policy`）、M4b A/B 决策桥/公开评测/留出冻结登记（`policy eval`、`policy holdout`）、M4c profile 独立事实库/本机 `facts`/固定 OS 共享设备门禁/restore 活动检查/验收复核/`run check` 预检、M5 五动作护栏/文本资格/人工卡与受控对账（`action`），以及 M6 调度/安全点/批次预算/实际 `run prepare|execute`/草稿与运行时决策记忆/第六动作 `apply_job` 边界；按“CLI 组合根 → usecase → port ← adapter”的依赖方向组织，`domain/` 只放无 IO 模型与校验。M7 清理与 M8 灰度仍待实现。
 
 ## 二、当前文件与子目录
 
@@ -11,7 +11,9 @@
 - `cli/`：参数解析、配置校验、路径边界、JSON 输出与组合根；见 `cli/AGENTS.md`。
 - `domain/`：M1 纯领域模型、键/摘要算法、无 IO 校验与 M2 纯聚合/停止原因；见 `domain/AGENTS.md`。
 - `ports/`：能力端口与领域快照/租约类型；见 `ports/AGENTS.md`。
-- `usecases/`：单次用例的校验、持久化编排、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。
+- `usecases/`：单次用例的校验、持久化编排、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。M6 `runtime.py` 编排显式 `prepare` 与有界 `execute`，先占共享门禁、再开 profile，安全点/预算/游标/双时钟在每次新工作前检查。
+- `domain/runtime.py`：M6 纯规则：`BudgetLimits/BudgetState`、七条件 `SafePoint`、`select_task` 固定优先级、`BatchCursor` 身份恢复、`stage_preempted` 单调等待与双时钟漂移；不访问数据库/设备/模型。
+- `ports/runtime.py`：M6 场景/决策刺激与批次/职位/草稿/决策记忆最小端口。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。
 - `profile_open.py`：facts/run/restore 共用的唯一 profile 打开日志边界；`open_profile_store` 在实际 `store.open()` 前后记录 `profile/open_profile` started 与唯一 ok/failed，原因只取固定 reason_code，不写事实值/路径/原异常。
 - `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值；唯一 `emit_degraded_warning` 每次运行只写一次固定 stderr 标记，CLI 与仓储 API 共用。阶段已扩展到 `store/sense/read/policy/facts/profile/device_gate/action/run/eval/decision/adb_hierarchy/adb_screen/adb_evidence`，结果含 `started/ok/undetermined/failed`，并以 `operation` 记录 M0–M5 固定操作（含 eval/verify/bridge/suite/authorize/case/report/acceptance/holdout、facts set/show/revoke/forget、device_gate acquire/verify/release/quarantine/recover、profile open_profile、run check、current_lease_expiry、M5 begin/complete/reconcile action、save_ime、text_admission、task_conversation、require_running、perform/eligibility/card/reconcile 与 action_validate/admit/execute/derive/commit/reconcile_validate/commit 等），`case_index` 只作安全序号；仍复用唯一日志器。
@@ -57,6 +59,8 @@ python -m app action eligibility --profile demo --pack prompts/local/demo --mode
 python -m app facts set --profile demo --key work_location --value "<合成值>" --confirm
 python -m app facts show --profile demo --pack prompts/local/demo
 python -m app run check --pack prompts/local/demo --mode read_only --confirm-device
+python -m app run prepare --pack prompts/local/demo
+python -m app run execute --pack prompts/local/demo --mode read_only --fixture <合成场景文件> --confirm-device
 ```
 
 `tests.test_doctor` 覆盖 M0 CLI、配置与夹具校验、设备解析、日志与 fixture 零子进程；`tests.test_process_log_concurrency` 用两个独立进程验证默认与显式日志路径的隔离和完整关联；`tests.test_store` 覆盖候选入库、竞争、TTL、三态收敛、恢复、clock_changed、严格输入与事务回滚；`tests.test_migrations` 覆盖空库建表/核验、幂等、初始化回滚、schema 篡改与 `store init` CLI；`tests.test_sensor` 覆盖 M2 解析/合并/聚合/停止原因，`tests.test_sensor_store` 覆盖 sense 落库、重放、终态与仓储错误；`tests.test_read` 覆盖 M3 页面/职位/未读/会话、字段阶梯、像素、稳定消息身份、跨屏合并、门禁与 CLI，`tests.test_screen` 覆盖 mock ADB 采集与共享门禁；`tests.test_policy_contract`/`test_policy_pack` 覆盖 M4a Envelope/Decision、摘要、事实交集、2/4/39 硬下限、唯一内容对象 64 KiB、渲染与披露/事实值复验，`tests.test_policy_store` 覆盖六命令文件事务、复制源重读、四键/配置错误外层、链接候选 list、load/validate/render/publish 阶段日志、坏 profile 库 unknown 拒绝与 LF/CRLF。`tests.test_profile_facts` 覆盖事实提案/确认/再显示/冲突/撤销/遗忘/无值审计/值不进日志/pack-profile 身份/旧库不导入；`tests.test_device_gate` 覆盖固定 OS 路径、跨进程/跨项目根互斥、完整 owner/profile 篡改、未知库不改写、崩溃/PID/TTL/nonce 篡改/库不可读/隔离与 profile 活动检查；`tests.test_run_guard` 覆盖 read_only 确认/draft 验收/A 档拒绝/跨库隔离/日志配对；`tests.test_profile_session_lease` 覆盖合法 profile 库经唯一 SqliteStore 领取/续租/失效与 decide 桥前后拒绝；`tests.test_m4c_closed_loop` 覆盖真实活动 restore、目录不发布、三值一致、事实/任务审计不重置、旧凭证失效、唯一仓储快照重核与实际受控合成桥 CLI 串行闭环。M5 `tests.test_action_domain` 覆盖动作键/观察→三态/授权/人工卡；`tests.test_action_store` 覆盖 pending 先落库、额度冷却、事务回滚、迁移备份、unknown/pending/abandon；`tests.test_action_usecase` 覆盖授权精确、unknown 单次调用、零重放与当前证据；`tests.test_action_executor` 覆盖 ADB 原语参数数组/超时/不重试与合成执行器；`tests.test_action_cli` 覆盖五动作正反例、资格、对账与 abandon 隔离。M4b `tests.test_bridge` 覆盖 A/B 参数数组真实子进程、固定三角色、启动失败一次重试、重试前时钟/包/事实有效期门禁、提交后超时、临时创建/写超预算零 Popen、2MiB stdout 上限、慢/不读 stdin/大 stderr/短命继承 stdout、输出监测或 wait OSError、认证/额度/断连/角色/协议固定诊断与事实复验；`tests.test_policy_eval` 覆盖实包加载、模拟/真实适配器路径报告绑定与 correlation、公开/回归/留出分桶、24 行映射、失败/模拟/零样本无凭证、编辑包改变请求/摘要、留出 intent/中断/写失败/并发/样本身份占用/退役实际 regression/登记失败清理准入/无上传合同/文件边界/无关坏 regression 准入不影响 public+holdout/job_card 正控制/缺 public 与 authorize 拒绝日志唯一终态。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行；M1/M2 测试只用合成库与注入检查器，M2/M3 只用合成 XML/RGBA，M4a/M4b/M4c/M5 只用临时项目根、临时 OS 根、合成 preview/套件/事实/桥桩/动作脚本与跨进程模拟；真实 profile 租约只接合成 profile 库，真实 provider、私有留出、真实 OS 门禁目录与真机未运行。
@@ -71,7 +75,7 @@ python -m app run check --pack prompts/local/demo --mode read_only --confirm-dev
 
 ## 六、已知限制
 
-- M1 只实现设计说明 §6 的五表 v1、任务租约与 `store init`；M2 只实现合成 XML 解析/未读快照入库，不 claim/start/finish、不推进已读基线；M3 只实现离线页面/职位/未读/会话读取、字段阶梯、像素与跨屏身份，不调用仓储、不导航、不执行动作；M4a 只实现决策契约、策略包/摘要/渲染、六命令文件事务与真实活动恢复接线；M4b 只实现 A/B 本机子进程桥、单次决策编排、分层 eval/留出事务与无上传合同门槛；M4c 只实现 profile 事实库/本机 facts、固定 OS 共享门禁/restore 检查/验收复核/run check 预检；M5 只实现五动作纯判据、profile v2 动作账本/额度、合成执行器与受控人工对账，不接真实设备动作、不提供真实 A 档、不实现 M6 调度。
+- M1 只实现设计说明 §6 的五表 v1、任务租约与 `store init`；M2 只实现合成 XML 解析/未读快照入库，不 claim/start/finish、不推进已读基线；M3 只实现离线页面/职位/未读/会话读取、字段阶梯、像素与跨屏身份，不调用仓储、不导航、不执行动作；M4a 只实现决策契约、策略包/摘要/渲染、六命令文件事务与真实活动恢复接线；M4b 只实现 A/B 本机子进程桥、单次决策编排、分层 eval/留出事务与无上传合同门槛；M4c 只实现 profile 事实库/本机 facts、固定 OS 共享门禁/restore 检查/验收复核/run check 预检；M5 只实现动作纯判据、profile v2 动作账本/额度、合成执行器与受控人工对账；M6 只实现纯合成场景下的调度/安全点/预算/游标/实际 run 生命周期、profile v3 最小表、草稿/决策记忆与 `apply_job` 边界，不导航真实设备、不调用真实 provider、不提供 apply 生产配额合同、不实现 M7 清理或 M8 灰度。
 - 真实 `adb devices` / `dumpsys window` / `uiautomator dump` / `screencap` 未在本机执行，真实机型、系统版本、序列号格式、窗口/截图输出差异未验证。
 - `doctor` 只做一次独立探针，不提供业务循环、导航、截图或动作；`store init` 不做真实业务调度；`sense` 只读合成夹具；`read` 只读合成输入且不提供真实 `--device` 入口；`policy` 只在离线合成资源上运行；`policy eval` 只用本机桥桩/模拟 transport，未调用真实模型；`facts`/`policy acceptance`/`run check` 只用临时项目/OS 根与合成事实，`run check` 不执行设备或动作。
 - M1 的 v1 只允许 app=boss；第二应用启用时需后续版本迁移，不预建迁移框架。

@@ -121,7 +121,7 @@ def check_preflight(
         "acceptance": acceptance,
         "limitations": [
             "real_device_action_entry_not_delivered",
-            "m6_scheduling_not_implemented",
+            "m6_runtime_execute_fixture_only",
             "m8_run_not_implemented",
             "device_probe_not_run",
         ],

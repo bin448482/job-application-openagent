@@ -1125,7 +1125,7 @@ class ProfileMigrationTests(unittest.TestCase):
         connection = sqlite3.connect(str(path))
         try:
             self.assertEqual(
-                connection.execute("PRAGMA user_version").fetchone()[0], 2
+                connection.execute("PRAGMA user_version").fetchone()[0], 3
             )
             names = {
                 row[0]
@@ -1134,6 +1134,8 @@ class ProfileMigrationTests(unittest.TestCase):
                 )
             }
             self.assertIn("action_records", names)
+            self.assertIn("jobs", names)
+            self.assertIn("job_batches", names)
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM profile_facts").fetchone()[0], 1
             )
