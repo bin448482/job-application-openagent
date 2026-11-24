@@ -331,6 +331,21 @@ def init_pack(
     }
 
 
+def load_active_pack(
+    repo: PolicyRepositoryPort,
+    pack_rel: str,
+    *,
+    process_log: ProcessLog | None = None,
+) -> tuple[str, dict[str, str], dict[str, str], dict[str, str], PolicyPack]:
+    """读取并校验当前活动包，返回规范化路径、base、四载荷、指南与包对象。"""
+    normalized = _active_pack_path(pack_rel)
+    with _policy_stage(process_log, "load"):
+        base_files, files, guides = _load_active_bundle(repo, normalized)
+    with _policy_stage(process_log, "validate"):
+        pack = _parse_pack(files, guides, normalized)
+    return normalized, base_files, files, guides, pack
+
+
 def validate_pack(
     repo: PolicyRepositoryPort,
     pack_rel: str,

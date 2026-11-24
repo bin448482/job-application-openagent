@@ -14,6 +14,9 @@ POLICY_REASON_CODES = frozenset(
         "policy_io_error",
         "policy_changed",
         "unknown_case",
+        "invalid_provider",
+        "eval_failed",
+        "authorization_required",
     }
 )
 

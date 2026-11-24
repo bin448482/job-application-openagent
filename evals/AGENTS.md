@@ -2,7 +2,7 @@
 
 ## 目录职责
 
-保存 promptfoo 合成黄金集、评测提示词、确定性断言和离线评测入口。检验记忆与授权决策，不实现运行时记忆、业务数据库或设备操作。全局工作规则见[根目录 AGENTS.md](../AGENTS.md)。
+保存 promptfoo 合成黄金集、评测提示词、确定性断言和离线评测入口，以及 M4b `policy eval` 的公开合成套件与旧 24 例映射。检验记忆与授权决策及策略包合同，不实现运行时记忆、业务数据库或设备操作。全局工作规则见[根目录 AGENTS.md](../AGENTS.md)。
 
 ## 当前结构
 
@@ -12,6 +12,7 @@
 - `assertions.test.cjs`：Node 内置测试；验证参考答案通过，并拒绝授权翻转、错误记忆、伪造来源、非法 JSON、缺失判据和错误启动参数。
 - `reference-provider.cjs`：仅按 case_id 回放参考答案的离线 provider，标识为 synthetic-reference-only，不进行推理。
 - `run.cjs`：区分 smoke/model，使用根 promptfooconfig.json 启动已锁定版本的本机 promptfoo，将结果写入 data/evals。
+- `policy-suite/`：M4b 公开合成套件、旧 24 例逐项责任映射与目录指南；见 `policy-suite/AGENTS.md`。
 - `AGENTS.md`：本目录职责、案例接口、验证命令、限制与维护要求。
 - `CLAUDE.md`：仅含 `@AGENTS.md`，引用本指南。
 
@@ -23,11 +24,14 @@
 
 模型须输出一个独立 JSON 对象，恰好含 next_action、can_send、memory_updates、used_memory_ids、answer、reason。动作枚举为 answer/ask_user/wait_for_confirmation/reconcile/skip/send；更新为 set 或 delete。断言通过 context.test.metadata.expected 读取判据，返回 pass/score/reason。结构、更新内容与所用来源必须符合该例；来源 ID 顺序不影响判定。
 
+M4b `policy-suite/public.json` 是另一套独立合同：每例只把 `input` 十键投影为 DecisionEnvelope，断言检查新 Decision 的意图/子意图/回复属性/escalate/固定 C，不读取旧 `cases.json` 的 expected/reference_output，也不把旧六字段当新 Decision。`policy-suite/mapping.json` 只登记 M01–M24 的责任端与未接入原因；旧 npm 回归、M4c 事实和 M5 授权/动作分别计数，未接入不记为通过。
+
 ## 适用约束
 
 - 数据全部合成；苏州、25K 等只是测试值，不代表当前使用者事实或授权。不得导入聊天原文、真实身份、截图或凭据。
 - M01–M04、M18–M19、M24 检查事实选择、冲突、失效及缺失；M05–M09、M20 检查授权及到期边界；M10–M12、M21–M23 检查动作防重和请求/交付区别；M13–M14 检查证据缺失与 HR 指令注入；M15–M17 检查长期更新、临时偏好和遗忘。
 - M08 的 can_send=true 只是合成场景的预期决策，不授予任何真实发送权限。promptfoo 不执行手机、消息、简历、联系方式或记忆写入。
+- M4b 公开套件只做有限合同与请求分区验证；真实 provider、私有回归/留出未测。模拟 transport 不生成验收凭证，`--confirm-external-send` 只确认模型外发/计费，不授予设备/事实/业务发送权限。
 - npm 开发依赖只用于评测，Python 业务运行仍无第三方依赖。入口关闭 promptfoo 遥测、更新检查、缓存、分享及评测数据库保存；本地状态与 JSON 报告统一放在被忽略的 data/evals 下。
 - 不把历史模型输出直接当作正确答案。新增案例须先由可核对的规则/经确认故障确定 expected，再独立检查参考输出和错误反例。
 
@@ -39,6 +43,8 @@
 npm test
 npm run eval:smoke
 npm run eval:model -- "<provider-id>"
+python -m unittest tests.test_policy_eval
+python -m app policy eval --help
 ```
 
 前两项不需要 API 密钥、不请求模型、不连接设备；smoke 报告中的 100% 只证明参考回放与断言链路可用。model 会把合成输入发送给指定 provider，可能产生调用费用；按 provider 文档配置认证后再运行。当前未指定实际 provider，不能声称模型通过。

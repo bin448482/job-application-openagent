@@ -1765,6 +1765,25 @@ def render_request(
     )
 
 
+def verify_rendered_request(
+    rendered: RenderedRequest,
+    base_files: Mapping[str, str],
+    pack: PolicyPack,
+    envelope: Mapping[str, object],
+    *,
+    now: str,
+) -> RenderedRequest:
+    """按当前 base/pack/envelope 重渲染并逐字段比对，拒绝过期或被替换的请求。
+
+    只复用 `render_request` 的规范内容对象与摘要算法，不复制渲染或校验逻辑；
+    调用方仍须在桥调用前后重读包文件并比较 `base_hash`/`pack_hash`。
+    """
+    fresh = render_request(base_files, pack, envelope, now=now)
+    if rendered != fresh:
+        raise DecisionError("invalid_decision")
+    return fresh
+
+
 def pack_sources(pack: PolicyPack) -> list[dict[str, object]]:
     """返回可编辑字段、载荷文件和 base 的固定相对来源清单。"""
     raw = pack.files["pack.toml"]

@@ -13,7 +13,10 @@ from typing import NoReturn
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
 from app.adapters.boss.list import load_and_parse_snapshot
 from app.adapters.boss.read import load_and_read_fixture
+from app.adapters.files.evals import FileEvalStore
 from app.adapters.files.policy import FilePolicyRepository
+from app.adapters.llm.bridge_a import ExternalAgentBridge
+from app.adapters.llm.bridge_b import LocalProcessBridge
 from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
 from app.ports.device import ProbeSnapshot
@@ -23,6 +26,7 @@ from app.domain.json_input import load_json_object as _load_json_object
 from app.domain.policy import PolicyIssue, utc_now
 from app.process_log import ProcessLog, elapsed_ms
 from app.usecases import policy as policy_usecases
+from app.usecases import policy_eval as policy_eval_usecases
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
 from app.usecases.policy import RefusingPolicyActivity
 from app.usecases.read import build_read_payload
@@ -30,6 +34,30 @@ from app.usecases.sense import build_sense_payload, persist_and_aggregate
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = "data/runtime/runtime.sqlite3"
+POLICY_EVAL_HELP = """
+支持的桥/provider（必须显式选择，不使用默认真实模型）:
+  external-agent  架构 A 外部 agent 子进程；协议 m4b-agent-v1。
+                  格式：--provider external-agent --bridge-command <程序> --arg <参数>...
+  local-process   架构 B 本机进程；协议 m4b-local-v1；私有留出只允许本类型。
+                  格式：--provider local-process --bridge-command <程序> --arg <参数>...
+认证变量/端点入口:
+  本程序不读取、不转发、不记录认证变量值；桥程序如需认证，使用其自身本机环境
+  或受保护凭据存储，变量名与端点参数由该桥程序文档定义。不得把凭据放进命令行。
+本机要求:
+  桥程序必须是本机可执行的参数数组入口，固定接收 system/developer/user 三消息、
+  独立回显对象、tools=[]、history=[]；不支持三角色分区或返回角色声明不符时拒绝。
+拒绝:
+  echo、参考回放（reference-provider）、smoke 冒充、未知 provider。
+固定诊断:
+  invalid_provider/authorization_required/invalid_decision/stale_decision/
+  stale_evidence/decision_timeout/policy_changed/bridge_start_failed/
+  bridge_auth/bridge_quota/bridge_disconnected/bridge_protocol/bridge_roles/eval_failed
+产物:
+  逐例报告与成功凭证只写本机 data/evals；失败不生成有效验收凭证。
+--confirm-external-send:
+  仅是使用者对本轮模型评测外发与计费的显式确认，不授予设备、事实写入或业务发送权限。
+"""
+
 
 
 class _CliArgumentError(Exception):
@@ -105,8 +133,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = _StrictArgumentParser(
         prog="python -m app",
         description=(
-            "M0 只读 doctor、M1 store init、M2 sense、M3 read 与 M4a policy；"
-            "默认不连接设备、不调用网络或模型。"
+            "M0 只读 doctor、M1 store init、M2 sense、M3 read、M4a policy 与 M4b policy eval；"
+            "除显式 policy eval 本机桥外，默认不连接设备、不调用网络或模型。"
         ),
         allow_abbrev=False,
     )
@@ -204,8 +232,11 @@ def _build_parser() -> argparse.ArgumentParser:
     policy = subparsers.add_parser(
         "policy",
         allow_abbrev=False,
-        help="离线编辑、校验、预览与回滚本机策略包。",
-        description="只读本机策略文件；不连接设备、网络或模型。",
+        help="离线编辑/校验/预览/回滚策略包，并运行显式本机桥评测。",
+        description=(
+            "init/validate/preview/list/snapshot/restore/holdout 只读本机策略文件；"
+            "eval 只在显式 provider 与本轮确认下启动本机桥程序。"
+        ),
     )
     policy_commands = policy.add_subparsers(
         dest="policy_command",
@@ -296,6 +327,119 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         metavar="<prompts/local/名称>",
         help="新的 local 直接目标目录。",
+    )
+    policy_eval = policy_commands.add_parser(
+        "eval",
+        allow_abbrev=False,
+        help="用当前包经真实桥路径运行本机公开/分层评测。",
+        description=(
+            "实际加载当前包并经同一 DecisionBridgePort 运行；必须显式选择本地桥程序，"
+            "不接受 echo/参考回放。"
+        ),
+        epilog=POLICY_EVAL_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    policy_eval.add_argument(
+        "--pack",
+        action=_UniqueStore,
+        required=True,
+        metavar="<prompts/local/名称>",
+        help="local 直接活动包目录。",
+    )
+    policy_eval.add_argument(
+        "--suite",
+        action=_UniqueStore,
+        required=True,
+        choices=("public", "regression", "holdout"),
+        metavar="<public|regression|holdout>",
+        help="公开契约、私有回归或冻结留出套件。",
+    )
+    policy_eval.add_argument(
+        "--provider",
+        action=_UniqueStore,
+        required=True,
+        metavar="<external-agent|local-process>",
+        help="显式桥/provider 类型；不支持的名字报 invalid_provider。",
+    )
+    policy_eval.add_argument(
+        "--bridge-command",
+        action=_UniqueStore,
+        required=True,
+        metavar="<本机程序>",
+        help="桥程序路径或命令名；作为 argv[0]，不经过 shell。",
+    )
+    policy_eval.add_argument(
+        "--arg",
+        action="append",
+        default=[],
+        metavar="<参数>",
+        help="追加到参数数组的单个参数，可重复；不放凭据。",
+    )
+    policy_eval.add_argument(
+        "--model-id",
+        action=_UniqueStore,
+        required=True,
+        metavar="<标签>",
+        help="报告使用的模型标签；非空、不含凭据。",
+    )
+    policy_eval.add_argument(
+        "--confirm-external-send",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="确认本轮模型评测外发与计费；不授予设备/事实/业务发送权限。",
+    )
+    policy_holdout = policy_commands.add_parser(
+        "holdout",
+        allow_abbrev=False,
+        help="登记或退役本机私有留出冻结批次。",
+        description=(
+            "只读私有留出套件并维护本机登记；不读取真实私有样本内容到报告，"
+            "不调用模型、设备或网络。"
+        ),
+    )
+    holdout_commands = policy_holdout.add_subparsers(
+        dest="holdout_command",
+        required=True,
+        parser_class=_StrictArgumentParser,
+    )
+    holdout_register = holdout_commands.add_parser(
+        "register",
+        allow_abbrev=False,
+        help="登记新的冻结留出批次。",
+        description="要求维护者、独立标注者、版本、数量、时间与候选发布齐全。",
+    )
+    holdout_register.add_argument(
+        "--batch-id", action=_UniqueStore, required=True, metavar="<批次ID>"
+    )
+    holdout_register.add_argument(
+        "--version", action=_UniqueStore, required=True, metavar="<版本>"
+    )
+    holdout_register.add_argument(
+        "--sample-count", action=_UniqueStore, required=True, type=int, metavar="<数量>"
+    )
+    holdout_register.add_argument(
+        "--annotator", action=_UniqueStore, required=True, metavar="<独立标注者>"
+    )
+    holdout_register.add_argument(
+        "--maintainer", action=_UniqueStore, required=True, metavar="<维护者>"
+    )
+    holdout_register.add_argument(
+        "--candidate-release", action=_UniqueStore, required=True, metavar="<候选发布>"
+    )
+    holdout_register.add_argument(
+        "--frozen-at", action=_UniqueStore, metavar="<UTC时间>", default=None
+    )
+    holdout_retire = holdout_commands.add_parser(
+        "retire",
+        allow_abbrev=False,
+        help="整批退役留出批次。",
+        description="退役后必须为新候选发布重新登记冻结批次。",
+    )
+    holdout_retire.add_argument(
+        "--batch-id", action=_UniqueStore, required=True, metavar="<批次ID>"
+    )
+    holdout_retire.add_argument(
+        "--retired-at", action=_UniqueStore, metavar="<UTC时间>", default=None
     )
     return parser
 
@@ -841,6 +985,58 @@ def _run_policy(log: ProcessLog, started: float, args: argparse.Namespace) -> in
                 now=now,
                 process_log=log,
             )
+        elif operation == "eval":
+            bridge_types = {
+                "external-agent": ExternalAgentBridge,
+                "local-process": LocalProcessBridge,
+            }
+            bridge_type = bridge_types.get(args.provider)
+            argv = [args.bridge_command, *args.arg]
+            if bridge_type is None or any(
+                "reference-provider" in item.lower() for item in argv
+            ):
+                raise PolicyError("invalid_provider")
+            try:
+                bridge = bridge_type(argv, model_id=args.model_id)
+            except ValueError:
+                raise PolicyError("invalid_provider") from None
+
+            def authorize(plan: dict[str, object]) -> bool:
+                """只有本轮显式确认才允许启动桥；模拟传输也走同一检查。"""
+                del plan
+                return bool(args.confirm_external_send)
+
+            result = policy_eval_usecases.eval_pack(
+                repository,
+                FileEvalStore(PROJECT_ROOT),
+                args.pack,
+                args.suite,
+                bridge,
+                authorize,
+                now=now,
+                process_log=log,
+            )
+        elif operation == "holdout":
+            eval_store = FileEvalStore(PROJECT_ROOT)
+            if args.holdout_command == "register":
+                result = policy_eval_usecases.register_holdout(
+                    eval_store,
+                    batch_id=args.batch_id,
+                    version=args.version,
+                    sample_count=args.sample_count,
+                    annotator=args.annotator,
+                    maintainer=args.maintainer,
+                    frozen_at=args.frozen_at or now,
+                    candidate_release=args.candidate_release,
+                )
+            elif args.holdout_command == "retire":
+                result = policy_eval_usecases.retire_holdout(
+                    eval_store,
+                    batch_id=args.batch_id,
+                    retired_at=args.retired_at or now,
+                )
+            else:
+                raise PolicyError("invalid_input")
         else:
             raise PolicyError("invalid_input")
     except PolicyError as error:

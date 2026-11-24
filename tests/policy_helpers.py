@@ -66,7 +66,12 @@ def temp_project():
     """创建带 base、示例与 preview 的临时项目根，调用方负责清理。"""
     tmp = tempfile.TemporaryDirectory(dir=ROOT, prefix=".m4a-policy-")
     root = Path(tmp.name)
-    for rel in ("prompts/base", "prompts/examples", "tests/fixtures/policy-preview"):
+    for rel in (
+        "prompts/base",
+        "prompts/examples",
+        "tests/fixtures/policy-preview",
+        "evals/policy-suite",
+    ):
         shutil.copytree(ROOT / rel, root / rel)
     return tmp, root
 

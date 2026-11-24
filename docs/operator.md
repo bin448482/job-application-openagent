@@ -1,20 +1,21 @@
-# M0 只读探针、M1 状态库、M2 合成传感器、M3 离线读取与 M4a 策略包操作手册
+# M0 只读探针、M1 状态库、M2 合成传感器、M3 离线读取、M4a 策略包与 M4b 决策桥操作手册
 
-> 文件用途：说明当前已实现的 M0 `doctor`、M1 `store init`、M2 `sense`、M3 `read` 与 M4a `policy` 能做什么、怎么运行、如何解读 JSON，以及在执行真实设备探针/采集前必须完成的确认与边界；M4b 真实桥/eval、M4c 真实活动检查及 M5 以后的能力尚未实现。
+> 文件用途：说明当前已实现的 M0 `doctor`、M1 `store init`、M2 `sense`、M3 `read`、M4a `policy` 与 M4b `policy eval`/`policy holdout` 能做什么、怎么运行、如何解读 JSON，以及在执行真实设备探针/采集或模型外发前必须完成的确认与边界；M4c 真实活动检查及 M5 以后的能力尚未实现。
 
 ## 一、当前可用范围
 
-已实现五组离线入口：
+已实现六组离线入口：
 
 - `doctor`：一次独立的只读探针，读取 ADB 设备清单或合成 fixture，并输出设备数量、所选逻辑别名、解锁状态和前台应用类别。
 - `store init`：创建或核验设计说明 §6 的本机 SQLite v1 状态库（五表、约束、索引与用户版本 1），不导入旧库。
 - `sense`：读取合成 sensor manifest/profile/XML，按 M2 四源规则解析、合并、落库候选并输出有序停止原因。
 - `read`：读取 M3 合成页面/职位/未读/会话 manifest/profile/XML 与可选合成像素标定，执行层级/像素/人工读取阶梯和跨屏合并，输出 `ReadResult` 与决策门禁；不连接业务库。
 - `policy`：M4a 策略包六命令，离线完成初始化、TOML/Markdown 校验、纯渲染预览、活动包/快照列表、快照与恢复；不连接设备、业务库、模型或网络。
+- `policy eval`/`policy holdout`：M4b 实际加载当前策略包，经 A/B 本机子进程桥运行公开/回归/留出套件并把报告只写 `data/evals`；必须显式选择 provider 与本机桥程序，真实模型外发需本轮 `--confirm-external-send`。离线验收只用合成本机桥桩，未调用真实模型。
 
-M0–M4a 都不切换真实应用、不 dump 真实聊天、不截图、不点击、不发送、不调用网络或模型。`doctor --fixture` 只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite；`sense`/`read` 只读合成输入，`sense` 可写项目内合成 SQLite，`read` 不写业务库；`policy` 只读写项目内公开 base、示例、固定 preview 案例与本机 `prompts/local`。每次运行创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl` 本机过程日志（见第十一节），运行之间不共享追加。
+M0–M4b 都不切换真实应用、不 dump 真实聊天、不截图、不点击、不发送、不写个人事实。`doctor --fixture` 只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite；`sense`/`read` 只读合成输入，`sense` 可写项目内合成 SQLite，`read` 不写业务库；`policy` 只读写项目内公开 base、示例、固定 preview 案例与本机 `prompts/local`；`policy eval` 只读当前活动包与合成套件、只启动显式本机桥程序并只写 `data/evals`。每次运行创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl` 本机过程日志（见第十一节），运行之间不共享追加。
 
-M1 的仓储 API 已实现候选入库、任务租约、三态收敛与过期恢复；M2 `sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，**不** claim/start/finish、不消耗发现、不推进已读基线、不打开会话。M3 `read` 不调用仓储、不关闭发现、不写正文或 `verified` 基线；M4a `policy` 不调用桥、仓储或设备。M4b 真实桥/eval、M4c 真实活动检查、M5+ 的决策运行、动作与调度仍未实现。
+M1 的仓储 API 已实现候选入库、任务租约、三态收敛与过期恢复；M2 `sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，**不** claim/start/finish、不消耗发现、不推进已读基线、不打开会话。M3 `read` 不调用仓储、不关闭发现、不写正文或 `verified` 基线；M4a `policy` 不调用桥、仓储或设备；M4b `policy eval` 只做单次决策桥与分层评测，不执行发送、事实写入、动作或设备调用。M4c 真实活动检查、M5+ 的决策运行、动作与调度仍未实现。
 
 ## 二、离线 fixture 模式（默认推荐）
 
@@ -241,7 +242,48 @@ M4a 尚无 M4c 的真实运行/停止/未决租约检查，生产 CLI `restore` 
 {"schema_version":1,"status":"ok","reason_code":null,"result":{}}
 ```
 
-失败也输出四键：`{schema_version:1,status:"failed",reason_code:<固定>,errors:[{file,field,line,code}]}`，`errors` 可为空；`policy` 参数形状错误、全局配置受控错误或配置读取意外异常同样使用四键（配置错误保留 `invalid_config` 原因并以空 `errors` 表达），不改变其它命令的三键约定。`operation` 只按命令位置识别，配置值含 `policy` 不改变外层。原因码固定 `invalid_input/invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case`；配置错误沿用全局 `invalid_config`。字段诊断码固定 `missing/unknown_key/duplicate/type/range/vocabulary/coverage/safety_floor/encoding/path/size/sensitive/conflict/format`。`file` 仅为项目内相对路径或 null，`line` 为 1 起整数或 null；未知短语标题等不可信值只定位固定父字段或 null，不得回显原值、可疑键名或底层异常。帮助退出 `0`，业务/校验/IO 失败退出 `2`。
+失败也输出四键：`{schema_version:1,status:"failed",reason_code:<固定>,errors:[{file,field,line,code}]}`，`errors` 可为空；`policy` 参数形状错误、全局配置受控错误或配置读取意外异常同样使用四键（配置错误保留 `invalid_config` 原因并以空 `errors` 表达），不改变其它命令的三键约定。`operation` 只按命令位置识别，配置值含 `policy` 不改变外层。原因码固定 `invalid_input/invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case`，M4b 另加 `invalid_provider/eval_failed/authorization_required` 与决策/桥固定码；配置错误沿用全局 `invalid_config`。字段诊断码固定 `missing/unknown_key/duplicate/type/range/vocabulary/coverage/safety_floor/encoding/path/size/sensitive/conflict/format`。`file` 仅为项目内相对路径或 null，`line` 为 1 起整数或 null；未知短语标题等不可信值只定位固定父字段或 null，不得回显原值、可疑键名或底层异常。帮助退出 `0`，业务/校验/IO 失败退出 `2`。
+
+### 7.6 M4b 决策桥与 policy eval
+
+M4b 在 M4a 唯一契约/渲染/校验之上增加架构 A 外部 agent 与架构 B 本机进程桥，以及实际加载当前包的 `policy eval`。桥的固定信任边界：
+
+- 请求只有三条消息：base 为 `system`、已校验有效策略为独立 `developer`、envelope 投影为独立 `user` JSON 字符串；协议回显字段放在顶层独立 `echo` 对象，`tools=[]`、`history=[]`。不可信输入不能指定 role、tool 或额外消息；单字符串拼接不具备角色隔离，拒绝接入。
+- 桥程序只用显式 argv 数组、`shell=False`、20 秒超时与有界 stdout；不经过 shell、不读取本程序的环境凭据。桥程序自己的认证由它按本机环境/受保护凭据存储配置，本程序不展示变量值。
+- 只有传输层直接观察到“进程尚未启动”的固定错误可重试一次；进程启动后的超时、坏 JSON、重复键、坏 UTF-8、坏回显、角色声明不符、认证/额度/断连都按可能已提交处理，不自动重发。模型输出只解析、不执行命令或模板。
+- 桥返回的 `roles/tools/history` 只是协议声明，不能独立证明任意外部 provider 的真实运行行为；没有可信三角色支持的接法受控拒绝。
+
+`policy eval` 命令形状：
+
+```powershell
+python -m app policy eval --help
+python -m app policy eval --pack prompts/local/<profile> --suite public `
+  --provider external-agent --bridge-command <本机程序> --arg <参数> `
+  --model-id <标签> --confirm-external-send
+```
+
+- `--provider` 只接受 `external-agent`（`m4b-agent-v1`）或 `local-process`（`m4b-local-v1`）；`echo`、`reference-provider`、smoke 冒充与未知名字在启动桥前返回 `invalid_provider`。
+- `--confirm-external-send` 仅是使用者对本轮模型评测外发与计费的显式确认，**不**授予设备操作、个人事实写入或业务发送权限。没有该确认时返回 `authorization_required`，不会启动桥；模拟 transport 也走同一授权回调。
+- `--suite` 为 `public`、`regression`、`holdout`。公开套件固定 `evals/policy-suite/public.json`；私有回归/留出固定 `evals/private/regression|holdout/suite.json` 且被 Git 忽略。当前私有套件不存在，零样本显示未测。
+- 每例只把 `input` 十键投影进 envelope；断言、答案、metadata 与其它案例不进入桥请求。报告逐例只留固定诊断、摘要、attempts/submissions，不保存回复正文。
+- 公开套件的地点/薪资正控制要求当前包 `facts.allow_keys` 允许对应键；若包故意禁止事实，这些案例应按策略失败或转待办，不应改断言或绕过包白名单。空事实流程（缺失薪资、注入转人工）可独立运行。
+- 报告写到 `data/evals/eval-<run-id>/report.json`，绑定 suite_hash/base_hash/pack_hash/profile_id/provider_id/model_id/model_config_hash。只有公开集全部通过且非 simulated 才写 `acceptance.json`；失败、零样本、非公开套件或模拟桥不生成有效验收凭证。
+- 失败时 stdout 仍为四键错误，`errors[0].file` 指向本机报告（若已生成）；先看原因码与逐例 checks，不把模型输出贴到公开 issue。
+
+provider 帮助不读取或展示环境变量值，也不猜测使用者账户；`policy eval --help` 列出协议、认证边界、本机要求、固定诊断与 `data/evals` 产物。真实 provider 未在本仓库运行；本轮不实际模型外发。
+
+留出生命周期：
+
+```powershell
+python -m app policy holdout register --batch-id <批次ID> --version <版本> `
+  --sample-count <数量> --annotator <独立标注者> --maintainer <维护者> `
+  --candidate-release <候选发布>
+python -m app policy holdout retire --batch-id <批次ID>
+```
+
+登记必须有维护者、独立标注者、版本、数量、冻结时间与候选关联；留出只允许 `local-process` 本机 provider。同摘要重跑只记录访问轮次、不产生新的独立证据；base/pack/provider/model/config 摘要变化会在运行前拒绝，必须先整批退役并注册新批次。查看逐例结果并据此调优即应将整批转回归；当前实现以“摘要变化拒绝 + 显式退役 + 新批次”记录该边界，无法自动检测同摘要下的策略调优，必须由维护者遵守。零样本、无登记或私有无获准 provider 时记未测，不以 100% 或公开集替代。
+
+M4c 事实来源选择/确认/撤销、M5 授权/动作与本轮设备确认仍分别归后续里程碑；M4b 的 nonce/租约不证明发送授权，`policy eval` 通过不证明语义安全、A 档资格或真实模型能力。
 
 ## 八、显式真实设备模式
 
@@ -360,13 +402,13 @@ stdout 不包含 `correlation_id`。按单次运行核对时，优先读取该�
 
 ## 十二、尚未实现
 
-M3 离线读取（`read`）与 M4a 策略包六命令（`policy`）已实现；M4b 真实桥/eval、M4c 真实活动/未决检查与完整 CLI 安全恢复、M5 的动作护栏以及 M6–M8 的调度、清理和灰度都尚未实现。M1 的完整任务租约 API 已实现，但 M2 `sense` 只调用 upsert 与未关闭会话查询，M3 `read` 不调用仓储、不 claim/start/finish、不关闭发现。M4a `policy preview` 不生成 Decision、不调用模型；生产 `policy restore` 固定受控拒绝。真实读取、进入会话、滚动、返回与截图仍依赖后续共享设备门禁和本轮确认；不要用 M0 的 fixture 结果、M1 的合成库、M2 的合成 profile、M3 的合成读取或 M4a 的 preview 推断真实设备/模型支持范围，也不要把合成候选、探针成功、读取 actionable、`store init` 成功、策略 validate/preview 或快照当作发送授权或真实版本已标定。
+M3 离线读取（`read`）、M4a 策略包六命令（`policy`）与 M4b 本机桥/分层 eval（`policy eval`/`policy holdout`）已实现；M4c 真实活动/未决检查与完整 CLI 安全恢复、M5 的动作护栏以及 M6–M8 的调度、清理和灰度都尚未实现。M1 的完整任务租约 API 已实现，但 M2 `sense` 只调用 upsert 与未关闭会话查询，M3 `read` 不调用仓储、不 claim/start/finish、不关闭发现。M4a `policy preview` 不生成 Decision、不调用模型；生产 `policy restore` 固定受控拒绝。M4b 只用合成本机桥桩/模拟 transport，未调用真实 provider、未运行私有留出、未接 M4c 真实租约或 M5 授权/动作。真实读取、进入会话、滚动、返回与截图仍依赖后续共享设备门禁和本轮确认；不要用 M0 的 fixture 结果、M1 的合成库、M2 的合成 profile、M3 的合成读取、M4a 的 preview 或 M4b 的模拟 eval 推断真实设备/模型支持范围，也不要把合成候选、探针成功、读取 actionable、`store init` 成功、策略 validate/preview/快照或 M4b 模拟通过当作发送授权、真实版本标定或完整业务验收。
 
 ## 十三、安全与隐私
 
 - fixture 只用合成别名与状态，不放真实序列号、聊天、联系人、公司、截图或绝对路径。
 - 真实模式输出不含真实序列号、窗口原文或异常命令参数。
-- M1 只保存摘要、键、状态与白名单事件，不保存聊天正文；M2 只解析合成 XML，日志不写 XML、身份键或正文。M3 `read` 的会话/职位正文只存在内存与合成 CLI 数据区，不写日志、事件或数据库；像素标定与原始截图只在合成测试与本机证据目录使用。M4a `policy` 只读写四载荷、双指南、history 与固定 preview 案例；日志不写文件正文、绝对路径或异常，preview/快照输出属于本机数据，不提交公开报告。数据库、事件、日志与截图只在本机保存，不提交 Git。
-- 不读取根 `config.json`、环境文件、凭据或个人事实。
+- M1 只保存摘要、键、状态与白名单事件，不保存聊天正文；M2 只解析合成 XML，日志不写 XML、身份键或正文。M3 `read` 的会话/职位正文只存在内存与合成 CLI 数据区，不写日志、事件或数据库；像素标定与原始截图只在合成测试与本机证据目录使用。M4a `policy` 只读写四载荷、双指南、history 与固定 preview 案例；M4b `policy eval` 只读当前包/合成套件并只写本机 `data/evals`；两者日志不写文件正文、像素、回复、argv、端点、凭据、绝对路径或异常，报告只含摘要/固定诊断/计数，不提交公开报告。
+- 不读取根 `config.json`、环境文件、凭据或个人事实。M4b 不读取、转发或记录 provider 认证变量值，桥程序自行管理其本机凭据；不要把凭据放进 `--bridge-command`/`--arg`。
 - 设备、日志、截图和评测产物只在本机保存，不提交 Git。
 - 发现疑似敏感信息时按根 `AGENTS.md` 的“开源项目敏感信息告知”处理，不在对话或公开材料中复述原值。
