@@ -31,7 +31,7 @@
 12. M4a `policy` 只读公开 base/示例与固定 preview 案例，写本机 `prompts/local` 与 history；不连接设备、数据库、模型或网络，不读取根 `config.json`、私有事实、旧源码或黄金答案。四键错误外层是策略命令的明确扩展，其它命令保持三键；生产 `restore` 在无 M4c 真实活动/未决证据时固定拒绝，不使用占位 True。
 13. M4a `domain/policy.py` 是 Envelope/Decision、策略包 schema、45 组合、摘要、渲染与披露复验的唯一纯实现；`ports/policy.py` 只声明文件与活动状态能力；`usecases/policy.py` 编排文件事务；`adapters/files/policy.py` 只做项目内 IO。M4b 桥/eval 与 M4c 真实检查不得另写一套契约或 JSON 出口。
 14. M4b `usecases/decision.py` 只复用 M4a 唯一契约/渲染/校验与披露复验；`ports/decision.py` 声明 A/B 桥、当前包快照、可信租约与可注入时钟；`adapters/llm/` 只用参数数组、`shell=False`、`stderr=DEVNULL`、20 秒总预算与临时 stdin/stdout 文件，预算覆盖临时创建/输入写/Popen 边界，stdout 只读 `64KiB+1` 并在运行中监测增长，监测/等待 OSError 受控；固定 system/developer/user 三角色、无工具无历史，不支持角色分区即拒绝。只有传输层可证明进程未启动时可重试一次；重试前用唯一 render 校验器复验时钟/租约/包与事实有效期，提交后超时/schema/回显/证据失败不重发。
-15. M4b `policy eval` 必须实际加载当前包并经同一桥路径；公开套件与旧 24 npm 回归独立，逐例映射只登记责任，不把旧参考输出回填新 Decision；模拟 transport 不生成验收凭证，真实外发需显式 `--confirm-external-send` 且该确认不授予设备/事实/业务发送权限。报告/凭证只写 `data/evals`；缺套件/零样本 not_measured 且 zero authorize，缺 public suite 与 authorize 拒绝的日志只记 started→failed；public/holdout 不读取无关 regression 准入；留出访问 intent 在调用前锁内持久化、样本指纹占用历史、退役写实际 regression 准入且登记失败清理本次准入；私有留出另需绑定当前 model/config 的本机无上传合同，合同只是 operator/host 声明。
+15. M4b `policy eval` 必须实际加载当前包并经同一桥路径；公开套件与旧 24 npm 回归独立，逐例映射只登记责任，不把旧参考输出回填新 Decision；模拟 transport 不生成验收凭证，真实外发需显式 `--confirm-external-send` 且该确认不授予设备/事实/业务发送权限。报告/凭证只写 `data/evals`；缺套件/零样本 not_measured 且 zero authorize，缺 public suite 与 authorize 拒绝的日志只记 started→failed；public/holdout 不读取无关 regression 准入，regression 仅纳入 registry 已确认退役的准入；留出访问 intent 在调用前锁内持久化、样本指纹占用历史、退役写实际 regression 准入且登记失败清理本次准入；私有留出另需绑定当前 model/config 的本机无上传合同，合同只是 operator/host 声明。
 
 ## 四、测试与验证
 

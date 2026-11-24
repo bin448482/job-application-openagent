@@ -114,6 +114,14 @@ class FileEvalStore:
             raise PolicyError("policy_io_error", [PolicyIssue(rel, None, None, "format")])
         if suite_name != "regression":
             return base
+        registry = self._read_registry_unlocked()
+        retired = {
+            str(batch["batch_id"]): batch.get("regression_ref")
+            for batch in registry.get("batches", [])
+            if isinstance(batch, dict)
+            and batch.get("status") == "retired"
+            and batch.get("regression_eligible") is True
+        }
         admissions = self._read_regression_admissions()
         if not admissions:
             return base
@@ -123,8 +131,12 @@ class FileEvalStore:
             if not isinstance(base_cases, list):
                 raise PolicyError("policy_io_error", [PolicyIssue(rel, None, None, "format")])
             cases.extend(base_cases)
-        for item in admissions:
+        for name, item in admissions:
+            if retired.get(name) != f"{REGRESSION_ADMISSION_ROOT}/{name}/suite.json":
+                continue
             cases.extend(item)
+        if not cases and base is None:
+            return None
         return {
             "schema_version": 1,
             "suite": "regression",
@@ -132,8 +144,8 @@ class FileEvalStore:
             "cases": cases,
         }
 
-    def _read_regression_admissions(self) -> list[list[object]]:
-        """读取本机 regression 准入副本；链接/坏文件 fail closed。"""
+    def _read_regression_admissions(self) -> list[tuple[str, list[object]]]:
+        """读取本机 regression 准入副本；链接/坏文件 fail closed，不按 registry 过滤。"""
         root, posix = self._resolve(REGRESSION_ADMISSION_ROOT)
         if not root.exists():
             return []
@@ -143,7 +155,7 @@ class FileEvalStore:
             entries = sorted(os.scandir(root), key=lambda item: item.name)
         except OSError:
             raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")]) from None
-        suites: list[list[object]] = []
+        suites: list[tuple[str, list[object]]] = []
         for entry in entries:
             if is_link_like(Path(entry.path)) or not entry.is_dir(follow_symlinks=False):
                 raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")])
@@ -155,7 +167,7 @@ class FileEvalStore:
             cases = data.get("cases")
             if not isinstance(cases, list):
                 raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "format")])
-            suites.append(cases)
+            suites.append((entry.name, cases))
         return suites
 
     def _run_path(self, run_id: str, name: str) -> str:

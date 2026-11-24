@@ -800,6 +800,47 @@ class PolicyEvalTests(unittest.TestCase):
             (self.root / "data/evals/regression-admissions/batch-1/suite.json").exists()
         )
 
+    def test_unconfirmed_admission_is_not_readable_as_regression(self) -> None:
+        """准入副本已发布但 registry 未确认退役时，regression 不得先暴露该例。"""
+        self._install_holdout()
+        suite = json.loads(
+            (self.root / "evals/private/holdout/suite.json").read_text(encoding="utf-8")
+        )
+        self.store.write_regression_admission("batch-1", suite)
+        self.assertIsNone(self.store.read_suite("regression"))
+        eval_usecases.retire_holdout(self.store, batch_id="batch-1", retired_at=self.now)
+        regression = self.store.read_suite("regression")
+        self.assertIsNotNone(regression)
+        self.assertEqual(len(regression["cases"]), 6)
+
+    def test_retire_cleanup_failure_cannot_expose_unconfirmed_regression(self) -> None:
+        """登记失败且准入清理也失败时，未确认批次仍不得可运行 regression。"""
+        self._install_holdout()
+
+        class FailingCleanupStore(FileEvalStore):
+            """登记更新与本次准入清理都失败。"""
+
+            def update_holdout_registry(self, mutator):
+                """模拟登记写失败。"""
+                raise PolicyError("policy_io_error", [])
+
+            def remove_regression_admission(self, batch_id: str) -> None:
+                """模拟清理失败。"""
+                raise PolicyError("policy_io_error", [])
+
+        before = self.store.read_holdout_registry()
+        with self.assertRaises(PolicyError):
+            eval_usecases.retire_holdout(
+                FailingCleanupStore(self.root),
+                batch_id="batch-1",
+                retired_at=self.now,
+            )
+        self.assertEqual(self.store.read_holdout_registry(), before)
+        self.assertIsNone(self.store.read_suite("regression"))
+        self.assertTrue(
+            (self.root / "data/evals/regression-admissions/batch-1/suite.json").exists()
+        )
+
     def test_holdout_rejects_external_provider(self) -> None:
         """留出只允许本机 provider，外部 agent 在调用前拒绝。"""
         self._install_holdout()

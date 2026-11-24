@@ -265,7 +265,7 @@ python -m app policy eval --pack prompts/local/<profile> --suite public `
 
 - `--provider` 只接受 `external-agent`（`m4b-agent-v1`）或 `local-process`（`m4b-local-v1`）；`echo`、`reference-provider`、smoke 冒充与未知名字在启动桥前返回 `invalid_provider`。
 - `--confirm-external-send` 仅是使用者对本轮模型评测外发与计费的显式确认，**不**授予设备操作、个人事实写入或业务发送权限。没有该确认时返回 `authorization_required`，不会启动桥；模拟 transport 也走同一授权回调。
-- `--suite` 为 `public`、`regression`、`holdout`。公开套件固定 `evals/policy-suite/public.json`；私有回归/留出固定 `evals/private/regression|holdout/suite.json` 且被 Git 忽略。当前私有套件不存在；缺失/零样本返回 `not_measured`、`authorization.confirmed=false`、零授权回调与零桥调用；缺 public suite 的 suite 阶段与 authorize 拒绝只记 started→failed。只有 regression 读取并合并退役准入副本，public/holdout 不受无关坏 regression 准入影响。
+- `--suite` 为 `public`、`regression`、`holdout`。公开套件固定 `evals/policy-suite/public.json`；私有回归/留出固定 `evals/private/regression|holdout/suite.json` 且被 Git 忽略。当前私有套件不存在；缺失/零样本返回 `not_measured`、`authorization.confirmed=false`、零授权回调与零桥调用；缺 public suite 的 suite 阶段与 authorize 拒绝只记 started→failed。只有 regression 读取并合并 registry 已确认 retired 且 ref 匹配的准入副本，public/holdout 不受无关坏 regression 准入影响；未确认/清理失败的准入不会先行暴露。
 - 留出运行必须同时有本机合同 `data/evals/holdout-attestation.local.json`：`scope=holdout_local_no_upload`、`provider_id=local-process`，并与当前桥的 `model_id`/`model_config_hash` 一致；`no_upload/no_cache/no_share/no_telemetry/cloud_fallback_disabled` 全为 true，`host_scope=local`、`operator` 非空、`attested_at` 有效。缺/不匹配/非真时 `authorization_required` 且零调用。该合同是 operator/host 显式声明，不证明子进程真实无网络；通用 `--confirm-external-send` 不替代留出许可。
 - 每例只把 `input` 十键投影进 envelope；断言、答案、metadata 与其它案例不进入桥请求。报告逐例只留安全序号、固定诊断、摘要、attempts/submissions，不保存回复正文。
 - 公开套件的地点/薪资正控制要求当前包 `facts.allow_keys` 允许对应键；若包故意禁止事实，这些案例应按策略失败或转待办，不应改断言或绕过包白名单。空事实流程（缺失薪资、注入转人工）可独立运行。
@@ -285,7 +285,7 @@ python -m app policy holdout register --batch-id <批次ID> --version <版本> `
 python -m app policy holdout retire --batch-id <批次ID>
 ```
 
-登记必须有维护者、独立标注者、版本、数量、冻结时间与候选关联，且 `--sample-count` 必须即时等于当前留出套件实际数；登记同时保存每例样本身份指纹（排除 case/task/nonce/now 等运行字段）。所有历史批次占用过的样本身份不得换 batch/候选/套件或拆子集重新冻结。访问意向在授权/桥调用前先原子持久化；中断/写失败/重跑均按已看访问记录处理，只有同摘要重跑标记为重复、不产生新证据。退役必须整批写入 `data/evals/regression-admissions/<batch-id>/suite.json` 冻结副本并在登记写 `regression_ref`/`regression_eligible=true`，之后同一 regression 生产路径可实际读取运行；登记写失败时只清理本次新建准入副本，原登记不变且 regression 不可运行。零样本、无登记或缺无上传条件时记未测，不以 100% 或公开集替代。
+登记必须有维护者、独立标注者、版本、数量、冻结时间与候选关联，且 `--sample-count` 必须即时等于当前留出套件实际数；登记同时保存每例样本身份指纹（排除 case/task/nonce/now 等运行字段）。所有历史批次占用过的样本身份不得换 batch/候选/套件或拆子集重新冻结。访问意向在授权/桥调用前先原子持久化；中断/写失败/重跑均按已看访问记录处理，只有同摘要重跑标记为重复、不产生新证据。退役必须整批写入 `data/evals/regression-admissions/<batch-id>/suite.json` 冻结副本并在登记写 `regression_ref`/`regression_eligible=true`，regression 只读取 registry 已确认 retired 且 ref 匹配的副本；登记写失败时只清理本次新建准入副本，清理也失败时未确认副本仍不可运行。零样本、无登记或缺无上传条件时记未测，不以 100% 或公开集替代。
 
 M4c 事实来源选择/确认/撤销、M5 授权/动作与本轮设备确认仍分别归后续里程碑；M4b 的 nonce/租约不证明发送授权，`policy eval` 通过不证明语义安全、A 档资格或真实模型能力。
 
