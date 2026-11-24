@@ -6,13 +6,13 @@
 
 ## 当前文件
 
-- `bridge_stub.py`：读取一条规范 JSON 请求，按模式返回 A/B 成功响应、固定 error.code、坏 JSON、重复键、角色声明不符或坏回显；可把收到的请求追加到测试临时捕获文件，供独立检查模型只收到当前案例输入。
+- `bridge_stub.py`：读取一条规范 JSON 请求，按模式返回 A/B 成功响应、固定 error.code、坏 JSON、重复键、角色声明不符或坏回显；`slow`/`no-read` 验证超时与 stdin 不读，`huge` 输出 2MiB 验证 stdout 上限，`stderr-huge` 验证大 stderr 丢弃，`fork-hold` 派生短命后代持有 stdout 验证有界收尾。可把收到的请求追加到测试临时捕获文件，供独立检查模型只收到当前案例输入。
 - `AGENTS.md`：本目录职责与边界。
 - `CLAUDE.md`：仅含 `@AGENTS.md`。
 
 ## 边界
 
-- 仅由 `tests.test_bridge` 与 `tests.test_policy_eval` 以本机 Python 参数数组启动；所有输出与决策均为合成数据。
+- 仅由 `tests.test_bridge` 与 `tests.test_policy_eval` 以本机 Python 参数数组启动；所有输出与决策均为合成数据。`fork-hold` 只派生 0.8 秒短命合成后代，不创建常驻失控进程。
 - 不得把该桩当作真实 provider 或据此生成公开验收结论；测试中真实适配器路径的评测报告强制 `simulated=true`。
 - 不写仓库路径外的文件；捕获文件位于测试临时目录。
 

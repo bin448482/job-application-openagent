@@ -1,4 +1,4 @@
-"""提供 M4b 评测套件、独立断言与留出冻结/退役的纯领域校验。"""
+"""提供 M4b 评测套件、独立断言、留出冻结/访问/退役与无上传合同校验。"""
 
 from __future__ import annotations
 
@@ -34,22 +34,31 @@ CHECK_CODES = frozenset(
         "tier",
     }
 )
+SAMPLE_EXCLUDE_KEYS = ("case_id", "task_id", "nonce", "now")
 REGISTRY_KEYS = ("schema_version", "batches")
 BATCH_KEYS = (
     "batch_id",
     "suite_hash",
     "version",
     "sample_count",
+    "sample_fingerprints",
     "annotator",
     "maintainer",
     "frozen_at",
     "candidate_release",
     "status",
+    "viewed",
+    "regression_eligible",
+    "regression_ref",
     "access_rounds",
     "retired_at",
 )
 ACCESS_KEYS = (
-    "at",
+    "attempt_id",
+    "started_at",
+    "completed_at",
+    "phase",
+    "outcome",
     "base_hash",
     "pack_hash",
     "provider_id",
@@ -58,6 +67,21 @@ ACCESS_KEYS = (
     "passed",
     "total",
     "repeat_access",
+)
+ATTESTATION_KEYS = (
+    "schema_version",
+    "scope",
+    "provider_id",
+    "model_id",
+    "model_config_hash",
+    "no_upload",
+    "no_cache",
+    "no_share",
+    "no_telemetry",
+    "cloud_fallback_disabled",
+    "host_scope",
+    "operator",
+    "attested_at",
 )
 
 
@@ -141,6 +165,21 @@ def project_case(case: Mapping[str, object]) -> dict[str, object]:
     return dict(case["input"])  # type: ignore[arg-type]
 
 
+def sample_fingerprint(case: Mapping[str, object]) -> str:
+    """按语义输入排除 case/task/nonce/now 等运行身份，生成样本身份摘要。"""
+    input_data = project_case(case)
+    return canonical_hash(
+        {key: value for key, value in input_data.items() if key not in SAMPLE_EXCLUDE_KEYS}
+    )
+
+
+def suite_fingerprints(suite: Mapping[str, object]) -> list[str]:
+    """按套件顺序返回每例样本身份摘要；重复指纹由套件/登记校验拒绝。"""
+    cases = suite["cases"]
+    assert isinstance(cases, list)
+    return [sample_fingerprint(case) for case in cases]
+
+
 def evaluate_assertions(
     decision: Mapping[str, object],
     reply: str,
@@ -169,8 +208,15 @@ def evaluate_assertions(
     return failures
 
 
+def _validate_hashes(item: Mapping[str, object], keys: tuple[str, ...]) -> None:
+    """校验指定字段均为小写 SHA-256。"""
+    for key in keys:
+        if not is_hash(item[key]):
+            raise ValueError("holdout hash is invalid")
+
+
 def validate_holdout_registry(data: object) -> dict[str, object]:
-    """严格校验留出登记：维护者、独立标注者、版本、数量、时间与候选关联。"""
+    """严格校验登记样本指纹、冻结元数据、访问轮次与回归资格。"""
     if not isinstance(data, dict) or set(data) != set(REGISTRY_KEYS):
         raise ValueError("holdout registry keys are invalid")
     if type(data["schema_version"]) is not int or data["schema_version"] != 1:
@@ -185,18 +231,28 @@ def validate_holdout_registry(data: object) -> dict[str, object]:
         if not is_nonempty_text(batch["batch_id"]) or batch["batch_id"] in seen:
             raise ValueError("holdout batch id is invalid")
         seen.add(batch["batch_id"])
-        if not is_hash(batch["suite_hash"]):
-            raise ValueError("holdout suite hash is invalid")
-        for key in (
-            "version",
-            "annotator",
-            "maintainer",
-            "candidate_release",
-        ):
+        _validate_hashes(batch, ("suite_hash",))
+        for key in ("version", "annotator", "maintainer", "candidate_release"):
             if not is_nonempty_text(batch[key]):
                 raise ValueError("holdout batch identity is invalid")
         if type(batch["sample_count"]) is not int or batch["sample_count"] < 0:
             raise ValueError("holdout sample count is invalid")
+        fingerprints = batch["sample_fingerprints"]
+        if (
+            not isinstance(fingerprints, list)
+            or len(fingerprints) != batch["sample_count"]
+            or any(not is_hash(item) for item in fingerprints)
+            or len(set(fingerprints)) != len(fingerprints)
+        ):
+            raise ValueError("holdout sample fingerprints are invalid")
+        if not isinstance(batch["viewed"], bool) or not isinstance(
+            batch["regression_eligible"], bool
+        ):
+            raise ValueError("holdout flags are invalid")
+        if batch["regression_ref"] is not None and not is_nonempty_text(
+            batch["regression_ref"]
+        ):
+            raise ValueError("holdout regression ref is invalid")
         try:
             parse_utc(batch["frozen_at"])
             if batch["retired_at"] is not None:
@@ -211,30 +267,53 @@ def validate_holdout_registry(data: object) -> dict[str, object]:
         for item in rounds:
             if not isinstance(item, dict) or set(item) != set(ACCESS_KEYS):
                 raise ValueError("holdout access keys are invalid")
-            try:
-                parse_utc(item["at"])
-            except (ValueError, TypeError):
-                raise ValueError("holdout access time is invalid") from None
-            for key in (
-                "base_hash",
-                "pack_hash",
-                "model_config_hash",
+            if not is_nonempty_text(item["attempt_id"]):
+                raise ValueError("holdout attempt is invalid")
+            for key in ("started_at", "completed_at"):
+                value = item[key]
+                if value is not None:
+                    try:
+                        parse_utc(value)
+                    except (ValueError, TypeError):
+                        raise ValueError("holdout access time is invalid") from None
+            if item["phase"] not in ("intent", "completed"):
+                raise ValueError("holdout access phase is invalid")
+            if item["outcome"] not in (
+                "started",
+                "completed",
+                "failed",
+                "unknown",
             ):
-                if not is_hash(item[key]):
-                    raise ValueError("holdout access hash is invalid")
+                raise ValueError("holdout access outcome is invalid")
+            _validate_hashes(
+                item, ("base_hash", "pack_hash", "model_config_hash")
+            )
             for key in ("provider_id", "model_id"):
                 if not is_nonempty_text(item[key]):
                     raise ValueError("holdout access identity is invalid")
+            for key in ("passed", "total"):
+                value = item[key]
+                if value is not None and (type(value) is not int or value < 0):
+                    raise ValueError("holdout access counts are invalid")
             if (
-                type(item["passed"]) is not int
-                or type(item["total"]) is not int
-                or item["passed"] < 0
-                or item["total"] < 0
-                or item["passed"] > item["total"]
-                or not isinstance(item["repeat_access"], bool)
+                item["passed"] is not None
+                and item["total"] is not None
+                and item["passed"] > item["total"]
             ):
                 raise ValueError("holdout access counts are invalid")
+            if not isinstance(item["repeat_access"], bool):
+                raise ValueError("holdout access repeat is invalid")
     return data
+
+
+def occupied_sample_fingerprints(registry: Mapping[str, object]) -> set[str]:
+    """返回所有历史批次占用过的样本身份，退役/冻结均不可重新作为留出。"""
+    batches = registry["batches"]
+    assert isinstance(batches, list)
+    occupied: set[str] = set()
+    for batch in batches:
+        occupied.update(str(item) for item in batch["sample_fingerprints"])
+    return occupied
 
 
 def register_holdout_batch(
@@ -244,19 +323,31 @@ def register_holdout_batch(
     suite_digest: str,
     version: str,
     sample_count: int,
+    sample_fingerprints: list[str],
     annotator: str,
     maintainer: str,
     frozen_at: str,
     candidate_release: str,
 ) -> dict[str, object]:
-    """注册新的冻结留出批次；新候选发布不得复用旧批次或相同发布名。"""
+    """注册冻结留出；缺维护者/标注者、数量不符或已看样本复用均拒绝。"""
     validate_holdout_registry(registry)
     if not is_nonempty_text(batch_id):
         raise ValueError("holdout batch id is invalid")
+    if (
+        type(sample_count) is not int
+        or sample_count < 0
+        or not isinstance(sample_fingerprints, list)
+        or len(sample_fingerprints) != sample_count
+        or any(not is_hash(item) for item in sample_fingerprints)
+        or len(set(sample_fingerprints)) != len(sample_fingerprints)
+    ):
+        raise ValueError("holdout samples are invalid")
     batches = registry["batches"]
     assert isinstance(batches, list)
     if any(batch["batch_id"] == batch_id for batch in batches):
         raise ValueError("holdout batch exists")
+    if occupied_sample_fingerprints(registry) & set(sample_fingerprints):
+        raise ValueError("holdout samples already occupied")
     if any(
         batch["status"] == "frozen"
         and batch["candidate_release"] == candidate_release
@@ -268,11 +359,15 @@ def register_holdout_batch(
         "suite_hash": suite_digest,
         "version": version,
         "sample_count": sample_count,
+        "sample_fingerprints": list(sample_fingerprints),
         "annotator": annotator,
         "maintainer": maintainer,
         "frozen_at": frozen_at,
         "candidate_release": candidate_release,
         "status": "frozen",
+        "viewed": False,
+        "regression_eligible": False,
+        "regression_ref": None,
         "access_rounds": [],
         "retired_at": None,
     }
@@ -297,7 +392,7 @@ def frozen_holdout_batch(
     return matches[0] if matches else None
 
 
-def check_holdout_access(
+def _check_digest(
     batch: Mapping[str, object],
     *,
     base_hash: str,
@@ -305,14 +400,12 @@ def check_holdout_access(
     provider_id: str,
     model_id: str,
     model_config_hash: str,
-) -> bool:
-    """检查批次是否仍可访问；返回是否为同摘要重复访问，摘要变化即拒绝。"""
-    if batch["status"] != "frozen":
-        raise ValueError("holdout batch is retired")
+) -> None:
+    """同一冻结批次只允许同一 base/pack/provider/model/config 摘要。"""
     rounds = batch["access_rounds"]
     assert isinstance(rounds, list)
     if not rounds:
-        return False
+        return
     previous = rounds[-1]
     if (
         previous["base_hash"],
@@ -328,23 +421,44 @@ def check_holdout_access(
         model_config_hash,
     ):
         raise ValueError("holdout batch digest changed")
-    return True
 
 
-def record_holdout_access(
+def check_holdout_access(
+    batch: Mapping[str, object],
+    *,
+    base_hash: str,
+    pack_hash: str,
+    provider_id: str,
+    model_id: str,
+    model_config_hash: str,
+) -> bool:
+    """检查批次是否仍可访问；返回是否为同摘要重复访问，摘要变化即拒绝。"""
+    if batch["status"] != "frozen":
+        raise ValueError("holdout batch is retired")
+    _check_digest(
+        batch,
+        base_hash=base_hash,
+        pack_hash=pack_hash,
+        provider_id=provider_id,
+        model_id=model_id,
+        model_config_hash=model_config_hash,
+    )
+    return bool(batch["access_rounds"])
+
+
+def begin_holdout_access(
     registry: dict[str, object],
     batch: dict[str, object],
     *,
+    attempt_id: str,
     at: str,
     base_hash: str,
     pack_hash: str,
     provider_id: str,
     model_id: str,
     model_config_hash: str,
-    passed: int,
-    total: int,
 ) -> dict[str, object]:
-    """记录访问轮次；同摘要重跑标记为重复访问，摘要变化须先整批退役。"""
+    """在任何调用前持久化访问意向；返回含首次/重复标记的访问记录。"""
     validate_holdout_registry(registry)
     repeat = check_holdout_access(
         batch,
@@ -354,35 +468,120 @@ def record_holdout_access(
         model_id=model_id,
         model_config_hash=model_config_hash,
     )
-    rounds = batch["access_rounds"]
-    assert isinstance(rounds, list)
+    if not is_nonempty_text(attempt_id):
+        raise ValueError("holdout attempt is invalid")
     entry = {
-        "at": at,
+        "attempt_id": attempt_id,
+        "started_at": at,
+        "completed_at": None,
+        "phase": "intent",
+        "outcome": "started",
         "base_hash": base_hash,
         "pack_hash": pack_hash,
         "provider_id": provider_id,
         "model_id": model_id,
         "model_config_hash": model_config_hash,
-        "passed": passed,
-        "total": total,
+        "passed": None,
+        "total": None,
         "repeat_access": repeat,
     }
+    rounds = batch["access_rounds"]
+    assert isinstance(rounds, list)
     rounds.append(entry)
+    batch["viewed"] = True
     validate_holdout_registry(registry)
     return entry
 
 
-def retire_holdout_batch(
-    registry: dict[str, object], *, batch_id: str, retired_at: str
-) -> None:
-    """整批退役转回归；退役后不能继续作为留出证据使用。"""
+def finish_holdout_access(
+    registry: dict[str, object],
+    batch: dict[str, object],
+    *,
+    attempt_id: str,
+    at: str,
+    outcome: str,
+    passed: int | None,
+    total: int | None,
+) -> dict[str, object]:
+    """完成/失败/未知收尾同一意向；不删除已消耗访问，不覆盖其它轮次。"""
     validate_holdout_registry(registry)
+    if outcome not in ("completed", "failed", "unknown"):
+        raise ValueError("holdout outcome is invalid")
+    rounds = batch["access_rounds"]
+    assert isinstance(rounds, list)
+    for entry in rounds:
+        if entry["attempt_id"] != attempt_id:
+            continue
+        if entry["phase"] != "intent":
+            raise ValueError("holdout attempt is already completed")
+        entry["phase"] = "completed"
+        entry["outcome"] = outcome
+        entry["completed_at"] = at
+        entry["passed"] = passed
+        entry["total"] = total
+        validate_holdout_registry(registry)
+        return entry
+    raise ValueError("holdout attempt is missing")
+
+
+def retire_holdout_batch(
+    registry: dict[str, object],
+    *,
+    batch_id: str,
+    retired_at: str,
+    regression_ref: str,
+) -> None:
+    """整批退役并记录实际 regression 准入副本引用，不保留可重冻结留出。"""
+    validate_holdout_registry(registry)
+    if not is_nonempty_text(regression_ref):
+        raise ValueError("holdout regression ref is invalid")
     for batch in registry["batches"]:
         if batch["batch_id"] == batch_id:
             if batch["status"] != "frozen":
                 raise ValueError("holdout batch is retired")
             batch["status"] = "retired"
             batch["retired_at"] = retired_at
+            batch["regression_eligible"] = True
+            batch["regression_ref"] = regression_ref
             validate_holdout_registry(registry)
             return
     raise ValueError("holdout batch is missing")
+
+
+def validate_holdout_attestation(
+    data: object,
+    *,
+    provider_id: str,
+    model_id: str,
+    model_config_hash: str,
+) -> dict[str, object]:
+    """校验本机无上传合同与当前桥摘要绑定；缺项/非真/坏时间均拒绝。"""
+    if not isinstance(data, dict) or set(data) != set(ATTESTATION_KEYS):
+        raise ValueError("holdout attestation keys are invalid")
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        raise ValueError("holdout attestation version is invalid")
+    if data["scope"] != "holdout_local_no_upload":
+        raise ValueError("holdout attestation scope is invalid")
+    if (
+        data["provider_id"] != "local-process"
+        or data["provider_id"] != provider_id
+        or data["model_id"] != model_id
+        or data["model_config_hash"] != model_config_hash
+    ):
+        raise ValueError("holdout attestation binding is invalid")
+    for key in (
+        "no_upload",
+        "no_cache",
+        "no_share",
+        "no_telemetry",
+        "cloud_fallback_disabled",
+    ):
+        if data[key] is not True:
+            raise ValueError("holdout attestation flag is invalid")
+    if data["host_scope"] != "local" or not is_nonempty_text(data["operator"]):
+        raise ValueError("holdout attestation operator is invalid")
+    try:
+        parse_utc(data["attested_at"])
+    except (ValueError, TypeError):
+        raise ValueError("holdout attestation time is invalid") from None
+    return data

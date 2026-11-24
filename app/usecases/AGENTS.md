@@ -12,8 +12,8 @@
 - `read.py`：`is_actionable(result)`/`require_actionable` 按值类型检查页面、职位、未读与会话；结构 ok 但字段未知/身份未决仍拒绝决策。`build_read_payload` 是 M3 唯一 JSON 组装点；`targeted_verification_outcome(initial,targeted,queued_keys,*,now)` 要求新 snapshot、同 app/profile、observed_at 在 0–5 秒且不老于 initial，重放/陈旧/跨 profile 分别返回 `unread_unverified/stale_snapshot/identity_ambiguous`；`read_from_device` 在任何门禁或采集前拒绝不可调用 parser，再要求共享设备门禁通过。不调用仓储、模型或动作。
 - `payload.py`：M2/M3 共用的 `ReadResult` 七键与 `UnreadSnapshot` 深层序列化唯一实现；用显式字段投影而不 `asdict`，保持 M2 `SIGNAL_KEYS` 顺序与全部字段，`sense`/`read` 均复用。
 - `policy.py`：`init_pack/validate_pack/preview_pack/list_packs/snapshot_pack/restore_pack` 只经 `PolicyRepositoryPort` 做文件事务，经领域纯函数校验/摘要/渲染；`init` 只建 local 直接子目录并保留 profile 身份；`snapshot` 复制前后重读活动源且清单完成才发布；`restore` 要求清单/快照/目标三值 `pack_hash` 相等、base_hash 与 base_version 匹配、保留 profile_id，staging 同卷发布且不覆盖。`load_active_pack` 是 eval 复用的当前包加载/校验入口。所有用例可选注入同一 `ProcessLog`，在 load/validate/render/publish 实际边界记录 started→ok/failed/undetermined 与耗时。`RefusingPolicyActivity` 是 M4a 生产受控拒绝（返回 unknown）；测试可向同一 `restore_pack` 注入明确合成 `stopped` 证据，完整 CLI 安全接线留 M4c。
-- `decision.py`：`decide(...)` 调用既有 `verify_rendered_request`、`parse_decision`、`validate_decision`、`append_and_validate_reply` 与 `resolve_policy_tier`，不复制契约。桥前重渲染并重读当前 base/pack，比较摘要与可信租约；桥后再次重读包与租约，变化/到期/坏回显/坏证据/披露或事实失败均丢弃输出；只有传输层证明进程未启动的 `bridge_start_failed` 重试一次，提交后超时映射 `decision_timeout` 不重发。返回 Decision、复验回复、最终档位与不含正文的审计摘要（attempts/submissions）。
-- `policy_eval.py`：`eval_pack` 实际加载当前包与公开/回归/留出套件，经同一 `decide` 与 `DecisionBridgePort` 逐例运行；授权回调拒绝时不启动桥；报告绑定 base/pack/profile/provider/model/model_config_hash/suite_hash，逐例只留摘要与固定诊断；只有公开集全通过且非 simulated 才写验收凭证，失败/零样本/非公开集不生成凭证。`RepositorySnapshot` 每例重读当前包，`EvaluationLease` 是离线评测程序侧合成租约，不证明真实授权。`register_holdout`/`retire_holdout` 维护冻结批次、维护者/标注者/数量/时间/候选关联与整批退役。
+- `decision.py`：`decide(...)` 调用既有 `verify_rendered_request`、`parse_decision`、`validate_decision`、`append_and_validate_reply` 与 `resolve_policy_tier`，不复制契约。桥前、重试前与桥后重读可信时钟、租约和当前 base/pack；桥期间跨截止、包变化、坏回显/坏证据/披露或事实失败均丢弃输出；只有传输层证明进程未启动的 `bridge_start_failed` 重试一次，重试前重新检查时钟/租约/包，提交后超时映射 `decision_timeout` 不重发。未知桥异常映射 `bridge_protocol` 并写终态日志。返回 Decision、复验回复、最终档位与不含正文的审计摘要（attempts/submissions）。
+- `policy_eval.py`：`eval_pack` 实际加载当前包与公开/回归/留出套件，经同一 `decide`/`DecisionBridgePort` 逐例运行；每例使用 case_now+真实单调耗时的逻辑时钟；缺套件/零样本返回 not_measured 且零授权零调用；授权回调拒绝时不启动桥；报告绑定 base/pack/profile/provider/model/model_config_hash/suite_hash 与 correlation_id，逐例只留 case_index/摘要/固定诊断；只有公开集全通过且非 simulated 才写验收凭证。留出在任何调用前锁内持久化 intent，完成/失败/中断/重复如实收尾；无上传合同必须绑定当前 model_id/model_config_hash 且所有禁用项为真；`register_holdout`/`retire_holdout` 维护样本身份占用、实际 regression 准入副本与整批退役。
 - `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、行为契约
@@ -33,8 +33,8 @@
 - `snapshot_pack` 在暂存写入后、清单发布前及最终发布后重读活动源四载荷与双指南；源字节/身份变化或读取失败以 `policy_changed` 拒绝并清理本次自有发布/暂存，不改变原活动包。`init` 使用同一 `_write_payload`/`_verify_staging`，坏示例返回带定位的 `errors` 列表而不是嵌套异常。
 - `restore_pack` 只接受 `prompts/local/history/<snapshot-id>` 与新的 local 直接子目录；`activity.assess_restore` 非 `stopped` 时以 `policy_changed` 拒绝，未知状态不得当已停止。M4a CLI 固定注入返回 unknown 的受控实现，不新增公开绕过参数。
 - `_policy_stage` 在 load/validate/render/publish 实际边界记录同一 `ProcessLog`/correlation 的 started→ok/failed/undetermined、固定原因和耗时；日志失败不改变业务结果；不记录正文、事实、路径或异常原值。
-- `decide` 只使用渲染请求的固定三消息与 `protocol` 回显，不把不可信输入变成 role/tool/message；桥返回内容只解析、不执行。桥启动失败可重试一次；进程启动后超时/schema/证据/回显失败不重试。所有失败只暴露固定原因码与字段诊断。
-- `eval_pack` 每例只把 `input` 投影进 envelope；断言、metadata、答案与其它案例不进入请求。报告/凭证只写 `data/evals`；`simulated` transport 永不写验收凭证。留出只允许 `local-process`，冻结批次登记不完整、零样本或摘要变化时不把重跑当新证据。
+- `decide` 只使用渲染请求的固定三消息与 `protocol` 回显，不把不可信输入变成 role/tool/message；桥返回内容只解析、不执行。桥启动失败可重试一次，重试前重读时钟/租约/包；进程启动后超时/schema/证据/回显失败不重试。所有失败只暴露固定原因码与字段诊断。
+- `eval_pack` 每例只把 `input` 投影进 envelope；断言、metadata、答案与其它案例不进入请求。报告/凭证只写 `data/evals`；`simulated` transport 永不写验收凭证。留出只允许 `local-process` 且必须有无上传合同，缺条件零调用；访问意向先持久化，失败/中断不恢复成未看；退役批次实际进入 regression 准入并被同一生产 regression 路径读取。
 - `--confirm-external-send` 仅是模型评测外发/计费的本轮确认，不授予设备、事实写入或业务发送权限；生产 CLI 在授权回调返回 false 时不启动桥。
 
 ## 四、测试

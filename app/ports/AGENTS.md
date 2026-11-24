@@ -11,8 +11,8 @@
 - `screen.py`：`HierarchyCapture`（XML 内存文本、受控证据名、字节数）、`ScreenCapture`（原始 RGBA 内存字节、受控证据名）、`ScreenReadError`（仅 `device_disconnected/invalid_fixture`）、`ScreenPort`（dump_hierarchy/capture_screen）与 `DeviceGate`/`DeviceGateUnavailable`。端口不暴露 serial、绝对路径或原始异常。
 - `store.py`：`StorePort` 协议与 `StoreError`；方法为 `upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，错误码固定为 `invalid_input/lease_busy/stale_lease/owner_not_stopped/clock_changed/store_busy/store_io_error/db_version_unsupported/migration_failed`。`sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，`upsert_snapshot` 的返回值限定为写后仍 queued 的发现键；M3 `read` 不调用本端口。
 - `policy.py`：M4a `PolicyError(reason_code, issues, *, activity_state)`、`PolicyRepositoryPort`（base/示例/活动包/快照/指南/preview 读取、暂存、原字节写、同卷发布、受控清理）与 `PolicyActivityPort.assess_restore(*, profile_id, dest_pack)->stopped|active|unknown`。原因码固定 `invalid_input/invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case/invalid_provider/eval_failed/authorization_required`；M4a 生产只注入返回 `unknown` 的受控实现，M4c 才接真实活动/未决检查。
-- `decision.py`：M4b `BridgeDescriptor`、`BridgeError(reason_code, *, submitted)`、`DecisionBridgePort.complete(*, system_message, developer_message, user_message, echo)->str`、`DecisionSnapshotPort.reload()->(base,pack)` 与 `DecisionLeasePort.current_expiry()->str|null`；固定 `BRIDGE_TIMEOUT_SECONDS=20`、`BRIDGE_MAX_OUTPUT_BYTES=64KiB`、三角色、A/B 协议与 `bridge_start_failed/unavailable/timeout/protocol/roles/auth/quota/disconnected` 诊断。只有 `bridge_start_failed` 在传输层证明进程未启动时可重试；端口不暴露 argv、端点或凭据。
-- `eval.py`：M4b `EvalStorePort`（公开/回归/留出套件读取、本机报告/凭证写入、留出登记读写）；不存在套件返回 null，路径/链接/坏格式映射固定策略错误。
+- `decision.py`：M4b `BridgeDescriptor`、`BridgeError(reason_code, *, submitted)`、`DecisionBridgePort.complete(*, system_message, developer_message, user_message, echo)->str`、`DecisionSnapshotPort.reload()->(base,pack)`、`DecisionLeasePort.current_expiry()->str|null` 与 `DecisionClockPort.now()->str`；固定 `BRIDGE_TIMEOUT_SECONDS=20`、`BRIDGE_MAX_OUTPUT_BYTES=64KiB`、三角色、A/B 协议与 `bridge_start_failed/unavailable/timeout/protocol/roles/auth/quota/disconnected` 诊断。只有 `bridge_start_failed` 在传输层证明进程未启动时可重试；端口不暴露 argv、端点或凭据。
+- `eval.py`：M4b `EvalStorePort`（公开/回归/留出套件读取、本机报告/凭证原子写入、留出登记锁内更新、无上传合同读取、退役 regression 准入写入）；不存在套件返回 null，路径/链接/坏格式映射固定策略错误。
 - `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、边界
@@ -23,7 +23,7 @@
 - `ScreenPort` 只做一次层级/截图采集；`DeviceGate.require_available` 必须在任何真实采集前通过，M4 共享门禁未交付时抛出 `DeviceGateUnavailable`，profile 内 primary 任务锁不能替代。
 - `StorePort` 的租约、三态与 blocked 设备处置以设计说明 §6 为准；M1 只允许 app=boss。
 - `PolicyRepositoryPort` 只暴露项目内文件能力与被校验包文本，不暴露绝对路径、正文或远程下载；`PolicyActivityPort` 只有 `stopped` 才允许 restore，`unknown/active` 均拒绝且不得用占位 True。
-- `DecisionBridgePort` 只接收已渲染三分区消息与独立协议回显；`DecisionSnapshotPort`/`DecisionLeasePort` 只提供当前包原文与可信截止时间，不把模型输出、argv 或桥自报状态当授权。
+- `DecisionBridgePort` 只接收已渲染三分区消息与独立协议回显；`DecisionSnapshotPort`/`DecisionLeasePort`/`DecisionClockPort` 只提供当前包原文、可信截止时间与当前时间，不把模型输出、argv 或桥自报状态当授权。
 - `EvalStorePort` 只读写项目内合成套件与被忽略的 `data/evals`，不读取真实私有样本内容到公开报告，不下载或上传。
 - 不预建 M5 动作、M6 调度或事实确认端口。
 

@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import stat
 import uuid
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from app.domain.json_input import load_json_object
 from app.domain.policy import (
@@ -23,6 +22,12 @@ from app.domain.policy import (
     normalize_active_pack_path,
     normalize_snapshot_path,
 )
+from app.adapters.files.support import (
+    is_link_like,
+    normalize_project_relative,
+    read_bounded_bytes,
+    resolve_project_relative,
+)
 from app.ports.policy import PolicyError
 
 BASE_MAX_BYTES = 64 * 1024
@@ -37,16 +42,7 @@ def _issue(file: str | None, field: str | None, code: str) -> PolicyIssue:
 
 def _is_link_like(path: Path) -> bool:
     """判断路径是否为符号链接或 Windows reparse point/junction。"""
-    try:
-        if path.is_symlink():
-            return True
-        if os.name == "nt":
-            attributes = path.lstat().st_file_attributes
-            if attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0):
-                return True
-    except OSError:
-        return False
-    return False
+    return is_link_like(path)
 
 
 class FilePolicyRepository:
@@ -59,35 +55,20 @@ class FilePolicyRepository:
 
     def _normalize_rel(self, value: str) -> str:
         """只做纯字符串项目内相对路径检查，不访问文件系统。"""
-        if not isinstance(value, str) or not value or "\x00" in value:
-            raise PolicyError("invalid_input", [_issue(None, None, "path")])
-        normalized = value.replace("\\", "/")
-        candidate = PurePosixPath(normalized)
-        if (
-            candidate.is_absolute()
-            or candidate.anchor
-            or normalized.startswith("~")
-            or not candidate.parts
-            or any(part in ("..", "") for part in candidate.parts)
-        ):
-            raise PolicyError("invalid_input", [_issue(None, None, "path")])
-        return candidate.as_posix()
+        try:
+            return normalize_project_relative(value)
+        except ValueError:
+            raise PolicyError("invalid_input", [_issue(None, None, "path")]) from None
 
     def _resolve(self, value: str, *, missing_ok: bool = False) -> tuple[Path, str]:
         """把项目内相对路径规范为绝对路径与 POSIX 相对路径，拒绝越界与链接。"""
         posix = self._normalize_rel(value)
-        candidate = PurePosixPath(posix)
-        resolved = (self.root / Path(*candidate.parts)).resolve()
-        if not resolved.is_relative_to(self.root):
-            raise PolicyError("invalid_input", [_issue(None, None, "path")])
-        current = self.root
-        for part in candidate.parts:
-            current = current / part
-            if current.exists() and _is_link_like(current):
-                raise PolicyError("invalid_input", [_issue(posix, None, "path")])
-        if not missing_ok and not resolved.exists():
-            raise PolicyError("policy_io_error", [_issue(posix, None, "missing")])
-        return resolved, posix
+        try:
+            return resolve_project_relative(self.root, posix, missing_ok=missing_ok)
+        except ValueError:
+            raise PolicyError("invalid_input", [_issue(posix, None, "path")]) from None
+        except FileNotFoundError:
+            raise PolicyError("policy_io_error", [_issue(posix, None, "missing")]) from None
 
     def _active_pack(self, value: str) -> str:
         """校验值恰为 local 直接活动包目录并返回规范相对路径。"""
@@ -113,13 +94,9 @@ class FilePolicyRepository:
         if _is_link_like(path) or not path.is_file():
             raise PolicyError("invalid_policy", [_issue(posix, None, "path")])
         try:
-            size = path.stat().st_size
-        except OSError:
-            raise PolicyError("policy_io_error", [_issue(posix, None, "format")]) from None
-        if max_bytes is not None and size > max_bytes:
-            raise PolicyError("invalid_policy", [_issue(posix, None, "size")])
-        try:
-            data = path.read_bytes()
+            data = read_bounded_bytes(path, max_bytes)
+        except ValueError:
+            raise PolicyError("invalid_policy", [_issue(posix, None, "size")]) from None
         except OSError:
             raise PolicyError("policy_io_error", [_issue(posix, None, "format")]) from None
         if data.startswith(b"\xef\xbb\xbf"):

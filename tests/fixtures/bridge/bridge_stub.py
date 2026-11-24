@@ -3,13 +3,35 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 
 def main(argv: list[str]) -> int:
     """按固定模式返回合成 Decision 或固定桥错误，供适配器/评测测试使用。"""
     mode = argv[0] if argv else "ok"
+    if mode == "fork-hold":
+        subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(0.8)"],
+            stdout=sys.stdout,
+            stderr=subprocess.DEVNULL,
+        )
+        return 0
+    if mode == "huge":
+        sys.stdout.buffer.write(b"x" * (2 * 1024 * 1024))
+        sys.stdout.buffer.flush()
+        return 0
+    if mode == "slow":
+        time.sleep(5)
+        return 0
+    if mode == "no-read":
+        time.sleep(5)
+        return 0
+    if mode == "stderr-huge":
+        sys.stderr.write("y" * (2 * 1024 * 1024))
+        sys.stderr.flush()
     request = json.loads(sys.stdin.read())
     if not isinstance(request, dict):
         return 2

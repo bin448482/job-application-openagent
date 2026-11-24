@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import tempfile
+import time
 from typing import Mapping
 
 from app.domain.json_input import load_json_object
@@ -50,6 +53,7 @@ class SubprocessBridge:
         self._argv = tuple(argv)
         self._model_id = model_id
         self._protocol = protocol
+        self._timeout = float(BRIDGE_TIMEOUT_SECONDS)
         self._config_hash = canonical_hash(
             {
                 "provider_id": self.provider_id,
@@ -59,6 +63,12 @@ class SubprocessBridge:
                 "argv": list(self._argv),
             }
         )
+
+    def _set_timeout_for_test(self, seconds: float) -> None:
+        """仅供离线测试缩短总预算；生产默认固定 20 秒，CLI 不暴露该入口。"""
+        if not isinstance(seconds, (int, float)) or not 0 < float(seconds) <= BRIDGE_TIMEOUT_SECONDS:
+            raise ValueError("timeout is invalid")
+        self._timeout = float(seconds)
 
     def descriptor(self) -> BridgeDescriptor:
         """返回报告使用的固定摘要；不暴露 argv、端点或凭据。"""
@@ -159,27 +169,94 @@ class SubprocessBridge:
         user_message: str,
         echo: Mapping[str, str],
     ) -> str:
-        """发送一次固定分区请求并返回 Decision JSON 文本；不自行重试。"""
+        """在总预算内用本机临时文件承载 stdin/stdout；超时/超限受控回收。"""
         request = self._request(system_message, developer_message, user_message, echo)
+        deadline = time.monotonic() + self._timeout
         try:
-            completed = subprocess.run(
-                list(self._argv),
-                input=request,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=BRIDGE_TIMEOUT_SECONDS,
-                check=False,
-                shell=False,
-            )
-        except (FileNotFoundError, PermissionError):
-            raise BridgeError("bridge_start_failed", submitted=False) from None
-        except subprocess.TimeoutExpired:
-            raise BridgeError("bridge_timeout", submitted=True) from None
+            request_file = tempfile.TemporaryFile()
+            output = tempfile.TemporaryFile()
         except OSError:
-            raise BridgeError("bridge_unavailable", submitted=True) from None
-        except (ValueError, TypeError):
-            raise BridgeError("bridge_start_failed", submitted=False) from None
-        text = self._decode_stdout(completed.stdout or b"")
-        if completed.returncode != 0:
-            raise self._error_from_stdout(text)
-        return self._content_from_stdout(text)
+            raise BridgeError("bridge_protocol", submitted=False) from None
+        try:
+            try:
+                request_file.write(request)
+                request_file.seek(0)
+            except OSError:
+                raise BridgeError("bridge_start_failed", submitted=False) from None
+            try:
+                process = subprocess.Popen(
+                    list(self._argv),
+                    stdin=request_file,
+                    stdout=output,
+                    stderr=subprocess.DEVNULL,
+                    shell=False,
+                )
+            except (FileNotFoundError, PermissionError):
+                raise BridgeError("bridge_start_failed", submitted=False) from None
+            except OSError:
+                raise BridgeError("bridge_unavailable", submitted=True) from None
+            except (ValueError, TypeError):
+                raise BridgeError("bridge_start_failed", submitted=False) from None
+
+            timed_out = False
+            overflow = False
+            while True:
+                try:
+                    output.seek(0, os.SEEK_END)
+                    if output.tell() > BRIDGE_MAX_OUTPUT_BYTES:
+                        overflow = True
+                        try:
+                            process.kill()
+                        except OSError:
+                            pass
+                        break
+                except (OSError, ValueError):
+                    pass
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+                    break
+                try:
+                    process.wait(timeout=min(0.02, remaining))
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+            try:
+                process.wait(timeout=0.2)
+            except subprocess.TimeoutExpired:
+                try:
+                    process.kill()
+                    process.wait(timeout=0.2)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
+            try:
+                output.seek(0, os.SEEK_END)
+                if output.tell() > BRIDGE_MAX_OUTPUT_BYTES:
+                    overflow = True
+            except (OSError, ValueError):
+                pass
+            if timed_out:
+                raise BridgeError("bridge_timeout", submitted=True)
+            if overflow:
+                raise BridgeError("bridge_protocol", submitted=True)
+            try:
+                output.seek(0)
+                raw = output.read(BRIDGE_MAX_OUTPUT_BYTES + 1)
+            except (OSError, ValueError):
+                raise BridgeError("bridge_protocol", submitted=True) from None
+            if len(raw) > BRIDGE_MAX_OUTPUT_BYTES:
+                raise BridgeError("bridge_protocol", submitted=True)
+            text = self._decode_stdout(raw)
+            if process.returncode != 0:
+                raise self._error_from_stdout(text)
+            return self._content_from_stdout(text)
+        finally:
+            for stream in (request_file, output):
+                try:
+                    stream.close()
+                except OSError:
+                    pass

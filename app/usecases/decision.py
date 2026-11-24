@@ -28,6 +28,7 @@ from app.ports.decision import (
     BRIDGE_REASON_CODES,
     BridgeError,
     DecisionBridgePort,
+    DecisionClockPort,
     DecisionLeasePort,
     DecisionSnapshotPort,
 )
@@ -37,6 +38,27 @@ DECISION_RUN_REASON_CODES = frozenset(
     set(DECISION_REASON_CODES) | set(BRIDGE_REASON_CODES) | {"policy_changed"}
 )
 _BRIDGE_ERROR_TO_RUN = {"bridge_timeout": "decision_timeout"}
+
+
+class FixedClock:
+    """离线兼容用固定逻辑时钟；只在合成夹具或显式固定时间测试中使用。"""
+
+    def __init__(self, value: str) -> None:
+        """保存规范 UTC 时间。"""
+        self._value = value
+
+    def now(self) -> str:
+        """返回固定逻辑时间，不推进真实流逝。"""
+        return self._value
+
+
+class SystemClock:
+    """生产使用的可信系统时钟；每次调用重新读取当前 UTC 时间。"""
+
+    def now(self) -> str:
+        """返回毫秒精度 UTC 当前时间。"""
+        return utc_now()
+
 
 
 class DecisionRunError(Exception):
@@ -82,6 +104,18 @@ def _record_stage(
         error_category=error_category,
         duration_ms=elapsed_ms(started) if started is not None else 0,
     )
+
+
+def _current_time(clock: DecisionClockPort) -> str:
+    """读取可信当前时间并校验规范 UTC；坏时钟按 stale 拒绝。"""
+    try:
+        value = clock.now()
+        parse_utc(value)
+    except (ValueError, TypeError):
+        raise DecisionRunError(
+            "stale_decision", submitted=False, attempts=0, submissions=0
+        ) from None
+    return str(value)
 
 
 def _lease_expiry(lease: DecisionLeasePort, now: str) -> str:
@@ -143,19 +177,27 @@ def decide(
     bridge: DecisionBridgePort,
     snapshot: DecisionSnapshotPort,
     lease: DecisionLeasePort,
-    now: str,
+    now: str | None = None,
+    clock: DecisionClockPort | None = None,
     process_log: ProcessLog | None = None,
 ) -> dict[str, object]:
-    """执行一次生产决策路径并返回不含正文的 Decision、复验回复与审计摘要。"""
+    """执行一次生产决策路径并返回不含正文的 Decision、复验回复与审计摘要。
+
+    显式 `clock` 时在桥前、重试前和桥后分别重读可信当前时间；只传 `now`
+    是离线兼容固定时钟。全部租约、事实有效期与回显复验都使用当前读取值。
+    """
+    if clock is None:
+        clock = FixedClock(now) if now is not None else SystemClock()
     attempts = 0
     submissions = 0
     stage_started = time.perf_counter()
     _record_stage(process_log, "verify", "started")
     try:
-        verify_rendered_request(rendered, base_files, pack, envelope, now=now)
+        current_now = _current_time(clock)
+        verify_rendered_request(rendered, base_files, pack, envelope, now=current_now)
         current_base, current_pack_files = _reload_snapshot(snapshot)
         _check_snapshot(rendered, current_base, current_pack_files)
-        expiry_before = _lease_expiry(lease, now)
+        lease_expiry = _lease_expiry(lease, current_now)
     except DecisionError as error:
         _record_stage(
             process_log,
@@ -179,11 +221,34 @@ def decide(
         )
         raise
     _record_stage(process_log, "verify", "ok", started=stage_started)
-    del expiry_before
 
     text: str | None = None
     while attempts < 2:
         attempts += 1
+        if attempts == 2:
+            retry_started = time.perf_counter()
+            _record_stage(process_log, "verify", "started")
+            try:
+                retry_now = _current_time(clock)
+                retry_base, retry_pack = _reload_snapshot(snapshot)
+                _check_snapshot(rendered, retry_base, retry_pack)
+                lease_expiry = _lease_expiry(lease, retry_now)
+            except DecisionRunError as error:
+                error.attempts = attempts - 1
+                error.submissions = submissions
+                error.submitted = False
+                _record_stage(
+                    process_log,
+                    "verify",
+                    "failed",
+                    started=retry_started,
+                    reason_code=error.reason_code,
+                    error_category=(
+                        "decision" if error.reason_code != "policy_changed" else "policy"
+                    ),
+                )
+                raise
+            _record_stage(process_log, "verify", "ok", started=retry_started)
         call_started = time.perf_counter()
         _record_stage(process_log, "bridge", "started")
         try:
@@ -212,6 +277,22 @@ def decide(
                 attempts=attempts,
                 submissions=submissions,
             ) from None
+        except Exception:
+            submissions += 1
+            _record_stage(
+                process_log,
+                "bridge",
+                "failed",
+                started=call_started,
+                reason_code="bridge_protocol",
+                error_category="bridge",
+            )
+            raise DecisionRunError(
+                "bridge_protocol",
+                submitted=True,
+                attempts=attempts,
+                submissions=submissions,
+            ) from None
         submissions += 1
         _record_stage(process_log, "bridge", "ok", started=call_started)
         break
@@ -220,14 +301,15 @@ def decide(
     validate_started = time.perf_counter()
     _record_stage(process_log, "validate", "started")
     try:
+        after_now = _current_time(clock)
         after_base, after_pack_files = _reload_snapshot(snapshot)
         _check_snapshot(rendered, after_base, after_pack_files)
-        expiry_after = _lease_expiry(lease, now)
+        expiry_after = _lease_expiry(lease, after_now)
         decision = parse_decision(text)
         validate_decision(
             decision,
             envelope,
-            now=now,
+            now=after_now,
             lease_expires_at=expiry_after,
         )
         canonical_pack, issues = parse_and_validate_pack(after_pack_files)
@@ -306,7 +388,7 @@ def decide(
             "pack_hash": rendered.pack_hash,
             "prompt_hash": rendered.prompt_hash,
             "input_hash": rendered.input_hash,
-            "rendered_at": utc_now(),
+            "rendered_at": after_now,
             "provider_id": descriptor.provider_id,
             "model_id": descriptor.model_id,
             "model_config_hash": descriptor.model_config_hash,

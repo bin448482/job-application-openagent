@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import subprocess
 import sys
+import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from app.adapters.files.evals import FileEvalStore
 from app.adapters.llm.bridge_a import ExternalAgentBridge
+from app.domain.eval import begin_holdout_access, evaluate_assertions
 from app.domain.models import canonical_hash
 from app.ports.decision import BridgeDescriptor
 from app.ports.policy import PolicyError
@@ -162,8 +167,10 @@ class PolicyEvalTests(unittest.TestCase):
         """只清理本用例临时目录。"""
         self.tmp.cleanup()
 
-    def _eval(self, bridge, suite: str = "public"):
-        """以显式授权回调运行一次评测。"""
+    def _eval(self, bridge, suite: str = "public", *, attest: bool = True):
+        """以显式授权回调运行一次评测；留出默认写合成无上传合同。"""
+        if suite == "holdout" and attest:
+            self._write_attestation(bridge)
         return eval_usecases.eval_pack(
             self.repo,
             self.store,
@@ -172,6 +179,33 @@ class PolicyEvalTests(unittest.TestCase):
             bridge,
             lambda plan: True,
             now=self.now,
+        )
+
+    def _write_attestation(self, bridge) -> None:
+        """写入与当前桥摘要绑定的合成 operator/host 无上传合同。"""
+        descriptor = bridge.descriptor()
+        target = self.root / "data/evals/holdout-attestation.local.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "scope": "holdout_local_no_upload",
+                    "provider_id": descriptor.provider_id,
+                    "model_id": descriptor.model_id,
+                    "model_config_hash": descriptor.model_config_hash,
+                    "no_upload": True,
+                    "no_cache": True,
+                    "no_share": True,
+                    "no_telemetry": True,
+                    "cloud_fallback_disabled": True,
+                    "host_scope": "local",
+                    "operator": "synthetic-operator",
+                    "attested_at": self.now,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
         )
 
     def _report(self, result: dict[str, object]) -> dict[str, object]:
@@ -381,8 +415,8 @@ class PolicyEvalTests(unittest.TestCase):
             [f"M{index:02d}" for index in range(1, 25)],
         )
 
-    def _install_holdout(self, *, empty: bool = False) -> dict[str, object]:
-        """在临时项目复制公开套件为私有留出，并写冻结登记。"""
+    def _install_holdout(self, *, empty: bool = False, register: bool = True) -> dict[str, object] | None:
+        """在临时项目复制公开套件为私有留出，并按需写冻结登记。"""
         suite = json.loads(
             (ROOT / "evals/policy-suite/public.json").read_text(encoding="utf-8")
         )
@@ -392,6 +426,8 @@ class PolicyEvalTests(unittest.TestCase):
         target = self.root / "evals/private/holdout/suite.json"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(suite, ensure_ascii=False), encoding="utf-8")
+        if not register:
+            return None
         count = 0 if empty else len(suite["cases"])
         return eval_usecases.register_holdout(
             self.store,
@@ -405,7 +441,7 @@ class PolicyEvalTests(unittest.TestCase):
         )
 
     def test_holdout_freeze_access_repeat_retire_and_new_batch(self) -> None:
-        """冻结批次记录访问轮次；重跑非新证据，摘要变化须退役并新批次。"""
+        """冻结批次记录访问；重跑非新证据，退役后旧样本不可换名重冻结。"""
         self._install_holdout()
         bridge = SimulatedBridge(public_decisions())
         first = self._eval(bridge, "holdout")
@@ -414,6 +450,7 @@ class PolicyEvalTests(unittest.TestCase):
         self.assertIsNone(report["acceptance"])
         self.assertFalse(report["holdout"]["repeat_access"])
         self.assertTrue(report["holdout"]["new_evidence"])
+        self.assertEqual(report["authorization"]["scope"], "holdout_no_upload_attested")
         second = self._eval(SimulatedBridge(public_decisions()), "holdout")
         second_report = self._report(second)
         self.assertTrue(second_report["holdout"]["repeat_access"])
@@ -425,13 +462,37 @@ class PolicyEvalTests(unittest.TestCase):
             self._eval(changed_bridge, "holdout")
         self.assertEqual(caught.exception.reason_code, "eval_failed")
         self.assertEqual(changed_bridge.requests, [])
-        eval_usecases.retire_holdout(self.store, batch_id="batch-1", retired_at=self.now)
+        retired = eval_usecases.retire_holdout(
+            self.store, batch_id="batch-1", retired_at=self.now
+        )
+        self.assertTrue(retired["regression_ref"])
         registry = self.store.read_holdout_registry()
         self.assertEqual(registry["batches"][0]["status"], "retired")
+        self.assertTrue(registry["batches"][0]["regression_eligible"])
+        with self.assertRaises(PolicyError):
+            eval_usecases.register_holdout(
+                self.store,
+                batch_id="batch-same-samples",
+                version="2026-11-24",
+                sample_count=6,
+                annotator="synthetic-annotator-2",
+                maintainer="synthetic-maintainer",
+                frozen_at=self.now,
+                candidate_release="candidate-2",
+            )
+        # 新候选必须使用全新样本；旧样本换 batch/候选/套件均被占用指纹拒绝。
+        suite = json.loads(
+            (self.root / "evals/private/holdout/suite.json").read_text(encoding="utf-8")
+        )
+        for case in suite["cases"]:
+            case["input"]["inbound"] = case["input"]["inbound"] + "（新样本）"
+        (self.root / "evals/private/holdout/suite.json").write_text(
+            json.dumps(suite, ensure_ascii=False), encoding="utf-8"
+        )
         eval_usecases.register_holdout(
             self.store,
             batch_id="batch-2",
-            version="2026-11-24",
+            version="2026-11-25",
             sample_count=6,
             annotator="synthetic-annotator-2",
             maintainer="synthetic-maintainer",
@@ -440,6 +501,267 @@ class PolicyEvalTests(unittest.TestCase):
         )
         third = self._eval(SimulatedBridge(public_decisions()), "holdout")
         self.assertEqual(self._report(third)["holdout"]["batch_id"], "batch-2")
+
+    def test_holdout_subset_split_is_rejected(self) -> None:
+        """已看整批退役后，取子集作为新留出仍被样本身份占用拒绝。"""
+        self._install_holdout()
+        self._eval(SimulatedBridge(public_decisions()), "holdout")
+        eval_usecases.retire_holdout(self.store, batch_id="batch-1", retired_at=self.now)
+        suite = json.loads(
+            (self.root / "evals/private/holdout/suite.json").read_text(encoding="utf-8")
+        )
+        suite["cases"] = suite["cases"][:2]
+        for case in suite["cases"]:
+            case["input"]["case_id"] = case["input"]["case_id"] + "-subset"
+            case["input"]["task_id"] = case["input"]["task_id"] + "-subset"
+            case["input"]["nonce"] = "00000000-0000-4000-8000-000000000999"
+            case["input"]["now"] = "2026-12-01T00:00:00.000Z"
+        (self.root / "evals/private/holdout/suite.json").write_text(
+            json.dumps(suite, ensure_ascii=False), encoding="utf-8"
+        )
+        with self.assertRaises(PolicyError):
+            eval_usecases.register_holdout(
+                self.store,
+                batch_id="batch-subset",
+                version="2026-12-01",
+                sample_count=2,
+                annotator="synthetic-annotator-3",
+                maintainer="synthetic-maintainer",
+                frozen_at=self.now,
+                candidate_release="candidate-3",
+            )
+
+    def test_register_requires_actual_sample_count(self) -> None:
+        """登记声明 7 但实际 1 时必须即时拒绝，不等 eval 才发现。"""
+        self._install_holdout(register=False)
+        suite = json.loads(
+            (self.root / "evals/private/holdout/suite.json").read_text(encoding="utf-8")
+        )
+        suite["cases"] = suite["cases"][:1]
+        (self.root / "evals/private/holdout/suite.json").write_text(
+            json.dumps(suite, ensure_ascii=False), encoding="utf-8"
+        )
+        with self.assertRaises(PolicyError):
+            eval_usecases.register_holdout(
+                self.store,
+                batch_id="batch-count",
+                version="2026-11-24",
+                sample_count=7,
+                annotator="synthetic-annotator",
+                maintainer="synthetic-maintainer",
+                frozen_at=self.now,
+                candidate_release="candidate-count",
+            )
+
+    def test_missing_holdout_suite_is_not_measured_without_authorization(self) -> None:
+        """缺留出套件返回未测、authorization 未确认且零桥调用。"""
+        self._install_holdout(register=False)
+        (self.root / "evals/private/holdout/suite.json").unlink()
+        bridge = SimulatedBridge(public_decisions())
+        result = self._eval(bridge, "holdout")
+        self.assertEqual(result["status"], "not_measured")
+        report = self._report(result)
+        self.assertFalse(report["authorization"]["confirmed"])
+        self.assertEqual(report["authorization"]["scope"], "not_applicable")
+        self.assertIn("suite_not_present", report["limitations"])
+        self.assertEqual(bridge.requests, [])
+        self.assertFalse((self.root / "data/evals/holdout-registry.local.json").exists())
+
+    def test_legacy_registry_without_fingerprints_fails_closed(self) -> None:
+        """旧登记无样本身份时不得补空继续当新证据，零调用拒绝。"""
+        self._install_holdout(register=False)
+        registry = self.root / "data/evals/holdout-registry.local.json"
+        registry.parent.mkdir(parents=True, exist_ok=True)
+        registry.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "batches": [
+                        {
+                            "batch_id": "legacy",
+                            "suite_hash": "a" * 64,
+                            "version": "old",
+                            "sample_count": 1,
+                            "annotator": "old",
+                            "maintainer": "old",
+                            "frozen_at": self.now,
+                            "candidate_release": "old",
+                            "status": "frozen",
+                            "access_rounds": [],
+                            "retired_at": None,
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        bridge = SimulatedBridge(public_decisions())
+        with self.assertRaises(PolicyError) as caught:
+            self._eval(bridge, "holdout")
+        self.assertEqual(caught.exception.reason_code, "eval_failed")
+        self.assertEqual(bridge.requests, [])
+
+    def test_holdout_concurrent_first_access_is_not_double_counted(self) -> None:
+        """并发登记事务串行：只有一次首次访问，另一条标记重复，记录不丢失。"""
+        self._install_holdout()
+        results: list[bool] = []
+
+        def begin(index: int) -> None:
+            """在线程内提交一次访问意向并记录 repeat 标记。"""
+            def mutate(registry):
+                """在锁内提交一次访问意向并返回 repeat 标记。"""
+                batch = registry["batches"][0]
+                entry = begin_holdout_access(
+                    registry,
+                    batch,
+                    attempt_id=f"attempt-{index}",
+                    at=self.now,
+                    base_hash="a" * 64,
+                    pack_hash="b" * 64,
+                    provider_id="local-process",
+                    model_id="synthetic-model",
+                    model_config_hash="c" * 64,
+                )
+                return bool(entry["repeat_access"])
+
+            results.append(self.store.update_holdout_registry(mutate))  # type: ignore[arg-type]
+
+        threads = [
+            threading.Thread(target=begin, args=(index,), name=f"holdout-{index}")
+            for index in range(2)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+        self.assertEqual(sorted(results), [False, True])
+        rounds = self.store.read_holdout_registry()["batches"][0]["access_rounds"]
+        self.assertEqual(len(rounds), 2)
+
+    def test_holdout_interruption_consumes_access_and_repeat_is_not_new_evidence(self) -> None:
+        """已提交后中断不恢复未看：访问意向/未知结果持久化，重跑只算重复访问。"""
+        self._install_holdout()
+        bridge = SimulatedBridge(public_decisions())
+
+        class ExitBridge(SimulatedBridge):
+            """模拟调用后进程被 SystemExit 中断。"""
+
+            def complete(self, **kwargs: object) -> str:
+                """记录一次提交式调用后抛出进程中断。"""
+                self.requests.append({"interrupted": True, **kwargs})
+                raise SystemExit(7)
+
+        interrupted = ExitBridge(public_decisions())
+        with self.assertRaises(SystemExit):
+            self._eval(interrupted, "holdout")
+        registry = self.store.read_holdout_registry()
+        rounds = registry["batches"][0]["access_rounds"]
+        self.assertEqual(len(rounds), 1)
+        self.assertEqual(rounds[0]["phase"], "completed")
+        self.assertEqual(rounds[0]["outcome"], "unknown")
+        rerun = self._eval(bridge, "holdout")
+        report = self._report(rerun)
+        self.assertTrue(report["holdout"]["repeat_access"])
+        self.assertFalse(report["holdout"]["new_evidence"])
+        self.assertEqual(report["holdout"]["outcome"], "completed")
+
+    def test_holdout_finish_write_failure_keeps_intent_and_repeat_is_not_new_evidence(self) -> None:
+        """调用后收尾写失败保留 intent；重跑只能算重复访问，不恢复未看证据。"""
+        self._install_holdout()
+
+        class FailingFinishStore(FileEvalStore):
+            """第一次登记成功，第二次收尾模拟写失败。"""
+
+            def __init__(self, root: Path) -> None:
+                """保存根并初始化调用计数。"""
+                super().__init__(root)
+                self.calls = 0
+
+            def update_holdout_registry(self, mutator):
+                """第二次登记事务固定失败。"""
+                self.calls += 1
+                if self.calls == 2:
+                    raise PolicyError("policy_io_error", [])
+                return super().update_holdout_registry(mutator)
+
+        bridge = SimulatedBridge(public_decisions())
+        self._write_attestation(bridge)
+        with self.assertRaises(PolicyError) as caught:
+            eval_usecases.eval_pack(
+                self.repo,
+                FailingFinishStore(self.root),
+                "prompts/local/demo",
+                "holdout",
+                bridge,
+                lambda plan: True,
+                now=self.now,
+            )
+        self.assertEqual(caught.exception.reason_code, "policy_io_error")
+        rounds = self.store.read_holdout_registry()["batches"][0]["access_rounds"]
+        self.assertEqual(len(rounds), 1)
+        self.assertEqual(rounds[0]["phase"], "intent")
+        self.assertEqual(rounds[0]["outcome"], "started")
+        rerun = self._eval(SimulatedBridge(public_decisions()), "holdout")
+        report = self._report(rerun)
+        self.assertTrue(report["holdout"]["repeat_access"])
+        self.assertFalse(report["holdout"]["new_evidence"])
+
+    def test_holdout_intent_write_failure_makes_no_bridge_call(self) -> None:
+        """调用前访问意向持久化失败时零桥调用，原登记保持不变。"""
+        self._install_holdout()
+
+        class FailingBeginStore(FileEvalStore):
+            """第一次登记事务模拟本机写失败。"""
+
+            def __init__(self, root: Path) -> None:
+                """保存根并初始化失败计数。"""
+                super().__init__(root)
+                self.calls = 0
+
+            def update_holdout_registry(self, mutator):
+                """第一次直接固定失败，之后委托真实实现。"""
+                self.calls += 1
+                if self.calls == 1:
+                    raise PolicyError("policy_io_error", [])
+                return super().update_holdout_registry(mutator)
+
+        bridge = SimulatedBridge(public_decisions())
+        self._write_attestation(bridge)
+        store = FailingBeginStore(self.root)
+        before = self.store.read_holdout_registry()
+        with self.assertRaises(PolicyError) as caught:
+            eval_usecases.eval_pack(
+                self.repo,
+                store,
+                "prompts/local/demo",
+                "holdout",
+                bridge,
+                lambda plan: True,
+                now=self.now,
+            )
+        self.assertEqual(caught.exception.reason_code, "policy_io_error")
+        self.assertEqual(bridge.requests, [])
+        self.assertEqual(self.store.read_holdout_registry(), before)
+
+    def test_holdout_missing_or_mismatched_attestation_makes_no_call(self) -> None:
+        """缺无上传合同或合同与当前 model/config 不符时零调用。"""
+        self._install_holdout()
+        missing = SimulatedBridge(public_decisions())
+        with self.assertRaises(PolicyError) as caught:
+            self._eval(missing, "holdout", attest=False)
+        self.assertEqual(caught.exception.reason_code, "authorization_required")
+        self.assertEqual(missing.requests, [])
+        mismatched = SimulatedBridge(public_decisions())
+        self._write_attestation(mismatched)
+        target = self.root / "data/evals/holdout-attestation.local.json"
+        data = json.loads(target.read_text(encoding="utf-8"))
+        data["model_config_hash"] = "0" * 64
+        target.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaises(PolicyError) as caught:
+            self._eval(mismatched, "holdout", attest=False)
+        self.assertEqual(caught.exception.reason_code, "authorization_required")
+        self.assertEqual(mismatched.requests, [])
 
     def test_holdout_rejects_external_provider(self) -> None:
         """留出只允许本机 provider，外部 agent 在调用前拒绝。"""
@@ -451,16 +773,16 @@ class PolicyEvalTests(unittest.TestCase):
         self.assertEqual(bridge.requests, [])
 
     def test_zero_sample_holdout_is_not_measured(self) -> None:
-        """零样本批次写未测报告且无验收凭证，不以 100% 冒充通过。"""
+        """零样本批次写未测报告、零授权零调用且无验收凭证。"""
         self._install_holdout(empty=True)
         bridge = SimulatedBridge(public_decisions())
-        with self.assertRaises(PolicyError) as caught:
-            self._eval(bridge, "holdout")
-        self.assertEqual(caught.exception.reason_code, "eval_failed")
-        report_path = caught.exception.issues[0].file
-        report = json.loads((self.root / str(report_path)).read_text(encoding="utf-8"))
+        result = self._eval(bridge, "holdout")
+        self.assertEqual(result["status"], "not_measured")
+        report = self._report(result)
         self.assertEqual(report["buckets"]["holdout"]["status"], "not_measured")
         self.assertEqual(report["buckets"]["holdout"]["total"], 0)
+        self.assertFalse(report["authorization"]["confirmed"])
+        self.assertEqual(report["authorization"]["scope"], "not_applicable")
         self.assertIsNone(report["acceptance"])
         self.assertIn("zero_samples", report["limitations"])
         self.assertEqual(bridge.requests, [])
@@ -512,7 +834,7 @@ class PolicyEvalTests(unittest.TestCase):
 
     def test_cli_holdout_register_and_retire(self) -> None:
         """CLI 最小登记/退役入口维护维护者、标注者、数量与候选关联。"""
-        self._install_holdout()
+        self._install_holdout(register=False)
         code, payload, _ = policy_helpers.run_cli(
             self.root,
             [
@@ -542,6 +864,156 @@ class PolicyEvalTests(unittest.TestCase):
         )
         self.assertEqual(code, 0)
         self.assertEqual(payload["result"]["status"], "retired")
+        self.assertTrue(payload["result"]["regression_ref"])
+        regression = self.store.read_suite("regression")
+        self.assertIsNotNone(regression)
+        self.assertEqual(len(regression["cases"]), 6)
+        regression_result = self._eval(SimulatedBridge(public_decisions()), "regression")
+        self.assertEqual(regression_result["status"], "measured")
+        regression_report = self._report(regression_result)
+        self.assertEqual(regression_report["buckets"]["regression"]["passed"], 6)
+        self.assertIsNone(regression_report["acceptance"])
+
+    def test_bounded_suite_read_rejects_oversize_before_full_decode(self) -> None:
+        """2MiB 套件在 max+1 读取边界拒绝，不完整读入内存。"""
+        target = self.root / "evals/private/holdout/suite.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"{" + b"x" * (2 * 1024 * 1024))
+        with self.assertRaises(PolicyError) as caught:
+            self.store.read_suite("holdout")
+        self.assertEqual(caught.exception.reason_code, "policy_io_error")
+        self.assertEqual(caught.exception.issues[0].code, "size")
+
+    @unittest.skipUnless(os.name == "nt", "Windows junction test")
+    def test_data_evals_junction_is_rejected_without_touching_target(self) -> None:
+        """data/evals 为 junction 时写报告拒绝，目标目录内容不变。"""
+        target = self.root / "data" / "evals-target"
+        target.mkdir(parents=True)
+        sentinel = target / "sentinel.txt"
+        sentinel.write_text("keep", encoding="utf-8")
+        link = self.root / "data" / "evals"
+        subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            check=True,
+            capture_output=True,
+            shell=False,
+        )
+        try:
+            with self.assertRaises(PolicyError) as caught:
+                self.store.write_report("a" * 32, {"x": 1})
+            self.assertEqual(caught.exception.reason_code, "policy_io_error")
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+            self.assertFalse((target / ("eval-" + "a" * 32)).exists())
+        finally:
+            os.rmdir(link)
+
+    def test_report_write_failure_leaves_no_partial_file(self) -> None:
+        """原子发布失败清理临时文件，不留下可误认的报告/凭证。"""
+        run_id = "b" * 32
+        with patch("app.adapters.files.evals.os.link", side_effect=OSError("boom")):
+            with self.assertRaises(PolicyError):
+                self.store.write_report(run_id, {"x": 1})
+        directory = self.root / "data/evals" / f"eval-{run_id}"
+        self.assertFalse((directory / "report.json").exists())
+        self.assertEqual(list(directory.glob("*.tmp")), [])
+
+    def test_job_card_requires_useful_classification(self) -> None:
+        """job_card 正控制要求 interested 且无 human_review；反例被击穿。"""
+        suite = json.loads(
+            (ROOT / "evals/policy-suite/public.json").read_text(encoding="utf-8")
+        )
+        case = next(
+            item
+            for item in suite["cases"]
+            if item["input"]["case_id"] == "eval-job-card"
+        )
+        positive = {
+            "intent": "interested",
+            "sub_intents": [],
+            "escalate": None,
+        }
+        self.assertEqual(
+            evaluate_assertions(positive, "", "C", case["assertions"]), []
+        )
+        negative = {
+            "intent": "uncertain",
+            "sub_intents": ["ambiguous"],
+            "escalate": "human_review",
+        }
+        failures = evaluate_assertions(negative, "", "C", case["assertions"])
+        self.assertIn("intent", failures)
+        self.assertIn("escalate", failures)
+
+    def test_eval_logs_real_stages_and_correlation(self) -> None:
+        """eval/report/case 与 decision 阶段实际成对记录，报告关联同一 correlation。"""
+        log = ProcessLog(self.root / "logs" / "eval.jsonl")
+        result = eval_usecases.eval_pack(
+            self.repo,
+            self.store,
+            "prompts/local/demo",
+            "public",
+            SimulatedBridge(public_decisions()),
+            lambda plan: True,
+            now=self.now,
+            process_log=log,
+        )
+        report = self._report(result)
+        self.assertEqual(report["correlation_id"], log.correlation_id)
+        events = [
+            json.loads(line)
+            for line in log.path.read_text(encoding="utf-8").splitlines()
+        ]
+        operations = {(event["stage"], event.get("operation")) for event in events}
+        self.assertIn(("eval", "suite"), operations)
+        self.assertIn(("eval", "authorize"), operations)
+        self.assertIn(("eval", "case"), operations)
+        self.assertIn(("eval", "report"), operations)
+        self.assertIn(("decision", "verify"), operations)
+        self.assertIn(("decision", "bridge"), operations)
+        self.assertIn(("decision", "validate"), operations)
+        self.assertTrue(
+            any(
+                event["stage"] == "eval"
+                and event.get("operation") == "case"
+                and isinstance(event.get("case_index"), int)
+                for event in events
+            )
+        )
+
+    def test_unknown_bridge_exception_is_logged_and_fixed(self) -> None:
+        """未知桥异常映射 bridge_protocol，日志有终态且不写原异常。"""
+        class BoomBridge(SimulatedBridge):
+            """每次调用抛普通 RuntimeError。"""
+
+            def complete(self, **kwargs: object) -> str:
+                """模拟未知桥实现错误。"""
+                raise RuntimeError("secret boom")
+
+        log = ProcessLog(self.root / "logs" / "boom.jsonl")
+        bridge = BoomBridge(public_decisions())
+        with self.assertRaises(PolicyError):
+            eval_usecases.eval_pack(
+                self.repo,
+                self.store,
+                "prompts/local/demo",
+                "public",
+                bridge,
+                lambda plan: True,
+                now=self.now,
+                process_log=log,
+            )
+        text = log.path.read_text(encoding="utf-8")
+        events = [json.loads(line) for line in text.splitlines()]
+        self.assertTrue(
+            any(
+                event["stage"] == "decision"
+                and event.get("operation") == "bridge"
+                and event["result"] == "failed"
+                and event.get("reason_code") == "bridge_protocol"
+                for event in events
+            )
+        )
+        self.assertNotIn("secret boom", text)
 
     def test_cli_eval_help_lists_providers_auth_and_limits(self) -> None:
         """eval --help 明确 provider 协议、认证边界、本机要求与固定诊断。"""

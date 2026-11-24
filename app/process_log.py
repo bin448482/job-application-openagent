@@ -173,6 +173,7 @@ OPERATIONS = frozenset(
         "case",
         "report",
         "holdout",
+        "acceptance",
     }
 )
 EVENT_KEYS = (
@@ -190,6 +191,7 @@ EVENT_KEYS = (
     "mode",
     "config_source",
     "device_count",
+    "case_index",
 )
 
 
@@ -223,6 +225,7 @@ class ProcessLog:
         mode: str | None = None,
         config_source: str | None = None,
         device_count: int | None = None,
+        case_index: int | None = None,
     ) -> bool:
         """追加一条固定白名单事件；非法值或任何 IO 失败都置 degraded 并返回 False。"""
         try:
@@ -238,6 +241,7 @@ class ProcessLog:
                 mode=mode,
                 config_source=config_source,
                 device_count=device_count,
+                case_index=case_index,
             ):
                 self.degraded = True
                 return False
@@ -257,6 +261,7 @@ class ProcessLog:
                 "mode": mode,
                 "config_source": config_source,
                 "device_count": device_count,
+                "case_index": case_index,
             }
             line = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
             self._append(line)
@@ -320,6 +325,7 @@ def _valid_event(
     mode: str | None,
     config_source: str | None,
     device_count: int | None,
+    case_index: int | None,
 ) -> bool:
     """检查事件只含固定阶段、操作名、结果、原因码和可选元数据。"""
     if stage not in STAGES or result not in RESULTS:
@@ -343,6 +349,8 @@ def _valid_event(
     if config_source is not None and config_source not in CONFIG_SOURCES:
         return False
     if device_count is not None and (type(device_count) is not int or device_count < 0):
+        return False
+    if case_index is not None and (type(case_index) is not int or case_index < 1):
         return False
     return True
 

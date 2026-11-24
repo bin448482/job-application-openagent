@@ -46,6 +46,12 @@ POLICY_EVAL_HELP = """
 本机要求:
   桥程序必须是本机可执行的参数数组入口，固定接收 system/developer/user 三消息、
   独立回显对象、tools=[]、history=[]；不支持三角色分区或返回角色声明不符时拒绝。
+留出无上传门槛:
+  --suite holdout 必须同时满足 local-process、当前 BridgeDescriptor 的 model_id/
+  model_config_hash 与本机 data/evals/holdout-attestation.local.json 一致，且
+  no_upload/no_cache/no_share/no_telemetry/cloud_fallback_disabled 全为 true。
+  该合同是 operator/host 显式声明，不证明子进程真实无网络；通用
+  --confirm-external-send 不替代留出许可，缺条件零调用。
 拒绝:
   echo、参考回放（reference-provider）、smoke 冒充、未知 provider。
 固定诊断:
@@ -1028,12 +1034,14 @@ def _run_policy(log: ProcessLog, started: float, args: argparse.Namespace) -> in
                     maintainer=args.maintainer,
                     frozen_at=args.frozen_at or now,
                     candidate_release=args.candidate_release,
+                    process_log=log,
                 )
             elif args.holdout_command == "retire":
                 result = policy_eval_usecases.retire_holdout(
                     eval_store,
                     batch_id=args.batch_id,
                     retired_at=args.retired_at or now,
+                    process_log=log,
                 )
             else:
                 raise PolicyError("invalid_input")

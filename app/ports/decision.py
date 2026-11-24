@@ -104,3 +104,11 @@ class DecisionLeasePort(Protocol):
     def current_expiry(self) -> str | None:
         """返回规范 UTC 截止时间；无租约返回 None，由用例拒绝决策。"""
         ...
+
+
+class DecisionClockPort(Protocol):
+    """声明可信当前时间；每次调用都应重新读取，不得由模型或固定测试值替代。"""
+
+    def now(self) -> str:
+        """返回规范 UTC 当前时间，供租约、事实有效期与回显边界复验。"""
+        ...

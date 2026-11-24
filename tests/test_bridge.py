@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -61,6 +61,22 @@ class SequenceLease:
     def current_expiry(self) -> str | None:
         """返回下一个值；用尽时返回 None。"""
         return self._values.pop(0) if self._values else None
+
+
+class ManualClock:
+    """按调用顺序返回可信时刻，用于模拟桥前/重试前/桥后的真实流逝。"""
+
+    def __init__(self, values: list[str]) -> None:
+        """保存按序返回值。"""
+        self._values = list(values)
+
+    def now(self) -> str:
+        """返回下一个时刻；用尽后重复最后一个值。"""
+        if not self._values:
+            raise AssertionError("clock exhausted")
+        if len(self._values) > 1:
+            return self._values.pop(0)
+        return self._values[0]
 
 
 class FlakyStartBridge:
@@ -136,8 +152,13 @@ class BridgeTests(unittest.TestCase):
         """构造测试桩参数数组。"""
         return [sys.executable, str(STUB), mode, str(self.decisions), str(self.capture)]
 
-    def _run(self, bridge, *, snapshot=None, lease=None, rendered=None):
+    def _run(self, bridge, *, snapshot=None, lease=None, rendered=None, clock=None):
         """按当前合成输入运行一次决策用例。"""
+        kwargs = {}
+        if clock is not None:
+            kwargs["clock"] = clock
+        else:
+            kwargs["now"] = str(self.case["now"])
         return decide(
             rendered=rendered or self.rendered,
             envelope=self.envelope,
@@ -146,7 +167,7 @@ class BridgeTests(unittest.TestCase):
             bridge=bridge,
             snapshot=snapshot or self.snapshot,
             lease=lease or self.lease,
-            now=str(self.case["now"]),
+            **kwargs,
         )
 
     def test_a_and_b_real_subprocess_keep_three_role_messages(self) -> None:
@@ -248,24 +269,62 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(caught.exception.attempts, 2)
         self.assertEqual(caught.exception.submissions, 0)
 
-    def test_timeout_uses_twenty_seconds_and_does_not_retry(self) -> None:
-        """提交后超时映射 decision_timeout，只调用一次且不重复提交。"""
-        bridge = ExternalAgentBridge(self._argv(), model_id="synthetic-model")
-        calls: list[object] = []
-
-        def timeout(*args: object, **kwargs: object):
-            calls.append(kwargs)
-            raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
-
-        with patch("app.adapters.llm.support.subprocess.run", side_effect=timeout):
-            with self.assertRaises(DecisionRunError) as caught:
-                self._run(bridge)
+    def test_timeout_uses_bounded_budget_and_does_not_retry(self) -> None:
+        """提交后超时映射 decision_timeout，只调用一次且总预算有界。"""
+        bridge = ExternalAgentBridge(self._argv("slow"), model_id="synthetic-model")
+        bridge._set_timeout_for_test(0.2)
+        started = time.monotonic()
+        with self.assertRaises(DecisionRunError) as caught:
+            self._run(bridge)
+        elapsed = time.monotonic() - started
         self.assertEqual(caught.exception.reason_code, "decision_timeout")
         self.assertEqual(caught.exception.attempts, 1)
         self.assertEqual(caught.exception.submissions, 1)
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0]["timeout"], 20)
-        self.assertFalse(calls[0]["shell"])
+        self.assertLess(elapsed, 1.0)
+
+    def test_huge_stdout_is_bounded_and_killed(self) -> None:
+        """超过 64KiB 的 stdout 在读取上限处终止，不完整缓存也不重试。"""
+        bridge = ExternalAgentBridge(self._argv("huge"), model_id="synthetic-model")
+        bridge._set_timeout_for_test(1.0)
+        with self.assertRaises(DecisionRunError) as caught:
+            self._run(bridge)
+        self.assertEqual(caught.exception.reason_code, "bridge_protocol")
+        self.assertEqual(caught.exception.attempts, 1)
+        self.assertEqual(caught.exception.submissions, 1)
+
+    def test_large_stderr_and_unread_stdin_do_not_block(self) -> None:
+        """大 stderr 丢弃、子进程不读 stdin 仍由总预算回收，不残留线程。"""
+        stderr_bridge = ExternalAgentBridge(
+            self._argv("stderr-huge"), model_id="synthetic-model"
+        )
+        result = self._run(stderr_bridge)
+        self.assertEqual(result["resolved_tier"], "C")
+        unread = ExternalAgentBridge(self._argv("no-read"), model_id="synthetic-model")
+        unread._set_timeout_for_test(0.2)
+        started = time.monotonic()
+        with self.assertRaises(DecisionRunError) as caught:
+            self._run(unread)
+        self.assertEqual(caught.exception.reason_code, "decision_timeout")
+        self.assertLess(time.monotonic() - started, 0.8)
+        self.assertFalse(
+            any(thread.name.startswith("m4b-bridge-") for thread in threading.enumerate())
+        )
+
+    def test_fork_held_stdout_returns_within_budget(self) -> None:
+        """父进程已退出但孙进程短暂持有 stdout 时，超时收尾不得等待 EOF。"""
+        bridge = ExternalAgentBridge(self._argv("fork-hold"), model_id="synthetic-model")
+        bridge._set_timeout_for_test(0.1)
+        started = time.monotonic()
+        with self.assertRaises(DecisionRunError) as caught:
+            self._run(bridge)
+        elapsed = time.monotonic() - started
+        self.assertIn(
+            caught.exception.reason_code, {"bridge_protocol", "decision_timeout"}
+        )
+        self.assertLess(elapsed, 0.6)
+        self.assertFalse(
+            any(thread.name.startswith("m4b-bridge-") for thread in threading.enumerate())
+        )
 
     def test_auth_quota_disconnect_are_fixed_and_not_retried(self) -> None:
         """认证/额度/断连只映射固定诊断，进程已启动后不再重试。"""
@@ -333,6 +392,7 @@ class BridgeTests(unittest.TestCase):
             """在桥调用完成后模拟磁盘包被编辑。"""
 
             def reload(self):
+                """返回当前合成原文副本。"""
                 return dict(self.base_files), dict(self.pack_files)
 
         snapshot = ChangingSnapshot(self.base_files, self.pack.files)
@@ -342,6 +402,7 @@ class BridgeTests(unittest.TestCase):
         original_complete = bridge.complete
 
         def complete(**kwargs):
+            """先完成真实桥调用，再修改快照包内容。"""
             text = original_complete(**kwargs)
             snapshot.pack_files = dict(self.pack.files)
             snapshot.pack_files["tone.md"] = snapshot.pack_files["tone.md"] + "\n更简洁。"
@@ -370,6 +431,85 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(
             len(self.capture.read_text(encoding="utf-8").splitlines()), 1
         )
+
+    def test_clock_crossing_lease_during_bridge_is_stale(self) -> None:
+        """桥期间可信时钟跨过同一租约截止：调用1/提交1后丢弃输出。"""
+        expiry = self.lease.current_expiry()
+        assert expiry is not None
+        clock = ManualClock([str(self.case["now"]), expiry])
+        bridge = ExternalAgentBridge(self._argv(), model_id="synthetic-model")
+        with self.assertRaises(DecisionRunError) as caught:
+            self._run(bridge, clock=clock)
+        self.assertEqual(caught.exception.reason_code, "stale_decision")
+        self.assertEqual(caught.exception.attempts, 1)
+        self.assertEqual(caught.exception.submissions, 1)
+        self.assertEqual(
+            len(self.capture.read_text(encoding="utf-8").splitlines()), 1
+        )
+
+    def test_clock_already_expired_before_bridge_makes_no_call(self) -> None:
+        """启动前时钟恰到期：零桥调用、零提交。"""
+        expiry = self.lease.current_expiry()
+        assert expiry is not None
+        bridge = ExternalAgentBridge(self._argv(), model_id="synthetic-model")
+        with self.assertRaises(DecisionRunError) as caught:
+            self._run(bridge, clock=ManualClock([expiry]))
+        self.assertEqual(caught.exception.reason_code, "stale_decision")
+        self.assertEqual(caught.exception.attempts, 0)
+        self.assertEqual(caught.exception.submissions, 0)
+        self.assertFalse(self.capture.exists())
+
+    def test_retry_gate_rechecks_clock_before_second_call(self) -> None:
+        """首次未启动失败后，重试前时钟跨截止即拒绝，不启动第二次。"""
+        expiry = self.lease.current_expiry()
+        assert expiry is not None
+        bridge = FlakyStartBridge(
+            ExternalAgentBridge(self._argv(), model_id="synthetic-model")
+        )
+        with self.assertRaises(DecisionRunError) as caught:
+            self._run(
+                bridge,
+                clock=ManualClock([str(self.case["now"]), expiry]),
+            )
+        self.assertEqual(caught.exception.reason_code, "stale_decision")
+        self.assertEqual(caught.exception.attempts, 1)
+        self.assertEqual(caught.exception.submissions, 0)
+        self.assertFalse(self.capture.exists())
+
+    def test_retry_gate_rechecks_pack_before_second_call(self) -> None:
+        """首次未启动失败后，重试前包变化即 policy_changed，不启动第二次。"""
+        class ChangeThenFailBridge:
+            """第一次抛未启动错误并同时模拟包被编辑。"""
+
+            def __init__(self, inner, snapshot) -> None:
+                """保存真实桥与可变快照。"""
+                self.inner = inner
+                self.snapshot = snapshot
+                self.calls = 0
+
+            def descriptor(self):
+                """委托真实桥描述符。"""
+                return self.inner.descriptor()
+
+            def complete(self, **kwargs):
+                """首次失败前改变包原文，之后委托真实桥。"""
+                self.calls += 1
+                if self.calls == 1:
+                    self.snapshot.pack_files = dict(self.snapshot.pack_files)
+                    self.snapshot.pack_files["tone.md"] += "\n更简洁。"
+                    raise BridgeError("bridge_start_failed", submitted=False)
+                return self.inner.complete(**kwargs)
+
+        snapshot = StaticSnapshot(self.base_files, self.pack.files)
+        bridge = ChangeThenFailBridge(
+            ExternalAgentBridge(self._argv(), model_id="synthetic-model"), snapshot
+        )
+        with self.assertRaises(DecisionRunError) as caught:
+            self._run(bridge, snapshot=snapshot)
+        self.assertEqual(caught.exception.reason_code, "policy_changed")
+        self.assertEqual(caught.exception.attempts, 1)
+        self.assertEqual(caught.exception.submissions, 0)
+        self.assertFalse(self.capture.exists())
 
     def test_tampered_rendered_content_is_rejected_before_bridge(self) -> None:
         """既有 RenderedRequest 被替换后重渲染比对失败，桥不启动。"""

@@ -1,12 +1,23 @@
-"""实现 M4b 套件读取、本机评测报告与留出登记的文件适配器。"""
+"""实现 M4b 套件读取、本机报告/凭证、留出登记事务与无上传合同。"""
 
 from __future__ import annotations
 
 import json
 import os
+import tempfile
+import threading
+import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Callable, Iterator
 
+from app.adapters.files.support import (
+    is_link_like,
+    read_bounded_bytes,
+    resolve_project_relative,
+)
+from app.domain.eval import empty_holdout_registry
 from app.domain.json_input import load_json_object
 from app.domain.policy import PolicyIssue
 from app.ports.policy import PolicyError
@@ -18,9 +29,14 @@ SUITE_PATHS = {
 }
 REPORT_ROOT = "data/evals"
 REGISTRY_REL = "data/evals/holdout-registry.local.json"
+REGISTRY_LOCK_REL = "data/evals/.holdout-registry.lock"
+ATTESTATION_REL = "data/evals/holdout-attestation.local.json"
+REGRESSION_ADMISSION_ROOT = "data/evals/regression-admissions"
 SUITE_MAX_BYTES = 256 * 1024
 REGISTRY_MAX_BYTES = 512 * 1024
+ATTESTATION_MAX_BYTES = 64 * 1024
 REPORT_MAX_BYTES = 2 * 1024 * 1024
+LOCK_WAIT_SECONDS = 5.0
 
 
 class FileEvalStore:
@@ -29,86 +45,118 @@ class FileEvalStore:
     def __init__(self, root: Path) -> None:
         """保存项目根，不读取环境变量、凭据或其它本机私有配置。"""
         self._root = root.resolve()
+        self._thread_lock = threading.Lock()
 
-    def _resolve(self, rel_path: str) -> Path:
-        """解析项目内 POSIX 相对路径，拒绝越界、链接组件与非普通文件。"""
-        if not isinstance(rel_path, str) or not rel_path or "\x00" in rel_path:
-            raise PolicyError("policy_io_error", [PolicyIssue(None, None, None, "path")])
-        candidate = Path(rel_path)
-        if candidate.is_absolute() or candidate.drive:
-            raise PolicyError("policy_io_error", [PolicyIssue(None, None, None, "path")])
-        current = self._root
-        for part in candidate.parts:
-            if part in ("", ".", ".."):
-                raise PolicyError(
-                    "policy_io_error", [PolicyIssue(None, None, None, "path")]
-                )
-            current = current / part
-            if current.exists() and current.is_symlink():
-                raise PolicyError(
-                    "policy_io_error", [PolicyIssue(None, None, None, "path")]
-                )
-        resolved = current.resolve()
-        if not resolved.is_relative_to(self._root):
-            raise PolicyError("policy_io_error", [PolicyIssue(None, None, None, "path")])
-        return resolved
+    def _resolve(self, rel_path: str) -> tuple[Path, str]:
+        """解析项目内相对路径，拒绝越界、链接/junction 与非法形状。"""
+        try:
+            return resolve_project_relative(self._root, rel_path, missing_ok=True)
+        except ValueError:
+            raise PolicyError("policy_io_error", [PolicyIssue(rel_path, None, None, "path")]) from None
 
     def _read_json(self, rel_path: str, max_bytes: int) -> object | None:
-        """读取有界 UTF-8 JSON；不存在返回 None，坏编码/重复键/超限受控失败。"""
-        path = self._resolve(rel_path)
+        """有界读取 UTF-8 JSON；不存在返回 None，坏编码/重复键/超限受控失败。"""
+        path, posix = self._resolve(rel_path)
         if not path.exists():
             return None
+        if not path.is_file() or is_link_like(path):
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")])
         try:
-            if not path.is_file():
-                raise OSError("not a file")
-            raw = path.read_bytes()
+            raw = read_bounded_bytes(path, max_bytes)
+        except ValueError:
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "size")]) from None
         except OSError:
-            raise PolicyError(
-                "policy_io_error", [PolicyIssue(rel_path, None, None, "path")]
-            ) from None
-        if len(raw) > max_bytes:
-            raise PolicyError("policy_io_error", [PolicyIssue(rel_path, None, None, "size")])
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")]) from None
         if raw.startswith(b"\xef\xbb\xbf"):
-            raise PolicyError(
-                "policy_io_error", [PolicyIssue(rel_path, None, None, "encoding")]
-            )
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "encoding")])
         try:
             return load_json_object(raw.decode("utf-8"))
         except (UnicodeError, ValueError):
-            raise PolicyError(
-                "policy_io_error", [PolicyIssue(rel_path, None, None, "format")]
-            ) from None
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "format")]) from None
 
-    def read_suite(self, suite_name: str) -> dict[str, object] | None:
-        """读取指定套件原文对象；不存在返回 None，不读取任何答案旁路文件。"""
-        rel = SUITE_PATHS.get(suite_name)
-        if rel is None:
-            raise PolicyError("invalid_input", [PolicyIssue(None, None, None, "vocabulary")])
-        data = self._read_json(rel, SUITE_MAX_BYTES)
-        if data is None:
-            return None
-        if not isinstance(data, dict):
-            raise PolicyError("policy_io_error", [PolicyIssue(rel, None, None, "format")])
-        return data
-
-    def _write_json(self, rel_path: str, payload: dict[str, object], max_bytes: int) -> str:
-        """把固定 JSON 写入项目内新文件；不覆盖已有文件、不跟随链接。"""
-        path = self._resolve(rel_path)
+    def _write_new_json(self, rel_path: str, payload: dict[str, object], max_bytes: int) -> str:
+        """同卷临时完整写入后原子链接到目标；目标存在不覆盖，失败不留半文件。"""
+        path, posix = self._resolve(rel_path)
+        if path.exists():
+            raise PolicyError("policy_exists", [PolicyIssue(posix, None, None, "conflict")])
         text = json.dumps(
             payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ) + "\n"
         raw = text.encode("utf-8")
         if len(raw) > max_bytes:
-            raise PolicyError("policy_io_error", [PolicyIssue(REPORT_ROOT, None, None, "size")])
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "size")])
+        temp = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("xb") as handle:
+            with temp.open("xb") as handle:
                 handle.write(raw)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.link(temp, path)
         except FileExistsError:
-            raise PolicyError("policy_exists", [PolicyIssue(rel_path, None, None, "conflict")]) from None
+            raise PolicyError("policy_exists", [PolicyIssue(posix, None, None, "conflict")]) from None
         except OSError:
-            raise PolicyError("policy_io_error", [PolicyIssue(rel_path, None, None, "path")]) from None
-        return rel_path
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")]) from None
+        finally:
+            try:
+                temp.unlink(missing_ok=True)
+            except OSError:
+                pass
+        return posix
+
+    def read_suite(self, suite_name: str) -> dict[str, object] | None:
+        """读取指定套件；regression 合并既有文件与已退役留出准入副本。"""
+        rel = SUITE_PATHS.get(suite_name)
+        if rel is None:
+            raise PolicyError("invalid_input", [PolicyIssue(None, None, None, "vocabulary")])
+        base = self._read_json(rel, SUITE_MAX_BYTES)
+        if base is not None and not isinstance(base, dict):
+            raise PolicyError("policy_io_error", [PolicyIssue(rel, None, None, "format")])
+        admissions = self._read_regression_admissions()
+        if suite_name != "regression":
+            return base
+        if not admissions:
+            return base
+        cases: list[object] = []
+        if base is not None:
+            base_cases = base.get("cases")
+            if not isinstance(base_cases, list):
+                raise PolicyError("policy_io_error", [PolicyIssue(rel, None, None, "format")])
+            cases.extend(base_cases)
+        for item in admissions:
+            cases.extend(item)
+        return {
+            "schema_version": 1,
+            "suite": "regression",
+            "version": "regression-admitted-v1",
+            "cases": cases,
+        }
+
+    def _read_regression_admissions(self) -> list[list[object]]:
+        """读取本机 regression 准入副本；链接/坏文件 fail closed。"""
+        root, posix = self._resolve(REGRESSION_ADMISSION_ROOT)
+        if not root.exists():
+            return []
+        if not root.is_dir() or is_link_like(root):
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")])
+        try:
+            entries = sorted(os.scandir(root), key=lambda item: item.name)
+        except OSError:
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")]) from None
+        suites: list[list[object]] = []
+        for entry in entries:
+            if is_link_like(Path(entry.path)) or not entry.is_dir(follow_symlinks=False):
+                raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")])
+            data = self._read_json(
+                f"{REGRESSION_ADMISSION_ROOT}/{entry.name}/suite.json", SUITE_MAX_BYTES
+            )
+            if not isinstance(data, dict):
+                raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "format")])
+            cases = data.get("cases")
+            if not isinstance(cases, list):
+                raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "format")])
+            suites.append(cases)
+        return suites
 
     def _run_path(self, run_id: str, name: str) -> str:
         """校验运行 ID 并返回本机运行目录内的固定文件名。"""
@@ -122,42 +170,153 @@ class FileEvalStore:
 
     def write_report(self, run_id: str, report: dict[str, object]) -> str:
         """写出本机评测报告；失败或已存在时不返回成功路径。"""
-        return self._write_json(self._run_path(run_id, "report.json"), report, REPORT_MAX_BYTES)
+        return self._write_new_json(self._run_path(run_id, "report.json"), report, REPORT_MAX_BYTES)
 
     def write_acceptance(self, run_id: str, acceptance: dict[str, object]) -> str:
         """写出绑定摘要的本机验收凭证；仅由评测成功路径调用。"""
-        return self._write_json(
+        return self._write_new_json(
             self._run_path(run_id, "acceptance.json"), acceptance, 64 * 1024
         )
 
     def read_holdout_registry(self) -> dict[str, object]:
         """读取本机留出登记；不存在时返回空登记，不创建文件。"""
+        return self._read_registry_unlocked()
+
+    def _read_registry_unlocked(self) -> dict[str, object]:
+        """读取登记对象；缺失返回空登记，坏格式固定失败。"""
         data = self._read_json(REGISTRY_REL, REGISTRY_MAX_BYTES)
         if data is None:
-            return {"schema_version": 1, "batches": []}
+            return empty_holdout_registry()
         if not isinstance(data, dict):
             raise PolicyError("policy_io_error", [PolicyIssue(REGISTRY_REL, None, None, "format")])
         return data
 
-    def write_holdout_registry(self, registry: dict[str, object]) -> str:
-        """同卷临时文件加改名原子替换留出登记，失败不留下半文件。"""
-        path = self._resolve(REGISTRY_REL)
+    @contextmanager
+    def _registry_lock(self) -> Iterator[None]:
+        """持项目内独占文件锁覆盖读-改-写最小原子区间，并串行同进程线程。"""
+        with self._thread_lock:
+            path, _posix = self._resolve(REGISTRY_LOCK_REL)
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                handle = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+            except OSError:
+                raise PolicyError("policy_io_error", [PolicyIssue(REGISTRY_REL, None, None, "path")]) from None
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    deadline = time.monotonic() + LOCK_WAIT_SECONDS
+                    while True:
+                        os.lseek(handle, 0, os.SEEK_SET)
+                        try:
+                            msvcrt.locking(handle, msvcrt.LK_NBLCK, 1)
+                            break
+                        except OSError:
+                            if time.monotonic() >= deadline:
+                                raise PolicyError(
+                                    "policy_io_error",
+                                    [PolicyIssue(REGISTRY_REL, None, None, "conflict")],
+                                ) from None
+                            time.sleep(0.05)
+                    try:
+                        yield
+                    finally:
+                        os.lseek(handle, 0, os.SEEK_SET)
+                        msvcrt.locking(handle, msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(handle, fcntl.LOCK_EX)
+                    try:
+                        yield
+                    finally:
+                        fcntl.flock(handle, fcntl.LOCK_UN)
+            finally:
+                os.close(handle)
+
+    def update_holdout_registry(
+        self, mutator: Callable[[dict[str, object]], object]
+    ) -> object:
+        """在独占锁内读-改-原子写登记；mutator 或写失败不覆盖原登记。"""
+        with self._registry_lock():
+            registry = self._read_registry_unlocked()
+            result = mutator(registry)
+            self._write_registry_unlocked(registry)
+            return result
+
+    def _write_registry_unlocked(self, registry: dict[str, object]) -> str:
+        """同卷临时文件原子替换登记；失败不留下可误认的部分登记。"""
+        path, posix = self._resolve(REGISTRY_REL)
         text = json.dumps(
             registry, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ) + "\n"
         raw = text.encode("utf-8")
         if len(raw) > REGISTRY_MAX_BYTES:
-            raise PolicyError("policy_io_error", [PolicyIssue(REGISTRY_REL, None, None, "size")])
-        temp = path.parent / f".{REGISTRY_REL.rsplit('/', 1)[-1]}.{uuid.uuid4().hex}.tmp"
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "size")])
+        temp = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with temp.open("xb") as handle:
                 handle.write(raw)
+                handle.flush()
+                os.fsync(handle.fileno())
             os.replace(temp, path)
         except OSError:
+            raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")]) from None
+        finally:
             try:
                 temp.unlink(missing_ok=True)
             except OSError:
                 pass
-            raise PolicyError("policy_io_error", [PolicyIssue(REGISTRY_REL, None, None, "path")]) from None
-        return REGISTRY_REL
+        return posix
+
+    def write_holdout_registry(self, registry: dict[str, object]) -> str:
+        """在独占锁内原子写入完整登记，供显式初始化或测试。"""
+        with self._registry_lock():
+            return self._write_registry_unlocked(registry)
+
+    def read_holdout_attestation(self) -> dict[str, object] | None:
+        """读取本机无上传合同；不存在返回 None，不读取环境或凭据。"""
+        data = self._read_json(ATTESTATION_REL, ATTESTATION_MAX_BYTES)
+        if data is None:
+            return None
+        if not isinstance(data, dict):
+            raise PolicyError("policy_io_error", [PolicyIssue(ATTESTATION_REL, None, None, "format")])
+        return data
+
+    def write_regression_admission(
+        self, batch_id: str, suite: dict[str, object]
+    ) -> str:
+        """写退役留出整批回归准入副本；同内容重试幂等，不同内容不覆盖。"""
+        if (
+            not isinstance(batch_id, str)
+            or not batch_id
+            or len(batch_id) > 64
+            or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for char in batch_id)
+        ):
+            raise PolicyError("policy_io_error", [PolicyIssue(REGRESSION_ADMISSION_ROOT, None, None, "path")])
+        rel = f"{REGRESSION_ADMISSION_ROOT}/{batch_id}/suite.json"
+        payload = dict(suite)
+        payload["suite"] = "regression"
+        path, posix = self._resolve(rel)
+        new_bytes = (
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            + "\n"
+        ).encode("utf-8")
+        if path.exists():
+            if not path.is_file() or is_link_like(path):
+                raise PolicyError("policy_io_error", [PolicyIssue(posix, None, None, "path")])
+            try:
+                existing = read_bounded_bytes(path, SUITE_MAX_BYTES)
+            except ValueError:
+                raise PolicyError(
+                    "policy_io_error", [PolicyIssue(posix, None, None, "size")]
+                ) from None
+            except OSError:
+                raise PolicyError(
+                    "policy_io_error", [PolicyIssue(posix, None, None, "path")]
+                ) from None
+            if existing == new_bytes:
+                return posix
+            raise PolicyError("policy_exists", [PolicyIssue(posix, None, None, "conflict")])
+        return self._write_new_json(rel, payload, SUITE_MAX_BYTES)

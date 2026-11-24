@@ -18,11 +18,11 @@
 - `test_policy_contract.py`：M4a Envelope/Decision 严格键/类型/词表/回显/证据/nonce 租约参数/2048 字节边界、嵌套重复 JSON 键、H 无规范化与四类摘要无自引用、64 KiB 内容对象 65536/65537、事实交集与重复/冲突拒绝、职位五 intent、subject 次要空字符串、围栏拒绝、披露追加后的码点/控制字符/联系方式/禁谈/事实值严格匹配（小数/范围/单位/地点全文、经验单位必需、普通数量问句不误判、未知单位/数量级受控 conflict）。
 - `test_policy_pack.py`：TOML/Markdown 完整 schema、缺失/额外/类型/范围/词表、45 组合唯一覆盖、同档重复/跨档冲突/漏项、2 A/4 B/39 C 统一硬下限、有效限制、通配限制、联系方式与包内事实模式、三 md 语法、未知标题不反射、base/system 选择、唯一 `{base,pack,data}` 内容对象、渲染重派生、preview 案例 schema；测试构造兼容 LF/CRLF。
 - `test_policy_store.py`：路径/普通文件/链接/BOM/NUL/大小/CRLF、init/validate/preview/list、编辑语气/分档/披露、坏示例受控四键、snapshot 清单与复制前后源重读、restore 三值/base/清单/快照/目标篡改、生产受控拒绝、合成 stopped 正路径、失败清理、四键外层、配置错误四键、链接候选 list、load/validate/render/publish 阶段日志与零设备/网络/子进程。
-- `test_bridge.py`：M4b A/B 真实参数数组子进程成功、固定三角色/无工具无历史、伪造 role 保持 user 数据、启动失败一次重试、提交后 20 秒超时不重试、认证/额度/断连/坏 JSON/重复键/角色不符/坏回显固定诊断、事实来源复验、包变动与桥前后租约过期、RenderedRequest 篡改先拒绝。
-- `test_policy_eval.py`：实际加载当前包、公开套件模拟/真实适配器路径、报告绑定 base/pack/provider/model/config/suite 摘要、模拟无凭证、成功凭证、授权拒绝前不启动桥、编辑包改变请求与摘要、24 行映射完整、公开/回归/留出分桶、失败报告无凭证、留出冻结/访问/重跑非新证据/摘要变化拒绝/退役/新批次/外部 provider 拒绝/零样本未测、CLI eval help/echo/未确认与 holdout register/retire。
+- `test_bridge.py`：M4b A/B 真实参数数组子进程成功、固定三角色/无工具无历史、伪造 role 保持 user 数据、启动失败一次重试、重试前时钟/包门禁、提交后 20 秒超时不重试、2MiB stdout 上限、慢进程/不读 stdin/大 stderr/短命继承 stdout 有界收尾、认证/额度/断连/坏 JSON/重复键/角色不符/坏回显固定诊断、事实来源复验、包变动与桥前后租约过期、RenderedRequest 篡改先拒绝。
+- `test_policy_eval.py`：实际加载当前包、公开套件模拟/真实适配器路径、报告绑定 base/pack/provider/model/config/suite 摘要与 correlation、模拟/失败/零样本/缺套件无凭证、成功凭证、授权拒绝前不启动桥、编辑包改变请求与摘要、24 行映射完整、公开/回归/留出分桶、失败报告无凭证、留出冻结/访问 intent/中断/写失败/并发/重启重复/样本身份换名与子集拒绝/摘要变化/退役实际 regression 准入/新批次/外部 provider 拒绝/无上传合同绑定与缺失/零样本未测、有界套件读取、报告原子失败清理、真实 Windows junction 拒绝、job_card 正控制、阶段日志与未知桥异常、CLI eval help/echo/未确认与 holdout register/retire。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。
 - `policy_helpers.py`：M4a/M4b 测试共用仓库原文读取、临时项目根（含公开套件）、CLI 运行、合成包写入与有效 envelope/decision/租约截止构造；不调用模型、设备或网络。
-- `fixtures/`：M0/M2/M3/M4a/M4b 纯合成输入夹具；见 `fixtures/AGENTS.md`。
+- `fixtures/`：M0/M2/M3/M4a/M4b 纯合成输入夹具；见 `fixtures/AGENTS.md`。M4b 桥桩含成功、错误、慢进程、2MiB stdout、大 stderr、不读 stdin 与短命继承 stdout 模式。
 - `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、范围边界
@@ -33,7 +33,7 @@
 - 测试不把被测输出反推成预期，也不使用真实姓名、序列号、聊天、数据库或绝对路径；`fixtures/sensor/expected.json`、`fixtures/read/expected.json` 只由测试读取，`fixtures/policy-preview`/`evals/policy-suite` 不含模型答案或参考输出。M4b 合成决策表由测试独立构造，不从断言侧或旧 24 参考输出回填。
 - 日志测试覆盖正常追加、白名单拒绝、IO 故障注入与 CLI 固定 `m0_process_log_degraded` 标记；fixture 模式只允许写被忽略日志，M1/M2 只写临时库。每次运行日志必须独立，显式路径也不得退回共享追加；CLI 默认生产日志保留在被忽略目录，测试不得按目录差集删除文件。
 - M1/M2/M3/M4a/M4b 反例必须显式断言失败原因与“任务/设备/事件全部回滚”“未创建业务库”“未生成可发送身份/未通过门禁”“未留下半包/未覆盖旧包”或“未启动桥/无验收凭证”，不能只断言抛出异常。
-- M4a 生产 `policy restore` 固定拒绝；正路径只对同一 `restore_pack` 用例注入 `_StoppedActivity` 合成证据，不新增公开 CLI 绕过参数。M4b 模拟 transport 必须仍经过同一授权回调，且 `simulated=true` 永不写验收凭证；真实适配器测试的评测报告也强制 simulated 标记。
+- M4a 生产 `policy restore` 固定拒绝；正路径只对同一 `restore_pack` 用例注入 `_StoppedActivity` 合成证据，不新增公开 CLI 绕过参数。M4b 模拟 transport 必须仍经过同一授权回调，且 `simulated=true` 永不写验收凭证；真实适配器测试的评测报告也强制 simulated 标记。留出测试只使用临时项目根合成套件/登记/合同，不读取真实私有数据；跨进程/线程写登记使用同一锁，不按目录差集清理证据。
 
 ## 四、运行方式
 

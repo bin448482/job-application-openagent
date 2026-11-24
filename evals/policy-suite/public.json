@@ -159,12 +159,12 @@
         "allowed_facts": []
       },
       "assertions": {
-        "intent_in": ["interested", "uncertain"],
+        "intent_in": ["interested"],
         "sub_intents_required": [],
         "sub_intents_forbidden": ["sensitive"],
         "reply_nonempty": false,
         "reply_contains_any": [],
-        "escalate_in": [null, "human_review"]
+        "escalate_in": [null]
       }
     }
   ]
