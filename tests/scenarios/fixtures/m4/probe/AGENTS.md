@@ -23,6 +23,7 @@
 - `d03_post_submit_timeout.json`：合成输入文件。
 - `d03_pre_submit_error.json`：合成输入文件。
 - `d04_expired_fact.json`：合成输入文件。
+- `d04_facts_flow.json`：合成输入文件。
 - `d04_injection.json`：合成输入文件。
 - `d04_missing_fact.json`：合成输入文件。
 - `d04_tier.json`：合成输入文件。
@@ -47,6 +48,11 @@
 - `d08_hash.json`：合成输入文件。
 - `d08_mutations.json`：合成输入文件。
 - `d08_render_size.json`：合成输入文件。
+- `d09_gate_a.json`：合成输入文件。
+- `d09_gate_b.json`：合成输入文件。
+- `d09_gate_release.json`：合成输入文件。
+- `d09_preflight.json`：合成输入文件。
+- `d10_activity.json`：合成输入文件。
 - `d10_restore_active.json`：合成输入文件。
 - `d10_restore_stopped.json`：合成输入文件。
 - `d10_restore_unknown.json`：合成输入文件。

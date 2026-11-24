@@ -1,0 +1,6 @@
+{
+  "operation": "preflight",
+  "profile_id": "synthetic-preflight",
+  "pack": "prompts/local/valid",
+  "os_root": "data/runtime/os-gate"
+}

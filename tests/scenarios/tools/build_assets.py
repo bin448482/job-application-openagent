@@ -1744,6 +1744,40 @@ def build_support_fixtures() -> None:
             "bridge_error": "bridge_quota",
         },
     }
+    probe_requests.update(
+        {
+            "d09_gate_a": {
+                "operation": "gate_race",
+                "profile_id": "synthetic-alpha",
+                "os_root": "data/runtime/os-gate",
+            },
+            "d09_gate_b": {
+                "operation": "gate_race",
+                "profile_id": "synthetic-beta",
+                "os_root": "data/runtime/os-gate",
+            },
+            "d09_gate_release": {
+                "operation": "gate_lifecycle",
+                "profile_id": "synthetic-release",
+                "os_root": "data/runtime/os-gate",
+            },
+            "d09_preflight": {
+                "operation": "preflight",
+                "profile_id": "synthetic-preflight",
+                "pack": "prompts/local/valid",
+                "os_root": "data/runtime/os-gate",
+            },
+            "d04_facts_flow": {
+                "operation": "facts",
+                "profile_id": "synthetic-facts",
+            },
+            "d10_activity": {
+                "operation": "activity",
+                "profile_id": "synthetic-activity",
+                "os_root": "data/runtime/os-gate",
+            },
+        }
+    )
     for name, request in probe_requests.items():
         write_json(f"fixtures/m4/probe/{name}.json", request)
     public_suite = json.loads(
@@ -4186,6 +4220,13 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
             f"--request tests/scenarios/fixtures/m4/probe/{name}.json"
         )
 
+    def m4c_cmd(name: str) -> str:
+        """构造隔离根内的真实 M4c profile/门禁/预检探针命令。"""
+        return (
+            "python tests/scenarios/framework/m4c_probe.py "
+            f"--request tests/scenarios/fixtures/m4/probe/{name}.json"
+        )
+
     def policy_cmd(*parts: str) -> str:
         """构造真实 policy CLI 命令。"""
         return "python -m app policy " + " ".join(parts)
@@ -5813,6 +5854,22 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     {"path": "bridge_calls", "equals": 0},
                 )]},
             ),
+            ready_variant(
+                "m4c_facts_flow",
+                label="真实 profile 事实提案/应用/撤销/遗忘",
+                steps=[m4c_cmd("d04_facts_flow")],
+                fixture="fixtures/m4/probe/d04_facts_flow.json",
+                assertions=["propose 不写入", "apply 后重读可见", "revoke/forget 生效", "值不进入输出"],
+                acceptance={"steps": [probe_ok(
+                    {"path": "propose_action", "equals": "set"},
+                    {"path": "propose_confirmed", "equals": False},
+                    {"path": "apply_action", "equals": "set"},
+                    {"path": "apply_confirmed", "equals": True},
+                    {"path": "after_count", "equals": 1},
+                    {"path": "after_revoke_count", "equals": 0},
+                    {"path": "value_visible_in_local_show", "equals": True},
+                )]},
+            ),
         ],
     )
     d05_cases = {
@@ -5997,6 +6054,18 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         policy_ok(),
                     ]
                 },
+            ),
+            ready_variant(
+                "m4c_facts_entry",
+                label="真实事实确认入口子证据",
+                steps=[m4c_cmd("d04_facts_flow")],
+                fixture="fixtures/m4/probe/d04_facts_flow.json",
+                assertions=["提案无值写入", "显式 apply 后才可见", "值不出现在输出"],
+                acceptance={"steps": [probe_ok(
+                    {"path": "before_count", "equals": 0},
+                    {"path": "propose_confirmed", "equals": False},
+                    {"path": "apply_confirmed", "equals": True},
+                )]},
             ),
             variant(
                 "missing_fact_entry",
@@ -6274,25 +6343,76 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         "跨 profile 共享设备门禁",
         ["M4 共享门禁未交付前真实 run BLOCKED"],
         [
-            variant(
-                name,
-                "F",
-                label=label,
-                fixture="fixtures/m4/gate/shared_gate.json",
-                setup=setup,
-                required_api="M4 共享 SQLite 门禁",
-                assertions=assertions,
-                asset_status="DEFERRED",
-                deferred_to="M4c 共享 OS 设备门禁",
-            )
-            for name, label, setup, assertions in (
+            ready_variant(
+                "m4c_single_primary",
+                label="两受控进程争真实共享门禁",
+                steps=[
+                    {
+                        "concurrent": [
+                            m4c_cmd("d09_gate_a"),
+                            m4c_cmd("d09_gate_b"),
+                        ]
+                    }
+                ],
+                fixture="fixtures/m4/probe/d09_gate_a.json",
+                assertions=["恰一 primary", "另一 device_busy", "共享行完整身份"],
+                acceptance={
+                    "steps": [
+                        {
+                            "children": [
+                                probe_ok({"path": "outcome", "in": ["held", "busy"]}),
+                                probe_ok({"path": "outcome", "in": ["held", "busy"]}),
+                            ],
+                            "outcome_counts": {"held": 1, "busy": 1},
+                        }
+                    ]
+                },
+            ),
+            ready_variant(
+                "m4c_gate_release",
+                label="真实 acquire/verify/release 子证据",
+                steps=[m4c_cmd("d09_gate_release")],
+                fixture="fixtures/m4/probe/d09_gate_release.json",
+                assertions=["仅原身份可收敛释放", "释放后无占用行"],
+                acceptance={"steps": [probe_ok({"path": "released", "equals": True})]},
+            ),
+            ready_variant(
+                "m4c_preflight",
+                label="read_only 预检占用门禁子证据",
+                steps=[m4c_cmd("d09_preflight")],
+                fixture="fixtures/m4/probe/d09_preflight.json",
+                shared_inputs=["prompts/base"],
+                local_packs={"valid": "m4/policy/packs/valid"},
+                assertions=["预检期间占用门禁", "actions/decisions 为 0", "预检不等于完整 run"],
+                acceptance={"steps": [probe_ok(
+                    {"path": "preflight_only", "equals": True},
+                    {"path": "mode", "equals": "read_only"},
+                    {"path": "actions", "equals": None},
+                    {"path": "decisions", "equals": 0},
+                    {"path": "gate_released", "equals": True},
+                )]},
+            ),
+            *[
+                variant(
+                    name,
+                    "F",
+                    label=label,
+                    fixture="fixtures/m4/gate/shared_gate.json",
+                    setup=setup,
+                    required_api="M4 共享 SQLite 门禁",
+                    assertions=assertions,
+                    asset_status="DEFERRED",
+                    deferred_to="M4c 共享 OS 设备门禁",
+                )
+                for name, label, setup, assertions in (
                 ("single_primary", "两 profile 争同一门禁", "两个合成 profile/仓库", ["共享库唯一 primary 覆盖整个 run 含 read_only", "profile 库 primary 不能替代"]),
                 ("business_failure", "占用后业务库失败", "持有共享占用后注入业务库 IO 错误", ["失败保留占用", "不补偿为空闲"]),
                 ("crash_unknown", "崩溃/父停子未知", "模拟持有者崩溃", ["保留隔离", "换 profile/重启不自动解除"]),
                 ("normal_release", "正常释放条件", "原 profile 全部子命令收敛", ["仅当前 owner/nonce 条件删除", "先对账"]),
                 ("ttl_not_release", "TTL 到期不自动释放", "仅推进时钟超过租约", ["TTL/PID 不存在/重启不自动解除", "跨 profile 不共享事实/额度"]),
                 ("run_read_only_covered", "read_only 也占用门禁", "以 read_only 启动 run", ["整个 run 含 read_only 持有", "profile 库 primary 不能替代"]),
-            )
+                )
+            ],
         ],
     )
     add(
@@ -6323,6 +6443,17 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     ("old_acceptance_invalid", "旧验收/草稿失效", "修改后沿用旧验收", ["拒绝提升", "重新 validate/preview/eval"]),
                 )
             ],
+            ready_variant(
+                "m4c_activity",
+                label="真实 ProfilePolicyActivity 子证据",
+                steps=[m4c_cmd("d10_activity")],
+                fixture="fixtures/m4/probe/d10_activity.json",
+                assertions=["无占用为 stopped", "占用后为 active", "不把 active/unknown 当 stopped"],
+                acceptance={"steps": [probe_ok(
+                    {"path": "stopped_assessment", "equals": "stopped"},
+                    {"path": "active_assessment", "in": ["active", "unknown"]},
+                )]},
+            ),
             ready_variant(
                 "snapshot_state_limit",
                 label="生产 restore 受控状态子证据",

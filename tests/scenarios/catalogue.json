@@ -18928,7 +18928,8 @@
         "contract_unconfirmed_source",
         "contract_injection_tier",
         "contract_uncertain_escalation",
-        "contract_tier_floor"
+        "contract_tier_floor",
+        "m4c_facts_flow"
       ],
       "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
@@ -19409,6 +19410,80 @@
           "local_packs": {
             "valid": "m4/policy/packs/valid"
           },
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "m4c_facts_flow",
+          "label": "真实 profile 事实提案/应用/撤销/遗忘",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4c_probe.py --request tests/scenarios/fixtures/m4/probe/d04_facts_flow.json"
+          ],
+          "fixture": "fixtures/m4/probe/d04_facts_flow.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D04/m4c_facts_flow",
+          "device_gate": false,
+          "assertions": [
+            "propose 不写入",
+            "apply 后重读可见",
+            "revoke/forget 生效",
+            "值不进入输出"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "propose_action",
+                    "equals": "set"
+                  },
+                  {
+                    "path": "propose_confirmed",
+                    "equals": false
+                  },
+                  {
+                    "path": "apply_action",
+                    "equals": "set"
+                  },
+                  {
+                    "path": "apply_confirmed",
+                    "equals": true
+                  },
+                  {
+                    "path": "after_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "after_revoke_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "value_visible_in_local_show",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [],
+          "local_packs": {},
           "fixture_copies": {},
           "junctions": {}
         }
@@ -20788,6 +20863,7 @@
       ],
       "offline_subscenarios": [
         "init_validate_preview",
+        "m4c_facts_entry",
         "missing_fact_entry",
         "operator_docs"
       ],
@@ -20908,6 +20984,63 @@
             "prompts/examples/default",
             "tests/fixtures/policy-preview"
           ],
+          "local_packs": {},
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "m4c_facts_entry",
+          "label": "真实事实确认入口子证据",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4c_probe.py --request tests/scenarios/fixtures/m4/probe/d04_facts_flow.json"
+          ],
+          "fixture": "fixtures/m4/probe/d04_facts_flow.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D06/m4c_facts_entry",
+          "device_gate": false,
+          "assertions": [
+            "提案无值写入",
+            "显式 apply 后才可见",
+            "值不出现在输出"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "before_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "propose_confirmed",
+                    "equals": false
+                  },
+                  {
+                    "path": "apply_confirmed",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [],
           "local_packs": {},
           "fixture_copies": {},
           "junctions": {}
@@ -21972,6 +22105,9 @@
         "M4 共享门禁未交付前真实 run BLOCKED"
       ],
       "offline_subscenarios": [
+        "m4c_single_primary",
+        "m4c_gate_release",
+        "m4c_preflight",
         "single_primary",
         "business_failure",
         "crash_unknown",
@@ -21979,8 +22115,206 @@
         "ttl_not_release",
         "run_read_only_covered"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
+        {
+          "id": "m4c_single_primary",
+          "label": "两受控进程争真实共享门禁",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            {
+              "concurrent": [
+                "python tests/scenarios/framework/m4c_probe.py --request tests/scenarios/fixtures/m4/probe/d09_gate_a.json",
+                "python tests/scenarios/framework/m4c_probe.py --request tests/scenarios/fixtures/m4/probe/d09_gate_b.json"
+              ]
+            }
+          ],
+          "fixture": "fixtures/m4/probe/d09_gate_a.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D09/m4c_single_primary",
+          "device_gate": false,
+          "assertions": [
+            "恰一 primary",
+            "另一 device_busy",
+            "共享行完整身份"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "children": [
+                  {
+                    "exit_code": 0,
+                    "stdout_paths": [
+                      {
+                        "path": "status",
+                        "equals": "ok"
+                      },
+                      {
+                        "path": "outcome",
+                        "in": [
+                          "held",
+                          "busy"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "exit_code": 0,
+                    "stdout_paths": [
+                      {
+                        "path": "status",
+                        "equals": "ok"
+                      },
+                      {
+                        "path": "outcome",
+                        "in": [
+                          "held",
+                          "busy"
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                "outcome_counts": {
+                  "held": 1,
+                  "busy": 1
+                }
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [],
+          "local_packs": {},
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "m4c_gate_release",
+          "label": "真实 acquire/verify/release 子证据",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4c_probe.py --request tests/scenarios/fixtures/m4/probe/d09_gate_release.json"
+          ],
+          "fixture": "fixtures/m4/probe/d09_gate_release.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D09/m4c_gate_release",
+          "device_gate": false,
+          "assertions": [
+            "仅原身份可收敛释放",
+            "释放后无占用行"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "released",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [],
+          "local_packs": {},
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "m4c_preflight",
+          "label": "read_only 预检占用门禁子证据",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4c_probe.py --request tests/scenarios/fixtures/m4/probe/d09_preflight.json"
+          ],
+          "fixture": "fixtures/m4/probe/d09_preflight.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D09/m4c_preflight",
+          "device_gate": false,
+          "assertions": [
+            "预检期间占用门禁",
+            "actions/decisions 为 0",
+            "预检不等于完整 run"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "preflight_only",
+                    "equals": true
+                  },
+                  {
+                    "path": "mode",
+                    "equals": "read_only"
+                  },
+                  {
+                    "path": "actions",
+                    "equals": null
+                  },
+                  {
+                    "path": "decisions",
+                    "equals": 0
+                  },
+                  {
+                    "path": "gate_released",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [
+            "prompts/base"
+          ],
+          "local_packs": {
+            "valid": "m4/policy/packs/valid"
+          },
+          "fixture_copies": {},
+          "junctions": {}
+        },
         {
           "id": "single_primary",
           "label": "两 profile 争同一门禁",
@@ -22185,6 +22519,7 @@
         "quota_preserved",
         "base_mismatch",
         "old_acceptance_invalid",
+        "m4c_activity",
         "snapshot_state_limit",
         "restore_stopped_subevidence",
         "restore_active_subevidence",
@@ -22396,6 +22731,62 @@
           "expected_missing_inputs": [],
           "observations_ref": null,
           "deferred_to": "M4c 活动/额度/旧授权与显式 activity 成功事务",
+          "module_evidence": null,
+          "shared_inputs": [],
+          "local_packs": {},
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "m4c_activity",
+          "label": "真实 ProfilePolicyActivity 子证据",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4c_probe.py --request tests/scenarios/fixtures/m4/probe/d10_activity.json"
+          ],
+          "fixture": "fixtures/m4/probe/d10_activity.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D10/m4c_activity",
+          "device_gate": false,
+          "assertions": [
+            "无占用为 stopped",
+            "占用后为 active",
+            "不把 active/unknown 当 stopped"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "stopped_assessment",
+                    "equals": "stopped"
+                  },
+                  {
+                    "path": "active_assessment",
+                    "in": [
+                      "active",
+                      "unknown"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
           "module_evidence": null,
           "shared_inputs": [],
           "local_packs": {},

@@ -185,6 +185,7 @@ M1_PROBE_PATH = "tests/scenarios/framework/m1_probe.py"
 M2_PROBE_PATH = "tests/scenarios/framework/m2_probe.py"
 M3_PROBE_PATH = "tests/scenarios/framework/m3_probe.py"
 M4_PROBE_PATH = "tests/scenarios/framework/m4_probe.py"
+M4C_PROBE_PATH = "tests/scenarios/framework/m4c_probe.py"
 EXPECTED_FILE_NAMES = {"expected.json", "oracles.json"}
 
 
@@ -346,6 +347,17 @@ def _prepare_isolation(
         destination_m4 = root / M4_PROBE_PATH
         destination_m4.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(resolved_m4, destination_m4)
+    if any(M4C_PROBE_PATH in command for command in _iter_command_strings(variant)):
+        source_m4c = target / M4C_PROBE_PATH
+        _reject_link_ancestors(source_m4c, target, "m4c_probe")
+        if source_m4c.is_symlink():
+            raise IsolationError("M4c 探针不得是符号链接")
+        resolved_m4c = source_m4c.resolve()
+        if not _within(resolved_m4c, target.resolve()) or not resolved_m4c.is_file():
+            raise IsolationError("M4c 探针路径越界或不存在")
+        destination_m4c = root / M4C_PROBE_PATH
+        destination_m4c.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(resolved_m4c, destination_m4c)
     if any(M0_PROBE_PATH in command for command in _iter_command_strings(variant)):
         source_probe = target / M0_PROBE_PATH
         _reject_link_ancestors(source_probe, target, "m0_protocol_probe")
@@ -972,6 +984,7 @@ def _run_concurrent(
             or command.startswith(f"python {M2_PROBE_PATH} ")
             or command.startswith(f"python {M3_PROBE_PATH} ")
             or command.startswith(f"python {M4_PROBE_PATH} ")
+            or command.startswith(f"python {M4C_PROBE_PATH} ")
         ):
             raise IsolationError("并发子进程命令不在白名单")
     barrier = root / "barrier"
@@ -1113,6 +1126,7 @@ def _variant_status(scenario: dict[str, Any], variant: dict[str, Any], target: P
             or command.startswith(f"python {M2_PROBE_PATH} ")
             or command.startswith(f"python {M3_PROBE_PATH} ")
             or command.startswith(f"python {M4_PROBE_PATH} ")
+            or command.startswith(f"python {M4C_PROBE_PATH} ")
         ):
             return "BLOCKED_ENTRY_UNFROZEN"
     return "READY"

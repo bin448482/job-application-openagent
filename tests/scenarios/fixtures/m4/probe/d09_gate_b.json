@@ -1,0 +1,5 @@
+{
+  "operation": "gate_race",
+  "profile_id": "synthetic-beta",
+  "os_root": "data/runtime/os-gate"
+}

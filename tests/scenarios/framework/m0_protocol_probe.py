@@ -33,7 +33,9 @@ def _run_case(case: str) -> dict:
     original_run = subprocess.run
     try:
         subprocess.run = fake_run
-        AdbDeviceProbe().probe("synthetic-serial")
+        AdbDeviceProbe(gate=SimpleNamespace(verify=lambda: None)).probe(
+            "synthetic-serial"
+        )
     except DeviceProbeError as exc:
         reason_code = exc.reason_code
     except Exception:
