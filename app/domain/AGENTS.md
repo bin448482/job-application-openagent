@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-承载 M1 起的纯领域模型与无 IO 校验：任务状态、读取三态、未读快照、候选、动作证据和租约，M2 的未读聚合/停止原因，M3 的读取值类型、字段阶梯与稳定消息身份，M4a 的 DecisionEnvelope/Decision 契约、策略包校验、摘要与受限渲染，以及 M4b 的评测套件/断言/留出生命周期校验。该目录不导入 `sqlite3`、`adapters/`、`adb` 或具体应用控件，只依赖标准库与自身。
+承载 M1 起的纯领域模型与无 IO 校验：任务状态、读取三态、未读快照、候选、动作证据和租约，M2 的未读聚合/停止原因，M3 的读取值类型、字段阶梯与稳定消息身份，M4a 的 DecisionEnvelope/Decision 契约、策略包校验、摘要与受限渲染，M4b 的评测套件/断言/留出生命周期校验，以及 M4c 的 profile 事实输入/状态筛选/待办。该目录不导入 `sqlite3`、`adapters/`、`adb` 或具体应用控件，只依赖标准库与自身。
 
 ## 二、当前文件
 
@@ -13,6 +13,7 @@
 - `ladder.py`：`FieldReading/FieldResolution` 与纯 `resolve_field`；层级→像素→视觉→人工顺序，reading 的 source 必须与调用槽位一致，前级 failed 在上下文比较前保留，跨级冲突/上下文不一致转 undetermined/人工且只携带主上下文证据，视觉默认关闭且无独立交叉证据不放行；枚举/原因/计数/flag 先做类型检查，坏类型统一 ValueError。
 - `scheduler.py`：`aggregate_unread(snapshot, unresolved_keys)` 只重算 `unread_state`；`stop_reason_for(snapshot, queued_keys)` 按 M2 有序判据返回 `null/unread_unverified/needs_targeted_verification`。两者均无 IO，非法参数抛 `ValueError`。
 - `policy.py`：M4a `DecisionEnvelope`/`Decision` 严格校验、`parse_envelope`/`parse_decision`、租约参数位置 `validate_decision(..., *, now, lease_expires_at)`；TOML+三 md schema、45 组合唯一覆盖与 A/B/C 硬下限、`effective_limits`、`resolve_policy_tier(pack, intent, sub_intents, escalate, upper_tier)`；`compute_base_hash/compute_pack_hash/compute_prompt_hash/compute_input_hash` 与无自引用投影；固定 system/developer/user `render_request` 与唯一 `{base,pack,data}` 内容对象；`verify_rendered_request` 复用同一渲染逐字段重核；`append_and_validate_reply` 追加披露并复验码点/控制字符/联系方式/禁谈项/事实值；`validate_policy_guides` 检查可选双指南编码/控制字符/联系方式；`v1_policy_tier()` 固定 C。只有标准库与自身依赖。
+- `profile.py`：M4c 事实键/值/有效期校验（单行、1–200 字符、拒绝联系方式/控制字符/孤立代理）、active 行输入校验；`select_profile_facts` 只把 active 行投影为四键并交给 `policy.py` 的唯一 `select_allowed_facts_with_reasons`，据其 allowed/missing/expired/conflict 结果组织无值待办，不复制有效期/冲突选择。`has_contact` 在 `policy.py` 公开同一联系方式模式，供事实录入与回复复验共用。
 - `eval.py`：M4b 公开/回归/留出套件与单例断言 schema、`validate_suite`、`suite_hash`、`project_case`、`sample_fingerprint`/`suite_fingerprints`、`evaluate_assertions`；留出登记 `validate_holdout_registry`、`register_holdout_batch`、`frozen_holdout_batch`、`check_holdout_access`、`begin_holdout_access`、`finish_holdout_access`、`retire_holdout_batch`、`validate_holdout_attestation`。样本身份排除 case/task/nonce/now 运行字段；所有历史批次占用样本不可换名/换候选/拆子集重冻结；访问意向先于调用持久化，退役写实际 regression 引用；不读取文件。
 - `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
@@ -37,12 +38,13 @@
 17. `render_request` 只选当前 kind 的一份 base 作为 system，有效策略为 developer，envelope 投影为 user JSON；渲染前从四载荷原文重解析派生结构并复核摘要，避免同摘要不同实际策略内容；完整 `{base,pack,data}` 内容对象 ≤64 KiB，同时保留实际三分区消息上限；预览不调用桥/模型/设备，`v1_policy_tier()` 固定 C。
 18. 构建器 `select_allowed_facts` 以显式 now 取包白名单/注册表/`user_confirmed`/未过期交集；同一键重复或值/有效期冲突时整键受控丢弃、留给待办，不做同值去重；不猜测、不编造来源。公开 validator 仍严格拒绝到期/非法结构。回复复验只识别明确经验/薪资/地点形式：经验须有年/个月/月单位，普通“我有3个问题”不识别；数值保留小数点、范围端点与单位，允许的薪金单位为 k/千、万/万元、元或无单位，其它后缀/数量级/未知单位/范围与单值不一致均 conflict；地点按全文严格相等，不做双向子串；未识别语义不因此放行。
 19. `verify_rendered_request` 只调用 `render_request` 重算完整 dataclass 并逐字段比较；不能替代桥前/桥后对当前包原文摘要的重读，也不把既有 RenderedRequest 当永久可信。
-20. M4b 评测套件每例只投影 `input` 十键，断言侧独立；意图/子意图/回复属性/escalate/最终档位分别计数。样本身份指纹排除 case_id/task_id/nonce/now 等运行身份，保留 kind/subject/inbound/context/allowed_facts（含有效期）等语义字段。留出登记必须有维护者、独立标注者、版本、数量、冻结时间、候选发布与每例指纹；所有历史占用样本不得换批次/候选/子集重新冻结；访问意向在调用前持久化，完成/失败/未知/重复如实区分；退役整批写实际 regression 准入引用；零样本为未测。
+20. M4c `select_profile_facts` 只把 state=active 行投影为四键交给唯一 `select_allowed_facts_with_reasons`；superseded/revoked/到期排除，同键多个未过期候选（含同值）记 conflict 而不是按较新时间择一，缺失/到期不返回值。事实值比较仍由既有回复复验与联系方式模式负责，本模块不推断未命中语义。来源 ID 由本机存储/用例生成，不从 HR 文本、模型 reply/evidence 或包导入。
+21. M4b 评测套件每例只投影 `input` 十键，断言侧独立；意图/子意图/回复属性/escalate/最终档位分别计数。样本身份指纹排除 case_id/task_id/nonce/now 等运行身份，保留 kind/subject/inbound/context/allowed_facts（含有效期）等语义字段。留出登记必须有维护者、独立标注者、版本、数量、冻结时间、候选发布与每例指纹；所有历史占用样本不得换批次/候选/子集重新冻结；访问意向在调用前持久化，完成/失败/未知/重复如实区分；退役整批写实际 regression 准入引用；零样本为未测。
 
 ## 四、测试
 
 ```powershell
-python -m unittest tests.test_store tests.test_migrations tests.test_sensor tests.test_read tests.test_policy_contract tests.test_policy_pack tests.test_policy_eval
+python -m unittest tests.test_store tests.test_migrations tests.test_sensor tests.test_read tests.test_policy_contract tests.test_policy_pack tests.test_profile_facts tests.test_device_gate tests.test_policy_eval
 ```
 
 领域校验通过仓储入口间接覆盖，包括 app 固定 boss、bool 计数、坏摘要/UUID/时间、候选键重算与证据组合；M2 聚合/停止原因由 `tests.test_sensor` 断言，M3 值类型、稳定消息/职位键、阶梯与跨屏身份由 `tests.test_read` 断言；M4a 契约、摘要、45 组合、渲染与披露复验由 `tests.test_policy_contract`、`tests.test_policy_pack` 断言。
@@ -55,5 +57,5 @@ python -m unittest tests.test_store tests.test_migrations tests.test_sensor test
 
 ## 六、已知限制
 
-- M2 只实现合成快照聚合；M3 只实现合成页面/职位/未读/会话读取、像素字段后备与跨屏稳定身份；M4a 只实现纯契约、策略包/摘要/渲染与回复复验；M4b 增加评测套件/断言/留出生命周期与渲染重核，真实设备采集、导航、视觉、正文持久化、真实模型桥、事实确认与运行调度未实现。
+- M2 只实现合成快照聚合；M3 只实现合成页面/职位/未读/会话读取、像素字段后备与跨屏稳定身份；M4a 只实现纯契约、策略包/摘要/渲染与回复复验；M4b 增加评测套件/断言/留出生命周期与渲染重核；M4c 增加事实状态筛选/待办，真实设备采集、导航、视觉、正文持久化、真实模型桥、事实对账开锁与运行调度未实现。
 - `unread_state=present` 不证明候选可点击或计数完整；`unknown` 不得当成无未读。M3 `actionable=true` 只是离线门禁，不提供发送授权。M4a/M4b 的 pattern/长度/禁谈检查只是有限确定性门禁，未命中不等于语义安全，最终档位固定 C。

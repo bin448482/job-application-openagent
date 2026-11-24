@@ -7,6 +7,8 @@ import subprocess
 import time
 
 from app.ports.device import DeviceEntry, ProbeSnapshot
+from app.ports.device_gate import DeviceGateError
+from app.ports.screen import DeviceGate
 from app.process_log import ProcessLog, elapsed_ms
 
 ADB_TIMEOUT_SECONDS = 5
@@ -38,13 +40,20 @@ class DeviceProbeError(Exception):
 class AdbDeviceProbe:
     """通过参数数组和 shell=false 执行一次有界的真实 ADB 只读探针。"""
 
-    def __init__(self, adb: str = "adb", process_log: ProcessLog | None = None) -> None:
-        """保存 adb 文件名与可选过程日志，构造阶段不启动任何子进程。"""
+    def __init__(
+        self,
+        adb: str = "adb",
+        process_log: ProcessLog | None = None,
+        gate: DeviceGate | None = None,
+    ) -> None:
+        """保存 adb 文件名、可选日志与共享门禁；构造阶段不启动任何子进程。"""
         self._adb = adb
         self._process_log = process_log
+        self._gate = gate
 
     def probe(self, serial: str | None = None) -> ProbeSnapshot:
         """读取一次设备清单和窗口字段，返回不含真实序列号或窗口原文的快照。"""
+        self._require_gate()
         if not isinstance(serial, str) or not serial:
             raise ValueError("serial is required")
 
@@ -99,7 +108,10 @@ class AdbDeviceProbe:
         stage: str,
         command: str,
     ) -> str:
-        """执行一条不重试的 ADB 命令，并把缺失、超时或非零退出归一为断连。"""
+        """每条 ADB 子命令前要求并复核共享门禁，再执行一条不重试的命令。"""
+        self._require_gate()
+        assert self._gate is not None
+        self._gate.verify()
         started = time.perf_counter()
         self._record(
             stage=stage,
@@ -153,6 +165,11 @@ class AdbDeviceProbe:
             duration_ms=elapsed_ms(started),
         )
         return completed.stdout
+
+    def _require_gate(self) -> None:
+        """真实适配器缺失共享门禁时在零子进程处固定拒绝。"""
+        if self._gate is None:
+            raise DeviceGateError("device_not_held")
 
     def _record_failure(
         self,

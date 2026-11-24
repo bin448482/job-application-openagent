@@ -531,8 +531,11 @@ class SnapshotRestoreTests(unittest.TestCase):
         )
         self.assertTrue((self.root / "prompts/local/demo/tone.md").exists())
 
-    def test_restore_production_is_controlled_refusal(self) -> None:
-        """验证生产 CLI restore 无可信停止证据时受控拒绝。"""
+    def test_restore_unreadable_profile_is_controlled_refusal(self) -> None:
+        """验证 profile 库不可读时生产 CLI restore 以未知状态受控拒绝。"""
+        profile_dir = self.root / "data/runtime/profiles/demo"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "runtime.sqlite3").write_bytes(b"not-a-sqlite-database")
         code, payload, stderr = run_cli(
             self.root,
             [
@@ -847,6 +850,9 @@ class CliAndLogTests(unittest.TestCase):
             now=NOW,
             snapshot_id="20261124T000000000Z-abcdef01",
         )
+        profile_dir = self.root / "data/runtime/profiles/demo"
+        profile_dir.mkdir(parents=True)
+        (profile_dir / "runtime.sqlite3").write_bytes(b"not-a-sqlite-database")
         log = ProcessLog(self.root / "restore.jsonl", correlation_id="corr")
         code, payload, _ = run_cli(
             self.root,

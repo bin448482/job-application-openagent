@@ -69,3 +69,7 @@ class StorePort(Protocol):
     def unresolved_conversations(self, app: str) -> list[str]:
         """只读返回未关闭发现涉及的会话键（升序去重）。"""
         ...
+
+    def current_lease_expiry(self, lease: Lease, *, now: str) -> str | None:
+        """只读重核任务/设备租约与取得时 Lease/Owner/nonce/到期。"""
+        ...

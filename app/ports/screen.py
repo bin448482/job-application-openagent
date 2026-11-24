@@ -59,12 +59,16 @@ class ScreenPort(Protocol):
 
 
 class DeviceGate(Protocol):
-    """抽象跨 profile 的共享设备门禁；未实现时真实采集必须拒绝。"""
+    """抽象跨 profile 的共享设备门禁；未取得占用时真实采集必须拒绝。"""
 
     def require_available(self) -> None:
-        """清除占用或抛出 DeviceGateUnavailable。"""
+        """要求本会话已持共享占用并通过一次完整复核。"""
+        ...
+
+    def verify(self) -> None:
+        """每条设备子命令前复核共享身份与 profile 绑定。"""
         ...
 
     def release(self) -> None:
-        """结束真实 run 后释放共享占用。"""
+        """结束真实 run 后按收敛状态释放或保留共享占用。"""
         ...

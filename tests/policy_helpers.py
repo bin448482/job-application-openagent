@@ -91,12 +91,17 @@ def read_pack(root: Path, rel: str) -> dict[str, str]:
 
 
 def run_cli(
-    root: Path, argv: list[str], process_log: object | None = None
+    root: Path,
+    argv: list[str],
+    process_log: object | None = None,
+    os_root: Path | None = None,
 ) -> tuple[int, dict[str, object] | None, str]:
-    """在临时项目根运行 CLI，返回退出码、解析后的 stdout 与 stderr。"""
+    """在临时项目根运行 CLI，可注入测试 OS 根；返回退出码、JSON 与 stderr。"""
     out = io.StringIO()
     err = io.StringIO()
     kwargs = {"process_log": process_log} if process_log is not None else {}
+    if os_root is not None:
+        kwargs["os_root"] = os_root
     with patch("app.cli.main.PROJECT_ROOT", root), redirect_stdout(out), redirect_stderr(err):
         code = main(argv, **kwargs)
     text = out.getvalue().strip()

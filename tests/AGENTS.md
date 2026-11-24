@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-存放 Python 标准库 `unittest` 测试与纯合成夹具。当前覆盖 M0 `doctor`、M1 状态库/租约、M2 合成传感器/落库、M3 离线读取/像素/跨屏身份/ADB 采集模拟、M4a 决策契约/策略包/文件事务，以及 M4b A/B 桥/评测报告/留出生命周期；不连接真实设备、不调用真实模型或网络、不读取根 `config.json`。M1/M2 测试只使用临时合成 SQLite 库与合成 XML，M3 还使用合成 RGBA 与 mock subprocess，M4a 使用临时项目根与固定合成 preview 案例，M4b 使用合成本机桥桩与模拟 transport。
+存放 Python 标准库 `unittest` 测试与纯合成夹具。当前覆盖 M0 `doctor`、M1 状态库/租约、M2 合成传感器/落库、M3 离线读取/像素/跨屏身份/ADB 采集模拟、M4a 决策契约/策略包/文件事务、M4b A/B 桥/评测报告/留出生命周期，以及 M4c profile 事实/共享门禁/验收复核/运行预检/闭环；不连接真实设备、不调用真实模型或网络、不读取根 `config.json`。M1/M2 测试只使用临时合成 SQLite 库与合成 XML，M3 还使用合成 RGBA 与 mock subprocess，M4a 使用临时项目根与固定合成 preview 案例，M4b 使用合成本机桥桩与模拟 transport。
 
 ## 二、当前文件与子目录
 
@@ -17,9 +17,14 @@
 - `test_screen.py`：M3 mock `subprocess.run` 验证 dump/cat/screencap 参数、`shell=False`、5 秒超时、单次 attempt、证据保存成功与失败 `adb_evidence` 日志、serial 前置拒绝、共享门禁先于采集与生产解析接线；不运行真实 ADB。
 - `test_policy_contract.py`：M4a Envelope/Decision 严格键/类型/词表/回显/证据/nonce 租约参数/2048 字节边界、嵌套重复 JSON 键、H 无规范化与四类摘要无自引用、64 KiB 内容对象 65536/65537、事实交集与重复/冲突拒绝、职位五 intent、subject 次要空字符串、围栏拒绝、披露追加后的码点/控制字符/联系方式/禁谈/事实值严格匹配（小数/范围/单位/地点全文、经验单位必需、普通数量问句不误判、未知单位/数量级受控 conflict）。
 - `test_policy_pack.py`：TOML/Markdown 完整 schema、缺失/额外/类型/范围/词表、45 组合唯一覆盖、同档重复/跨档冲突/漏项、2 A/4 B/39 C 统一硬下限、有效限制、通配限制、联系方式与包内事实模式、三 md 语法、未知标题不反射、base/system 选择、唯一 `{base,pack,data}` 内容对象、渲染重派生、preview 案例 schema；测试构造兼容 LF/CRLF。
-- `test_policy_store.py`：路径/普通文件/链接/BOM/NUL/大小/CRLF、init/validate/preview/list、编辑语气/分档/披露、坏示例受控四键、snapshot 清单与复制前后源重读、restore 三值/base/清单/快照/目标篡改、生产受控拒绝、合成 stopped 正路径、失败清理、四键外层、配置错误四键、链接候选 list、load/validate/render/publish 阶段日志与零设备/网络/子进程。
+- `test_policy_store.py`：路径/普通文件/链接/BOM/NUL/大小/CRLF、init/validate/preview/list、编辑语气/分档/披露、坏示例受控四键、snapshot 清单与复制前后源重读、restore 三值/base/清单/快照/目标篡改、坏 profile 库 unknown 拒绝、合成 stopped 正路径、失败清理、四键外层、配置错误四键、链接候选 list、load/validate/render/publish 阶段日志与零设备/网络/子进程。
 - `test_bridge.py`：M4b A/B 真实参数数组子进程成功、固定三角色/无工具无历史、伪造 role 保持 user 数据、启动失败一次重试、重试前时钟/包/事实有效期门禁、提交后 20 秒超时不重试、临时创建/输入写超预算零 Popen、2MiB stdout 上限、慢进程/不读 stdin/大 stderr/短命继承 stdout 有界收尾、输出监测/等待 OSError 受控、认证/额度/断连/坏 JSON/重复键/角色不符/坏回显固定诊断、事实来源复验、包变动与桥前后租约过期、RenderedRequest 篡改先拒绝。
 - `test_policy_eval.py`：实际加载当前包、公开套件模拟/真实适配器路径、报告绑定 base/pack/provider/model/config/suite 摘要与 correlation、模拟/失败/零样本/缺套件无凭证、成功凭证、授权拒绝前不启动桥且日志唯一失败终态、编辑包改变请求与摘要、24 行映射完整、公开/回归/留出分桶、失败报告无凭证、留出冻结/访问 intent/中断/写失败/并发/重启重复/样本身份换名与子集拒绝/摘要变化/退役实际 regression 准入/登记失败保留未确认准入但不可运行/新批次/外部 provider 拒绝/无上传合同绑定与缺失/零样本未测、有界套件读取、无关坏 regression 准入不影响 public+holdout、报告原子失败清理、真实 Windows junction 拒绝、job_card 正控制、缺 public suite 日志唯一失败终态、阶段日志与未知桥异常、CLI eval help/echo/未确认与 holdout register/retire。
+- `test_profile_facts.py`：M4c profile 事实域/CLI/存储绑定：提案不落库、确认后重读再显示、程序来源 ID、有效期、同键冲突/显式 replace、撤销/遗忘/无值审计、联系方式/控制字符拒绝、值不进日志、包白名单待办、pack.profile_id 与 `--profile` 不一致拒绝、目录路径不伪造空结果、不同 profile 不共享、旧合成库不导入与元数据绑定。
+- `test_device_gate.py`：M4c 固定 OS 门禁与活动检查：路径不随项目根/profile 改变、不同 profile/两逻辑项目根跨进程互斥、完整 owner/pid/host/nonce/profile/路径篡改均不删除占用、session_identity 单次已核行返回且 nonce 篡改拒绝、未知版本/额外对象/旧占用表不改写、崩溃/PID/TTL 不释放、异常隔离、库不可读、非 Windows 拒绝、profile 库 leased/running/blocked 状态。
+- `test_run_guard.py`：M4c `run check`：read_only 本轮确认、draft 当前验收、A 档固定拒绝、预检零子进程、跨库故障隔离与门禁/profile 打开日志 started/终态配对。
+- `test_profile_session_lease.py`：M4c 真实 profile 租约：合法 profile 库经唯一 SqliteStore 领取/续租/失效、`ProfileSessionLease` 与 decide 桥前后拒绝、跨门禁 profile/原库/owner、复制库且参数指向副本、任务两行 owner 同改、门禁 nonce 桥前/桥中变化、错误任务 key/app、任务 owner 篡改与错误 profile ID。
+- `test_m4c_closed_loop.py`：M4c 闭环：真实活动 restore、目录路径不发布、三值一致、同 profile 事实/任务审计不重置、旧凭证摘要变化拒绝、唯一仓储快照重核、实际受控合成桥 CLI eval→snapshot→restore→validate/preview→eval 串行。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。
 - `policy_helpers.py`：M4a/M4b 测试共用仓库原文读取、临时项目根（含公开套件）、CLI 运行、合成包写入与有效 envelope/decision/租约截止构造；不调用模型、设备或网络。
 - `fixtures/`：M0/M2/M3/M4a/M4b 纯合成输入夹具；见 `fixtures/AGENTS.md`。M4b 桥桩含成功、错误、慢进程、2MiB stdout、大 stderr、不读 stdin 与短命继承 stdout 模式。
@@ -29,18 +34,18 @@
 
 - 独立场景协调端维护 `tests/scenarios/` 与 `tests/test_offline_scenarios.py`，私有回归在 `tests/private_regression/`；本目录指南不为这些位置虚构内容，也不得由本 Task 创建或修改。
 - 负例由测试进程捕获预期退出码；验收命令本身必须退出 `0`。
-- 真实适配器只在测试中 mock `subprocess.run` 与 ctypes；不得实际运行 ADB 或检查真实 PID。M4b 只允许启动 `tests/fixtures/bridge/bridge_stub.py` 这个合成本机进程，不调用真实模型或网络。`sense`/`read`/`policy` 测试额外 mock/断言零设备、网络、子进程与任务租约写入口；`policy` 用 `FilePolicyRepository` 在临时项目根运行，不写仓库 `prompts/local`；`policy eval` 产物只写临时项目根的 `data/evals`。
+- 真实适配器只在测试中 mock `subprocess.run` 与 ctypes；不得实际运行 ADB 或检查真实 PID。M4b 只允许启动 `tests/fixtures/bridge/bridge_stub.py` 这个合成本机进程，不调用真实模型或网络。M4c 共享门禁与 profile 库只用临时项目根/临时 OS 根/合成事实/跨进程模拟，不写真实 `LOCALAPPDATA` 或读取旧本机库。`sense`/`read`/`policy` 测试额外 mock/断言零设备、网络、子进程与任务租约写入口；`policy` 用 `FilePolicyRepository` 在临时项目根运行，不写仓库 `prompts/local`；`policy eval` 产物只写临时项目根的 `data/evals`。
 - 测试不把被测输出反推成预期，也不使用真实姓名、序列号、聊天、数据库或绝对路径；`fixtures/sensor/expected.json`、`fixtures/read/expected.json` 只由测试读取，`fixtures/policy-preview`/`evals/policy-suite` 不含模型答案或参考输出。M4b 合成决策表由测试独立构造，不从断言侧或旧 24 参考输出回填。
 - 日志测试覆盖正常追加、白名单拒绝、IO 故障注入与 CLI 固定 `m0_process_log_degraded` 标记；fixture 模式只允许写被忽略日志，M1/M2 只写临时库。每次运行日志必须独立，显式路径也不得退回共享追加；CLI 默认生产日志保留在被忽略目录，测试不得按目录差集删除文件。
 - M1/M2/M3/M4a/M4b 反例必须显式断言失败原因与“任务/设备/事件全部回滚”“未创建业务库”“未生成可发送身份/未通过门禁”“未留下半包/未覆盖旧包”或“未启动桥/无验收凭证”，不能只断言抛出异常。
-- M4a 生产 `policy restore` 固定拒绝；正路径只对同一 `restore_pack` 用例注入 `_StoppedActivity` 合成证据，不新增公开 CLI 绕过参数。M4b 模拟 transport 必须仍经过同一授权回调，且 `simulated=true` 永不写验收凭证；真实适配器测试的评测报告也强制 simulated 标记。留出测试只使用临时项目根合成套件/登记/合同，不读取真实私有数据；跨进程/线程写登记使用同一锁，不按目录差集清理证据。
+- M4a 生产 `policy restore` 已接真实活动检查；测试用坏 profile 库/共享占用覆盖 active/unknown 拒绝，正路径用临时 stopped 检查，不新增公开 CLI 绕过参数。M4b 模拟 transport 必须仍经过同一授权回调，且 `simulated=true` 永不写验收凭证；真实适配器测试的评测报告也强制 simulated 标记。留出测试只使用临时项目根合成套件/登记/合同，不读取真实私有数据；跨进程/线程写登记使用同一锁，不按目录差集清理证据。
 
 ## 四、运行方式
 
 在项目根执行：
 
 ```powershell
-python -m unittest tests.test_doctor tests.test_store tests.test_migrations tests.test_sensor tests.test_sensor_store tests.test_process_log_concurrency tests.test_read tests.test_screen tests.test_policy_contract tests.test_policy_pack tests.test_policy_store tests.test_bridge tests.test_policy_eval
+python -m unittest discover -s tests -p "test_*.py"
 npm test
 ```
 
@@ -56,7 +61,7 @@ M0–M4b Python 测试不依赖 Node；`npm test` 验证既有 24 案例判据�
 
 ## 六、已知限制
 
-- 当前覆盖 M0–M4b；M4c 真实活动检查、M5+ 动作与调度测试尚未实现。
-- 真实 ADB、真实机型、窗口/截图输出与真实消息稳定标识未验证；M1 停止检查器只用注入值或 mock ctypes；M2 只用合成 XML/profile；M3 只用合成 XML/RGBA 与 mock subprocess；M4a 只用临时项目根、合成 base/包/preview 与注入停止证据；M4b 只用合成本机桥桩/模拟 transport，真实 provider、私有留出、真实租约与 M4c 活动未测。
+- 当前覆盖 M0–M4c；M5+ 动作、调度、完整 run、真实 provider/真机/真实 OS 门禁目录与 M5 对账开锁测试尚未实现。
+- 真实 ADB、真实机型、窗口/截图输出与真实消息稳定标识未验证；M1 停止检查器只用注入值或 mock ctypes；M2 只用合成 XML/profile；M3 只用合成 XML/RGBA 与 mock subprocess；M4a 只用临时项目根、合成 base/包/preview 与真实 stopped 检查；M4b 只用合成本机桥桩/模拟 transport；M4c 只用临时项目/OS 根、合成事实/凭证/桥桩与跨进程模拟，真实 provider、私有留出、真实租约、真实 OS 门禁目录与真机未测。
 - 独立离线场景与私有回归测试不在本 Task 范围。
 - 日志测试验证的是本机 best-effort 行为，不代表磁盘故障时仍能保留完整日志。

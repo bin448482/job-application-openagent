@@ -400,6 +400,11 @@ def _has_contact(value: str) -> bool:
     return any(pattern.search(value) for pattern in _CONTACT_PATTERNS)
 
 
+def has_contact(value: str) -> bool:
+    """公开同一联系方式模式入口，供事实录入与回复复验共用。"""
+    return _has_contact(value)
+
+
 def _fact_claims(value: str) -> list[tuple[str, str]]:
     """返回可确定识别的个人事实形式及其捕获值，不推断未命中文本。"""
     claims: list[tuple[str, str]] = []
@@ -1248,13 +1253,14 @@ def envelope_bytes(envelope: Mapping[str, object]) -> int:
     return len(canonical_json_bytes(envelope))
 
 
-def select_allowed_facts(
+def select_allowed_facts_with_reasons(
     allowed_facts: object, pack: PolicyPack, *, now: str
-) -> list[dict[str, object]]:
-    """按显式 now 取包白名单/注册表/已确认/未过期且无重复/冲突的事实交集。
+) -> dict[str, object]:
+    """按唯一规则返回 allowed 事实与 missing/expired/conflict 待办。
 
-    候选结构、来源、键、值或有效期不可用时逐项丢弃；同一键只保留唯一剩余
-    候选，重复键或值/有效期不一致均受控丢弃该键并留给待办，不做同值去重。
+    候选结构、来源、键、值或有效期不可用时逐项丢弃；同一键只保留唯一未过期
+    候选，重复候选（含同值）均受控丢弃并记 conflict；已登记但全部到期记
+    expired；完全没有可用候选记 missing。事实值与原因不互相替代。
     """
     if not isinstance(allowed_facts, list):
         raise DecisionError("invalid_decision")
@@ -1263,6 +1269,9 @@ def select_allowed_facts(
     except ValueError:
         raise DecisionError("invalid_decision") from None
     fact_keys = set(effective_limits(pack)["fact_keys"])
+    allowed_keys = [str(key) for key in effective_limits(pack)["fact_keys"]]
+    seen: dict[str, int] = {key: 0 for key in allowed_keys}
+    expired: set[str] = set()
     order: list[str] = []
     candidates: dict[str, list[dict[str, object]]] = {}
     for raw in allowed_facts:
@@ -1285,6 +1294,8 @@ def select_allowed_facts(
             except ValueError:
                 continue
             if expires_dt <= now_dt:
+                expired.add(key)
+                seen[key] += 1
                 continue
         candidate = {
             "key": key,
@@ -1296,12 +1307,29 @@ def select_allowed_facts(
             order.append(key)
             candidates[key] = []
         candidates[key].append(candidate)
+        seen[key] += 1
     selected: list[dict[str, object]] = []
-    for key in order:
-        values = candidates[key]
+    pending: list[dict[str, str]] = []
+    for key in allowed_keys:
+        values = candidates.get(key, [])
         if len(values) == 1:
             selected.append(values[0])
-    return selected
+        elif len(values) > 1:
+            pending.append({"key": key, "reason": "conflict"})
+        elif seen[key] > 0:
+            pending.append({"key": key, "reason": "expired"})
+        else:
+            pending.append({"key": key, "reason": "missing"})
+    return {"allowed": selected, "pending": pending}
+
+
+def select_allowed_facts(
+    allowed_facts: object, pack: PolicyPack, *, now: str
+) -> list[dict[str, object]]:
+    """按显式 now 取包白名单/注册表/已确认/未过期且无重复/冲突的事实交集。"""
+    return list(
+        select_allowed_facts_with_reasons(allowed_facts, pack, now=now)["allowed"]
+    )
 
 
 def build_envelope(
