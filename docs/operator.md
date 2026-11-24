@@ -404,13 +404,14 @@ python -m app run execute --pack prompts/local/demo --mode draft_only --fixture 
 ```
 
 - `run prepare` 先取得固定 OS 共享门禁排他，再创建/打开/迁移 profile v3；占用期间返回 `device_busy`，不改 profile。迁移 v1/v2 前先核验身份与完整 DDL，再备份并单事务迁移；失败不覆盖旧库。
-- `run execute` 先校验 mode/本轮设备确认/当前验收，再整轮持有共享门禁、打开现有 profile 与 v3 仓储。`read_only` 只读一次可见观察与过程审计：零导航、零未读消费、零模型、零任务/草稿/决策业务写、零隐式迁移。`draft_only` 走同一调度/存储/读取/决策流程，不自动 apply/send。
+- `run execute` 先校验 mode/本轮设备确认/当前验收，再整轮持有共享门禁、打开现有 profile 与 v3 仓储。`read_only` 经真实 M3 fixture 解析/门禁读取可见观察，零导航、零未读消费、零模型、零任务/草稿/决策业务写、零隐式迁移。`draft_only` 走同一 M3 读取→`RepositorySnapshot`/`ProfileSessionLease`→唯一 `decide` 流程；合成 bridge 只提供原始响应，非法决策由契约拒绝，needs_human/uncertain 保持 blocked 并保存待审草稿；不自动 apply/send。
 - 固定优先级：可定位未读 → 新消息 → 职位 → 显式清理候选；M7 清理表尚未创建。安全点七条件全部成立才允许切换：回列表、输入空、无确认框、无在途命令、无 pending/unknown 动作、动作状态已提交、checkpoint 已提交。未知未读只允许一次定向核对，仍未知暂停 `unread_unverified`。
 - 预算基线：900 秒 / 200 设备调用 / 20 候选 / 单职位 30 秒 / 5 次抢占；等号停止发起新工作，在途超支单列。第 6 次抢占暂停 `preemption_limit`，不回退职位/清理。设备调用与模型调用分别计数。
 - 批次游标 `job_batches.cursor_json` 保存 `last_job_dedupe_key/visited_keys/remaining_budget/preemptions/first_observed_at`；恢复按当前职位身份顺序，消失跳过、插入/重排不重复；新进程/round 不补预算。
 - `stage_preempted` 只在职位→未读实际切换并开始处理后写入；首次观察保留，`waited_ms` 由单调时钟计算，检测间隔另记。墙钟/单调时钟增量差超过 1 秒停止。
-- 决策记忆只保存摘要/枚举，键含 profile/subject/task/input/base/pack/model/model_config/facts 摘要；命中后仍重读事实、当前验收与运行租约，不把命中当本轮模型成功或授权。草稿是可重审本机件，不携带授权或租约；后续执行仍需全部新鲜复验。
-- `apply_job` 使用规范键 `app:job_key:apply`、`Evidence.effect=applied` 与同一 pending/授权/命令账本/无重放路径。生产 `action perform --action-kind apply_job` 在未定义 apply 配额合同时于任何 profile/门禁/设备写入前固定 `apply_quota_contract_missing` 拒绝；合成契约测试不构成生产授权。
+- 决策记忆只保存摘要/枚举，键含 profile/subject/input/base/pack/model/model_config/facts 摘要；命中必须同时找到匹配的 pending_review 草稿并重核事实/回复/披露/禁谈与运行租约，损坏摘要不会被静默复用。草稿是可重审本机件，不携带授权或租约；后续执行仍需全部新鲜复验。
+- `apply_job` 使用规范键 `app:job_key:apply`、`Evidence.effect=applied`、显式独立 `ApplyQuotaContract` 与同一 pending/授权/命令账本/无重放路径；合成 E2E 验证 pre-command 零命令、performed/applied、after-click unknown 和本地 complete 失败 pending 不重放。生产 `action perform --action-kind apply_job` 在未定义 apply 配额合同时于任何 profile/门禁/设备写入前固定 `apply_quota_contract_missing` 拒绝；合成契约测试不构成生产授权。
+- 本机策略 `promote` 对 Windows `PermissionError`（winerror 5/32）做总计 3 次、50/100ms 的同卷 rename 有界重试；每次重核暂存/目标/链接。其它错误立即拒绝，耗尽仍 `policy_io_error`，不覆盖、不复制回退、不关闭外部句柄。
 - 合成场景严格拒绝 `expected/oracle/verdict/answer`；缺键、额外键、坏 JSON 失败关闭。合成通过不构成真实设备、模型、发送或 A 档验收。
 
 ## 八、显式真实设备模式

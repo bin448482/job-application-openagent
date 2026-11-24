@@ -770,6 +770,62 @@ class ProfilePolicyActivityTests(unittest.TestCase):
         )
 
 
+    def test_m6_active_batch_and_running_job_affect_restore(self) -> None:
+        """M6 active batch 记 unknown，leased/running job 记 active。"""
+        connection = sqlite3.connect(str(self.profile_path))
+        try:
+            connection.execute(
+                "INSERT INTO job_batches(batch_id, profile_id, cursor_json, state, "
+                "created_at, updated_at) VALUES (?, 'demo', '{}', 'active', ?, ?)",
+                ("00000000-0000-4000-8000-000000000901", NOW, NOW),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        activity = ProfilePolicyActivity(self.root, os_root=self.os_root)
+        self.assertEqual(
+            activity.assess_restore(profile_id="demo", dest_pack="prompts/local/x"),
+            "unknown",
+        )
+        connection = sqlite3.connect(str(self.profile_path))
+        try:
+            connection.execute(
+                "UPDATE job_batches SET state = 'paused', pause_reason = 'unread_unverified'"
+            )
+            connection.execute(
+                "INSERT INTO jobs(app, job_key, dedupe_key, batch_id, state, "
+                "created_at, updated_at) VALUES ('boss', ?, ?, ?, 'queued', ?, ?)",
+                (
+                    "boss:job:" + "4" * 64,
+                    "boss:job:" + "4" * 64,
+                    "00000000-0000-4000-8000-000000000901",
+                    NOW,
+                    NOW,
+                ),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        self.assertEqual(
+            activity.assess_restore(profile_id="demo", dest_pack="prompts/local/x"),
+            "unknown",
+        )
+        connection = sqlite3.connect(str(self.profile_path))
+        try:
+            connection.execute(
+                "UPDATE jobs SET state = 'running', lease_owner = 'synthetic-owner', "
+                "owner_pid = 1, owner_host = ?, nonce = ?, lease_expires_at = ?",
+                (HOST, "00000000-0000-4000-8000-000000000902", LATER),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        self.assertEqual(
+            activity.assess_restore(profile_id="demo", dest_pack="prompts/local/x"),
+            "active",
+        )
+
+
 class GateReadOnlyTests(unittest.TestCase):
     """覆盖只读占用查询命令、映射与同 profile 写入保护。"""
 

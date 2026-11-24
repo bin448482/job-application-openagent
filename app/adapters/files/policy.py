@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -346,20 +347,43 @@ class FilePolicyRepository:
         return self._read_text(rel_path, max_bytes=BASE_MAX_BYTES)
 
     def promote(self, staging_rel: str, dest_rel: str) -> None:
-        """把暂存路径同卷改名为目标；目标存在时拒绝且不覆盖。"""
+        """把暂存路径同卷改名为目标；Windows 短暂占用时有界重试且不覆盖。"""
         staging_path, staging = self._resolve(staging_rel)
         dest_path, dest = self._resolve(dest_rel, missing_ok=True)
         if not any(part.startswith(STAGING_PREFIX) for part in staging.split("/")):
             raise PolicyError("invalid_input", [_issue(staging, None, "path")])
-        if dest_path.exists():
-            raise PolicyError("policy_exists", [_issue(dest, None, "conflict")])
-        try:
-            staging_path.rename(dest_path)
-        except FileExistsError:
-            raise PolicyError("policy_exists", [_issue(dest, None, "conflict")]) from None
-        except OSError:
-            raise PolicyError("policy_io_error", [_issue(dest, None, "format")]) from None
-        self._owned.add(dest)
+        attempts = 3
+        for attempt in range(attempts):
+            # 每次尝试前重核当前路径形状、链接/替换与目标不存在，绝不复用旧解析结果发布。
+            current_staging, _ = self._resolve(staging_rel)
+            current_dest, _ = self._resolve(dest_rel, missing_ok=True)
+            if _is_link_like(current_staging) or not current_staging.exists():
+                raise PolicyError("invalid_input", [_issue(staging, None, "path")])
+            if current_dest.exists():
+                raise PolicyError("policy_exists", [_issue(dest, None, "conflict")])
+            try:
+                current_staging.rename(current_dest)
+            except FileExistsError:
+                raise PolicyError("policy_exists", [_issue(dest, None, "conflict")]) from None
+            except PermissionError as error:
+                if (
+                    os.name != "nt"
+                    or getattr(error, "winerror", None) not in {5, 32}
+                    or attempt == attempts - 1
+                ):
+                    raise PolicyError(
+                        "policy_io_error", [_issue(dest, None, "format")]
+                    ) from None
+                # 仅对 Windows 短暂删除共享冲突做有界等待；不关闭外部句柄或改权限。
+                time.sleep(0.05 if attempt == 0 else 0.1)
+                continue
+            except OSError:
+                raise PolicyError(
+                    "policy_io_error", [_issue(dest, None, "format")]
+                ) from None
+            self._owned.add(dest)
+            return
+        raise PolicyError("policy_io_error", [_issue(dest, None, "format")])
 
     def remove_owned(self, rel_path: str) -> None:
         """仅清理本次操作登记过的暂存或已发布路径，避免误删用户数据。"""

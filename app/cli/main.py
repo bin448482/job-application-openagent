@@ -27,8 +27,9 @@ from app.adapters.llm.bridge_a import ExternalAgentBridge
 from app.adapters.llm.bridge_b import LocalProcessBridge
 from app.adapters.simulated.actions import ScriptedActionExecutor
 from app.adapters.simulated.runtime import (
-    StimulusDecisionSource,
+    FixtureM3Read,
     StimulusRuntimeScene,
+    SyntheticDecisionBridge,
 )
 from app.adapters.sqlite.activity import ProfilePolicyActivity
 from app.adapters.sqlite.device_gate import SharedDeviceGate, inspect_gate_occupancy
@@ -70,6 +71,7 @@ from app.usecases import device as device_usecases
 from app.usecases import facts as facts_usecases
 from app.usecases import policy as policy_usecases
 from app.usecases import policy_eval as policy_eval_usecases
+from app.usecases.policy_eval import RepositorySnapshot
 from app.usecases import run as run_usecases
 from app.usecases import runtime as runtime_usecases
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
@@ -2460,11 +2462,28 @@ def _run_run(
             fixture_path = _resolve_project_path(args.fixture)
             spec = _load_json_object(fixture_path.read_text(encoding="utf-8"))
             scene = StimulusRuntimeScene(spec, profile_id=pack.profile_id)
-            decision = StimulusDecisionSource()
+            read = FixtureM3Read(PROJECT_ROOT)
             owner = _gate_owner()
             profile_store = SqliteProfileStore(
                 PROJECT_ROOT, pack.profile_id, create=False, now=now
             )
+            runtime_provider = args.provider or "local-process"
+            runtime_model = args.model_id or "synthetic-runtime"
+            runtime_config = args.model_config_hash or canonical_hash(
+                {"synthetic": "runtime-model-config"}
+            )
+            snapshot = RepositorySnapshot(
+                FilePolicyRepository(PROJECT_ROOT), _pack_rel
+            )
+
+            def bridge_factory(stimulus: object) -> object:
+                """为当前步骤构造合成 bridge transport，由唯一 decide 校验。"""
+                return SyntheticDecisionBridge(
+                    stimulus,  # type: ignore[arg-type]
+                    provider_id=runtime_provider,
+                    model_id=runtime_model,
+                    model_config_hash=runtime_config,
+                )
 
             def open_store() -> SqliteStore:
                 """在共享门禁已持有、profile 已打开后打开唯一运行仓储。"""
@@ -2487,12 +2506,14 @@ def _run_run(
                 owner=owner,
                 now=now,
                 scene=scene,
-                decision=decision,
+                read=read,
+                bridge_factory=bridge_factory,  # type: ignore[arg-type]
+                snapshot=snapshot,
                 open_store=open_store,
                 limits=BudgetLimits(),
-                provider_id=args.provider,
-                model_id=args.model_id,
-                model_config_hash=args.model_config_hash,
+                provider_id=runtime_provider,
+                model_id=runtime_model,
+                model_config_hash=runtime_config,
                 eval_store=FileEvalStore(PROJECT_ROOT),
                 credential_rel=args.credential,
                 process_log=log,
@@ -2512,6 +2533,23 @@ def _run_run(
             _error_payload(error.reason_code),
             2,
             error.reason_code,
+            "run",
+        )
+    except ValueError:
+        log.record(
+            stage="run",
+            operation=operation,
+            result="failed",
+            reason_code="invalid_input",
+            error_category="run",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_input"),
+            2,
+            "invalid_input",
             "run",
         )
     except Exception:

@@ -32,8 +32,10 @@
 - `test_action_cli.py`：M5 实际 CLI 组合根：五动作正例、read_only/未确认/未授权/包漂移拒绝、缺身份拒绝、not_performed 与未收敛、unknown 不重放、资格正例/同动作历史/冷却负例、confirm/abandon 对账、设备现场对账坏 XML 拒绝后再正例、人工卡与 restore unknown；read_only reconcile 在 profile/门禁/设备写入前拒绝且状态不变。
 - `test_runtime_domain.py`：M6 纯规则：安全点七条件逐个为假、默认预算与等号停止/在途超支、游标往返/重排/插入/消失/重复访问、固定优先级、未知未读一次核对、第 6 次抢占、首次观察保留与单调等待、检测间隔与双时钟漂移。
 - `test_runtime_store.py`：M6 仓储：检查点事件故障回滚、`apply_job` performed/applied、unknown 隔离与不重放、typed `job_task_key` 数据库约束、v2→v3 备份迁移保留旧动作行。
-- `test_runtime_execute.py`：M6 实际运行（合成）：职位→未读实际抢占、七安全点逐个阻断、未知未读核对、预算四类边界、第 6 次抢占、重启不回补预算、双时钟、read_only 零业务写、决策记忆命中与事实撤销失效、prepare 共享排他、apply_job 配额合同缺失零写入、坏场景拒绝。
-- `runtime_helpers.py`：M6 测试共用的临时项目、profile 准备、合成发现、场景/决策刺激、CLI 执行与只读行数辅助。
+- `test_runtime_execute.py`：M6 实际运行（合成）：经真实 M3 fixture/门禁与唯一 decide 的职位→未读抢占、七安全点证据、未知未读只核对一次、非法 intent/needs_human 不标 done、暂停恢复、预算边界/负超支、重启不回补、决策记忆命中/损坏/事实撤销、read_only 零写、缺本轮确认零外部工作、prepare 共享排他、apply 配额缺失零写入、坏路径。
+- `test_runtime_apply.py`：`perform_action` + 真实临时 `CommandIdentityStore`/执行器 wrapper 的 apply_job E2E：pre-command 拒绝零命令、performed/applied、after-click unknown/隔离不重放、本地 complete 失败 pending 且重开不重放。
+- `test_operator_docs.py`：操作手册存在/M6 命令/限制声明与隔离副本缺失控制，只是文档证据。
+- `runtime_helpers.py`：M6 临时项目、M3 read fixture 复制、动态合成发现/会话夹具、场景/决策刺激、CLI 与只读行数辅助。
 - `tests/scenarios/`、`tests/test_offline_scenarios.py` 与 `tests/private_regression/` 由独立场景协调端维护；本目录不修改、不把其输出当作本 Task 判据。
 - `action_helpers.py`：M5 测试共用的临时项目根、策略包/验收凭证、profile 匹配 seed、动作/对账脚本、合成观察与 CLI 运行辅助。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。

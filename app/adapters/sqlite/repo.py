@@ -53,6 +53,7 @@ from app.domain.models import (
     is_int,
     is_discovery_key,
     is_job_task_key,
+    is_task_key,
     is_uuid,
     is_conversation_key,
     is_nonempty_text,
@@ -859,6 +860,61 @@ class SqliteStore:
         ).fetchone()
         return None if row is None else self._batch_payload(row)
 
+    @_store_operation("resume_batch")
+    def resume_batch(self, batch_id: str, now: str) -> dict[str, object]:
+        """把 paused 批次原子转回 active，保留游标/预算/访问历史。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None or not is_uuid(batch_id):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row = self._connection.execute(
+                "SELECT * FROM job_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if row is None or str(row["profile_id"]) != self.profile_id:
+                raise StoreError("invalid_input")
+            if str(row["state"]) == "paused":
+                self._connection.execute(
+                    "UPDATE job_batches SET state = 'active', pause_reason = NULL, "
+                    "updated_at = ? WHERE batch_id = ? AND state = 'paused'",
+                    (now, batch_id),
+                )
+                self._insert_scheduler_event(
+                    batch_id=batch_id,
+                    task_key=None,
+                    event="batch_resumed",
+                    reason_code=None,
+                    created_at=now,
+                    payload={"pause_reason": row["pause_reason"]},
+                )
+                row = self._connection.execute(
+                    "SELECT * FROM job_batches WHERE batch_id = ?", (batch_id,)
+                ).fetchone()
+        return self._batch_payload(row)
+
+    @_store_operation("checkpoint_status")
+    def checkpoint_status(self, batch_id: str) -> dict[str, object]:
+        """只读返回最后检查点与已提交事件计数，供安全点证据派生。"""
+        if not is_uuid(batch_id):
+            raise StoreError("invalid_input")
+        row = self._connection.execute(
+            "SELECT last_checkpoint_id FROM job_batches WHERE batch_id = ?",
+            (batch_id,),
+        ).fetchone()
+        if row is None:
+            raise StoreError("invalid_input")
+        count = int(
+            self._connection.execute(
+                "SELECT COUNT(*) FROM scheduler_events WHERE batch_id = ? "
+                "AND event = 'checkpoint_committed'",
+                (batch_id,),
+            ).fetchone()[0]
+        )
+        return {
+            "last_checkpoint_id": row["last_checkpoint_id"],
+            "checkpoint_events": count,
+        }
+
     def _batch_payload(self, row: sqlite3.Row) -> dict[str, object]:
         """把批次行投影为固定对象；游标重新严格解析后再输出。"""
         cursor = BatchCursor.from_json(json.loads(str(row["cursor_json"])))
@@ -1341,6 +1397,51 @@ class SqliteStore:
         ).fetchone()
         return None if row is None else _draft_payload(row)
 
+    @_store_operation("find_draft_by_identity")
+    def find_draft_by_identity(
+        self,
+        *,
+        task_key: str,
+        subject_key: str,
+        input_hash: str,
+        base_hash: str,
+        pack_hash: str,
+        model_id: str,
+        model_config_hash: str,
+        facts_hash: str,
+    ) -> dict[str, object] | None:
+        """按完整当前身份查找唯一 pending_review 草稿；不跨身份复用。"""
+        if self.profile_id is None:
+            raise StoreError("invalid_input")
+        for value in (
+            input_hash,
+            base_hash,
+            pack_hash,
+            model_config_hash,
+            facts_hash,
+        ):
+            if not is_hash(value):
+                raise StoreError("invalid_input")
+        row = self._connection.execute(
+            "SELECT * FROM drafts WHERE profile_id = ? AND task_key = ? "
+            "AND subject_key = ? AND input_hash = ? AND base_hash = ? "
+            "AND pack_hash = ? AND model_id = ? AND model_config_hash = ? "
+            "AND facts_hash = ? AND state = 'pending_review' "
+            "ORDER BY created_at DESC LIMIT 1",
+            (
+                self.profile_id,
+                task_key,
+                subject_key,
+                input_hash,
+                base_hash,
+                pack_hash,
+                model_id,
+                model_config_hash,
+                facts_hash,
+            ),
+        ).fetchone()
+        return None if row is None else _draft_payload(row)
+
     @_store_operation("save_runtime_decision")
     def save_runtime_decision(
         self,
@@ -1514,6 +1615,69 @@ class SqliteStore:
             ),
         )
 
+    @_store_operation("finish_semantic_block")
+    def finish_semantic_block(
+        self, lease: Lease, now: str, reason_code: str
+    ) -> str:
+        """仅语义未决时阻塞任务并释放安全设备行；不做设备隔离。"""
+        now_dt = self._prepare_now(now)
+        if reason_code not in {"human_review_required", "invalid_decision", "unread_unverified", "identity_ambiguous", "incomplete_snapshot", "stale_snapshot", "stale_decision", "policy_changed", "input_too_large", "decision_timeout"}:
+            raise StoreError("invalid_input")
+        if not is_task_key(lease.key):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row, _device = self._match_current_lease(
+                lease, {"running"}, now_dt, allow_expired=False
+            )
+            table = "jobs" if is_job_task_key(lease.key) else "hr_discoveries"
+            key_column = "job_key" if is_job_task_key(lease.key) else "\"key\""
+            cursor = self._connection.execute(
+                f"UPDATE {table} SET state = 'blocked', reason_code = ?, "
+                "lease_owner = NULL, owner_pid = NULL, owner_host = NULL, "
+                "nonce = NULL, lease_expires_at = NULL, updated_at = ? "
+                f"WHERE app = ? AND {key_column} = ? AND state = 'running' "
+                "AND lease_owner = ? AND owner_pid = ? AND owner_host = ? "
+                "AND nonce = ? AND lease_expires_at = ?",
+                (
+                    reason_code,
+                    now,
+                    APP,
+                    lease.key,
+                    lease.owner.id,
+                    lease.owner.pid,
+                    lease.owner.host,
+                    lease.nonce,
+                    str(row["lease_expires_at"]),
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("stale_lease")
+            cursor = self._connection.execute(
+                "DELETE FROM device_lease WHERE device_key = 'primary' "
+                "AND reservation_state = 'held' AND lease_owner = ? "
+                "AND owner_pid = ? AND owner_host = ? AND nonce = ? "
+                "AND lease_expires_at = ?",
+                (
+                    lease.owner.id,
+                    lease.owner.pid,
+                    lease.owner.host,
+                    lease.nonce,
+                    str(row["lease_expires_at"]),
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("stale_lease")
+            self._insert_event(
+                app=APP,
+                subject_key=lease.key,
+                event="task_finished",
+                reason_code=reason_code,
+                created_at=now,
+                payload=_event_payload("running", "blocked", lease.nonce, None),
+            )
+        return "updated"
+
     @_store_operation("begin_action", stage="action")
     def begin_action(
         self,
@@ -1528,6 +1692,7 @@ class SqliteStore:
         reply_cooldown_seconds: int,
         ime_original: str | None,
         now: str,
+        apply_allowance: int | None = None,
     ) -> dict[str, object]:
         """原子准入并写 pending 与唯一动作键锁；额度冷却不通过则不调用执行器。"""
         now_dt = self._prepare_now(now)
@@ -1543,9 +1708,13 @@ class SqliteStore:
             if action_kind == "apply_job":
                 if task_kind != "job" or target_key != lease.key:
                     raise StoreError("invalid_action_key")
+                if type(apply_allowance) is not int or apply_allowance < 1:
+                    raise StoreError("quota_exceeded")
             else:
                 if task_kind != "discovery":
                     raise StoreError("invalid_action_key")
+                if apply_allowance is not None:
+                    raise StoreError("invalid_input")
                 _validate_conversation_key(conversation_key)
                 if action_kind != "send_text" and target_key != conversation_key:
                     raise StoreError("invalid_action_key")
@@ -1605,6 +1774,17 @@ class SqliteStore:
                     reply_cooldown_seconds=reply_cooldown_seconds,
                     conversation_key=conversation_key,
                 )
+            if action_kind == "apply_job":
+                used = int(
+                    self._connection.execute(
+                        "SELECT COUNT(*) FROM action_records WHERE app = ? "
+                        "AND task_key = ? AND action_kind = 'apply_job' "
+                        "AND outcome = 'performed'",
+                        (APP, lease.key),
+                    ).fetchone()[0]
+                )
+                if used >= int(apply_allowance):  # type: ignore[arg-type]
+                    raise StoreError("quota_exceeded")
             self._run_fault_hook("action_before_insert")
             self._connection.execute(
                 "INSERT INTO action_records (action_key, app, action_kind, task_kind, "

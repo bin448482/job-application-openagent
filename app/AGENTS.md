@@ -11,7 +11,7 @@
 - `cli/`：参数解析、配置校验、路径边界、JSON 输出与组合根；见 `cli/AGENTS.md`。
 - `domain/`：M1 纯领域模型、键/摘要算法、无 IO 校验与 M2 纯聚合/停止原因；见 `domain/AGENTS.md`。
 - `ports/`：能力端口与领域快照/租约类型；见 `ports/AGENTS.md`。
-- `usecases/`：单次用例的校验、持久化编排、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。M6 `runtime.py` 编排显式 `prepare` 与有界 `execute`，先占共享门禁、再开 profile，安全点/预算/游标/双时钟在每次新工作前检查。
+- `usecases/`：单次用例的校验、持久化编排、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。M6 `runtime.py` 编排显式 `prepare` 与有界 `execute`：先占共享门禁、再开 profile；经真实 M3 读取门禁→唯一 decide（RepositorySnapshot/ProfileSessionLease）→草稿/记忆；安全点由实际读取/pending/checkpoint/现场派生，预算保留负超支，暂停批次原子恢复。`adapters/files/policy.py` 的 promote 对 Windows 短暂句柄冲突做有界同卷 rename 重试。
 - `domain/runtime.py`：M6 纯规则：`BudgetLimits/BudgetState`、七条件 `SafePoint`、`select_task` 固定优先级、`BatchCursor` 身份恢复、`stage_preempted` 单调等待与双时钟漂移；不访问数据库/设备/模型。
 - `ports/runtime.py`：M6 场景/决策刺激与批次/职位/草稿/决策记忆最小端口。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。

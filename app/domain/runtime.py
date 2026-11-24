@@ -34,6 +34,7 @@ PAUSE_REASONS = frozenset(
         "clock_changed",
         "device_unavailable",
         "precondition_failed",
+        "semantic_block",
     }
 )
 BUDGET_FIELDS = (
@@ -165,23 +166,24 @@ class BudgetState:
         )
 
     def to_json(self) -> dict[str, int]:
-        """投影为固定四键剩余预算对象；持久化不写负数，超支由报告单列。"""
+        """投影为固定四键剩余预算对象；负值保留为在途超支证据。"""
         return {
-            "seconds": max(0, self.remaining_seconds),
-            "device_calls": max(0, self.remaining_device_calls),
-            "candidates": max(0, self.remaining_candidates),
-            "preemptions": max(0, self.remaining_preemptions),
+            "seconds": self.remaining_seconds,
+            "device_calls": self.remaining_device_calls,
+            "candidates": self.remaining_candidates,
+            "preemptions": self.remaining_preemptions,
         }
 
     @classmethod
     def from_json(cls, value: object) -> "BudgetState":
-        """严格解析四键剩余预算，拒绝缺键、额外键、bool 与负数。"""
+        """严格解析四键剩余预算；允许负值以保留在途超支。"""
         if not isinstance(value, dict) or set(value) != set(BUDGET_FIELDS):
             raise ValueError("budget is invalid")
         numbers: dict[str, int] = {}
         for name in BUDGET_FIELDS:
             item = value[name]
-            _require_nonnegative_int(name, item)
+            if type(item) is not int:
+                raise ValueError(f"{name} is invalid")
             numbers[name] = item
         return cls(
             remaining_seconds=numbers["seconds"],

@@ -33,6 +33,8 @@ def runtime_project():
     """创建带公开策略、合成凭证与 M6 场景目录的临时项目根。"""
     tmp, root = action_helpers.temp_project()
     action_helpers.init_pack(root)
+    import shutil
+    shutil.copytree(ROOT / "tests" / "fixtures" / "read", root / "tests" / "fixtures" / "read")
     (root / "tests" / "fixtures" / "runtime").mkdir(parents=True, exist_ok=True)
     return tmp, root
 
@@ -156,8 +158,29 @@ def step(
     read_status: str = "ok",
     read_reason: str | None = None,
     in_progress: bool = False,
+    read_fixture: str | None = None,
+    conversation_fixture: str | None = None,
+    job_fixture: str | None = None,
+    raw_scene: dict[str, object] | None = None,
+    bridge_response: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """构造一条严格场景刺激；缺省为可成功完成的普通步骤。"""
+    if read_fixture is None:
+        if unread or new_messages:
+            read_fixture = "tests/fixtures/read/unread.json"
+        elif jobs:
+            read_fixture = "tests/fixtures/read/job_list.json"
+        else:
+            read_fixture = "tests/fixtures/read/page.json"
+    if conversation_fixture is None and unread:
+        conversation_fixture = "tests/fixtures/read/conversation.json"
+    if raw_scene is None:
+        raw_scene = {
+            "input_text": "",
+            "confirmation_title": None,
+            "inflight_commands": 0,
+            "ime_current": "synthetic-ime-default",
+        }
     return {
         "wall_now": wall_now,
         "monotonic_ms": monotonic_ms,
@@ -177,6 +200,11 @@ def step(
         "read_status": read_status,
         "read_reason": read_reason,
         "in_progress": in_progress,
+        "read_fixture": read_fixture,
+        "conversation_fixture": conversation_fixture,
+        "job_fixture": job_fixture,
+        "raw_scene": raw_scene,
+        "bridge_response": bridge_response,
     }
 
 
@@ -285,4 +313,66 @@ def owner() -> Owner:
         id="11111111-1111-4111-8111-111111111111",
         pid=4242,
         host=canonical_hash({"host": "synthetic"}),
+    )
+
+def m3_unread_key() -> str:
+    """返回公开 M3 unread fixture 的会话键。"""
+    from app.adapters.boss.read import load_and_read_fixture
+
+    result = load_and_read_fixture(
+        ROOT / "tests/fixtures/read/unread.json",
+        "00000000-0000-4000-8000-0000000000aa",
+    )
+    if result.status != "ok":
+        raise AssertionError(result.reason_code)
+    rows = [row.conversation_key for row in result.value.rows if row.conversation_key]
+    if not rows:
+        raise AssertionError("unread fixture has no key")
+    return rows[0]
+
+
+def m3_job_keys() -> tuple[str, ...]:
+    """返回公开 M3 job_list fixture 的全部职位键。"""
+    from app.adapters.boss.read import load_and_read_fixture
+
+    result = load_and_read_fixture(
+        ROOT / "tests/fixtures/read/job_list.json",
+        "00000000-0000-4000-8000-0000000000aa",
+    )
+    if result.status != "ok":
+        raise AssertionError(result.reason_code)
+    return tuple(card.job_key for card in result.value.cards if card.job_key)
+
+
+def make_unread_fixture(root: Path, label: str) -> tuple[str, str]:
+    """复制 M3 unread/conversation fixture 并替换合成身份，返回 manifest 与会话键。"""
+    import shutil
+
+    contact = f"合成联系人{label}"
+    company = f"合成公司{label}"
+    position = f"合成职位{label}"
+    target = root / "tests" / "fixtures" / "runtime" / f"read-{label}"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("profile.json", "unread.xml", "unread.json",
+                 "conversation-0.xml", "conversation-1.xml", "conversation.json"):
+        shutil.copyfile(ROOT / "tests/fixtures/read" / name, target / name)
+    for name in ("unread.xml", "conversation-0.xml", "conversation-1.xml"):
+        path = target / name
+        text = path.read_text(encoding="utf-8")
+        text = (
+            text.replace("合成联系人甲", contact)
+            .replace("合成公司甲", company)
+            .replace("合成职位甲", position)
+        )
+        path.write_text(text, encoding="utf-8")
+    manifest = json.loads((target / "conversation.json").read_text(encoding="utf-8"))
+    manifest["conversation_context"]["contact"] = contact
+    manifest["conversation_context"]["company"] = company
+    manifest["conversation_context"]["position"] = position
+    (target / "conversation.json").write_text(
+        json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+    )
+    return (
+        f"tests/fixtures/runtime/read-{label}/unread.json",
+        conversation_key(contact, company, position),
     )

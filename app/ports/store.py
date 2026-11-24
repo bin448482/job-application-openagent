@@ -105,6 +105,7 @@ class StorePort(Protocol):
         reply_cooldown_seconds: int,
         ime_original: str | None,
         now: str,
+        apply_allowance: int | None = None,
     ) -> dict[str, object]:
         """原子校验准入、文本额度冷却并写入 pending 与唯一动作键锁。"""
         ...

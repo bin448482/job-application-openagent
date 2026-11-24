@@ -66,7 +66,7 @@ TASK_REASON_CODES = (
     | READ_UNDETERMINED_REASONS
     | EVIDENCE_NOT_PERFORMED_REASONS
     | EVIDENCE_UNKNOWN_REASONS
-    | {"candidate_superseded", "recovery_requires_reconciliation"}
+    | {"candidate_superseded", "recovery_requires_reconciliation", "invalid_decision", "human_review_required", "stale_decision", "policy_changed", "input_too_large", "decision_timeout"}
 )
 
 LEASE_SECONDS = 60

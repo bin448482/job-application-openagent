@@ -2,20 +2,25 @@
 
 from __future__ import annotations
 
+import json
 import uuid
+from pathlib import Path
 
+from app.adapters.boss.read import load_and_read_fixture
 from app.domain.models import (
     APP,
     ReadResult,
     UnreadRow,
     UnreadSignal,
     UnreadSnapshot,
+    canonical_hash,
     is_hash,
     is_uuid,
     parse_utc,
 )
 from app.domain.runtime import SafePoint, SceneCandidates, TaskCandidate
-from app.ports.runtime import DecisionStimulus, SceneStep
+from app.ports.decision import BridgeDescriptor, DecisionBridgePort
+from app.ports.runtime import DecisionStimulus, RawScene, SceneStep
 
 _FORBIDDEN_KEYS = {"expected", "oracle", "verdict", "answer"}
 _STEP_KEYS = {
@@ -37,6 +42,17 @@ _STEP_KEYS = {
     "read_status",
     "read_reason",
     "in_progress",
+    "read_fixture",
+    "conversation_fixture",
+    "job_fixture",
+    "raw_scene",
+    "bridge_response",
+}
+_RAW_SCENE_KEYS = {
+    "input_text",
+    "confirmation_title",
+    "inflight_commands",
+    "ime_current",
 }
 _SAFE_KEYS = {
     "list_returned",
@@ -115,9 +131,37 @@ class StimulusRuntimeScene:
         in_progress = value["in_progress"]
         if type(in_progress) is not bool:
             raise ValueError("runtime in-progress is invalid")
-        decision = self._decision(value["decision"])
+        decision = self._decision(value.get("decision")) or self._bridge_decision(
+            value.get("bridge_response")
+        )
+        raw_scene = self._raw_scene(value.get("raw_scene"))
+        read_fixture = value.get("read_fixture")
+        if read_fixture is not None:
+            if not isinstance(read_fixture, str) or not read_fixture:
+                raise ValueError("runtime read fixture is invalid")
+        else:
+            if value["jobs"]:
+                read_fixture = "tests/fixtures/read/job_list.json"
+            elif value["unread"] or value["new_messages"]:
+                read_fixture = "tests/fixtures/read/unread.json"
+            else:
+                read_fixture = "tests/fixtures/read/page.json"
+        conversation_fixture = value.get("conversation_fixture")
+        if conversation_fixture is None and value["unread"]:
+            conversation_fixture = "tests/fixtures/read/conversation.json"
+        job_fixture = value.get("job_fixture")
+        for name, item in (
+            ("conversation_fixture", conversation_fixture),
+            ("job_fixture", job_fixture),
+        ):
+            if item is not None and (not isinstance(item, str) or not item):
+                raise ValueError(f"{name} is invalid")
         read_result = self._read_result(value, wall_now)
         return SceneStep(
+            read_fixture=read_fixture,
+            conversation_fixture=conversation_fixture,
+            job_fixture=job_fixture,
+            raw_scene=raw_scene,
             wall_now=wall_now,
             monotonic_ms=value["monotonic_ms"],  # type: ignore[arg-type]
             elapsed_seconds=value["elapsed_seconds"],  # type: ignore[arg-type]
@@ -132,35 +176,77 @@ class StimulusRuntimeScene:
             in_progress=in_progress,
         )
 
-    def _decision(self, value: object) -> DecisionStimulus | None:
-        """解析可选决策刺激；只接受枚举/摘要/本地回复。"""
+    def _raw_scene(self, value: object) -> RawScene:
+        """解析原始现场刺激；缺省是空输入、无确认框、零在途命令。"""
+        if value is None:
+            return RawScene("", None, 0)
+        if not isinstance(value, dict) or set(value) != _RAW_SCENE_KEYS:
+            raise ValueError("runtime raw scene is invalid")
+        return RawScene(
+            input_text=value["input_text"],  # type: ignore[arg-type]
+            confirmation_title=value["confirmation_title"],  # type: ignore[arg-type]
+            inflight_commands=value["inflight_commands"],  # type: ignore[arg-type]
+            ime_current=value["ime_current"],  # type: ignore[arg-type]
+        )
+
+    def _bridge_decision(self, value: object) -> DecisionStimulus | None:
+        """解析合成 bridge 响应字段；任务/nonce/摘要由 echo 回填。"""
         if value is None:
             return None
-        if not isinstance(value, dict) or set(value) != {
+        if not isinstance(value, dict) or set(value) - {
+            "intent",
+            "sub_intents",
+            "reply",
+            "escalate",
+        }:
+            raise ValueError("runtime bridge response is invalid")
+        if not {"intent", "sub_intents", "reply"} <= set(value):
+            raise ValueError("runtime bridge response is invalid")
+        sub_intents = value["sub_intents"]
+        if not isinstance(sub_intents, list):
+            raise ValueError("runtime bridge response is invalid")
+        return DecisionStimulus(
+            intent=str(value["intent"]),
+            sub_intents=tuple(sub_intents),
+            reply=str(value["reply"]),
+            escalate=None if value.get("escalate") is None else str(value["escalate"]),
+        )
+
+    def _decision(self, value: object) -> DecisionStimulus | None:
+        """解析旧版决策刺激；只当 bridge 响应字段，不当作已校验 Decision。"""
+        if value is None:
+            return None
+        if not isinstance(value, dict) or set(value) - {
             "intent",
             "sub_intents",
             "policy_tier",
             "reply",
             "evidence_hash",
+            "escalate",
         }:
+            raise ValueError("runtime decision is invalid")
+        if not {
+            "intent",
+            "sub_intents",
+            "policy_tier",
+            "reply",
+            "evidence_hash",
+        } <= set(value):
             raise ValueError("runtime decision is invalid")
         if (
             not isinstance(value["intent"], str)
-            or not value["intent"]
             or not isinstance(value["sub_intents"], list)
             or any(not isinstance(item, str) or not item for item in value["sub_intents"])
             or value["policy_tier"] not in {"A", "B", "C"}
             or not isinstance(value["reply"], str)
-            or not value["reply"]
             or not is_hash(value["evidence_hash"])
         ):
             raise ValueError("runtime decision is invalid")
         return DecisionStimulus(
             intent=str(value["intent"]),
             sub_intents=tuple(value["sub_intents"]),
-            policy_tier=str(value["policy_tier"]),
             reply=str(value["reply"]),
-            evidence_hash=str(value["evidence_hash"]),
+            escalate=None if value.get("escalate") is None else str(value["escalate"]),
         )
 
     def _read_result(self, value: dict[str, object], wall_now: str) -> ReadResult:
@@ -258,3 +344,87 @@ class StimulusDecisionSource:
         value = self._pending
         self._pending = None
         return value
+
+class FixtureM3Read:
+    """按项目内相对 M3 manifest 调用真实解析/门禁，供运行组合根注入。"""
+
+    def __init__(self, project_root: Path) -> None:
+        """保存项目根；路径解析拒绝绝对路径与越界。"""
+        self._root = Path(project_root).resolve()
+
+    def read(self, relative: str) -> ReadResult:
+        """读取并解析 M3 fixture；路径/格式错误映射固定失败。"""
+        if not isinstance(relative, str) or not relative:
+            raise ValueError("read fixture is invalid")
+        candidate = Path(relative)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise ValueError("read fixture is invalid")
+        path = (self._root / candidate).resolve()
+        if self._root not in path.parents and path != self._root:
+            raise ValueError("read fixture is invalid")
+        if not path.is_file():
+            raise ValueError("read fixture is invalid")
+        return load_and_read_fixture(path, str(uuid.uuid4()))
+
+
+class SyntheticDecisionBridge:
+    """返回一条合成 bridge transport 响应，由唯一 decide 完成全部校验。"""
+
+    def __init__(
+        self,
+        stimulus: DecisionStimulus | None,
+        *,
+        provider_id: str,
+        model_id: str,
+        model_config_hash: str,
+    ) -> None:
+        """保存响应与固定描述符；不读取凭据或网络。"""
+        if not isinstance(provider_id, str) or not provider_id:
+            raise ValueError("provider is invalid")
+        if not isinstance(model_id, str) or not model_id:
+            raise ValueError("model is invalid")
+        if not is_hash(model_config_hash):
+            raise ValueError("model config is invalid")
+        self._stimulus = stimulus
+        self._descriptor = BridgeDescriptor(
+            provider_id=provider_id,
+            model_id=model_id,
+            model_config_hash=model_config_hash,
+            bridge="bridge_b",
+            simulated=True,
+        )
+
+    def descriptor(self) -> BridgeDescriptor:
+        """返回合成桥身份，供 decide 审计。"""
+        return self._descriptor
+
+    def complete(
+        self,
+        *,
+        system_message: str,
+        developer_message: str,
+        user_message: str,
+        echo: dict[str, object],
+    ) -> str:
+        """按固定 echo 回填 task/nonce/input_hash 并返回原始 JSON 文本。"""
+        del system_message, developer_message
+        if self._stimulus is None:
+            raise ValueError("decision stimulus is missing")
+        try:
+            payload = json.loads(user_message)
+        except (TypeError, ValueError):
+            payload = {}
+        inbound = payload.get("inbound") if isinstance(payload, dict) else None
+        evidence = inbound[:2] if isinstance(inbound, str) and inbound else "ok"
+        response = {
+            "schema_version": 1,
+            "task_id": echo["task_id"],
+            "nonce": echo["nonce"],
+            "input_hash": echo["input_hash"],
+            "intent": self._stimulus.intent,
+            "sub_intents": list(self._stimulus.sub_intents),
+            "reply": self._stimulus.reply,
+            "evidence": evidence,
+            "escalate": self._stimulus.escalate,
+        }
+        return json.dumps(response, ensure_ascii=False)

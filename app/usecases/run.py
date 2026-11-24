@@ -98,6 +98,8 @@ def check_preflight(
         or pending["blocked"]
         or pending["device_lease"]
         or pending.get("actions")
+        or pending.get("jobs")
+        or pending.get("batches")
     ):
         try:
             gate.release(now=now, converged=False)

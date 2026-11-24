@@ -83,6 +83,63 @@ ACTION_REASON_CODES = frozenset(
 
 
 @dataclass(frozen=True)
+class ApplyQuotaContract:
+    """表示第六动作独立的显式配额与授权合同，不复用文本日额度。"""
+
+    profile_id: str
+    task_key: str
+    action_key: str
+    allowance: int
+    used: int
+    confirmed: bool
+    nonce: str
+    expires_at: str
+
+    def __post_init__(self) -> None:
+        """校验 profile/task/动作键、非默认配额、确认、nonce 与期限。"""
+        if not is_profile_id(self.profile_id):
+            raise ActionError("invalid_authorization")
+        if not isinstance(self.task_key, str) or not self.task_key.startswith(
+            f"{APP}:job:"
+        ):
+            raise ActionError("invalid_authorization")
+        if not is_action_key("apply_job", self.action_key):
+            raise ActionError("invalid_authorization")
+        if type(self.allowance) is not int or self.allowance < 1:
+            raise ActionError("invalid_authorization")
+        if type(self.used) is not int or self.used < 0 or self.used >= self.allowance:
+            raise ActionError("quota_exceeded")
+        if type(self.confirmed) is not bool or not self.confirmed:
+            raise ActionError("authorization_required")
+        if not is_uuid(self.nonce):
+            raise ActionError("invalid_authorization")
+        parse_utc(self.expires_at)
+
+
+def authorize_apply(
+    contract: ApplyQuotaContract,
+    *,
+    profile_id: str,
+    task_key: str,
+    action_key: str,
+    now: str,
+) -> None:
+    """复核独立 apply 合同；未定义/过期/错任务/错动作均受控拒绝。"""
+    if not isinstance(contract, ApplyQuotaContract):
+        raise ActionError("apply_quota_contract_missing")
+    if (
+        contract.profile_id != profile_id
+        or contract.task_key != task_key
+        or contract.action_key != action_key
+    ):
+        raise ActionError("authorization_required")
+    if parse_utc(now) >= parse_utc(contract.expires_at):
+        raise ActionError("authorization_expired")
+    if not contract.confirmed or contract.used >= contract.allowance:
+        raise ActionError("quota_exceeded")
+
+
+@dataclass(frozen=True)
 class ActionIdentity:
     """表示与持久任务会话绑定的完整姓名/公司/职位身份，不接受任意标签袋。"""
 

@@ -165,6 +165,7 @@ class RuntimeStoreTests(unittest.TestCase):
             reply_cooldown_seconds=0,
             ime_original=None,
             now=now_utc(),
+            apply_allowance=1,
         )
         outcome = derive_action_outcome(apply_observation(action_key))
         self.assertEqual(outcome.evidence.outcome, "performed")
@@ -209,6 +210,7 @@ class RuntimeStoreTests(unittest.TestCase):
             reply_cooldown_seconds=0,
             ime_original=None,
             now=now_utc(),
+            apply_allowance=1,
         )
         outcome = derive_action_outcome(apply_observation(action_key, outcome="unknown"))
         self.assertEqual(outcome.evidence.outcome, "unknown")

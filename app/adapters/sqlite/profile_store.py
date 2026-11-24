@@ -312,6 +312,22 @@ class SqliteProfileStore:
                 )
             except sqlite3.OperationalError:
                 actions = 0
+            try:
+                jobs = int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM jobs WHERE state IN "
+                        "('leased', 'running', 'blocked')"
+                    ).fetchone()[0]
+                )
+                batches = int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM job_batches WHERE state IN "
+                        "('active', 'paused')"
+                    ).fetchone()[0]
+                )
+            except sqlite3.OperationalError:
+                jobs = 0
+                batches = 0
         except sqlite3.Error:
             raise ProfileError("profile_io_error") from None
         return {
@@ -320,6 +336,8 @@ class SqliteProfileStore:
             "blocked": counts["blocked"],
             "device_lease": device_rows,
             "actions": actions,
+            "jobs": jobs,
+            "batches": batches,
         }
 
     def _insert_event(

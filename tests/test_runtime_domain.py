@@ -151,6 +151,14 @@ class BudgetTests(unittest.TestCase):
         overrun = state.spend_device_calls(2)
         self.assertEqual(overrun.overrun(BudgetLimits()), ("device_calls",))
 
+    def test_overrun_is_preserved_and_reported(self) -> None:
+        """在途耗时/调用超支保留负值并可持久化，不静默钳零。"""
+        state = BudgetState.initial(BudgetLimits()).spend_seconds(950)
+        self.assertEqual(state.overrun(BudgetLimits()), ("seconds",))
+        restored = BudgetState.from_json(state.to_json())
+        self.assertEqual(restored.remaining_seconds, -50)
+        self.assertEqual(restored.overrun(BudgetLimits()), ("seconds",))
+
     def test_cursor_round_trip_preserves_remaining_budget(self) -> None:
         """游标 JSON 严格往返，不因重启回补预算。"""
         cursor = BatchCursor.initial(BATCH, BudgetLimits()).visit_job(JOB_A)
@@ -162,8 +170,9 @@ class BudgetTests(unittest.TestCase):
         """坏游标与缺失/额外键不被默认采纳。"""
         payload = BatchCursor.initial(BATCH, BudgetLimits()).to_json()
         payload["remaining_budget"]["seconds"] = -1  # type: ignore[index]
-        with self.assertRaises(ValueError):
-            BatchCursor.from_json(payload)
+        restored = BatchCursor.from_json(payload)
+        self.assertEqual(restored.budget.remaining_seconds, -1)
+        self.assertEqual(restored.budget.overrun(BudgetLimits()), ("seconds",))
         payload = BatchCursor.initial(BATCH, BudgetLimits()).to_json()
         payload["index"] = 3
         with self.assertRaises(ValueError):

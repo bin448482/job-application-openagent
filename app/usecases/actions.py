@@ -13,8 +13,10 @@ from app.domain.actions import (
     ActionIdentity,
     ActionObservation,
     ActionOutcome,
+    ApplyQuotaContract,
     ReconciliationObservation,
     authorize,
+    authorize_apply,
     derive_action_outcome,
     human_card,
     is_action_key,
@@ -166,7 +168,7 @@ def perform_action(
     conversation_key: str,
     body_text: str | None,
     attachment_name: str | None,
-    identity: ActionIdentity,
+    identity: ActionIdentity | None,
     anchor_label: str | None,
     ime_component: str | None,
     tap_points: tuple[tuple[int, int], ...],
@@ -177,14 +179,25 @@ def perform_action(
     profile_db_path: str,
     executor: DeviceActionPort,
     now: str,
+    apply_quota: ApplyQuotaContract | None = None,
     process_log: ProcessLog | None = None,
     clock: Callable[[], str] | None = None,
     reload_snapshot: Callable[[], dict[str, str]] | None = None,
 ) -> dict[str, object]:
     """在共享占用与运行中租约下原子 pending、执行一次并提交三态证据。"""
-    if action_kind == "apply_job":
-        raise ActionError("apply_quota_contract_missing")
     active_clock = clock if clock is not None else utc_now
+    if action_kind == "apply_job":
+        if apply_quota is None:
+            raise ActionError("apply_quota_contract_missing")
+        authorize_apply(
+            apply_quota,
+            profile_id=authorization.profile_id,
+            task_key=lease.key,
+            action_key=action_key,
+            now=now,
+        )
+    elif apply_quota is not None:
+        raise ActionError("invalid_authorization")
     current = {
         "base_hash": current_base_hash,
         "pack_hash": current_pack_hash,
@@ -226,6 +239,15 @@ def perform_action(
             profile_db_path=profile_db_path,
         ):
             raise ActionError("authorization_required")
+        if action_kind == "apply_job":
+            assert apply_quota is not None
+            authorize_apply(
+                apply_quota,
+                profile_id=authorization.profile_id,
+                task_key=lease.key,
+                action_key=action_key,
+                now=current_now,
+            )
         if not store.require_running(lease, now=current_now):
             raise ActionError("authorization_required")
         gate.verify(now=current_now)
@@ -243,19 +265,25 @@ def perform_action(
         if not is_action_key(action_kind, action_key):
             raise ActionError("invalid_action")
         validate_action_target(action_kind, action_key, target_key)
-        if (
-            not isinstance(identity, ActionIdentity)
-            or identity.conversation_key() != conversation_key
-        ):
-            raise ActionError("precondition_failed")
         persisted_conversation = store.task_conversation(lease, now=now)
-        if (
-            persisted_conversation is None
-            or persisted_conversation != conversation_key
-        ):
-            raise ActionError("precondition_failed")
-        if action_kind != "send_text" and target_key != conversation_key:
-            raise ActionError("invalid_action")
+        if action_kind == "apply_job":
+            if target_key != lease.key:
+                raise ActionError("invalid_action")
+            if persisted_conversation != conversation_key:
+                raise ActionError("precondition_failed")
+        else:
+            if (
+                not isinstance(identity, ActionIdentity)
+                or identity.conversation_key() != conversation_key
+            ):
+                raise ActionError("precondition_failed")
+            if (
+                persisted_conversation is None
+                or persisted_conversation != conversation_key
+            ):
+                raise ActionError("precondition_failed")
+            if action_kind != "send_text" and target_key != conversation_key:
+                raise ActionError("invalid_action")
         guard()
     except ActionError as error:
         _log(
@@ -284,13 +312,13 @@ def perform_action(
         conversation_key=conversation_key,
         body_text=body_text,
         attachment_name=attachment_name,
-        target_label=identity.contact,
+        target_label=identity.contact if identity is not None else None,
         anchor_label=anchor_label,
         ime_component=ime_component,
         ime_original=None,
         irreversible_tap_index=len(tap_points) - 1 if tap_points else 0,
         tap_points=tap_points,
-        identity_labels=identity.labels(),
+        identity_labels=identity.labels() if identity is not None else (),
     )
 
     _log(process_log, "action_admit", "started")
@@ -307,6 +335,7 @@ def perform_action(
             reply_cooldown_seconds=reply_cooldown_seconds,
             ime_original=None,
             now=now,
+            apply_allowance=apply_quota.allowance if apply_quota is not None else None,
         )
     except Exception as error:
         reason = getattr(error, "reason_code", "store_io_error")

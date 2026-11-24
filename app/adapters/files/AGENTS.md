@@ -17,7 +17,7 @@
 1. 所有载荷和 base 以 `read_bytes().decode("utf-8", strict)` 读取，保留 LF/CRLF 原字节，不做换行转换；拒绝 BOM、NUL、非法 UTF-8、链接与非普通文件。
 2. `pack.toml` ≤16 KiB，每份 md ≤32 KiB，四载荷合计 ≤64 KiB；base 与 preview 案例有独立大小上限。多余文件、子目录、缺失载荷或只有一份指南均拒绝。
 3. 暂存目录固定在 `prompts/local` 或 `prompts/local/history` 下，名称以 `.staging-` 开头，活动包发现器与 history 列表不接纳；`write_text_exact` 只写暂存路径且不覆盖。
-4. `promote` 只做同卷改名，目标存在即 `policy_exists`；不提供覆盖、复制到任意目录或跨卷回退。
+4. `promote` 只做同卷改名，目标存在即 `policy_exists`；不提供覆盖、复制到任意目录或跨卷回退。Windows 短暂句柄占用时仅对 `PermissionError`（winerror 5/32）做总计 3 次、50/100ms 的有界等待重试，每次重核暂存/目标/链接与暂存前缀；其它 `errno`/非 Windows/其它 OSError 立即受控拒绝，耗尽仍 `policy_io_error`，不关闭或干扰外部句柄、不改权限、不发布半包。
 5. `remove_owned` 只删除本次适配器实例登记过的暂存/发布路径，防止测试或调用方误删用户数据。
 6. preview 案例从项目根固定读取 `tests/fixtures/policy-preview/<case>.json`；未知或越界 ID 返回 `unknown_case`，不搜索其它目录、不读取答案或私有留出。
 7. `list_pack_dirs`/`list_history_dirs` 只枚举直接项元数据；链接/junction 候选保留路径交给上层标 `valid=false`，不跟随目标、不递归。活动包/快照/指南读取共用领域路径形状与同一正文读取核心。
@@ -25,7 +25,7 @@
 
 ## 四、测试
 
-`tests/test_policy_store.py` 覆盖路径越界、history/暂存拒绝、额外/缺失文件、单指南、BOM/非法 UTF-8/NUL、三类大小、CRLF 原字节、链接（mock）、preview 未知 ID、list 跳过 history/dot，以及 init/snapshot/restore 的暂存清理与不覆盖；`tests/test_policy_eval.py` 覆盖有界套件读取、报告原子发布/失败清理、真实 Windows junction 拒绝且目标不变、套件/留出登记/准入与无上传合同；`tests/test_m4c_closed_loop.py` 覆盖凭证读取/摘要变化拒绝与真实文件快照重核。
+`tests/test_policy_store.py` 覆盖路径越界、history/暂存拒绝、额外/缺失文件、单指南、BOM/非法 UTF-8/NUL、三类大小、CRLF 原字节、链接（mock）、preview 未知 ID、list 跳过 history/dot，以及 init/snapshot/restore 的暂存清理与不覆盖；新增真实 Windows 非共享删除目录句柄的短暂释放正控与持续占用负控（3 次/50+100ms 上限）；`tests/test_policy_eval.py` 覆盖有界套件读取、报告原子发布/失败清理、真实 Windows junction 拒绝且目标不变、套件/留出登记/准入与无上传合同；`tests/test_m4c_closed_loop.py` 覆盖凭证读取/摘要变化拒绝与真实文件快照重核。
 
 ## 五、维护要求
 

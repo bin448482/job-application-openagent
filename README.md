@@ -185,7 +185,7 @@ M6 把单条发现/职位作为任务，职位批次只保存身份游标与预�
 
 profile 库新增最小 v3 表 `jobs/job_batches/drafts/runtime_decisions/scheduler_events`，并备份后重建 `action_records` 以支持第六动作 `apply_job` 与职位任务；类型化外键保证动作只引用对应任务表。运行时决策记忆只保存摘要/枚举，绑定 profile/subject/input/base/pack/model/model_config/facts；命中仍重读事实、验收与运行租约，不携带授权。草稿是可重审本机件，不自动 apply/send。
 
-`run prepare` 显式在共享门禁排他下准备/迁移 profile；`run execute` 整轮持有共享门禁，read_only 只读可见观察且零业务写/导航/模型，draft_only 走同一调度/存储/读取/决策流程。当前 `execute` 只接纯合成场景刺激，不含 expected/oracle；真实 M3/设备/模型入口保持未标定拒绝。`apply_job` 的规范键、`Evidence.effect=applied`、pending/授权/命令账本/无重放路径已接同一权威，但生产 `action perform` 因缺 apply 配额合同固定 `apply_quota_contract_missing` 拒绝。真实设备、模型、`apply_job` 配额、M7 清理与 M8 灰度未验收。
+`run prepare` 显式在共享门禁排他下准备/迁移 profile；`run execute` 整轮持有共享门禁，经真实 M3 fixture 解析/门禁、`RepositorySnapshot`、`ProfileSessionLease` 与唯一 `decide` 运行；合成 bridge 只提供原始响应，不含 expected/oracle。read_only 只读可见观察且零业务写/导航/模型；draft_only 的非法决策被契约拒绝，needs_human/uncertain 保持 blocked 并保存待审草稿。`apply_job` 在显式独立配额合同下走 perform_action/CommandIdentityStore/执行器三态与无重放；生产缺合同仍固定 `apply_quota_contract_missing` 拒绝。策略包本机发布对 Windows 短暂句柄冲突做有界同卷 rename 重试，耗尽仍受控失败。真实设备、模型、apply 配额、M7 清理与 M8 灰度未验收。
 
 ## 开发环境
 
