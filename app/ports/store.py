@@ -112,6 +112,17 @@ class StorePort(Protocol):
         """在同一事务提交动作证据、任务终态、设备行与审计事件。"""
         ...
 
+    def freeze_attempted_action(
+        self,
+        lease: Lease,
+        *,
+        action_key: str,
+        reason_code: str,
+        now: str,
+    ) -> dict[str, object]:
+        """执行后条件失效时按原身份冻结 unknown/blocked 并保留隔离。"""
+        ...
+
     def reconcile_action(
         self,
         *,

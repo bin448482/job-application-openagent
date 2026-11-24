@@ -257,6 +257,7 @@ class SharedDeviceGate:
                     or Path(str(row["profile_db_path"])).resolve()
                     != Path(self._profile_db_path)
                     or row["state"] not in {"held", "quarantined"}
+                    or row["owner_host"] != owner.host
                 ):
                     raise DeviceGateError("device_gate_mismatch")
                 try:

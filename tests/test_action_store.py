@@ -731,6 +731,31 @@ class ActionStoreTests(unittest.TestCase):
         finally:
             other_store.close()
 
+    def test_legit_renewal_allows_completion_with_captured_lease(self) -> None:
+        """真实续租后旧捕获 Lease 不阻断完成，使用同一行当前截止。"""
+        lease, conversation = self._run_task()
+        action_key = self._begin(lease, conversation, "renewed")
+        self.clock.advance(20)
+        renewed = self.store.renew(lease, self.clock.now())
+        self.assertNotEqual(renewed.expires_at, lease.expires_at)
+        current = self.store.current_lease_expiry(
+            lease, now=self.clock.now()
+        )
+        self.assertEqual(current, renewed.expires_at)
+        result = self.store.complete_action(
+            lease,
+            action_key=action_key,
+            outcome=derive_action_outcome(
+                _text_observation(action_key, self.clock.now())
+            ),
+            now=self.clock.now(),
+        )
+        self.assertEqual(result["state"], "performed")
+        self.assertTrue(result["gate_converged"])
+        self.assertIsNone(
+            m1_helpers.fetch_one(self.path, "SELECT * FROM device_lease")
+        )
+
     def test_confirm_performed_counts_once(self) -> None:
         """unknown 文本经人工 confirm_performed 只计一次成功额度。"""
         lease, conversation = self._run_task()
@@ -888,6 +913,33 @@ class ActionStoreTests(unittest.TestCase):
             )
         self.assertEqual(caught.exception.reason_code, "recovery_not_confirmed")
         self.assertEqual(self.store.get_action(action_key)["state"], "unknown")
+
+
+class CommandStopCheckerTests(unittest.TestCase):
+    """验证生产命令族停止检查器不会用单 PID 猜测解锁。"""
+
+    def test_parent_and_children_must_all_be_stopped(self) -> None:
+        """父停止但子进程活着/未知均不返回 stopped。"""
+        from unittest.mock import patch
+
+        from app.adapters.sqlite import repo as repo_module
+
+        with patch.object(repo_module, "default_stop_checker", return_value="alive"):
+            self.assertEqual(repo_module.default_command_stop_checker(1), "alive")
+        with patch.object(repo_module, "default_stop_checker", return_value="unknown"):
+            self.assertEqual(repo_module.default_command_stop_checker(1), "unknown")
+        with patch.object(repo_module, "default_stop_checker", return_value="stopped"), patch.object(
+            repo_module, "_child_processes", return_value=[2]
+        ):
+            self.assertEqual(repo_module.default_command_stop_checker(1), "alive")
+        with patch.object(repo_module, "default_stop_checker", return_value="stopped"), patch.object(
+            repo_module, "_child_processes", return_value=None
+        ):
+            self.assertEqual(repo_module.default_command_stop_checker(1), "unknown")
+        with patch.object(repo_module, "default_stop_checker", return_value="stopped"), patch.object(
+            repo_module, "_child_processes", return_value=[]
+        ):
+            self.assertEqual(repo_module.default_command_stop_checker(1), "stopped")
 
 
 class ProfileMigrationTests(unittest.TestCase):

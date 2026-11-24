@@ -418,24 +418,12 @@ def derive_action_outcome(observation: ActionObservation) -> ActionOutcome:
         else:
             evidence = _evidence(observation, "performed", effect, None)
 
-    pause = (
-        evidence.outcome != "performed"
-        and (
-            not observation.scene_settled
-            or observation.confirmation_open
-            or not observation.input_box_empty
-            or not observation.command_quiet
-            or not ime_restored
-        )
-    ) or (
-        evidence.outcome == "performed"
-        and (
-            not observation.scene_settled
-            or observation.confirmation_open
-            or not observation.input_box_empty
-            or not observation.command_quiet
-            or not ime_restored
-        )
+    pause = not (
+        observation.scene_settled
+        and observation.input_box_empty
+        and observation.command_quiet
+        and ime_restored
+        and not observation.confirmation_open
     )
     return ActionOutcome(
         evidence=evidence,
@@ -528,9 +516,17 @@ def authorize(
     base_hash: str,
     pack_hash: str,
     now: str,
+    acceptance_base_hash: str | None = None,
+    acceptance_pack_hash: str | None = None,
 ) -> None:
-    """复核本轮授权是否恰好覆盖该动作、当前摘要与未过期期限。"""
+    """复核本轮授权是否恰好覆盖该动作、当前四摘要与未过期期限。"""
     validate_authorization(authorization)
+    current_acceptance_base = (
+        base_hash if acceptance_base_hash is None else acceptance_base_hash
+    )
+    current_acceptance_pack = (
+        pack_hash if acceptance_pack_hash is None else acceptance_pack_hash
+    )
     now_dt = parse_utc(now)
     checks = (
         authorization.confirmed,
@@ -540,8 +536,8 @@ def authorize(
         authorization.profile_id == profile_id,
         authorization.base_hash == base_hash,
         authorization.pack_hash == pack_hash,
-        authorization.acceptance_base_hash == base_hash,
-        authorization.acceptance_pack_hash == pack_hash,
+        authorization.acceptance_base_hash == current_acceptance_base,
+        authorization.acceptance_pack_hash == current_acceptance_pack,
         now_dt < parse_utc(authorization.expires_at),
     )
     if not all(checks):

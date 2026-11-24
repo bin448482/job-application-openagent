@@ -104,6 +104,132 @@ def default_stop_checker(pid: int) -> str:
     return "alive"
 
 
+def default_command_stop_checker(pid: int) -> str:
+    """检查原父进程及其直接子进程是否都已停止；无法证明时返回 unknown。"""
+    state = default_stop_checker(pid)
+    if state != "stopped":
+        return state
+    children = _child_processes(pid)
+    if children is None:
+        return "unknown"
+    return "alive" if children else "stopped"
+
+
+def _child_processes(pid: int) -> list[int] | None:
+    """返回直接子进程 PID；无法枚举时返回 None。"""
+    if os.name == "nt":
+        return _windows_children(pid)
+    try:
+        children: list[int] = []
+        for name in os.listdir("/proc"):
+            if not name.isdigit():
+                continue
+            try:
+                stat = Path(f"/proc/{name}/stat").read_text(encoding="utf-8")
+            except OSError:
+                continue
+            parts = stat.rsplit(")", 1)
+            if len(parts) != 2:
+                continue
+            fields = parts[1].split()
+            if len(fields) > 1 and fields[1].isdigit() and int(fields[1]) == pid:
+                children.append(int(name))
+        return children
+    except OSError:
+        return None
+
+
+def _windows_children(pid: int) -> list[int] | None:
+    """用 Toolhelp32 快照枚举直接子进程；失败返回 None。"""
+    from ctypes import wintypes
+
+    class ProcessEntry32(ctypes.Structure):
+        """Toolhelp PROCESSENTRY32W 的固定字段。"""
+
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessEntry32),
+    )
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessEntry32),
+    )
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
+    if not snapshot:
+        return None
+    invalid_handle = wintypes.HANDLE(-1).value
+    if snapshot == invalid_handle:
+        return None
+    result: list[int] = []
+    entry = ProcessEntry32()
+    entry.dwSize = ctypes.sizeof(ProcessEntry32)
+    try:
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
+            return result
+        while True:
+            if int(entry.th32ParentProcessID) == pid:
+                result.append(int(entry.th32ProcessID))
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                break
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return result
+    """通过 OpenProcess 与 WaitForSingleObject 区分已停止、仍活动与未知。"""
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    process_query_limited_information = 0x1000
+    synchronize = 0x00100000
+    wait_object_0 = 0x00000000
+    wait_timeout = 0x00000102
+    error_invalid_parameter = 87
+    handle = kernel32.OpenProcess(
+        process_query_limited_information | synchronize, False, int(pid)
+    )
+    if not handle:
+        return (
+            "stopped"
+            if ctypes.get_last_error() == error_invalid_parameter
+            else "unknown"
+        )
+    try:
+        result = kernel32.WaitForSingleObject(handle, 0)
+    finally:
+        kernel32.CloseHandle(handle)
+    if result == wait_object_0:
+        return "stopped"
+    if result == wait_timeout:
+        return "alive"
+    return "unknown"
+
+
 def _windows_process_state(pid: int) -> str:
     """通过 OpenProcess 与 WaitForSingleObject 区分已停止、仍活动与未知。"""
     from ctypes import wintypes
@@ -433,7 +559,7 @@ class SqliteStore:
         self._check_clock(now_dt)
 
         with self._write():
-            row, _ = self._match_lease(
+            row, _ = self._match_current_lease(
                 lease, {"running"}, now_dt, allow_expired=False
             )
             self._run_fault_hook("finish_before_task_update")
@@ -589,105 +715,41 @@ class SqliteStore:
 
     @_store_operation("current_lease_expiry")
     def current_lease_expiry(self, lease: Lease, *, now: str) -> str | None:
-        """只读重核任务/设备租约与取得时 Lease/Owner/nonce/到期；不匹配返回 None。"""
+        """只读返回当前真实截止；身份/nonce 匹配且未过期，否则 None。"""
         if not isinstance(lease, Lease):
             raise StoreError("invalid_input")
         try:
-            validate_lease(lease)
             now_dt = parse_utc(now)
         except ValueError:
             raise StoreError("invalid_input") from None
-        nonce = lease.nonce
         try:
-            row = self._connection.execute(
-                "SELECT d.app AS task_app, d.key AS task_key, "
-                "d.lease_owner AS task_owner, d.owner_pid AS task_pid, "
-                "d.owner_host AS task_host, d.nonce AS task_nonce, "
-                "d.lease_expires_at AS task_expiry, d.state AS task_state, "
-                "dl.lease_owner AS dev_owner, dl.owner_pid AS dev_pid, "
-                "dl.owner_host AS dev_host, dl.nonce AS dev_nonce, "
-                "dl.lease_expires_at AS dev_expiry, "
-                "dl.reservation_state AS dev_state "
-                "FROM hr_discoveries d JOIN device_lease dl ON d.nonce = dl.nonce "
-                "WHERE d.app = ? AND d.key = ? AND d.nonce = ? "
-                "AND d.state IN ('leased', 'running')",
-                (lease.app, lease.key, nonce),
-            ).fetchone()
-        except sqlite3.OperationalError as error:
-            raise map_locked_error(error) from None
-        except sqlite3.Error:
-            raise StoreError("store_io_error") from None
-        if row is None:
-            return None
-        try:
-            task_expiry = str(row["task_expiry"])
-            device_expiry = str(row["dev_expiry"])
-            valid = (
-                row["dev_state"] == "held"
-                and row["task_app"] == lease.app
-                and row["task_key"] == lease.key
-                and row["task_nonce"] == nonce
-                and row["dev_nonce"] == nonce
-                and row["task_owner"] == lease.owner.id
-                and row["dev_owner"] == lease.owner.id
-                and int(row["task_pid"]) == lease.owner.pid
-                and int(row["dev_pid"]) == lease.owner.pid
-                and row["task_host"] == lease.owner.host
-                and row["dev_host"] == lease.owner.host
-                and task_expiry == device_expiry
-                and now_dt < parse_utc(task_expiry)
-                and now_dt < parse_utc(device_expiry)
+            row, _device = self._match_current_lease(
+                lease, {"leased", "running"}, now_dt, allow_expired=False
             )
-        except (TypeError, ValueError):
-            return None
-        return task_expiry if valid else None
+        except StoreError as error:
+            if error.reason_code in {"stale_lease", "invalid_input"}:
+                return None
+            raise
+        return str(row["lease_expires_at"])
 
     @_store_operation("require_running")
     def require_running(self, lease: Lease, *, now: str) -> bool:
-        """只读确认任务已 start 为 running 且任务/设备租约完整有效。"""
+        """只读确认任务已 start 为 running 且当前任务/设备租约完整有效。"""
         if not isinstance(lease, Lease):
             raise StoreError("invalid_input")
         try:
-            validate_lease(lease)
             now_dt = parse_utc(now)
         except ValueError:
             raise StoreError("invalid_input") from None
         try:
-            row = self._connection.execute(
-                "SELECT d.state AS task_state, d.lease_owner AS task_owner, "
-                "d.owner_pid AS task_pid, d.owner_host AS task_host, "
-                "d.nonce AS task_nonce, d.lease_expires_at AS task_expiry, "
-                "dl.lease_owner AS dev_owner, dl.owner_pid AS dev_pid, "
-                "dl.owner_host AS dev_host, dl.nonce AS dev_nonce, "
-                "dl.lease_expires_at AS dev_expiry, dl.reservation_state AS dev_state "
-                "FROM hr_discoveries d JOIN device_lease dl ON d.nonce = dl.nonce "
-                "WHERE d.app = ? AND d.key = ? AND d.nonce = ?",
-                (lease.app, lease.key, lease.nonce),
-            ).fetchone()
-        except sqlite3.OperationalError as error:
-            raise map_locked_error(error) from None
-        except sqlite3.Error:
-            raise StoreError("store_io_error") from None
-        if row is None:
-            return False
-        try:
-            expiry = str(row["task_expiry"])
-            return (
-                row["task_state"] == "running"
-                and row["dev_state"] == "held"
-                and row["task_owner"] == lease.owner.id
-                and row["dev_owner"] == lease.owner.id
-                and int(row["task_pid"]) == lease.owner.pid
-                and int(row["dev_pid"]) == lease.owner.pid
-                and row["task_host"] == lease.owner.host
-                and row["dev_host"] == lease.owner.host
-                and row["task_nonce"] == lease.nonce
-                and row["dev_nonce"] == lease.nonce
-                and expiry == str(row["dev_expiry"])
-                and now_dt < parse_utc(expiry)
+            self._match_current_lease(
+                lease, {"running"}, now_dt, allow_expired=False
             )
-        except (TypeError, ValueError):
-            return False
+        except StoreError as error:
+            if error.reason_code in {"stale_lease", "invalid_input"}:
+                return False
+            raise
+        return True
 
     @_store_operation("task_conversation")
     def task_conversation(self, lease: Lease, *, now: str) -> str | None:
@@ -767,7 +829,7 @@ class SqliteStore:
         self._check_clock(now_dt)
 
         with self._write():
-            row, _ = self._match_lease(
+            row, _ = self._match_current_lease(
                 lease, {"running"}, now_dt, allow_expired=False
             )
             if str(row["conversation_key"]) != conversation_key:
@@ -811,7 +873,7 @@ class SqliteStore:
                     lease.owner.pid,
                     lease.owner.host,
                     lease.nonce,
-                    lease.expires_at,
+                    str(row["lease_expires_at"]),
                     now,
                     now,
                 ),
@@ -868,7 +930,7 @@ class SqliteStore:
         self._check_clock(now_dt)
 
         with self._write():
-            task_row, _ = self._match_lease(
+            task_row, _ = self._match_current_lease(
                 lease, {"running"}, now_dt, allow_expired=False
             )
             record = self._connection.execute(
@@ -978,6 +1040,7 @@ class SqliteStore:
                 task_state=task_state,
                 reason_code=task_reason,
                 from_state="running",
+                lease_expires_at=str(task_row["lease_expires_at"]),
                 keep_device=(task_state == "blocked"),
             )
             self._run_fault_hook("action_before_event")
@@ -996,6 +1059,7 @@ class SqliteStore:
             "task_key": lease.key,
             "state": record_state,
             "evidence": {
+                "action_key": action_key,
                 "outcome": evidence.outcome,
                 "effect": evidence.effect,
                 "reason_code": evidence.reason_code,
@@ -1006,6 +1070,85 @@ class SqliteStore:
             "delivered": bool(outcome.delivered and record_state == "performed"),
             "gate_converged": record_state in {"performed", "not_performed"}
             and not outcome.pause,
+        }
+
+    @_store_operation("freeze_action", stage="action")
+    def freeze_attempted_action(
+        self,
+        lease: Lease,
+        *,
+        action_key: str,
+        reason_code: str,
+        now: str,
+    ) -> dict[str, object]:
+        """已尝试动作在失效租约/共享异常下按原身份冻结为 unknown/blocked。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("action_not_ready")
+        if not isinstance(reason_code, str) or not reason_code:
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            task_row, _device = self._match_current_lease(
+                lease, {"leased", "running"}, now_dt, allow_expired=True
+            )
+            record = self._connection.execute(
+                "SELECT * FROM action_records WHERE action_key = ?",
+                (action_key,),
+            ).fetchone()
+            if (
+                record is None
+                or str(record["state"]) != "pending"
+                or str(record["task_key"]) != lease.key
+                or str(record["nonce"]) != lease.nonce
+                or str(record["lease_owner"]) != lease.owner.id
+                or int(record["owner_pid"]) != lease.owner.pid
+            ):
+                raise StoreError("action_not_ready")
+            cursor = self._connection.execute(
+                "UPDATE action_records SET state = 'unknown', outcome = 'unknown', "
+                "effect = 'none', reason_code = ?, observed_at = ?, updated_at = ? "
+                "WHERE action_key = ? AND state = 'pending'",
+                (reason_code, now, now, action_key),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("action_not_ready")
+            self._apply_task_terminal(
+                task_row,
+                lease,
+                now=now,
+                task_state="blocked",
+                reason_code=reason_code,
+                from_state=str(task_row["state"]),
+                lease_expires_at=str(task_row["lease_expires_at"]),
+                keep_device=True,
+            )
+            self._insert_action_event(
+                action_key=action_key,
+                event="action_completed",
+                from_state="pending",
+                to_state="unknown",
+                reason_code=reason_code,
+                created_at=now,
+                payload={"action_kind": str(record["action_kind"]), "freeze": True},
+            )
+        return {
+            "action_key": action_key,
+            "action_kind": str(record["action_kind"]),
+            "task_key": lease.key,
+            "state": "unknown",
+            "evidence": {
+                "action_key": action_key,
+                "outcome": "unknown",
+                "effect": "none",
+                "reason_code": reason_code,
+                "before_snapshot_id": None,
+                "after_snapshot_id": None,
+                "observed_at": now,
+            },
+            "delivered": False,
+            "gate_converged": False,
+            "frozen": True,
         }
 
     @_store_operation("reconcile_action", stage="action")
@@ -1428,6 +1571,7 @@ class SqliteStore:
         task_state: str,
         reason_code: str | None,
         from_state: str,
+        lease_expires_at: str,
         keep_device: bool,
     ) -> None:
         """在同一事务清任务租约并按 blocked/终态处理设备行与任务事件。"""
@@ -1449,7 +1593,7 @@ class SqliteStore:
                 lease.owner.pid,
                 lease.owner.host,
                 lease.nonce,
-                lease.expires_at,
+                lease_expires_at,
             ),
         )
         if cursor.rowcount != 1:
@@ -1465,7 +1609,7 @@ class SqliteStore:
                     lease.owner.pid,
                     lease.owner.host,
                     lease.nonce,
-                    lease.expires_at,
+                    lease_expires_at,
                 ),
             )
         else:
@@ -1479,7 +1623,7 @@ class SqliteStore:
                     lease.owner.pid,
                     lease.owner.host,
                     lease.nonce,
-                    lease.expires_at,
+                    lease_expires_at,
                 ),
             )
         if cursor.rowcount != 1:
@@ -1647,6 +1791,47 @@ class SqliteStore:
         if abs(wall_delta - (mono - previous_mono)) > CLOCK_TOLERANCE_SECONDS:
             raise StoreError("clock_changed")
         self._clock_mark = (mono, now_dt)
+
+    def _match_current_lease(
+        self,
+        lease: Lease,
+        states: set[str] | frozenset[str],
+        now_dt: datetime,
+        *,
+        allow_expired: bool,
+    ) -> tuple[sqlite3.Row, sqlite3.Row]:
+        """按 app/key/owner/pid/host/nonce 匹配当前行，使用库中真实截止时间。"""
+        try:
+            validate_lease(lease)
+        except ValueError:
+            raise StoreError("invalid_input") from None
+        row = self._connection.execute(
+            "SELECT * FROM hr_discoveries WHERE app = ? AND \"key\" = ?",
+            (lease.app, lease.key),
+        ).fetchone()
+        device = self._select_device()
+        if row is None or device is None:
+            raise StoreError("stale_lease")
+        if (
+            str(row["state"]) not in states
+            or row["lease_owner"] != lease.owner.id
+            or row["owner_pid"] != lease.owner.pid
+            or row["owner_host"] != lease.owner.host
+            or row["nonce"] != lease.nonce
+            or str(device["reservation_state"]) != "held"
+            or device["lease_owner"] != lease.owner.id
+            or device["owner_pid"] != lease.owner.pid
+            or device["owner_host"] != lease.owner.host
+            or device["nonce"] != lease.nonce
+            or str(row["lease_expires_at"]) != str(device["lease_expires_at"])
+        ):
+            raise StoreError("stale_lease")
+        if not allow_expired and (
+            now_dt >= parse_utc(str(row["lease_expires_at"]))
+            or now_dt >= parse_utc(str(device["lease_expires_at"]))
+        ):
+            raise StoreError("stale_lease")
+        return row, device
 
     def _match_lease(
         self,

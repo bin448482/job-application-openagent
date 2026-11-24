@@ -162,6 +162,8 @@ ERROR_CATEGORIES = frozenset(
         "adb_timeout",
         "adb_nonzero",
         "adb_oserror",
+        "adb_gate",
+        "action_guard",
     }
 )
 COMMANDS = frozenset(
@@ -236,6 +238,7 @@ OPERATIONS = frozenset(
         "current_lease_expiry",
         "begin_action",
         "complete_action",
+        "freeze_action",
         "reconcile_action",
         "get_action",
         "pending_actions",

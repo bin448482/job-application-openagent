@@ -44,13 +44,14 @@ class FakeGate:
         self.path = path
         self.released: list[bool] = []
         self.override_path: Path | None = None
+        self.override_owner: Owner | None = None
 
     def session_identity(self) -> DeviceSessionIdentity:
         """返回 demo/owner/held 的完整可信身份。"""
         return DeviceSessionIdentity(
             profile_id="demo",
             profile_db_path=str(self.override_path or self.path),
-            owner=OWNER,
+            owner=self.override_owner or OWNER,
             nonce=helpers.BEFORE,
             state="held",
         )
@@ -123,6 +124,28 @@ class DriftExecutor(CountingExecutor):
             action_key=TEXT_KEY,
             action_kind="send_text",
             **helpers.observation(observed_at=helpers.NOW),
+        )
+
+
+class AdvancingExecutor(CountingExecutor):
+    """在返回观察前推进可信时钟并触发每命令 guard。"""
+
+    def __init__(self, clock: object, *, seconds: int = 61) -> None:
+        """保存可控时钟与推进秒数。"""
+        super().__init__()
+        self.clock = clock
+        self.seconds = seconds
+
+    def execute(self, plan, *, before_command=None):
+        """推进墙钟/单调钟后再返回观察。"""
+        self.calls += 1
+        self.clock.advance(self.seconds)
+        if before_command is not None:
+            before_command()
+        return ActionObservation(
+            action_key=TEXT_KEY,
+            action_kind="send_text",
+            **helpers.observation(observed_at=self.clock.now()),
         )
 
 
@@ -516,6 +539,154 @@ class ActionUseCaseTests(unittest.TestCase):
         joined = log.path.read_text("utf-8")
         self.assertNotIn("合成回复正文", joined)
         self.assertNotIn(str(self.path), joined)
+
+    def test_default_clock_is_dynamic_and_expires_before_next_command(self) -> None:
+        """合法省略 clock 的公开调用使用真实当前时间，截止后下一命令为0。"""
+        from unittest.mock import patch
+
+        executor = AdvancingExecutor(self.clock)
+        with patch("app.usecases.actions.utc_now", self.clock.now):
+            result = perform_action(
+                store=self.store,
+                gate=self.gate,
+                authorization=self._authorization(),
+                lease=self.lease,
+                action_kind="send_text",
+                action_key=TEXT_KEY,
+                target_key=MESSAGE,
+                conversation_key=CONVERSATION,
+                body_text="合成回复正文",
+                attachment_name=None,
+                target_label=None,
+                anchor_label=None,
+                ime_component=None,
+                tap_points=((10, 20),),
+                current_base_hash=DIGEST,
+                current_pack_hash=DIGEST,
+                daily_sends=10,
+                reply_cooldown_seconds=0,
+                profile_db_path=str(self.path),
+                executor=executor,
+                now=self.clock.now(),
+            )
+        self.assertEqual(executor.calls, 1)
+        self.assertEqual(result["state"], "unknown")
+        self.assertEqual(self.store.get_action(TEXT_KEY)["state"], "unknown")
+        task = m1_helpers.fetch_one(
+            self.path, 'SELECT state FROM hr_discoveries WHERE "key" = ?', (self.lease.key,)
+        )
+        self.assertEqual(task["state"], "blocked")
+        self.assertEqual(
+            m1_helpers.fetch_one(self.path, "SELECT reservation_state FROM device_lease"),
+            {"reservation_state": "quarantined"},
+        )
+
+    def test_acceptance_drift_is_rejected_before_next_command(self) -> None:
+        """只漂移当前验收摘要也必须拒绝，不拿包摘要代替验收。"""
+        snapshot = {
+            "base_hash": DIGEST,
+            "pack_hash": DIGEST,
+            "acceptance_base_hash": DIGEST,
+            "acceptance_pack_hash": DIGEST,
+        }
+
+        class AcceptanceDrift(CountingExecutor):
+            """在执行开始时只改变验收 pack 摘要。"""
+
+            def execute(self, plan, *, before_command=None):
+                """改变验收摘要后触发 guard。"""
+                self.calls += 1
+                snapshot["acceptance_pack_hash"] = canonical_hash(
+                    {"drift": "acceptance"}
+                )
+                if before_command is not None:
+                    before_command()
+                return ActionObservation(
+                    action_key=TEXT_KEY,
+                    action_kind="send_text",
+                    **helpers.observation(observed_at=helpers.NOW),
+                )
+
+        executor = AcceptanceDrift()
+        result = self._perform(
+            executor, reload_snapshot=lambda: dict(snapshot)
+        )
+        self.assertEqual(executor.calls, 1)
+        self.assertEqual(result["state"], "unknown")
+        self.assertFalse(result["gate_converged"])
+        self.assertEqual(self.store.get_action(TEXT_KEY)["state"], "unknown")
+
+    def test_shared_identity_drift_after_execution_freezes_unknown(self) -> None:
+        """执行后共享 owner 变化统一冻结 unknown/blocked，不丢锁。"""
+        executor = CountingExecutor()
+        original_execute = executor.execute
+
+        def execute(plan, *, before_command=None):
+            """执行一次后改变门禁 owner。"""
+            result = original_execute(plan, before_command=before_command)
+            self.gate.override_owner = Owner(
+                m1_helpers.OWNER_ID_2, 4243, m1_helpers.HOST_A
+            )
+            return result
+
+        executor.execute = execute  # type: ignore[method-assign]
+        result = self._perform(executor)
+        self.assertEqual(executor.calls, 1)
+        self.assertEqual(result["state"], "unknown")
+        self.assertFalse(result["gate_converged"])
+        self.assertEqual(self.store.get_action(TEXT_KEY)["state"], "unknown")
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path, 'SELECT state FROM hr_discoveries WHERE "key" = ?', (self.lease.key,)
+            )["state"],
+            "blocked",
+        )
+
+    def test_completion_ime_binding_rejects_missing_or_wrong_original(self) -> None:
+        """完成观察原 IME 缺失/不同值不收敛、不假写 restored。"""
+        for ime_original, ime_current in ((None, None), ("other-ime", "other-ime")):
+            with self.subTest(original=ime_original):
+                if self.store.get_action(TEXT_KEY) is not None:
+                    self.store.close()
+                    self.tmp.cleanup()
+                    self.setUp()
+                class WrongIme(CountingExecutor):
+                    """返回未绑定持久原值的 IME 观察。"""
+
+                    def execute(self, plan, *, before_command=None):
+                        """返回错误 IME 的 performed 观察。"""
+                        self.calls += 1
+                        data = helpers.observation(
+                            observed_at=self_clock_now(),
+                            ime_original=ime_original,
+                            ime_current=ime_current,
+                        )
+                        return ActionObservation(
+                            action_key=TEXT_KEY,
+                            action_kind="send_text",
+                            **data,
+                        )
+
+                def self_clock_now() -> str:
+                    """返回当前测试假时钟时间。"""
+                    return self.clock.now()
+
+                executor = WrongIme()
+                result = self._perform(
+                    executor, ime_component="com.example.synthetic/.Ime"
+                )
+                self.assertEqual(result["state"], "unknown")
+                state = self.store.load_ime_state()
+                self.assertFalse(state["restored"])
+
+    def test_matching_ime_completion_marks_restored(self) -> None:
+        """正常完成的观察原 IME 与持久值一致时收敛 performed 并更新账本。"""
+        executor = CountingExecutor()
+        result = self._perform(
+            executor, ime_component="com.example.synthetic/.Ime"
+        )
+        self.assertEqual(result["state"], "performed")
+        self.assertTrue(self.store.load_ime_state()["restored"])
 
     def test_unknown_is_single_call_and_not_replayed(self) -> None:
         """执行失败只调用一次；再次同键在同任务上被 action_conflict 拒绝。"""

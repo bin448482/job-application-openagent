@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import subprocess
+import tempfile
 import unittest
+from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 from app.adapters.adb.actions import AdbActionExecutor
+from app.adapters.adb.recovery import AdbRecoveryObserver
 from app.adapters.simulated.actions import ScriptedActionExecutor
 from app.domain.actions import derive_action_outcome
 from app.domain.models import canonical_hash
 from app.ports.actions import ActionExecutionError, ActionPlan
+from app.ports.screen import HierarchyCapture
 from app.process_log import ProcessLog
 from tests import action_helpers as helpers
 
@@ -18,15 +23,16 @@ CONVERSATION = "boss:conv:" + canonical_hash(["合成联系人", "合成公司",
 MESSAGE = helpers.synthetic_text_key()
 TEXT_KEY = f"boss:{MESSAGE}:reply"
 BEFORE_XML = (
-    '<hierarchy><node text="合成联系人" /><node text="消息" /></hierarchy>'
+    '<hierarchy><node text="合成联系人"><node text="消息" /></node></hierarchy>'
 )
 READBACK_XML = (
-    '<hierarchy><node class="android.widget.EditText" text="您好" />'
-    '<node text="合成联系人" /><node text="消息" /></hierarchy>'
+    '<hierarchy><node text="合成联系人"><node text="消息" /></node>'
+    '<node class="android.widget.EditText" text="您好" /></hierarchy>'
 )
 AFTER_XML = (
-    '<hierarchy><node class="android.widget.EditText" text="" />'
-    '<node text="合成联系人" /><node text="您好" /><node text="消息" /></hierarchy>'
+    '<hierarchy><node text="合成联系人"><node text="消息" />'
+    '<node text="您好" /></node>'
+    '<node class="android.widget.EditText" text="" /></hierarchy>'
 )
 
 
@@ -113,6 +119,35 @@ class AdbActionPrimitiveTests(unittest.TestCase):
                 state["cat"] = index + 1
                 text = (BEFORE_XML, READBACK_XML, after_xml)[min(index, 2)]
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout=text, stderr="")
+            if "ime" in args and "set" in args:
+                state["ime"] = args[-1]
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+            if "settings" in args and "get" in args:
+                return subprocess.CompletedProcess(
+                    args=args, returncode=0, stdout=state["ime"] + "\n", stderr=""
+                )
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+        return run, calls
+
+    def _custom_run(
+        self, texts: tuple[str, str, str], *, current_ime: str = "com.example.default/.Ime"
+    ):
+        """按三个 cat 阶段返回指定 XML 的执行器，供目标差分反例使用。"""
+        calls: list[list[str]] = []
+        state = {"cat": 0, "ime": current_ime}
+
+        def run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            """按命令类型返回指定阶段 XML。"""
+            calls.append(list(args))
+            if "uiautomator" in args:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+            if "cat" in args:
+                index = state["cat"]
+                state["cat"] = index + 1
+                return subprocess.CompletedProcess(
+                    args=args, returncode=0, stdout=texts[min(index, 2)], stderr=""
+                )
             if "ime" in args and "set" in args:
                 state["ime"] = args[-1]
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
@@ -284,6 +319,138 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         self.assertFalse(observation.attachment_request_observed)
         self.assertEqual(derive_action_outcome(observation).evidence.outcome, "unknown")
 
+    def test_text_readback_wrong_identity_or_multiple_editors_does_not_click(self) -> None:
+        """readback 换人或两个 editor 任一含正文都不发点击。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        wrong_person = (
+            '<hierarchy><node text="另一联系人"><node text="消息" /></node>'
+            '<node class="android.widget.EditText" text="您好" /></hierarchy>'
+        )
+        runner, calls = self._custom_run((BEFORE_XML, wrong_person, AFTER_XML))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(plan())
+        self.assertEqual([c for c in calls if "tap" in c], [])
+        self.assertEqual(derive_action_outcome(observation).evidence.outcome, "not_performed")
+
+        two_editors = (
+            '<hierarchy><node text="合成联系人"><node text="消息" /></node>'
+            '<node class="android.widget.EditText" text="别的" />'
+            '<node class="android.widget.EditText" text="您好" /></hierarchy>'
+        )
+        runner, calls = self._custom_run((BEFORE_XML, two_editors, AFTER_XML))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(plan())
+        self.assertEqual([c for c in calls if "tap" in c], [])
+        self.assertEqual(derive_action_outcome(observation).evidence.outcome, "not_performed")
+
+    def test_text_unrelated_subtree_echo_is_not_performed(self) -> None:
+        """正文只增加在另一会话子树时不得 performed。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        after_other = (
+            '<hierarchy><node text="合成联系人"><node text="消息" /></node>'
+            '<node text="另一联系人"><node text="您好" /></node>'
+            '<node class="android.widget.EditText" text="" /></hierarchy>'
+        )
+        runner, calls = self._custom_run((BEFORE_XML, READBACK_XML, after_other))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(plan())
+        self.assertTrue([c for c in calls if "tap" in c])
+        self.assertEqual(derive_action_outcome(observation).evidence.outcome, "unknown")
+
+    def test_contact_handled_or_disabled_slot_does_not_tap(self) -> None:
+        """联系方式槽位已处理/不可点击时零 tap。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        handled = (
+            '<hierarchy><node text="合成联系人"><node text="微信" clickable="true" />'
+            '<node text="请求中" /></node></hierarchy>'
+        )
+        contact = ActionPlan(
+            action_key=f"{CONVERSATION}:wechat",
+            action_kind="change_wechat",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=1,
+            tap_points=((10, 20), (30, 40)),
+        )
+        runner, calls = self._custom_run((handled, handled, handled))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(contact)
+        self.assertEqual([c for c in calls if "tap" in c], [])
+        self.assertEqual(derive_action_outcome(observation).evidence.outcome, "not_performed")
+
+    def test_delete_scrollable_viewport_and_single_tap_resume_do_not_tap(self) -> None:
+        """可滚动不完整列表与单 tap 简历均在不可逆点击前拒绝。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        scrollable = (
+            '<hierarchy><node scrollable="true"><node text="合成联系人">'
+            '<node text="消息" /></node></node></hierarchy>'
+        )
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+        runner, calls = self._custom_run((scrollable, scrollable, scrollable))
+        with patch("subprocess.run", side_effect=runner):
+            executor.execute(delete)
+        self.assertEqual([c for c in calls if "tap" in c], [])
+
+        single = replace(resume_plan(), irreversible_tap_index=0, tap_points=((10, 20),))
+        runner, calls = self._custom_run((BEFORE_XML, BEFORE_XML, BEFORE_XML))
+        with patch("subprocess.run", side_effect=runner):
+            executor.execute(single)
+        self.assertEqual([c for c in calls if "tap" in c], [])
+
+    def test_identity_failure_does_not_switch_ime(self) -> None:
+        """无需改变设备的前置失败不触发 IME 切换。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        duplicate = (
+            '<hierarchy><node text="合成联系人"><node text="消息" /></node>'
+            '<node text="合成联系人" /></hierarchy>'
+        )
+        runner, calls = self._custom_run((duplicate, duplicate, duplicate))
+        with patch("subprocess.run", side_effect=runner):
+            executor.execute(plan(ime=True))
+        self.assertEqual(
+            [c for c in calls if "ime" in c and "set" in c], []
+        )
+
+    def test_failure_after_ime_switch_restores_original(self) -> None:
+        """切换后出现可恢复早退时执行有界原 IME 恢复并读回。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        wrong = (
+            '<hierarchy><node text="合成联系人"><node text="消息" /></node>'
+            '<node class="android.widget.EditText" text="别的" /></hierarchy>'
+        )
+        runner, calls = self._custom_run((BEFORE_XML, wrong, AFTER_XML))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(plan(ime=True))
+        set_commands = [c for c in calls if "ime" in c and "set" in c]
+        self.assertEqual(set_commands[0][-1], "com.example.synthetic/.Ime")
+        self.assertEqual(set_commands[-1][-1], "com.example.default/.Ime")
+        self.assertEqual(observation.ime_current, "com.example.default/.Ime")
+
     def test_failure_before_click_does_not_retry(self) -> None:
         """首条命令非零退出即停止，只调用一次并标记未点击。"""
         gate = FakeGate()
@@ -358,6 +525,109 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             log.path.unlink()
         except OSError:
             pass
+
+    def test_gate_failure_logs_whitelisted_terminal(self) -> None:
+        """门禁失败使用白名单类别并写 started→failed，不降级。"""
+        class FailingGate(FakeGate):
+            """verify 抛出固定门禁错误。"""
+
+            def verify(self, *args: object, **kwargs: object) -> None:
+                """不执行命令，直接失败。"""
+                from app.ports.device_gate import DeviceGateError
+
+                raise DeviceGateError("device_not_held")
+
+        log = ProcessLog(path=helpers.ROOT / "data" / "logs" / "m5-gate-fail.jsonl")
+        executor = AdbActionExecutor(
+            serial="<serial>", gate=FailingGate(), process_log=log
+        )
+        with self.assertRaises(ActionExecutionError):
+            executor.execute(plan())
+        self.assertFalse(log.degraded)
+        records = [
+            __import__("json").loads(line)
+            for line in log.path.read_text("utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(records[0]["result"], "started")
+        self.assertEqual(records[-1]["result"], "failed")
+        self.assertEqual(records[-1]["error_category"], "adb_gate")
+        try:
+            log.path.unlink()
+        except OSError:
+            pass
+
+    def test_evidence_directory_saves_xml_and_index(self) -> None:
+        """真实证据目录保存原始 XML 与 UUID/动作索引，且不含正文。"""
+        gate = FakeGate()
+        with tempfile.TemporaryDirectory() as directory:
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=gate,
+                evidence_dir=Path(directory),
+            )
+            runner, _calls = self._runner()
+            with patch("subprocess.run", side_effect=runner):
+                executor.execute(plan())
+            files = list(Path(directory).glob("action-*.xml"))
+            indexes = list(Path(directory).glob("action-*.index.jsonl"))
+            self.assertEqual(len(files), 3)
+            self.assertEqual(len(indexes), 1)
+            index_text = indexes[0].read_text("utf-8")
+            self.assertIn('"phase":"before"', index_text)
+            self.assertIn('"phase":"after"', index_text)
+            self.assertNotIn("您好", index_text)
+
+    def test_recovery_observer_reads_scene_and_ime(self) -> None:
+        """生产恢复观察一次读取层级与 IME，命令未停止时不标 command_quiet。"""
+        class Screen:
+            """返回固定层级。"""
+
+            def dump_hierarchy(self, serial: str) -> HierarchyCapture:
+                """返回含 IME 空编辑框的层级。"""
+                return HierarchyCapture(
+                    xml_text=(
+                        '<hierarchy><node class="android.widget.EditText" text="" />'
+                        '<node text="消息" /></hierarchy>'
+                    ),
+                    evidence_name="synthetic.xml",
+                    byte_size=1,
+                )
+
+            def capture_screen(self, serial: str) -> object:
+                """未使用。"""
+                raise AssertionError
+
+        class ActionReader:
+            """返回固定当前 IME。"""
+
+            def read_current_ime(self, *, before_command=None) -> str:
+                """返回原 IME。"""
+                return "com.example.default/.Ime"
+
+            def execute(self, plan, *, before_command=None):
+                """未使用。"""
+                raise AssertionError
+
+        observer = AdbRecoveryObserver(
+            serial="<serial>",
+            gate=FakeGate(),
+            screen_reader=Screen(),
+            action_reader=ActionReader(),
+        )
+        observation = observer.observe(
+            action_key=f"{CONVERSATION}:resume",
+            action_kind="send_resume",
+            resolution="confirm_not_performed",
+            evidence=None,
+            ime_original="com.example.default/.Ime",
+            command_stopped=False,
+            confirmed=True,
+            observed_at=helpers.NOW,
+        )
+        self.assertFalse(observation.command_quiet)
+        self.assertTrue(observation.scene_settled)
+        self.assertEqual(observation.ime_current, "com.example.default/.Ime")
 
     def test_read_current_ime(self) -> None:
         """读取当前 IME 返回去空白值；失败为断连。"""

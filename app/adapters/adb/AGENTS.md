@@ -10,7 +10,8 @@
 - `device.py`：`AdbDeviceProbe`、`DeviceProbeError`、设备清单解析、`isKeyguardShowing` 判定与 `mCurrentFocus` 前台判定。
 - `command.py`：M3/M5 共用 ADB 有界子进程边界；参数数组、`shell=False`、5 秒超时、单次 attempt、可选每命令 before 复核与共享门禁 verify，失败只返回固定类别；`save_evidence` 只在调用方指定本机目录时落盘。
 - `screen.py`：`AdbScreenReader`；每次 dump/cat 或 screencap 复用 `command.py`，层级 XML 与原始 RGBA 保存到调用方指定的本机证据目录，文件名含独立 UUID，返回受控证据名与内存内容。
-- `actions.py`：M5 `AdbActionExecutor`；先解析 before 层级验证唯一身份、列表完整/保护项、编辑器正文、附件名与联系方式槽位，再执行不可逆点击；每一命令前由调用方 guard 复核当前包/验收/租约/门禁，单次 attempt 不重试；输入前实际切换并读回目标 IME，动作后恢复并读回原 IME；`clicked` 只表示是否已发出不可逆点击；动作特有变化只按目标节点的前后新增差分推导，坏 XML 无差分则保持 unknown。当前 CLI 不暴露真实动作入口，只由 mock subprocess 测试。
+- `recovery.py`：M5 `AdbRecoveryObserver`；在共享门禁下一次读取层级与当前 IME，输出 `ReconciliationObservation` 的现场/命令/IME 字段，复用既有采集器与 `read_current_ime`，不自行宣告动作效果或进程停止。
+- `actions.py`：M5 `AdbActionExecutor`；先解析 before 层级锁定唯一姓名+职位目标、非滚动完整列表、保护项、唯一 EditText 正文、附件名与可点未处理联系方式槽位，再发不可逆点击；同一目标子树计算前后新增差分，既有提示/无关子树/同名重复/单 tap 计划不证明执行。每一命令前由调用方 guard 复核当前包/验收/租约/门禁，单次 attempt 不重试；输入前实际切换并读回目标 IME，早退/动作后恢复并读回原 IME；原始 before/readback/dialog/after XML 与内容 UUID/动作索引写入可选本机证据目录；命令日志使用固定步骤标签。当前 CLI 不暴露真实动作入口，只由 mock subprocess 测试。
 
 ## 三、命令与安全契约
 

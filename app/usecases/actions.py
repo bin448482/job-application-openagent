@@ -153,20 +153,6 @@ def _failed_observation(
     )
 
 
-def _evidence_payload(outcome: ActionOutcome) -> dict[str, object]:
-    """按唯一七字段 Evidence 契约投影，避免顶层同名替代嵌套对象。"""
-    evidence = outcome.evidence
-    return {
-        "action_key": evidence.action_key,
-        "outcome": evidence.outcome,
-        "effect": evidence.effect,
-        "reason_code": evidence.reason_code,
-        "before_snapshot_id": evidence.before_snapshot_id,
-        "after_snapshot_id": evidence.after_snapshot_id,
-        "observed_at": evidence.observed_at,
-    }
-
-
 def perform_action(
     *,
     store: StorePort,
@@ -195,7 +181,7 @@ def perform_action(
     reload_snapshot: Callable[[], dict[str, str]] | None = None,
 ) -> dict[str, object]:
     """在共享占用与运行中租约下原子 pending、执行一次并提交三态证据。"""
-    active_clock = clock if clock is not None else (lambda: now)
+    active_clock = clock if clock is not None else utc_now
     current = {
         "base_hash": current_base_hash,
         "pack_hash": current_pack_hash,
@@ -216,6 +202,12 @@ def perform_action(
             base_hash=snapshot["base_hash"],
             pack_hash=snapshot["pack_hash"],
             now=current_now,
+            acceptance_base_hash=snapshot.get(
+                "acceptance_base_hash", snapshot["base_hash"]
+            ),
+            acceptance_pack_hash=snapshot.get(
+                "acceptance_pack_hash", snapshot["pack_hash"]
+            ),
         )
         if not _store_binding_matches(
             store,
@@ -336,6 +328,7 @@ def perform_action(
                 lease=lease,
                 action_key=action_key,
                 observation=observation,
+                ime_original=ime_original,
                 now=active_clock(),
                 process_log=process_log,
             )
@@ -410,7 +403,7 @@ def perform_action(
         _log(process_log, "action_execute", "ok")
     try:
         guard()
-    except ActionError as error:
+    except Exception as error:
         observation = _failed_observation(
             plan=plan,
             reason_code="executor_interrupted",
@@ -422,7 +415,7 @@ def perform_action(
             process_log,
             "action_commit",
             "failed",
-            reason_code=error.reason_code,
+            reason_code=getattr(error, "reason_code", "executor_interrupted"),
             error_category="action",
         )
     return _commit(
@@ -430,8 +423,25 @@ def perform_action(
         lease=lease,
         action_key=action_key,
         observation=observation,
+        ime_original=ime_original,
         now=active_clock(),
         process_log=process_log,
+    )
+
+
+def _bind_ime(
+    observation: ActionObservation, ime_original: str | None
+) -> ActionObservation:
+    """把完成观察绑定到已持久化原 IME；缺失/不同值不假称已恢复。"""
+    if ime_original is None:
+        return observation
+    if (
+        observation.ime_original == ime_original
+        and observation.ime_current == ime_original
+    ):
+        return observation
+    return replace(
+        observation, ime_original=ime_original, ime_current=None
     )
 
 
@@ -441,10 +451,12 @@ def _commit(
     lease: Lease,
     action_key: str,
     observation: ActionObservation,
+    ime_original: str | None,
     now: str,
     process_log: ProcessLog | None,
 ) -> dict[str, object]:
     """由唯一纯域规则派生 Evidence 并原子提交；坏观察保持未知未决。"""
+    observation = _bind_ime(observation, ime_original)
     _log(process_log, "action_derive", "started")
     try:
         outcome = derive_action_outcome(observation)
@@ -494,6 +506,35 @@ def _commit(
             reason_code=reason,
             error_category="action",
         )
+        if reason in {"stale_lease", "action_not_ready", "invalid_observation"}:
+            try:
+                frozen = store.freeze_attempted_action(
+                    lease,
+                    action_key=action_key,
+                    reason_code="result_unverified",
+                    now=now,
+                )
+            except Exception as freeze_error:
+                _log(
+                    process_log,
+                    "action_commit",
+                    "failed",
+                    reason_code=getattr(
+                        freeze_error, "reason_code", "store_io_error"
+                    ),
+                    error_category="action",
+                )
+                raise
+            _log(process_log, "action_commit", "ok")
+            record = store.get_action(action_key)
+            frozen["card"] = (
+                human_card(record)
+                if record is not None
+                and record["state"] in {"pending", "unknown", "cancelled"}
+                else None
+            )
+            frozen["requested_effect"] = "none"
+            return frozen
         raise
     _log(process_log, "action_commit", "ok")
     record = store.get_action(action_key)
@@ -502,7 +543,6 @@ def _commit(
         card = human_card(record)
     result = dict(completed)
     result["card"] = card
-    result["evidence"] = _evidence_payload(outcome)
     result["requested_effect"] = outcome.evidence.effect
     return result
 
@@ -654,6 +694,8 @@ def reconcile_action(
             commands_stopped = command_stop_checker(owner_pid) == "stopped"
             if not commands_stopped:
                 raise ActionError("recovery_not_confirmed")
+        _log(process_log, "action_reconcile_validate", "ok")
+        _log(process_log, "action_reconcile_commit", "started")
         result = store.reconcile_action(
             action_key=observation.action_key,
             resolution=observation.resolution,
@@ -679,6 +721,13 @@ def reconcile_action(
         )
         raise
     except Exception as error:
+        _log(
+            process_log,
+            "action_reconcile_commit",
+            "failed",
+            reason_code=getattr(error, "reason_code", "store_io_error"),
+            error_category="action",
+        )
         _log(
             process_log,
             "action_reconcile_validate",

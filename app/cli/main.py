@@ -24,7 +24,11 @@ from app.adapters.simulated.actions import ScriptedActionExecutor
 from app.adapters.sqlite.activity import ProfilePolicyActivity
 from app.adapters.sqlite.device_gate import SharedDeviceGate
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
-from app.adapters.sqlite.repo import SqliteStore, default_stop_checker
+from app.adapters.sqlite.repo import (
+    SqliteStore,
+    default_command_stop_checker,
+    default_stop_checker,
+)
 from app.adapters.sqlite.schema import initialize_database
 from app.domain.actions import (
     ActionAuthorization,
@@ -1625,12 +1629,6 @@ def _open_action_guard(
         profile_store.close()
 
 
-def _unknown_command_stop(pid: int) -> str:
-    """生产默认无法证明原动作父子命令已停止，恢复保持拒绝。"""
-    del pid
-    return "unknown"
-
-
 def _run_action(
     log: ProcessLog,
     started: float,
@@ -1689,7 +1687,7 @@ def _run_action(
         command_checker = (
             command_stop_checker
             if command_stop_checker is not None
-            else (stop_checker if stop_checker is not None else _unknown_command_stop)
+            else (stop_checker if stop_checker is not None else default_command_stop_checker)
         )
 
         if operation == "eligibility":

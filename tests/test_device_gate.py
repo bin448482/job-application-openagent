@@ -160,6 +160,28 @@ class SharedDeviceGateTests(unittest.TestCase):
             self._gate("alpha").verify()
         self.assertEqual(verify_error.exception.reason_code, "device_not_held")
 
+    def test_recover_rejects_cross_host_owner(self) -> None:
+        """受控接管要求同 host；异 host 即使本机 PID stopped 也拒绝且不改行。"""
+        from app.domain.models import Owner, canonical_hash
+
+        gate = self._gate("alpha")
+        self._acquire(gate)
+        gate.release(now=LATER, converged=False)
+        path = profile_runtime_path(self.root, "alpha")
+        before = self._gate("alpha").inspect()
+        other = self._gate("alpha")
+        with self.assertRaises(DeviceGateError) as caught:
+            other.recover(
+                profile_id="alpha",
+                profile_db_path=str(path),
+                owner=Owner(OWNER_ID, 4243, canonical_hash("other-host")),
+                confirm_stopped=True,
+                stop_checker=lambda pid: "stopped",
+                now=LATER,
+            )
+        self.assertEqual(caught.exception.reason_code, "device_gate_mismatch")
+        self.assertEqual(self._gate("alpha").inspect(), before)
+
     def test_nonce_tamper_and_profile_binding_mismatch_keep_row(self) -> None:
         """篡改 nonce 或换 profile 交付路径都不能通过复核或释放。"""
         gate = self._gate("alpha")
