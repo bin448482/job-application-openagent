@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import multiprocessing
 import os
 import sqlite3
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.adapters.sqlite.device_gate import SharedDeviceGate
+from app.adapters.sqlite.device_gate import SharedDeviceGate, guard_database_path
+from app.adapters.sqlite.profile_schema import PROFILE_V1_EXPECTED_OBJECTS
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
 from app.adapters.sqlite.schema import initialize_database
 from app.cli.main import main
@@ -41,6 +44,119 @@ def _pack_with_facts(*keys: str):
 def _sha(path: Path) -> str:
     """返回文件字节摘要，用于证明旧库未被改动。"""
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _guard_hold_worker(
+    os_root: str,
+    project_root: str,
+    profile_id: str,
+    ready: object,
+    release: object,
+) -> None:
+    """在子进程中真实持有事实写门禁事务，直到父进程显式放行。"""
+    from app.adapters.sqlite.device_gate import SharedDeviceGate as Gate
+    from app.adapters.sqlite.profile_store import profile_runtime_path as runtime_path
+
+    path = runtime_path(Path(project_root), profile_id)
+    gate = Gate(
+        profile_id=profile_id,
+        profile_db_path=path,
+        os_root=Path(os_root),
+    )
+    with gate.write_guard(create=True):
+        ready.set()
+        release.wait(30)
+
+
+def _acquire_probe_worker(
+    os_root: str,
+    project_root: str,
+    profile_id: str,
+    queue: object,
+) -> None:
+    """在子进程中尝试取得共享占用，记录实际结果并在成功时释放。"""
+    import uuid as uuid_module
+
+    from app.adapters.sqlite.device_gate import SharedDeviceGate as Gate
+    from app.adapters.sqlite.profile_store import profile_runtime_path as runtime_path
+    from app.domain.models import Owner as OwnerModel, canonical_hash as host_hash
+    from app.ports.device_gate import DeviceGateError as GateError
+
+    path = runtime_path(Path(project_root), profile_id)
+    gate = Gate(
+        profile_id=profile_id,
+        profile_db_path=path,
+        os_root=Path(os_root),
+    )
+    try:
+        gate.acquire(
+            profile_id=profile_id,
+            profile_db_path=str(path),
+            owner=OwnerModel(
+                id=str(uuid_module.uuid4()),
+                pid=os.getpid(),
+                host=host_hash("probe-host"),
+            ),
+            now=NOW,
+        )
+    except GateError as error:
+        queue.put(error.reason_code)
+    else:
+        queue.put("held")
+        gate.release(now=NOW, converged=True)
+
+
+def _create_v1_profile(path: Path, *, profile_id: str = "demo") -> None:
+    """按 v1 对象集与 meta/事实行创建严格旧 profile 库，供迁移拒绝测试。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(str(path))
+    connection.row_factory = sqlite3.Row
+    try:
+        connection.execute("PRAGMA foreign_keys = ON")
+        for _name, (_kind, sql) in PROFILE_V1_EXPECTED_OBJECTS.items():
+            connection.execute(sql)
+        connection.execute(
+            "INSERT INTO profile_meta(singleton, profile_id, schema_version, created_at) "
+            "VALUES (1, ?, 1, ?)",
+            (profile_id, NOW),
+        )
+        connection.execute(
+            "INSERT INTO profile_facts(fact_key, source_id, value, state, "
+            "confirmed_at, expires_at, superseded_by, updated_at) "
+            "VALUES ('work_location', '00000000-0000-4000-8000-000000000701', "
+            "'合成城市甲', 'active', ?, NULL, NULL, ?)",
+            (NOW, NOW),
+        )
+        connection.execute("PRAGMA user_version = 1")
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _insert_bad_gate_state(
+    path: Path, *, profile_id: str, profile_db_path: str
+) -> None:
+    """绕过 CHECK 注入不可识别门禁状态行，模拟坏库/故障残留。"""
+    connection = sqlite3.connect(str(path))
+    try:
+        connection.execute("PRAGMA ignore_check_constraints = ON")
+        connection.execute(
+            "INSERT INTO device_guard(device_key, profile_id, profile_db_path, "
+            "owner_id, owner_pid, owner_host, nonce, state, acquired_at, updated_at) "
+            "VALUES ('primary', ?, ?, ?, 4242, ?, ?, 'released', ?, ?)",
+            (
+                profile_id,
+                profile_db_path,
+                "00000000-0000-4000-8000-000000000001",
+                canonical_hash("synthetic-host"),
+                "00000000-0000-4000-8000-000000000077",
+                NOW,
+                NOW,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
 
 
 class ProfileFactsDomainTests(unittest.TestCase):
@@ -689,6 +805,418 @@ class ProfileFactsCliTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertEqual(payload["reason_code"], "invalid_fact")
         self.assertNotIn(contact, json.dumps(payload, ensure_ascii=False))
+
+
+class ProfileFactsGateAtomicityTests(unittest.TestCase):
+    """覆盖确认事实写的 gate→profile 原子保护、跨进程与首次初始化。"""
+
+    def setUp(self) -> None:
+        """创建独立项目根与独立 OS 应用数据根。"""
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.os_root = Path(self.tmp.name) / "os-root"
+        self.os_root.mkdir()
+
+    def tearDown(self) -> None:
+        """只清理本次拥有的临时根。"""
+        self.tmp.cleanup()
+
+    def _run(self, argv: list[str], log: ProcessLog | None = None):
+        """在临时项目根运行 CLI 并注入临时 OS 根。"""
+        return policy_helpers.run_cli(
+            self.root, argv, process_log=log, os_root=self.os_root
+        )
+
+    def _gate(self, profile_id: str = "demo") -> SharedDeviceGate:
+        """为临时项目根构造固定路径门禁实例。"""
+        return SharedDeviceGate(
+            profile_id=profile_id,
+            profile_db_path=profile_runtime_path(self.root, profile_id),
+            os_root=self.os_root,
+        )
+
+    def _hold(self, profile_id: str = "demo") -> SharedDeviceGate:
+        """取得同 profile 的合成设备占用并返回实例。"""
+        gate = self._gate(profile_id)
+        gate.acquire(
+            profile_id=profile_id,
+            profile_db_path=str(profile_runtime_path(self.root, profile_id)),
+            owner=Owner(
+                id="00000000-0000-4000-8000-000000000001",
+                pid=4242,
+                host=canonical_hash("synthetic-host"),
+            ),
+            now=NOW,
+        )
+        return gate
+
+    def _fact_commands(self, profile_id: str = "demo") -> dict[str, list[str]]:
+        """返回 set/revoke/forget 的确认写入命令。"""
+        return {
+            "set": [
+                "facts",
+                "set",
+                "--profile",
+                profile_id,
+                "--key",
+                "work_location",
+                "--value",
+                "合成城市乙",
+                "--confirm",
+            ],
+            "revoke": [
+                "facts",
+                "revoke",
+                "--profile",
+                profile_id,
+                "--key",
+                "work_location",
+                "--confirm",
+            ],
+            "forget": [
+                "facts",
+                "forget",
+                "--profile",
+                profile_id,
+                "--key",
+                "work_location",
+                "--confirm",
+            ],
+        }
+
+    def test_held_gate_blocks_set_revoke_forget_without_any_profile_write(self) -> None:
+        """同 profile 占用期间三种确认写都拒绝，事实与占用行完全不变。"""
+        code, payload, _ = self._run(
+            [
+                "facts",
+                "set",
+                "--profile",
+                "demo",
+                "--key",
+                "work_location",
+                "--value",
+                "合成城市甲",
+                "--confirm",
+            ]
+        )
+        self.assertEqual(code, 0)
+        original_source = payload["result"]["result"]["source_id"]
+        gate = self._hold("demo")
+        before = gate.inspect()
+        try:
+            for operation, argv in self._fact_commands().items():
+                with self.subTest(operation=operation):
+                    code, payload, stderr = self._run(argv)
+                    self.assertEqual((code, stderr), (2, ""))
+                    self.assertEqual(payload["reason_code"], "device_busy")
+                    self.assertEqual(gate.inspect(), before)
+                    code, shown, _ = self._run(
+                        ["facts", "show", "--profile", "demo"]
+                    )
+                    self.assertEqual(code, 0)
+                    facts = shown["result"]["facts"]
+                    self.assertEqual(len(facts), 1)
+                    self.assertEqual(facts[0]["source_id"], original_source)
+                    self.assertEqual(facts[0]["value"], "合成城市甲")
+        finally:
+            gate.release(now=NOW, converged=True)
+        code, payload, _ = self._run(self._fact_commands()["revoke"])
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["result"]["result"]["revoked_count"], 1)
+
+    def test_held_gate_blocks_first_profile_and_v1_migration(self) -> None:
+        """占用期间不创建新 profile、不迁移 v1、不写备份或事实行。"""
+        fresh_path = profile_runtime_path(self.root, "fresh")
+        fresh_gate = self._hold("fresh")
+        try:
+            code, payload, _ = self._run(
+                [
+                    "facts",
+                    "set",
+                    "--profile",
+                    "fresh",
+                    "--key",
+                    "work_location",
+                    "--value",
+                    "合成城市甲",
+                    "--confirm",
+                ]
+            )
+            self.assertEqual(code, 2)
+            self.assertEqual(payload["reason_code"], "device_busy")
+            self.assertFalse(fresh_path.exists())
+            self.assertEqual(list(fresh_path.parent.glob("*.v1-backup-*")), [])
+        finally:
+            fresh_gate.release(now=NOW, converged=True)
+
+        demo_path = profile_runtime_path(self.root, "demo")
+        _create_v1_profile(demo_path)
+        before_bytes = _sha(demo_path)
+        demo_gate = self._hold("demo")
+        try:
+            code, payload, _ = self._run(self._fact_commands()["set"])
+            self.assertEqual(code, 2)
+            self.assertEqual(payload["reason_code"], "device_busy")
+        finally:
+            demo_gate.release(now=NOW, converged=True)
+        self.assertEqual(_sha(demo_path), before_bytes)
+        self.assertEqual(list(demo_path.parent.glob("*.v1-backup-*")), [])
+        connection = sqlite3.connect(str(demo_path))
+        try:
+            self.assertEqual(
+                int(connection.execute("PRAGMA user_version").fetchone()[0]), 1
+            )
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM profile_facts").fetchone()[0],
+                1,
+            )
+        finally:
+            connection.close()
+
+    def test_first_confirmed_write_initializes_empty_gate_and_logs_guard(self) -> None:
+        """Windows 首次确认写初始化严格空门禁库，日志记 facts_guard 且无事实值。"""
+        gate_path = guard_database_path(self.os_root)
+        self.assertFalse(gate_path.exists())
+        log = ProcessLog(self.root / "facts-first.jsonl", correlation_id="corr-first")
+        value = "合成首次城市"
+        code, payload, stderr = self._run(
+            [
+                "facts",
+                "set",
+                "--profile",
+                "demo",
+                "--key",
+                "work_location",
+                "--value",
+                value,
+                "--confirm",
+            ],
+            log=log,
+        )
+        self.assertEqual((code, stderr), (0, ""), payload)
+        self.assertEqual(payload["result"]["display_value"], value)
+        self.assertTrue(gate_path.is_file())
+        self.assertIsNone(self._gate("demo").inspect())
+        connection = sqlite3.connect(str(gate_path))
+        try:
+            self.assertEqual(
+                int(connection.execute("PRAGMA user_version").fetchone()[0]), 1
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
+                ).fetchall(),
+                [("device_guard",)],
+            )
+            self.assertIsNone(
+                connection.execute("SELECT * FROM device_guard").fetchone()
+            )
+        finally:
+            connection.close()
+        events = [
+            event
+            for event in _events(log)
+            if event["stage"] == "device_gate"
+            and event["operation"] == "facts_guard"
+        ]
+        self.assertEqual([event["result"] for event in events], ["started", "ok"])
+        self.assertNotIn(value, log.path.read_text(encoding="utf-8"))
+
+    def test_unknown_gate_schema_blocks_cli_before_profile_creation(self) -> None:
+        """坏门禁结构在事实写前失败关闭，不创建 profile。"""
+        gate_path = guard_database_path(self.os_root)
+        gate_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(str(gate_path))
+        try:
+            connection.execute("CREATE TABLE legacy(value TEXT)")
+            connection.execute("PRAGMA user_version = 9")
+            connection.commit()
+        finally:
+            connection.close()
+        before = gate_path.read_bytes()
+        code, payload, _ = self._run(
+            [
+                "facts",
+                "set",
+                "--profile",
+                "demo",
+                "--key",
+                "work_location",
+                "--value",
+                "合成城市甲",
+                "--confirm",
+            ]
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["reason_code"], "device_gate_io_error")
+        self.assertFalse(profile_runtime_path(self.root, "demo").exists())
+        self.assertEqual(gate_path.read_bytes(), before)
+
+    def test_unknown_gate_state_blocks_other_profile_cli_write(self) -> None:
+        """既存未知状态行让不同 profile 的事实写也失败关闭，不创建目标 profile。"""
+        gate_path = guard_database_path(self.os_root)
+        with self._gate("alpha").write_guard(create=True):
+            pass
+        _insert_bad_gate_state(
+            gate_path,
+            profile_id="alpha",
+            profile_db_path=str(profile_runtime_path(self.root, "alpha")),
+        )
+        before = gate_path.read_bytes()
+        for profile_id in ("demo", "alpha"):
+            with self.subTest(profile=profile_id):
+                code, payload, stderr = self._run(
+                    [
+                        "facts",
+                        "set",
+                        "--profile",
+                        profile_id,
+                        "--key",
+                        "work_location",
+                        "--value",
+                        "合成城市甲",
+                        "--confirm",
+                    ]
+                )
+                self.assertEqual((code, stderr), (2, ""))
+                self.assertEqual(payload["reason_code"], "device_gate_io_error")
+                self.assertFalse(
+                    profile_runtime_path(self.root, profile_id).exists()
+                )
+                self.assertEqual(gate_path.read_bytes(), before)
+
+    def test_facts_guard_blocks_acquire_immediately_then_releases(self) -> None:
+        """子进程事实写事务持有时 acquire 零等待拒绝；退出后正常取得。"""
+        context = multiprocessing.get_context("spawn")
+        ready = context.Event()
+        release = context.Event()
+        worker = context.Process(
+            target=_guard_hold_worker,
+            args=(str(self.os_root), str(self.root), "alpha", ready, release),
+        )
+        worker.start()
+        try:
+            self.assertTrue(ready.wait(30))
+            self.assertIsNone(self._gate("alpha").inspect())
+            started = time.perf_counter()
+            with self.assertRaises(Exception) as busy:
+                self._gate("alpha").acquire(
+                    profile_id="alpha",
+                    profile_db_path=str(profile_runtime_path(self.root, "alpha")),
+                    owner=Owner(
+                        id="00000000-0000-4000-8000-000000000002",
+                        pid=os.getpid(),
+                        host=canonical_hash("parent-host"),
+                    ),
+                    now=NOW,
+                )
+            elapsed = time.perf_counter() - started
+            self.assertEqual(busy.exception.reason_code, "device_busy")
+            self.assertLess(elapsed, 2.0)
+            self.assertIsNone(self._gate("alpha").inspect())
+        finally:
+            release.set()
+            worker.join(timeout=30)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(worker.exitcode, 0)
+        acquired = self._gate("alpha")
+        acquired.acquire(
+            profile_id="alpha",
+            profile_db_path=str(profile_runtime_path(self.root, "alpha")),
+            owner=Owner(
+                id="00000000-0000-4000-8000-000000000003",
+                pid=os.getpid(),
+                host=canonical_hash("parent-host"),
+            ),
+            now=NOW,
+        )
+        acquired.release(now=NOW, converged=True)
+
+    def test_different_profile_guard_keeps_release_then_acquire_switch(self) -> None:
+        """其它 profile 事实写可短暂串行化；原行不变且释放后可切换新 profile。"""
+        alpha = self._hold("alpha")
+        before = alpha.inspect()
+        beta = self._gate("beta")
+        with beta.write_guard(create=True):
+            self.assertEqual(alpha.inspect(), before)
+        self.assertEqual(alpha.inspect(), before)
+        alpha.release(now=NOW, converged=True)
+        beta.acquire(
+            profile_id="beta",
+            profile_db_path=str(profile_runtime_path(self.root, "beta")),
+            owner=Owner(
+                id="00000000-0000-4000-8000-000000000004",
+                pid=os.getpid(),
+                host=canonical_hash("beta-host"),
+            ),
+            now=NOW,
+        )
+        self.assertEqual(beta.inspect()["profile_id"], "beta")
+        beta.release(now=NOW, converged=True)
+        self.assertIsNone(beta.inspect())
+
+    def test_profile_close_failure_still_releases_gate_for_other_process(self) -> None:
+        """profile close 抛错也不跳过 guard 清理；新进程可立即取得占用。"""
+        log = ProcessLog(
+            self.root / "facts-close-fail.jsonl", correlation_id="corr-close-fail"
+        )
+        real_close = SqliteProfileStore.close
+
+        def failing_close(store_self: SqliteProfileStore) -> None:
+            """先执行真实 close，再注入失败，模拟关闭阶段的故障。"""
+            real_close(store_self)
+            raise OSError("synthetic close failure")
+
+        with patch.object(SqliteProfileStore, "close", failing_close):
+            code, payload, stderr = self._run(
+                [
+                    "facts",
+                    "set",
+                    "--profile",
+                    "demo",
+                    "--key",
+                    "work_location",
+                    "--value",
+                    "合成关闭失败城市",
+                    "--confirm",
+                ],
+                log=log,
+            )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(payload["reason_code"], "profile_io_error")
+        self.assertIsNone(self._gate("demo").inspect())
+        guard_events = [
+            event
+            for event in _events(log)
+            if event["stage"] == "device_gate"
+            and event["operation"] == "facts_guard"
+        ]
+        self.assertEqual(
+            [event["result"] for event in guard_events], ["started", "failed"]
+        )
+        facts_events = [
+            event for event in _events(log) if event["stage"] == "facts"
+        ]
+        self.assertEqual(facts_events[-1]["result"], "failed")
+        self.assertNotIn(
+            "合成关闭失败城市", log.path.read_text(encoding="utf-8")
+        )
+
+        context = multiprocessing.get_context("spawn")
+        queue = context.Queue()
+        worker = context.Process(
+            target=_acquire_probe_worker,
+            args=(str(self.os_root), str(self.root), "demo", queue),
+        )
+        worker.start()
+        try:
+            outcome = queue.get(timeout=30)
+        finally:
+            worker.join(timeout=30)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(worker.exitcode, 0)
+        self.assertEqual(outcome, "held")
+        self.assertIsNone(self._gate("demo").inspect())
 
 
 class ProfileStoreBindingTests(unittest.TestCase):

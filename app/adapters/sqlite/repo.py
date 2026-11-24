@@ -21,6 +21,15 @@ from app.adapters.sqlite.schema import (
     map_locked_error,
     rollback_quietly,
 )
+from app.domain.actions import (
+    ActionError,
+    ActionOutcome,
+    ACTION_KIND_SET,
+    UNRESOLVED_ACTION_STATES,
+    expected_effect,
+    is_action_key,
+    validate_action_target,
+)
 from app.domain.models import (
     APP,
     CLOCK_TOLERANCE_SECONDS,
@@ -43,23 +52,24 @@ from app.domain.models import (
     is_hash,
     is_int,
     is_uuid,
+    is_conversation_key,
     is_nonempty_text,
     parse_utc,
     validate_event_reason,
     validate_evidence,
-    validate_lease,
     validate_lease,
     validate_owner,
     validate_read_result,
 )
 from app.ports.store import StoreError
 from app.process_log import ProcessLog, elapsed_ms
+from app.domain.reading import is_message_key
 
 StopChecker = Callable[[int], str]
 FaultHook = Callable[[str, sqlite3.Connection], None]
 
 
-def _store_operation(name: str):
+def _store_operation(name: str, *, stage: str = "store"):
     """把公开仓储方法包在唯一 started/ok/failed 操作日志边界内。"""
 
     def decorate(method: Callable[..., object]) -> Callable[..., object]:
@@ -68,7 +78,7 @@ def _store_operation(name: str):
         @functools.wraps(method)
         def wrapped(self: "SqliteStore", *args: object, **kwargs: object) -> object:
             """在调用前后记录固定操作名、结果、原因码与耗时。"""
-            with self._operation(name):
+            with self._operation(name, stage=stage):
                 return method(self, *args, **kwargs)
 
         return wrapped
@@ -92,6 +102,132 @@ def default_stop_checker(pid: int) -> str:
     except (PermissionError, OSError):
         return "unknown"
     return "alive"
+
+
+def default_command_stop_checker(pid: int) -> str:
+    """检查原父进程及其直接子进程是否都已停止；无法证明时返回 unknown。"""
+    state = default_stop_checker(pid)
+    if state != "stopped":
+        return state
+    children = _child_processes(pid)
+    if children is None:
+        return "unknown"
+    return "alive" if children else "stopped"
+
+
+def _child_processes(pid: int) -> list[int] | None:
+    """返回直接子进程 PID；无法枚举时返回 None。"""
+    if os.name == "nt":
+        return _windows_children(pid)
+    try:
+        children: list[int] = []
+        for name in os.listdir("/proc"):
+            if not name.isdigit():
+                continue
+            try:
+                stat = Path(f"/proc/{name}/stat").read_text(encoding="utf-8")
+            except OSError:
+                continue
+            parts = stat.rsplit(")", 1)
+            if len(parts) != 2:
+                continue
+            fields = parts[1].split()
+            if len(fields) > 1 and fields[1].isdigit() and int(fields[1]) == pid:
+                children.append(int(name))
+        return children
+    except OSError:
+        return None
+
+
+def _windows_children(pid: int) -> list[int] | None:
+    """用 Toolhelp32 快照枚举直接子进程；失败返回 None。"""
+    from ctypes import wintypes
+
+    class ProcessEntry32(ctypes.Structure):
+        """Toolhelp PROCESSENTRY32W 的固定字段。"""
+
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessEntry32),
+    )
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessEntry32),
+    )
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
+    if not snapshot:
+        return None
+    invalid_handle = wintypes.HANDLE(-1).value
+    if snapshot == invalid_handle:
+        return None
+    result: list[int] = []
+    entry = ProcessEntry32()
+    entry.dwSize = ctypes.sizeof(ProcessEntry32)
+    try:
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
+            return result
+        while True:
+            if int(entry.th32ParentProcessID) == pid:
+                result.append(int(entry.th32ProcessID))
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                break
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return result
+    """通过 OpenProcess 与 WaitForSingleObject 区分已停止、仍活动与未知。"""
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    process_query_limited_information = 0x1000
+    synchronize = 0x00100000
+    wait_object_0 = 0x00000000
+    wait_timeout = 0x00000102
+    error_invalid_parameter = 87
+    handle = kernel32.OpenProcess(
+        process_query_limited_information | synchronize, False, int(pid)
+    )
+    if not handle:
+        return (
+            "stopped"
+            if ctypes.get_last_error() == error_invalid_parameter
+            else "unknown"
+        )
+    try:
+        result = kernel32.WaitForSingleObject(handle, 0)
+    finally:
+        kernel32.CloseHandle(handle)
+    if result == wait_object_0:
+        return "stopped"
+    if result == wait_timeout:
+        return "alive"
+    return "unknown"
 
 
 def _windows_process_state(pid: int) -> str:
@@ -166,7 +302,9 @@ class SqliteStore:
             if profile_id is None:
                 self._connection = connect_database(path)
             else:
-                self._connection = connect_profile_database(Path(path), profile_id)
+                self._connection = connect_profile_database(
+                    Path(path), profile_id, require_actions=True
+                )
 
     def close(self) -> None:
         """关闭本机数据库连接；重复关闭保持无害。"""
@@ -421,7 +559,7 @@ class SqliteStore:
         self._check_clock(now_dt)
 
         with self._write():
-            row, _ = self._match_lease(
+            row, _ = self._match_current_lease(
                 lease, {"running"}, now_dt, allow_expired=False
             )
             self._run_fault_hook("finish_before_task_update")
@@ -577,7 +715,45 @@ class SqliteStore:
 
     @_store_operation("current_lease_expiry")
     def current_lease_expiry(self, lease: Lease, *, now: str) -> str | None:
-        """只读重核任务/设备租约与取得时 Lease/Owner/nonce/到期；不匹配返回 None。"""
+        """只读返回当前真实截止；身份/nonce 匹配且未过期，否则 None。"""
+        if not isinstance(lease, Lease):
+            raise StoreError("invalid_input")
+        try:
+            now_dt = parse_utc(now)
+        except ValueError:
+            raise StoreError("invalid_input") from None
+        try:
+            row, _device = self._match_current_lease(
+                lease, {"leased", "running"}, now_dt, allow_expired=False
+            )
+        except StoreError as error:
+            if error.reason_code in {"stale_lease", "invalid_input"}:
+                return None
+            raise
+        return str(row["lease_expires_at"])
+
+    @_store_operation("require_running")
+    def require_running(self, lease: Lease, *, now: str) -> bool:
+        """只读确认任务已 start 为 running 且当前任务/设备租约完整有效。"""
+        if not isinstance(lease, Lease):
+            raise StoreError("invalid_input")
+        try:
+            now_dt = parse_utc(now)
+        except ValueError:
+            raise StoreError("invalid_input") from None
+        try:
+            self._match_current_lease(
+                lease, {"running"}, now_dt, allow_expired=False
+            )
+        except StoreError as error:
+            if error.reason_code in {"stale_lease", "invalid_input"}:
+                return False
+            raise
+        return True
+
+    @_store_operation("task_conversation")
+    def task_conversation(self, lease: Lease, *, now: str) -> str | None:
+        """只读返回 running 任务绑定会话键；租约任何不符返回 None。"""
         if not isinstance(lease, Lease):
             raise StoreError("invalid_input")
         try:
@@ -585,21 +761,13 @@ class SqliteStore:
             now_dt = parse_utc(now)
         except ValueError:
             raise StoreError("invalid_input") from None
-        nonce = lease.nonce
+        if self.current_lease_expiry(lease, now=now) is None:
+            return None
         try:
             row = self._connection.execute(
-                "SELECT d.app AS task_app, d.key AS task_key, "
-                "d.lease_owner AS task_owner, d.owner_pid AS task_pid, "
-                "d.owner_host AS task_host, d.nonce AS task_nonce, "
-                "d.lease_expires_at AS task_expiry, d.state AS task_state, "
-                "dl.lease_owner AS dev_owner, dl.owner_pid AS dev_pid, "
-                "dl.owner_host AS dev_host, dl.nonce AS dev_nonce, "
-                "dl.lease_expires_at AS dev_expiry, "
-                "dl.reservation_state AS dev_state "
-                "FROM hr_discoveries d JOIN device_lease dl ON d.nonce = dl.nonce "
-                "WHERE d.app = ? AND d.key = ? AND d.nonce = ? "
-                "AND d.state IN ('leased', 'running')",
-                (lease.app, lease.key, nonce),
+                "SELECT conversation_key FROM hr_discoveries "
+                "WHERE app = ? AND \"key\" = ? AND state = 'running' AND nonce = ?",
+                (lease.app, lease.key, lease.nonce),
             ).fetchone()
         except sqlite3.OperationalError as error:
             raise map_locked_error(error) from None
@@ -607,40 +775,950 @@ class SqliteStore:
             raise StoreError("store_io_error") from None
         if row is None:
             return None
+        del now_dt
+        return str(row["conversation_key"])
+
+    @_store_operation("begin_action", stage="action")
+    def begin_action(
+        self,
+        lease: Lease,
+        *,
+        action_kind: str,
+        action_key: str,
+        target_key: str,
+        conversation_key: str,
+        authorization_json: str,
+        daily_sends: int,
+        reply_cooldown_seconds: int,
+        ime_original: str | None,
+        now: str,
+    ) -> dict[str, object]:
+        """原子准入并写 pending 与唯一动作键锁；额度冷却不通过则不调用执行器。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("action_not_ready")
         try:
-            task_expiry = str(row["task_expiry"])
-            device_expiry = str(row["dev_expiry"])
-            valid = (
-                row["dev_state"] == "held"
-                and row["task_app"] == lease.app
-                and row["task_key"] == lease.key
-                and row["task_nonce"] == nonce
-                and row["dev_nonce"] == nonce
-                and row["task_owner"] == lease.owner.id
-                and row["dev_owner"] == lease.owner.id
-                and int(row["task_pid"]) == lease.owner.pid
-                and int(row["dev_pid"]) == lease.owner.pid
-                and row["task_host"] == lease.owner.host
-                and row["dev_host"] == lease.owner.host
-                and task_expiry == device_expiry
-                and now_dt < parse_utc(task_expiry)
-                and now_dt < parse_utc(device_expiry)
+            if action_kind not in ACTION_KIND_SET or not is_action_key(
+                action_kind, action_key
+            ):
+                raise StoreError("invalid_action_key")
+            validate_action_target(action_kind, action_key, target_key)
+            _validate_conversation_key(conversation_key)
+            if action_kind != "send_text" and target_key != conversation_key:
+                raise StoreError("invalid_action_key")
+            if (
+                type(daily_sends) is not int
+                or daily_sends < 1
+                or type(reply_cooldown_seconds) is not int
+                or reply_cooldown_seconds < 0
+            ):
+                raise StoreError("invalid_input")
+            if not isinstance(authorization_json, str):
+                raise StoreError("invalid_input")
+            payload = json.loads(authorization_json)
+            if not isinstance(payload, dict):
+                raise StoreError("invalid_input")
+            if ime_original is not None and (
+                not isinstance(ime_original, str) or not ime_original.strip()
+            ):
+                raise StoreError("invalid_input")
+        except StoreError:
+            raise
+        except (ValueError, TypeError, json.JSONDecodeError):
+            raise StoreError("invalid_input") from None
+        self._check_clock(now_dt)
+
+        with self._write():
+            row, _ = self._match_current_lease(
+                lease, {"running"}, now_dt, allow_expired=False
             )
-        except (TypeError, ValueError):
+            if str(row["conversation_key"]) != conversation_key:
+                raise StoreError("invalid_action_key")
+            existing = self._connection.execute(
+                "SELECT state FROM action_records WHERE action_key = ?",
+                (action_key,),
+            ).fetchone()
+            if existing is not None:
+                raise StoreError("action_conflict")
+            active = self._connection.execute(
+                "SELECT 1 FROM action_records WHERE app = ? AND task_key = ? "
+                "AND state IN ('pending', 'unknown', 'cancelled') LIMIT 1",
+                (APP, lease.key),
+            ).fetchone()
+            if active is not None:
+                raise StoreError("action_conflict")
+            if action_kind == "send_text":
+                self._require_text_admission(
+                    now_dt,
+                    daily_sends=daily_sends,
+                    reply_cooldown_seconds=reply_cooldown_seconds,
+                    conversation_key=conversation_key,
+                )
+            self._run_fault_hook("action_before_insert")
+            self._connection.execute(
+                "INSERT INTO action_records (action_key, app, action_kind, task_key, "
+                "target_key, conversation_key, state, authorization_json, "
+                "lease_owner, owner_pid, owner_host, nonce, lease_expires_at, "
+                "created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    action_key,
+                    APP,
+                    action_kind,
+                    lease.key,
+                    target_key,
+                    conversation_key,
+                    authorization_json,
+                    lease.owner.id,
+                    lease.owner.pid,
+                    lease.owner.host,
+                    lease.nonce,
+                    str(row["lease_expires_at"]),
+                    now,
+                    now,
+                ),
+            )
+            if ime_original is not None:
+                self._connection.execute(
+                    "INSERT INTO action_ime_state (singleton, action_key, original_ime, "
+                    "current_ime, saved_at, restored, updated_at) "
+                    "VALUES (1, ?, ?, ?, ?, 0, ?) "
+                    "ON CONFLICT(singleton) DO UPDATE SET action_key = excluded.action_key, "
+                    "original_ime = excluded.original_ime, "
+                    "current_ime = excluded.current_ime, saved_at = excluded.saved_at, "
+                    "restored = 0, updated_at = excluded.updated_at",
+                    (action_key, ime_original, ime_original, now, now),
+                )
+            self._insert_action_event(
+                action_key=action_key,
+                event="action_pending",
+                from_state=None,
+                to_state="pending",
+                reason_code=None,
+                created_at=now,
+                payload={"action_kind": action_kind, "nonce": lease.nonce},
+            )
+        return {
+            "action_key": action_key,
+            "action_kind": action_kind,
+            "task_key": lease.key,
+            "target_key": target_key,
+            "conversation_key": conversation_key,
+            "state": "pending",
+            "created_at": now,
+        }
+
+    @_store_operation("complete_action", stage="action")
+    def complete_action(
+        self,
+        lease: Lease,
+        *,
+        action_key: str,
+        outcome: ActionOutcome,
+        now: str,
+    ) -> dict[str, object]:
+        """同一事务提交动作证据、任务终态、设备处置与两类审计事件。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("action_not_ready")
+        if not isinstance(outcome, ActionOutcome):
+            raise StoreError("invalid_observation")
+        try:
+            validate_evidence(outcome.evidence)
+        except ValueError:
+            raise StoreError("invalid_observation") from None
+        self._check_clock(now_dt)
+
+        with self._write():
+            task_row, _ = self._match_current_lease(
+                lease, {"running"}, now_dt, allow_expired=False
+            )
+            record = self._connection.execute(
+                "SELECT * FROM action_records WHERE action_key = ?",
+                (action_key,),
+            ).fetchone()
+            if record is None:
+                raise StoreError("action_not_found")
+            if (
+                str(record["state"]) != "pending"
+                or str(record["task_key"]) != lease.key
+                or not is_action_key(str(record["action_kind"]), action_key)
+            ):
+                raise StoreError("action_not_ready")
+            action_kind = str(record["action_kind"])
+            evidence = outcome.evidence
+            if evidence.action_key != action_key:
+                raise StoreError("invalid_observation")
+            try:
+                created_at = parse_utc(str(record["created_at"]))
+                observed_at = parse_utc(evidence.observed_at)
+            except ValueError:
+                raise StoreError("invalid_observation") from None
+            if observed_at < created_at or observed_at > now_dt:
+                raise StoreError("invalid_observation")
+            if evidence.outcome == "performed":
+                allowed = {expected_effect(action_kind)}
+                allowed.add(expected_effect(action_kind, delivered=True))
+                if evidence.effect not in allowed:
+                    raise StoreError("invalid_observation")
+            elif evidence.effect != "none":
+                raise StoreError("invalid_observation")
+
+            if evidence.outcome == "performed" and not outcome.pause:
+                record_state = "performed"
+                record_outcome: str | None = "performed"
+                record_effect: str | None = evidence.effect
+                record_reason: str | None = None
+                task_state = "done"
+                task_reason: str | None = None
+            elif evidence.outcome == "not_performed" and not outcome.pause:
+                record_state = "not_performed"
+                record_outcome = "not_performed"
+                record_effect = "none"
+                record_reason = evidence.reason_code
+                task_state = "not_sent"
+                task_reason = evidence.reason_code
+            elif evidence.outcome == "not_performed":
+                record_state = "pending"
+                record_outcome = None
+                record_effect = None
+                record_reason = "result_unverified"
+                task_state = "blocked"
+                task_reason = "result_unverified"
+            elif evidence.outcome == "performed":
+                record_state = "unknown"
+                record_outcome = "unknown"
+                record_effect = "none"
+                record_reason = "result_unverified"
+                task_state = "blocked"
+                task_reason = "result_unverified"
+            else:
+                record_state = "unknown"
+                record_outcome = "unknown"
+                record_effect = "none"
+                record_reason = evidence.reason_code
+                task_state = "blocked"
+                task_reason = evidence.reason_code
+
+            self._run_fault_hook("action_before_record_update")
+            cursor = self._connection.execute(
+                "UPDATE action_records SET state = ?, outcome = ?, effect = ?, "
+                "reason_code = ?, before_snapshot_id = ?, after_snapshot_id = ?, "
+                "observed_at = ?, scene_settled = ?, confirmation_open = ?, "
+                "ime_restored = ?, command_quiet = ?, updated_at = ? "
+                "WHERE action_key = ? AND state = 'pending'",
+                (
+                    record_state,
+                    record_outcome,
+                    record_effect,
+                    record_reason,
+                    evidence.before_snapshot_id,
+                    evidence.after_snapshot_id,
+                    evidence.observed_at,
+                    1 if outcome.scene_settled else 0,
+                    1 if outcome.confirmation_open else 0,
+                    1 if outcome.ime_restored else 0,
+                    1 if outcome.command_quiet else 0,
+                    now,
+                    action_key,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("action_not_ready")
+            if outcome.ime_restored:
+                self._connection.execute(
+                    "UPDATE action_ime_state SET restored = 1, "
+                    "current_ime = original_ime, updated_at = ? "
+                    "WHERE singleton = 1 AND action_key = ?",
+                    (now, action_key),
+                )
+            self._run_fault_hook("action_before_task_update")
+            self._apply_task_terminal(
+                task_row,
+                lease,
+                now=now,
+                task_state=task_state,
+                reason_code=task_reason,
+                from_state="running",
+                lease_expires_at=str(task_row["lease_expires_at"]),
+                keep_device=(task_state == "blocked"),
+            )
+            self._run_fault_hook("action_before_event")
+            self._insert_action_event(
+                action_key=action_key,
+                event="action_completed",
+                from_state="pending",
+                to_state=record_state,
+                reason_code=record_reason,
+                created_at=now,
+                payload={"action_kind": action_kind, "evidence_outcome": evidence.outcome},
+            )
+        return {
+            "action_key": action_key,
+            "action_kind": action_kind,
+            "task_key": lease.key,
+            "state": record_state,
+            "evidence": {
+                "action_key": action_key,
+                "outcome": evidence.outcome,
+                "effect": evidence.effect,
+                "reason_code": evidence.reason_code,
+                "before_snapshot_id": evidence.before_snapshot_id,
+                "after_snapshot_id": evidence.after_snapshot_id,
+                "observed_at": evidence.observed_at,
+            },
+            "delivered": bool(outcome.delivered and record_state == "performed"),
+            "gate_converged": record_state in {"performed", "not_performed"}
+            and not outcome.pause,
+        }
+
+    @_store_operation("freeze_action", stage="action")
+    def freeze_attempted_action(
+        self,
+        lease: Lease,
+        *,
+        action_key: str,
+        reason_code: str,
+        now: str,
+    ) -> dict[str, object]:
+        """已尝试动作在失效租约/共享异常下按原身份冻结为 unknown/blocked。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("action_not_ready")
+        if not isinstance(reason_code, str) or not reason_code:
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            task_row, _device = self._match_current_lease(
+                lease, {"leased", "running"}, now_dt, allow_expired=True
+            )
+            record = self._connection.execute(
+                "SELECT * FROM action_records WHERE action_key = ?",
+                (action_key,),
+            ).fetchone()
+            if (
+                record is None
+                or str(record["state"]) != "pending"
+                or str(record["task_key"]) != lease.key
+                or str(record["nonce"]) != lease.nonce
+                or str(record["lease_owner"]) != lease.owner.id
+                or int(record["owner_pid"]) != lease.owner.pid
+            ):
+                raise StoreError("action_not_ready")
+            cursor = self._connection.execute(
+                "UPDATE action_records SET state = 'unknown', outcome = 'unknown', "
+                "effect = 'none', reason_code = ?, observed_at = ?, updated_at = ? "
+                "WHERE action_key = ? AND state = 'pending'",
+                (reason_code, now, now, action_key),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("action_not_ready")
+            self._apply_task_terminal(
+                task_row,
+                lease,
+                now=now,
+                task_state="blocked",
+                reason_code=reason_code,
+                from_state=str(task_row["state"]),
+                lease_expires_at=str(task_row["lease_expires_at"]),
+                keep_device=True,
+            )
+            self._insert_action_event(
+                action_key=action_key,
+                event="action_completed",
+                from_state="pending",
+                to_state="unknown",
+                reason_code=reason_code,
+                created_at=now,
+                payload={"action_kind": str(record["action_kind"]), "freeze": True},
+            )
+        return {
+            "action_key": action_key,
+            "action_kind": str(record["action_kind"]),
+            "task_key": lease.key,
+            "state": "unknown",
+            "evidence": {
+                "action_key": action_key,
+                "outcome": "unknown",
+                "effect": "none",
+                "reason_code": reason_code,
+                "before_snapshot_id": None,
+                "after_snapshot_id": None,
+                "observed_at": now,
+            },
+            "delivered": False,
+            "gate_converged": False,
+            "frozen": True,
+        }
+
+    @_store_operation("reconcile_action", stage="action")
+    def reconcile_action(
+        self,
+        *,
+        action_key: str,
+        resolution: str,
+        evidence: Evidence | None,
+        command_quiet: bool,
+        scene_settled: bool,
+        confirmation_open: bool,
+        ime_restored: bool,
+        explicit_confirm: bool,
+        command_stopped: bool,
+        now: str,
+    ) -> dict[str, object]:
+        """人工确认/放弃固定三项；abandon 只关任务，未决锁与设备隔离保留。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("action_not_ready")
+        if resolution not in {
+            "confirm_performed",
+            "confirm_not_performed",
+            "abandon",
+        }:
+            raise StoreError("invalid_input")
+        if explicit_confirm is not True:
+            raise StoreError("recovery_not_confirmed")
+        if type(command_stopped) is not bool:
+            raise StoreError("invalid_input")
+        for name, value in (
+            ("command_quiet", command_quiet),
+            ("scene_settled", scene_settled),
+            ("confirmation_open", confirmation_open),
+            ("ime_restored", ime_restored),
+        ):
+            if type(value) is not bool:
+                raise StoreError("invalid_input")
+        if resolution != "abandon":
+            if evidence is None:
+                raise StoreError("invalid_observation")
+            try:
+                validate_evidence(evidence)
+            except ValueError:
+                raise StoreError("invalid_observation") from None
+            if (
+                not command_quiet
+                or not scene_settled
+                or confirmation_open
+                or not ime_restored
+            ):
+                raise StoreError("scene_unsettled")
+        self._check_clock(now_dt)
+
+        with self._write():
+            record = self._connection.execute(
+                "SELECT * FROM action_records WHERE action_key = ?",
+                (action_key,),
+            ).fetchone()
+            if record is None:
+                raise StoreError("action_not_found")
+            from_state = str(record["state"])
+            if from_state not in {"pending", "unknown", "cancelled"}:
+                raise StoreError("action_not_ready")
+            if from_state == "cancelled" and resolution == "abandon":
+                raise StoreError("action_not_ready")
+            if str(record["owner_host"]) != self._local_host:
+                raise StoreError("owner_not_stopped")
+            action_kind = str(record["action_kind"])
+            task = self._connection.execute(
+                "SELECT * FROM hr_discoveries WHERE app = ? AND \"key\" = ?",
+                (APP, str(record["task_key"])),
+            ).fetchone()
+            if task is None:
+                raise StoreError("action_not_ready")
+            allowed_task_states = {"blocked", "cancelled"} if from_state == "cancelled" else {
+                "leased",
+                "running",
+                "blocked",
+            }
+            if str(task["state"]) not in allowed_task_states:
+                raise StoreError("action_not_ready")
+            if str(task["state"]) in {"leased", "running"} and (
+                task["nonce"] != record["nonce"]
+                or task["lease_owner"] != record["lease_owner"]
+                or task["owner_pid"] != record["owner_pid"]
+                or task["owner_host"] != record["owner_host"]
+            ):
+                raise StoreError("stale_lease")
+            if resolution != "abandon":
+                if evidence is None or evidence.action_key != action_key:
+                    raise StoreError("invalid_observation")
+                if resolution == "confirm_performed":
+                    if evidence.outcome != "performed":
+                        raise StoreError("invalid_observation")
+                    if evidence.effect not in {
+                        expected_effect(action_kind),
+                        expected_effect(action_kind, delivered=True),
+                    }:
+                        raise StoreError("invalid_observation")
+                elif (
+                    evidence.outcome != "not_performed"
+                    or evidence.effect != "none"
+                ):
+                    raise StoreError("invalid_observation")
+                if self._stop_checker(int(record["owner_pid"])) != "stopped":
+                    raise StoreError("owner_not_stopped")
+                if not command_stopped:
+                    raise StoreError("owner_not_stopped")
+
+            if resolution == "confirm_performed":
+                new_record_state = "performed"
+                record_outcome: str | None = "performed"
+                record_effect: str | None = None if evidence is None else evidence.effect
+                record_reason: str | None = None
+                task_state = "cancelled" if from_state == "cancelled" else "done"
+                task_reason: str | None = (
+                    "cancelled_before_action" if from_state == "cancelled" else None
+                )
+                keep_device = False
+            elif resolution == "confirm_not_performed":
+                new_record_state = "not_performed"
+                record_outcome = "not_performed"
+                record_effect = "none"
+                record_reason = None if evidence is None else evidence.reason_code
+                task_state = "cancelled" if from_state == "cancelled" else "not_sent"
+                task_reason = (
+                    "cancelled_before_action"
+                    if from_state == "cancelled"
+                    else record_reason
+                )
+                keep_device = False
+            else:
+                new_record_state = "cancelled"
+                record_outcome = None
+                record_effect = None
+                record_reason = None
+                task_state = "cancelled"
+                task_reason = "cancelled_before_action"
+                keep_device = True
+
+            self._run_fault_hook("reconcile_before_record")
+            cursor = self._connection.execute(
+                "UPDATE action_records SET state = ?, outcome = ?, effect = ?, "
+                "reason_code = ?, before_snapshot_id = CASE WHEN ? IS NULL THEN before_snapshot_id ELSE ? END, "
+                "after_snapshot_id = CASE WHEN ? IS NULL THEN after_snapshot_id ELSE ? END, "
+                "observed_at = CASE WHEN ? IS NULL THEN observed_at ELSE ? END, "
+                "scene_settled = ?, confirmation_open = ?, ime_restored = ?, "
+                "command_quiet = ?, updated_at = ? "
+                "WHERE action_key = ? AND state = ?",
+                (
+                    new_record_state,
+                    record_outcome,
+                    record_effect,
+                    record_reason,
+                    None if evidence is None else "x",
+                    None if evidence is None else evidence.before_snapshot_id,
+                    None if evidence is None else "x",
+                    None if evidence is None else evidence.after_snapshot_id,
+                    None if evidence is None else "x",
+                    None if evidence is None else evidence.observed_at,
+                    1 if scene_settled else 0,
+                    1 if confirmation_open else 0,
+                    1 if ime_restored else 0,
+                    1 if command_quiet else 0,
+                    now,
+                    action_key,
+                    from_state,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("action_not_ready")
+            if ime_restored:
+                self._connection.execute(
+                    "UPDATE action_ime_state SET restored = 1, "
+                    "current_ime = original_ime, updated_at = ? "
+                    "WHERE singleton = 1 AND action_key = ?",
+                    (now, action_key),
+                )
+            self._run_fault_hook("reconcile_before_task")
+            if from_state == "cancelled":
+                self._connection.execute(
+                    "DELETE FROM device_lease WHERE device_key = 'primary'"
+                )
+            else:
+                self._apply_reconciled_task(
+                    task,
+                    now=now,
+                    task_state=task_state,
+                    reason_code=task_reason,
+                    keep_device=keep_device,
+                )
+            self._run_fault_hook("reconcile_before_event")
+            self._insert_action_event(
+                action_key=action_key,
+                event="action_reconciled",
+                from_state=from_state,
+                to_state=new_record_state,
+                reason_code=task_reason,
+                created_at=now,
+                payload={"resolution": resolution},
+            )
+        return {
+            "action_key": action_key,
+            "action_kind": action_kind,
+            "task_key": str(record["task_key"]),
+            "resolution": resolution,
+            "state": new_record_state,
+            "task_state": task_state,
+            "gate_converged": resolution != "abandon",
+            "lock_retained": resolution == "abandon",
+        }
+
+    @_store_operation("get_action", stage="action")
+    def get_action(self, action_key: str) -> dict[str, object] | None:
+        """只读返回一条动作记录，含固定标志位与证据摘要。"""
+        if not isinstance(action_key, str) or not action_key:
+            raise StoreError("invalid_input")
+        try:
+            row = self._connection.execute(
+                "SELECT * FROM action_records WHERE action_key = ?",
+                (action_key,),
+            ).fetchone()
+        except sqlite3.OperationalError as error:
+            raise map_locked_error(error) from None
+        except sqlite3.Error:
+            raise StoreError("store_io_error") from None
+        return None if row is None else _action_row_payload(row)
+
+    @_store_operation("pending_actions", stage="action")
+    def pending_actions(self, app: str = APP) -> list[dict[str, object]]:
+        """只读返回 pending/unknown/cancelled 动作，按创建时间与键排序。"""
+        if app != APP:
+            raise StoreError("invalid_input")
+        try:
+            rows = self._connection.execute(
+                "SELECT * FROM action_records WHERE app = ? "
+                "AND state IN ('pending', 'unknown', 'cancelled') "
+                "ORDER BY created_at, action_key",
+                (app,),
+            ).fetchall()
+        except sqlite3.OperationalError as error:
+            raise map_locked_error(error) from None
+        except sqlite3.Error:
+            raise StoreError("store_io_error") from None
+        return [_action_row_payload(row) for row in rows]
+
+    @_store_operation("save_ime", stage="action")
+    def save_ime_state(
+        self, action_key: str, original_ime: str, *, now: str
+    ) -> None:
+        """在切换 IME 前持久化原值；只允许当前 pending 动作写入。"""
+        if self.profile_id is None:
+            raise StoreError("action_not_ready")
+        if not isinstance(action_key, str) or not isinstance(original_ime, str):
+            raise StoreError("invalid_input")
+        if not original_ime.strip():
+            raise StoreError("invalid_input")
+        self._prepare_now(now)
+        with self._write():
+            record = self._connection.execute(
+                "SELECT state FROM action_records WHERE action_key = ?",
+                (action_key,),
+            ).fetchone()
+            if record is None or str(record["state"]) != "pending":
+                raise StoreError("action_not_ready")
+            self._connection.execute(
+                "INSERT INTO action_ime_state (singleton, action_key, original_ime, "
+                "current_ime, saved_at, restored, updated_at) "
+                "VALUES (1, ?, ?, ?, ?, 0, ?) "
+                "ON CONFLICT(singleton) DO UPDATE SET action_key = excluded.action_key, "
+                "original_ime = excluded.original_ime, "
+                "current_ime = excluded.current_ime, saved_at = excluded.saved_at, "
+                "restored = 0, updated_at = excluded.updated_at",
+                (action_key, original_ime, original_ime, now, now),
+            )
+
+    @_store_operation("text_admission", stage="action")
+    def text_admission_status(
+        self,
+        *,
+        now: str,
+        daily_sends: int,
+        reply_cooldown_seconds: int,
+        conversation_key: str,
+    ) -> dict[str, object]:
+        """只读计算文本资格；库不可读时报错而不是返回默认零已用。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("action_not_ready")
+        try:
+            _validate_conversation_key(conversation_key)
+            if (
+                type(daily_sends) is not int
+                or daily_sends < 1
+                or type(reply_cooldown_seconds) is not int
+                or reply_cooldown_seconds < 0
+            ):
+                raise ValueError("limits are invalid")
+        except ValueError:
+            raise StoreError("invalid_input") from None
+        try:
+            status = self._text_admission(
+                now_dt,
+                daily_sends=daily_sends,
+                reply_cooldown_seconds=reply_cooldown_seconds,
+                conversation_key=conversation_key,
+            )
+        except sqlite3.OperationalError as error:
+            raise map_locked_error(error) from None
+        except sqlite3.Error:
+            raise StoreError("store_io_error") from None
+        return status
+
+    @_store_operation("load_ime", stage="action")
+    def load_ime_state(self) -> dict[str, object] | None:
+        """只读返回持久化的原 IME 与恢复状态，供重启后继续收敛。"""
+        if self.profile_id is None:
+            raise StoreError("action_not_ready")
+        try:
+            row = self._connection.execute(
+                "SELECT * FROM action_ime_state WHERE singleton = 1"
+            ).fetchone()
+        except sqlite3.OperationalError as error:
+            raise map_locked_error(error) from None
+        except sqlite3.Error:
+            raise StoreError("store_io_error") from None
+        if row is None:
             return None
-        return task_expiry if valid else None
+        return {
+            "action_key": str(row["action_key"]),
+            "original_ime": str(row["original_ime"]),
+            "current_ime": None if row["current_ime"] is None else str(row["current_ime"]),
+            "saved_at": str(row["saved_at"]),
+            "restored": bool(row["restored"]),
+            "updated_at": str(row["updated_at"]),
+        }
+
+    def _require_text_admission(
+        self,
+        now_dt: datetime,
+        *,
+        daily_sends: int,
+        reply_cooldown_seconds: int,
+        conversation_key: str,
+    ) -> None:
+        """在 pending 插入同一事务内拒绝额度、冷却或未决文本发送。"""
+        status = self._text_admission(
+            now_dt,
+            daily_sends=daily_sends,
+            reply_cooldown_seconds=reply_cooldown_seconds,
+            conversation_key=conversation_key,
+        )
+        if status["reason"] is not None:
+            raise StoreError(str(status["reason"]))
+
+    def _text_admission(
+        self,
+        now_dt: datetime,
+        *,
+        daily_sends: int,
+        reply_cooldown_seconds: int,
+        conversation_key: str,
+    ) -> dict[str, object]:
+        """按 UTC 日期、跨 app 文本成功与按会话冷却计算唯一文本资格。"""
+        now_text = format_utc(now_dt)
+        day = now_text[:10]
+        daily_count = int(
+            self._connection.execute(
+                "SELECT COUNT(*) FROM action_records "
+                "WHERE action_kind = 'send_text' AND state = 'performed' "
+                "AND effect = 'sent' AND substr(observed_at, 1, 10) = ?",
+                (day,),
+            ).fetchone()[0]
+        )
+        pending_text = int(
+            self._connection.execute(
+                "SELECT COUNT(*) FROM action_records "
+                "WHERE action_kind = 'send_text' AND state IN ('pending', 'unknown')"
+            ).fetchone()[0]
+        )
+        last_row = self._connection.execute(
+            "SELECT MAX(observed_at) AS last_at FROM action_records "
+            "WHERE action_kind = 'send_text' AND state = 'performed' "
+            "AND effect = 'sent' AND conversation_key = ?",
+            (conversation_key,),
+        ).fetchone()
+        last_at = None if last_row is None else last_row["last_at"]
+        cooldown_until: str | None = None
+        cooldown_active = False
+        if last_at is not None:
+            cooldown_until = add_seconds(str(last_at), reply_cooldown_seconds)
+            cooldown_active = now_dt < parse_utc(cooldown_until)
+        if pending_text:
+            reason: str | None = "text_send_blocked"
+        elif daily_count >= daily_sends:
+            reason = "quota_exceeded"
+        elif cooldown_active:
+            reason = "cooldown_active"
+        else:
+            reason = None
+        return {
+            "eligible": reason is None,
+            "reason": reason,
+            "daily_count": daily_count,
+            "daily_limit": daily_sends,
+            "pending_text": pending_text,
+            "cooldown_seconds": reply_cooldown_seconds,
+            "last_sent_at": None if last_at is None else str(last_at),
+            "cooldown_until": cooldown_until,
+        }
+
+    def _apply_task_terminal(
+        self,
+        task_row: sqlite3.Row,
+        lease: Lease,
+        *,
+        now: str,
+        task_state: str,
+        reason_code: str | None,
+        from_state: str,
+        lease_expires_at: str,
+        keep_device: bool,
+    ) -> None:
+        """在同一事务清任务租约并按 blocked/终态处理设备行与任务事件。"""
+        cursor = self._connection.execute(
+            "UPDATE hr_discoveries SET state = ?, reason_code = ?, "
+            "lease_owner = NULL, owner_pid = NULL, owner_host = NULL, "
+            "nonce = NULL, lease_expires_at = NULL, updated_at = ? "
+            "WHERE app = ? AND \"key\" = ? AND state = ? "
+            "AND lease_owner = ? AND owner_pid = ? AND owner_host = ? "
+            "AND nonce = ? AND lease_expires_at = ?",
+            (
+                task_state,
+                reason_code,
+                now,
+                lease.app,
+                lease.key,
+                from_state,
+                lease.owner.id,
+                lease.owner.pid,
+                lease.owner.host,
+                lease.nonce,
+                lease_expires_at,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise StoreError("stale_lease")
+        if keep_device:
+            cursor = self._connection.execute(
+                "UPDATE device_lease SET reservation_state = 'quarantined' "
+                "WHERE device_key = 'primary' AND reservation_state = 'held' "
+                "AND lease_owner = ? AND owner_pid = ? AND owner_host = ? "
+                "AND nonce = ? AND lease_expires_at = ?",
+                (
+                    lease.owner.id,
+                    lease.owner.pid,
+                    lease.owner.host,
+                    lease.nonce,
+                    lease_expires_at,
+                ),
+            )
+        else:
+            cursor = self._connection.execute(
+                "DELETE FROM device_lease WHERE device_key = 'primary' "
+                "AND reservation_state = 'held' AND lease_owner = ? "
+                "AND owner_pid = ? AND owner_host = ? AND nonce = ? "
+                "AND lease_expires_at = ?",
+                (
+                    lease.owner.id,
+                    lease.owner.pid,
+                    lease.owner.host,
+                    lease.nonce,
+                    lease_expires_at,
+                ),
+            )
+        if cursor.rowcount != 1:
+            raise StoreError("stale_lease")
+        self._insert_event(
+            app=lease.app,
+            subject_key=lease.key,
+            event="task_finished",
+            reason_code=reason_code,
+            created_at=now,
+            payload=_event_payload(from_state, task_state, lease.nonce, None),
+        )
+
+    def _apply_reconciled_task(
+        self,
+        task: sqlite3.Row,
+        *,
+        now: str,
+        task_state: str,
+        reason_code: str | None,
+        keep_device: bool,
+    ) -> None:
+        """人工对账后清理旧任务租约；abandon 保留隔离设备行。"""
+        cursor = self._connection.execute(
+            "UPDATE hr_discoveries SET state = ?, reason_code = ?, "
+            "lease_owner = NULL, owner_pid = NULL, owner_host = NULL, "
+            "nonce = NULL, lease_expires_at = NULL, updated_at = ? "
+            "WHERE app = ? AND \"key\" = ? AND state = ?",
+            (
+                task_state,
+                reason_code,
+                now,
+                APP,
+                str(task["key"]),
+                str(task["state"]),
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise StoreError("stale_lease")
+        if keep_device:
+            self._connection.execute(
+                "UPDATE device_lease SET reservation_state = 'quarantined' "
+                "WHERE device_key = 'primary' AND reservation_state = 'held'"
+            )
+        else:
+            self._connection.execute(
+                "DELETE FROM device_lease WHERE device_key = 'primary'"
+            )
+        self._insert_event(
+            app=APP,
+            subject_key=str(task["key"]),
+            event="task_finished",
+            reason_code=reason_code,
+            created_at=now,
+            payload=_event_payload(str(task["state"]), task_state, None, None),
+        )
+
+    def _insert_action_event(
+        self,
+        *,
+        action_key: str,
+        event: str,
+        from_state: str | None,
+        to_state: str,
+        reason_code: str | None,
+        created_at: str,
+        payload: dict[str, object],
+    ) -> None:
+        """追加不含正文/坐标的动作审计事件。"""
+        validate_event_reason(reason_code)
+        self._connection.execute(
+            "INSERT INTO action_events (action_key, event, from_state, to_state, "
+            "reason_code, created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                action_key,
+                event,
+                from_state,
+                to_state,
+                reason_code,
+                created_at,
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            ),
+        )
 
     @contextmanager
-    def _operation(self, name: str) -> Iterator[None]:
+    def _operation(self, name: str, *, stage: str = "store") -> Iterator[None]:
         """记录公开操作的 started/ok/failed；日志失败只降级，不影响业务结果。"""
         started = time.perf_counter()
-        self.process_log.record(stage="store", operation=name, result="started")
+        self.process_log.record(stage=stage, operation=name, result="started")
         try:
             try:
                 yield
             except StoreError as error:
                 self.process_log.record(
-                    stage="store",
+                    stage=stage,
                     operation=name,
                     result="failed",
                     reason_code=error.reason_code,
@@ -650,7 +1728,7 @@ class SqliteStore:
                 raise
             except Exception:
                 self.process_log.record(
-                    stage="store",
+                    stage=stage,
                     operation=name,
                     result="failed",
                     error_category="internal",
@@ -659,7 +1737,7 @@ class SqliteStore:
                 raise
             else:
                 self.process_log.record(
-                    stage="store",
+                    stage=stage,
                     operation=name,
                     result="ok",
                     duration_ms=elapsed_ms(started),
@@ -714,7 +1792,7 @@ class SqliteStore:
             raise StoreError("clock_changed")
         self._clock_mark = (mono, now_dt)
 
-    def _match_lease(
+    def _match_current_lease(
         self,
         lease: Lease,
         states: set[str] | frozenset[str],
@@ -722,7 +1800,7 @@ class SqliteStore:
         *,
         allow_expired: bool,
     ) -> tuple[sqlite3.Row, sqlite3.Row]:
-        """核对任务与 held 设备行的持有者、nonce、截止时间；不匹配即 stale。"""
+        """按 app/key/owner/pid/host/nonce 匹配当前行，使用库中真实截止时间。"""
         try:
             validate_lease(lease)
         except ValueError:
@@ -740,18 +1818,36 @@ class SqliteStore:
             or row["owner_pid"] != lease.owner.pid
             or row["owner_host"] != lease.owner.host
             or row["nonce"] != lease.nonce
-            or row["lease_expires_at"] != lease.expires_at
             or str(device["reservation_state"]) != "held"
             or device["lease_owner"] != lease.owner.id
             or device["owner_pid"] != lease.owner.pid
             or device["owner_host"] != lease.owner.host
             or device["nonce"] != lease.nonce
-            or device["lease_expires_at"] != lease.expires_at
+            or str(row["lease_expires_at"]) != str(device["lease_expires_at"])
         ):
             raise StoreError("stale_lease")
         if not allow_expired and (
             now_dt >= parse_utc(str(row["lease_expires_at"]))
             or now_dt >= parse_utc(str(device["lease_expires_at"]))
+        ):
+            raise StoreError("stale_lease")
+        return row, device
+
+    def _match_lease(
+        self,
+        lease: Lease,
+        states: set[str] | frozenset[str],
+        now_dt: datetime,
+        *,
+        allow_expired: bool,
+    ) -> tuple[sqlite3.Row, sqlite3.Row]:
+        """核对任务与 held 设备行的持有者、nonce 与取得时截止；不匹配即 stale。"""
+        row, device = self._match_current_lease(
+            lease, states, now_dt, allow_expired=allow_expired
+        )
+        if (
+            str(row["lease_expires_at"]) != lease.expires_at
+            or str(device["lease_expires_at"]) != lease.expires_at
         ):
             raise StoreError("stale_lease")
         return row, device
@@ -1013,3 +2109,50 @@ def _require_time_order(observed_at: str, existing_updated_at: str) -> None:
     """拒绝用更早的观察时间倒写已有发现。"""
     if parse_utc(observed_at) < parse_utc(existing_updated_at):
         raise StoreError("invalid_input")
+
+
+def _validate_conversation_key(conversation_key: object) -> None:
+    """要求目标会话键是当前 app 的规范会话键。"""
+    if not is_conversation_key(APP, conversation_key):
+        raise ValueError("conversation key is invalid")
+
+
+def _validate_target_key(action_kind: str, target_key: object) -> None:
+    """文本目标必须是稳定消息键，其它动作目标必须是规范会话键。"""
+    if action_kind == "send_text":
+        if not is_message_key(target_key):
+            raise ValueError("target key is invalid")
+        return
+    _validate_conversation_key(target_key)
+
+
+def _action_row_payload(row: sqlite3.Row) -> dict[str, object]:
+    """把动作行投影为不含正文/坐标/授权的固定结果对象。"""
+    return {
+        "action_key": str(row["action_key"]),
+        "app": str(row["app"]),
+        "action_kind": str(row["action_kind"]),
+        "task_key": str(row["task_key"]),
+        "target_key": str(row["target_key"]),
+        "conversation_key": str(row["conversation_key"]),
+        "state": str(row["state"]),
+        "outcome": None if row["outcome"] is None else str(row["outcome"]),
+        "effect": None if row["effect"] is None else str(row["effect"]),
+        "reason_code": None if row["reason_code"] is None else str(row["reason_code"]),
+        "before_snapshot_id": (
+            None if row["before_snapshot_id"] is None else str(row["before_snapshot_id"])
+        ),
+        "after_snapshot_id": (
+            None if row["after_snapshot_id"] is None else str(row["after_snapshot_id"])
+        ),
+        "observed_at": None if row["observed_at"] is None else str(row["observed_at"]),
+        "scene_settled": bool(row["scene_settled"]),
+        "confirmation_open": bool(row["confirmation_open"]),
+        "ime_restored": bool(row["ime_restored"]),
+        "command_quiet": bool(row["command_quiet"]),
+        "created_at": str(row["created_at"]),
+        "updated_at": str(row["updated_at"]),
+        "attempt": int(row["attempt"]),
+        "owner_pid": int(row["owner_pid"]),
+        "owner_host": str(row["owner_host"]),
+    }

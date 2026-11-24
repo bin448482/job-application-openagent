@@ -4,13 +4,14 @@
 
 ## 当前状态
 
-旧的业务源码、Skills 与业务离线测试已清理，项目正在分阶段实现。当前已实现 M0 只读探针、M1 本机状态库/租约、M2 合成未读四源传感器、M3 离线读取阶梯/页面/职位/会话读取、M4a 策略包离线编辑/校验/预览/快照/恢复、M4b A/B 本机决策桥/分层 policy eval/留出冻结登记，以及 M4c profile 独立事实库/本机事实确认入口、固定 OS 共享 SQLite 设备门禁、真实 restore 活动检查、验收凭证复核与 `run check` 预检；仍未连接真实设备或模型，并已建立独立的 promptfoo 合成黄金测试集：
+旧的业务源码、Skills 与业务离线测试已清理，项目正在分阶段实现。当前已实现 M0 只读探针、M1 本机状态库/租约、M2 合成未读四源传感器、M3 离线读取阶梯/页面/职位/会话读取、M4a 策略包离线编辑/校验/预览/快照/恢复、M4b A/B 本机决策桥/分层 policy eval/留出冻结登记、M4c profile 独立事实库/本机事实确认入口、固定 OS 共享 SQLite 设备门禁、确认事实写的 gate→profile 原子保护、真实 restore 活动检查、验收凭证复核与 `run check` 预检，以及 M5 五动作护栏/唯一文本额度冷却/固定人工卡/受控对账；仍未连接真实设备或模型，并已建立独立的 promptfoo 合成黄金测试集：
 
 - `pyproject.toml`、`requirements.txt`：Python 业务元数据；暂不引入第三方 Python 依赖。
-- `app/`：M0–M4c 分层程序，提供 `python -m app`、只读 `doctor`、`store init`、合成 `sense`、合成 `read`、`policy`（含 `eval`/`holdout`/`acceptance`）、本机 `facts`、只读 `device gate inspect` 与 `run check`，以及 `domain/` 纯模型/读取/策略/评测/事实契约、`adapters/sqlite/` 本机仓储/profile 库/共享设备门禁/活动检查、`adapters/boss/` 解析、`adapters/adb/` 采集、`adapters/files/` 策略/评测文件与 `adapters/llm/` A/B 子进程桥。
-- `tests/`：M0–M4c 标准库 `unittest` 与纯合成夹具。
-- `docs/operator.md`：M0–M4c 探针、状态库、合成传感器、离线读取、策略包、桥/eval/留出、profile 事实、共享门禁与只读占用查询、facts 写保护、恢复检查、验收复核与 `run check` 预检说明。
+- `app/`：M0–M5 分层程序，提供 `python -m app`、只读 `doctor`、`store init`、合成 `sense`、合成 `read`、`policy`（含 `eval`/`holdout`/`acceptance`）、本机 `facts`、只读 `device gate inspect`、`run check` 与 `action`（perform/eligibility/card/reconcile），以及 `domain/` 纯模型/读取/策略/评测/事实/动作契约、`adapters/sqlite/` 本机仓储/profile 库/共享设备门禁/活动检查、`adapters/boss/` 解析、`adapters/adb/` 采集与动作原语、`adapters/files/` 策略/评测文件、`adapters/llm/` A/B 子进程桥与 `adapters/simulated/` 合成动作执行器。
+- `tests/`：M0–M5 标准库 `unittest` 与纯合成夹具。
+- `docs/operator.md`：M0–M5 探针、状态库、合成传感器、离线读取、策略包、桥/eval/留出、profile 事实、共享门禁与只读占用查询、facts 写保护、恢复检查、验收复核、`run check` 预检与动作护栏/对账说明。
 - `docs/BOSS直聘_M3读取阶梯与最小数据契约_20261124.md`：M3 读取值类型、字段阶梯、像素标定、跨屏稳定消息身份与失败/门禁契约。
+- `docs/BOSS直聘_M5动作护栏与对账_20261124.md`：M5 动作键、profile v2 备份迁移、分动作授权、文本额度/冷却、观察→三态证据、人工卡/受控恢复与离线验收边界。
 - `prompts/`：公开 base、纯合成示例与 `policy init` 生成的本机策略包/history；`tests/fixtures/policy-preview/` 是 preview 的公开合成输入资源；`evals/policy-suite/` 是 eval 的公开套件与旧 24 映射。
 - `config.example.json`：可提交的示例配置，当前只描述未来 M4 的策略包引用，不是 M0 配置。
 - `data/`、`screenshots/`：本机运行产物目录，只提交目录说明；`data/runtime/` 中的 SQLite 库与 `data/evals/` 报告被忽略。
@@ -132,7 +133,7 @@ M4b 交付架构 A 外部 agent 与 B 本机进程两个参数数组桥：固定
 
 `policy eval` 实际加载 `--pack` 指定的当前包，经同一决策桥逐例运行公开/回归/留出套件；必须显式选择 `external-agent` 或 `local-process`，拒绝 echo/参考回放，并要求 `--confirm-external-send`。该确认只表示本轮模型评测外发与计费，不授予设备、事实写入或业务发送权限，也不替代留出无上传合同。逐例报告只写本机 `data/evals`，绑定 base/pack/profile/provider/model/model_config_hash/suite_hash 与 process correlation；失败、零样本、缺私有套件、非公开套件或 simulated transport 不生成有效验收凭证。公开套件与旧 24 案例 npm 回归独立，`evals/policy-suite/mapping.json` 只登记每例责任与未接入原因。留出按语义输入指纹占用历史样本，已看样本不得换批次/候选/套件或拆子集重冻结；访问意向在调用前锁内持久化，完成/失败/中断/重复如实区分；退役整批写 `data/evals/regression-admissions/` 副本并可被同一 regression 路径实际运行；登记写失败保留未确认准入本机残留，但 registry 过滤使其不可运行，不删除其它 owner 文件。public/holdout 不读取无关 regression 准入；重试前用唯一 render 校验器复核事实有效期；临时文件创建/输入写也计入总预算，输出监测/等待 OSError 受控。留出还要求 `data/evals/holdout-attestation.local.json` 绑定当前 model/config 并显式声明 no-upload/cache/share/telemetry/cloud-fallback 全部关闭；该声明是 operator/host 合同，不证明子进程真实无网络。
 
-真实 provider、私有回归/留出与 M5 授权/动作未运行；桥自报角色/工具/历史只是协议声明，不证明第三方实际能力。详见 [docs/operator.md](docs/operator.md) 与 [evals/policy-suite/AGENTS.md](evals/policy-suite/AGENTS.md)。
+真实 provider、私有回归/留出与真实 M5 动作未运行；桥自报角色/工具/历史只是协议声明，不证明第三方实际能力。详见 [docs/operator.md](docs/operator.md) 与 [evals/policy-suite/AGENTS.md](evals/policy-suite/AGENTS.md)。
 
 ## M4c profile 事实、共享设备门禁与 M4 闭环（已实现，未接真机/真实 provider）
 
@@ -154,14 +155,32 @@ python -m app device gate inspect
 
 `policy acceptance check` 只读比较 M4b 验收凭证与当前 base/pack（可选 provider/model 摘要），任何变化以 `policy_changed` 拒绝旧凭证，不授予设备或发送权限。`run check` 是预检而非完整运行：read_only 要求本轮 `--confirm-device`，draft_only 另要求当前验收（provider/model/model_config 齐全），`auto_send_tier_a` 在 v1 固定 C 且缺独立前置判据时始终 `authorization_required`；它不探测设备、不调用模型、不执行 M5 动作，跨库失败会保留占用并隔离。门禁适配器唯一记录 acquire/verify/release/quarantine 的 started/终态，只读 `device gate inspect` 由 CLI 记录同一 `device_gate` 阶段（不建库、不释放、不输出路径/host/nonce），run/restore 的 profile 打开也有唯一 started/终态。真实 `ProfileSessionLease` 保存取得时 Lease/Owner/nonce，每次关联 profile 库、门禁 session identity 与任务/设备两行；门禁身份从一次已核行读取返回，任务选择复用 `validate_lease` 并匹配 app/key/nonce。跨 profile/原库/owner、复制库、门禁 nonce 桥前/桥中变化、错误任务 key/app 或桥期间 owner 变化均拒绝，桥前/桥后由 `decide` 拒绝且不重发。实际 CLI 合成桥 eval→snapshot→restore→validate/preview→eval 串行闭环已验证，三摘要一致且同 profile 既有事实/任务审计不变。M5–M8 的动作、调度、真机执行与真实 provider 仍未实现，完整 MVP 运行不可声称完成。
 
+## M5 五动作护栏、文本资格与受控对账（已实现，未执行真实动作）
+
+```powershell
+python -m unittest tests.test_action_domain tests.test_action_store tests.test_action_usecase tests.test_action_executor tests.test_action_cli
+python -m app action card --profile demo
+python -m app action eligibility --profile demo --pack prompts/local/demo --mode draft_only `
+  --action-kind send_text --target-key <message_key> --conversation-key <conversation_key> `
+  --task-key <task_key> --credential data/evals/eval-<id>/acceptance.json `
+  --provider local-process --model-id <标签> --model-config-hash <摘要> `
+  --authorize send_text --confirm-action
+```
+
+M5 的五类不可逆动作是发文本、发简历、换微信、换电话、删会话；动作键精确为文本 `boss:<message_key>:reply`、其余 `<conversation_key>:resume|wechat|phone|delete`。流程固定为“同一事务写 pending 与唯一动作键锁 → 执行一次 → 由可信前后观察推导三态 → unknown/未收敛标 blocked 并隔离 → 绝不自动重试”。动作结果、任务状态与 `action_events`/`events` 一次提交；`performed` 必须由不同前后快照与动作特有变化证明，同快照、目标早已不存在、简历仅请求或联系方式槽位未变“请求中”都不算执行。点击前断连为 `not_performed`，点击后异常/断连为 `unknown`；输入框/确认框/IME/在途命令未收敛时即使未点击也保持 pending 与共享隔离。
+
+文本额度/冷却直接由 `action_records` 计算：UTC 日期内跨 app 合计 performed+sent 文本，按 profile/app/会话冷却；任一文本 pending/unknown 阻断新发送。额度检查与本次 pending/键锁同一事务，换包、restore、重启或调低额度不清零历史；附件 `request_sent`、`not_performed`、`unknown` 不充当成功文本。`pending/unknown/cancelled` 生成固定人工卡，`confirm_performed`/`confirm_not_performed` 需本轮显式确认、当前证据与原命令停止/现场/IME 收敛，`abandon` 只关任务且不解锁。受控接管隔离占用必须在原 profile/原库身份下带 `--confirm-recovery` 并确认原 PID 已停止；正常 acquire/TTL/PID 消失不会开锁。profile 库从严格 v1 迁移到 v2 时先写不覆盖 SQLite 备份，再单事务追加动作三表；普通 M1 库、额外对象或未知版本不宽放。
+
+`action perform` 只接受 `draft_only`、当前验收、本轮 `--authorize` 与合成动作脚本；CLI 不提供真实 ADB 动作入口，真实动作原语只由 mock subprocess 测试。合成资格为真、`policy_tier="C"` 与 `production_auto_send=false` 并列，不代表真实 A 档或发送授权。第3轮返修后，公开 guard 要求当前验收四字段齐备、目标/槽位/editor/列表覆盖按阶段重核、IME 所有早退有界恢复、命令身份与现场观察接入恢复、日志每阶段唯一终态，并复用统一采集/保存与租约核验。第4轮返修补充：公开 `perform_action` 必须携带完整目标身份标签并贯通到计划；缺失/错位身份在执行器前拒绝且不可逆点击为 0。联系方式只按当前动作类型的槽位统计效果，确认阶段重新核对同类型槽位 enabled/clickable/未处理；删除列表覆盖取自目标/锚点祖先链的显式非滚动容器，并分别核对 dialog 与 after，不复用过期 before 布尔。命令账本按动作记录实际命令族后代，缺失/损坏/枚举失败/写入失败都保持 unknown；`Popen` 成功但身份写入失败有界 kill/回收，超时后的 kill 与回收都带预算。CLI 恢复新增显式 `--device --serial` 现场模式，复用现有 `AdbRecoveryObserver` 一次读取层级/IME，坏 XML 与错 IME 拒绝。采集保存与 guard 拒绝都记录 started 与单一终态。第5轮返修补充：公开动作身份改为结构化 `ActionIdentity`（姓名/公司/职位），必须重算出与持久任务一致的 `conversation_key`；缩减或冲突身份在 pending 与设备调用前拒绝。联系方式槽位由唯一 `_slot_node` 定位，嵌套“标签容器→按钮→状态”只算一个槽位，另一类型已处理不污染本类型。列表覆盖只认可真正列表容器的显式非滚动与 bounds 覆盖，行/按钮自身 false 不算。命令账本改为 begin→PID/后代→complete 分段，公开入口在首次 IME 前绑定并覆盖共享采集命令，命令结束再展开以记录晚生后代；部分写/枚举失败/未闭合均 unknown。第6轮返修补充：列表覆盖进一步要求容器内全部可见行/后代都在容器范围内且容器未被外层可见区域裁剪，缺失/坏格式/零面积/自相矛盾 bounds 不默认成功；同分组两个独立同类型槽位保留歧义并零点击，效果定位不要求按钮动作后仍 enabled，本类型精确新状态仍可证明 request_sent。命令族改用 Windows Job Object 做有限有界终止/核验，无平台有界或未证明族停止时保持 unknown 与隔离；任务身份 SELECT 读故障在 validate 阶段补安全单终态。第7轮返修补充：列表覆盖对容器内所有有可见意义的后代强制可解析 bounds，并逐层核验全部祖先的 bounds 与滚动事实，不再遇首个合法祖先即停止；命令族在启动前先建 Job，以 CREATE_SUSPENDED 启动、加入后恢复，权限使用 SET_QUOTA|TERMINATE；任一命令未证明族停止时公开观察 command_quiet=false，保留已证效果但不报 gate_converged、不释放共享占用，并有本机自有合成 Python 子孙的真实 Job 正例。第8轮返修补充：列表覆盖把 content-desc 计入可见意义，并按每个有意义节点的真实祖先链逐层核验中间/外层裁剪与 scrollable 事实；命令边界在 Popen 前先写账本未闭合事实，assign 失败不恢复执行，所有启动/收尾（含二次超时与 OSError）走同一个有界 finally；finish 写失败与空 IME 早退都保持 command_quiet=false，未证明全停时 action/task/profile/共享与人工卡共同保持未收敛。第9轮返修补充：唯一账本闭合步骤在真实 complete 写失败时记录 `action_finish_command` started→failed（`store_io_error`/`store`）固定安全终态，可由同一 ProcessLog/correlation 关联且不写异常原文/参数/路径；公开仍保持 unknown/隔离与已证效果。第10轮返修补充：真实 ADB `execute` 在无命令账本、未绑定动作或绑定不一致时零命令拒绝，生产 `perform_action` 无账本只能留下 pending/blocked、`gate_converged=false` 与隔离；`read_current_ime` 仅保留 reconcile 维护读取，动作上下文绑定后的 IME 预读同样要求账本，不提供账本绕过。证据索引失败保留真实 clicked 与阶段，before/readback/dialog 不固定 clicked=True；readback 已输入，不按 idle 推断输入为空/IME 已恢复，输入/回读异常保留底层未证明命令族，不硬写 quiet/收敛；v1→v2 备份前核验完整 DDL 与 profile 身份；`action reconcile` 固定只允许 `draft_only`；`run check` limitations 改为真实设备入口/M6 调度/M8 run 未交付。真实设备动作组合根仍未交付，合成执行器不能冒充真实 ADB 进程停止证明。真实手机、ADB 坐标/输入法/附件名/联系方式/删除保护/恢复时序、真实 provider 与 M6–M8 调度/清理/灰度仍未验证。
+
 ## 开发环境
 
 - Python 3.13 或更高版本。
 - 评测工具另需 Node.js >=22.22.0 与 npm；promptfoo 固定为 0.126.0。
-- 真机功能另需 Android SDK Platform-Tools 中的 `adb`、USB 调试和使用者确认；M0–M4b 离线测试不连接设备。
+- 真机功能另需 Android SDK Platform-Tools 中的 `adb`、USB 调试和使用者确认；M0–M5 离线测试不连接设备。
 - 仓库中的 `.venv/` 与 `config.json` 为被 Git 忽略的本机文件，可自行保留或删除。
 
-M5–M8 的动作、调度、灰度与完整运行仍待实现；M4c 的 `run check` 只是预检，不执行设备或动作。M3 的读取阶梯只使用合成 XML、合成 RGBA、模拟 ADB 与独立门禁测试，不代表真实设备采集或真实版本标定；M4a 只用合成 base/包/preview 与临时项目根，M4b 只用合成本机桥桩/模拟 transport，M4c 只用临时 OS 根、合成事实与进程内/跨进程模拟，不代表真实 provider 能力、真机门禁或发送安全。数据库、日志、截图、契约、凭据和个人事实只在本机保存。
+M6–M8 的调度、清理、灰度与完整运行仍待实现；M4c 的 `run check` 只是预检，M5 的 `action` 只在合成执行器/临时 profile 库上验证，均不执行真实设备或动作。M3 的读取阶梯只使用合成 XML、合成 RGBA、模拟 ADB 与独立门禁测试，不代表真实设备采集或真实版本标定；M4a 只用合成 base/包/preview 与临时项目根，M4b 只用合成本机桥桩/模拟 transport，M4c 只用临时 OS 根、合成事实与进程内/跨进程模拟，M5 只用合成动作脚本与 mock ADB，不代表真实 provider 能力、真机门禁、动作安全或发送授权。数据库、日志、截图、契约、凭据和个人事实只在本机保存。
 
 全新机器的引导、依赖边界与验收规划见[新环境自动化部署方案](docs/求职自动化_新环境自动化部署方案_20261123.md)：分别设计 eval、ADB 工具准备和经本轮确认后的手机环境检测（§8、§10.1）；工具安装不代表手机或业务就绪。安装器与手机检查器尚未实现，干净机器及手机验收均待执行；本轮仅文档，不运行 ADB 或连接手机。
 

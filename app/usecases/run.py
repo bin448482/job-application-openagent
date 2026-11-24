@@ -92,7 +92,13 @@ def check_preflight(
             pass
         raise
     profile_store.close()
-    if pending["leased"] or pending["running"] or pending["blocked"] or pending["device_lease"]:
+    if (
+        pending["leased"]
+        or pending["running"]
+        or pending["blocked"]
+        or pending["device_lease"]
+        or pending.get("actions")
+    ):
         try:
             gate.release(now=now, converged=False)
         except Exception:
@@ -114,7 +120,8 @@ def check_preflight(
         "decisions": 0,
         "acceptance": acceptance,
         "limitations": [
-            "m5_actions_not_implemented",
+            "real_device_action_entry_not_delivered",
+            "m6_scheduling_not_implemented",
             "m8_run_not_implemented",
             "device_probe_not_run",
         ],

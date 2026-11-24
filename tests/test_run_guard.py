@@ -116,7 +116,11 @@ class RunGuardTests(unittest.TestCase):
         self.assertTrue(result["preflight_only"])
         self.assertEqual(result["actions_performed"], 0)
         self.assertEqual(result["gate"], "released")
-        self.assertIn("m5_actions_not_implemented", result["limitations"])
+        self.assertNotIn("m5_actions_not_implemented", result["limitations"])
+        self.assertIn(
+            "real_device_action_entry_not_delivered", result["limitations"]
+        )
+        self.assertIn("m6_scheduling_not_implemented", result["limitations"])
         self.assertIn("m8_run_not_implemented", result["limitations"])
         self.assertIsNone(self._gate().inspect())
 

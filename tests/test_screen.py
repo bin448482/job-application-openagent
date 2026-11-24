@@ -215,6 +215,81 @@ class ScreenAdapterTests(unittest.TestCase):
             )
         )
 
+    def test_guard_rejection_logs_started_and_single_terminal(self) -> None:
+        """before guard 拒绝时记录固定失败终态并按原语义传播。"""
+        class GuardError(Exception):
+            """带固定原因码的 guard 拒绝替身。"""
+
+            reason_code = "authorization_required"
+
+        reader = AdbScreenReader(
+            self.root / "evidence",
+            process_log=self.log,
+            gate=_Gate(unavailable=False),
+        )
+
+        def guard() -> None:
+            """在任何子进程前拒绝。"""
+            raise GuardError()
+
+        with patch("subprocess.run") as run:
+            with self.assertRaises(GuardError):
+                reader.dump_hierarchy(SERIAL, before_command=guard)
+        run.assert_not_called()
+        events = [
+            event
+            for event in self._events()
+            if event["stage"] == "adb_hierarchy"
+            and event["command"] == "adb_hierarchy_dump"
+        ]
+        self.assertEqual([e["result"] for e in events], ["started", "failed"])
+        self.assertEqual(events[-1]["reason_code"], "authorization_required")
+        self.assertEqual(events[-1]["error_category"], "action_guard")
+
+    def test_evidence_save_logs_started_and_single_terminal(self) -> None:
+        """证据保存成功/失败都只记一次 started 和一个终态。"""
+        reader = AdbScreenReader(
+            self.root / "evidence",
+            process_log=self.log,
+            gate=_Gate(unavailable=False),
+        )
+        with patch(
+            "subprocess.run",
+            side_effect=[
+                subprocess.CompletedProcess([], 0, stdout="dumped"),
+                subprocess.CompletedProcess([], 0, stdout=PAGE_XML),
+            ],
+        ):
+            reader.dump_hierarchy(SERIAL)
+        events = [
+            event for event in self._events() if event["stage"] == "adb_evidence"
+        ]
+        self.assertEqual([e["result"] for e in events], ["started", "ok"])
+
+        failing = AdbScreenReader(
+            self.root / "evidence-file",
+            process_log=ProcessLog(path=self.root / "logs" / "second.jsonl"),
+            gate=_Gate(unavailable=False),
+        )
+        (self.root / "evidence-file").write_text("x", encoding="utf-8")
+        with patch(
+            "subprocess.run",
+            side_effect=[
+                subprocess.CompletedProcess([], 0, stdout="dumped"),
+                subprocess.CompletedProcess([], 0, stdout=PAGE_XML),
+            ],
+        ):
+            with self.assertRaises(ScreenReadError):
+                failing.dump_hierarchy(SERIAL)
+        files = list((self.root / "logs").glob("second-*.jsonl"))
+        self.assertEqual(len(files), 1)
+        events = [
+            __import__("json").loads(line)
+            for line in files[0].read_text(encoding="utf-8").splitlines()
+        ]
+        evidence = [e for e in events if e["stage"] == "adb_evidence"]
+        self.assertEqual([e["result"] for e in evidence], ["started", "failed"])
+
     def test_reader_without_gate_rejects_before_subprocess(self) -> None:
         """缺共享门禁时 M3 采集在零子进程处固定拒绝。"""
         reader = AdbScreenReader(self.root / "evidence")

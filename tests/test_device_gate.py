@@ -75,6 +75,55 @@ def _race_worker(
         queue.put("held")
 
 
+def _guard_die_worker(
+    os_root: str,
+    project_root: str,
+    profile_id: str,
+    ready: object,
+) -> None:
+    """在子进程中取得事实写门禁事务后直接退出，验证进程死亡释放 SQLite 锁。"""
+    from app.adapters.sqlite.device_gate import SharedDeviceGate
+    from app.adapters.sqlite.profile_store import profile_runtime_path
+
+    path = profile_runtime_path(Path(project_root), profile_id)
+    gate = SharedDeviceGate(
+        profile_id=profile_id,
+        profile_db_path=path,
+        os_root=Path(os_root),
+    )
+    guard = gate.write_guard(create=True)
+    guard.__enter__()
+    ready.set()
+    os._exit(7)
+
+
+def _insert_bad_state_row(
+    path: Path, *, profile_id: str, profile_db_path: str, state: str
+) -> None:
+    """绕过 CHECK 注入不可识别状态行，模拟坏库/故障残留以验证失败关闭。"""
+    connection = sqlite3.connect(str(path))
+    try:
+        connection.execute("PRAGMA ignore_check_constraints = ON")
+        connection.execute(
+            "INSERT INTO device_guard(device_key, profile_id, profile_db_path, "
+            "owner_id, owner_pid, owner_host, nonce, state, acquired_at, updated_at) "
+            "VALUES ('primary', ?, ?, ?, 4242, ?, ?, ?, ?, ?)",
+            (
+                profile_id,
+                profile_db_path,
+                OWNER_ID,
+                HOST,
+                "00000000-0000-4000-8000-000000000077",
+                state,
+                NOW,
+                NOW,
+            ),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
 class SharedDeviceGateTests(unittest.TestCase):
     """覆盖固定路径、互斥、隔离、崩溃与不自动解锁。"""
 
@@ -162,6 +211,219 @@ class SharedDeviceGateTests(unittest.TestCase):
         with self.assertRaises(DeviceGateError) as verify_error:
             self._gate("alpha").verify()
         self.assertEqual(verify_error.exception.reason_code, "device_not_held")
+
+    def test_recover_rejects_cross_host_owner(self) -> None:
+        """受控接管要求同 host；异 host 即使本机 PID stopped 也拒绝且不改行。"""
+        from app.domain.models import Owner, canonical_hash
+
+        gate = self._gate("alpha")
+        self._acquire(gate)
+        gate.release(now=LATER, converged=False)
+        path = profile_runtime_path(self.root, "alpha")
+        before = self._gate("alpha").inspect()
+        other = self._gate("alpha")
+        with self.assertRaises(DeviceGateError) as caught:
+            other.recover(
+                profile_id="alpha",
+                profile_db_path=str(path),
+                owner=Owner(OWNER_ID, 4243, canonical_hash("other-host")),
+                confirm_stopped=True,
+                stop_checker=lambda pid: "stopped",
+                now=LATER,
+            )
+        self.assertEqual(caught.exception.reason_code, "device_gate_mismatch")
+        self.assertEqual(self._gate("alpha").inspect(), before)
+
+    def test_recover_replaces_owner_after_original_pid_stopped(self) -> None:
+        """原 PID 已停止且显式确认时受控接管，替换 owner/nonce 并置 held。"""
+        gate = self._gate("alpha")
+        original_nonce = self._acquire(gate)
+        gate.release(now=LATER, converged=False)
+        path = profile_runtime_path(self.root, "alpha")
+        recovered = self._gate("alpha")
+        new_owner = Owner(OWNER_ID, 5151, HOST)
+        new_nonce = recovered.recover(
+            profile_id="alpha",
+            profile_db_path=str(path),
+            owner=new_owner,
+            confirm_stopped=True,
+            stop_checker=lambda pid: "stopped",
+            now=LATER,
+        )
+        self.assertNotEqual(new_nonce, original_nonce)
+        row = self._gate("alpha").inspect()
+        self.assertEqual(row["state"], "held")
+        self.assertEqual(row["owner_pid"], 5151)
+        self.assertEqual(row["nonce"], new_nonce)
+        recovered.verify()
+        self.assertEqual(recovered.session_identity().owner, new_owner)
+        recovered.release(now=LATER, converged=True)
+        self.assertIsNone(recovered.inspect())
+
+    def test_recover_rejects_unconfirmed_running_missing_and_wrong_profile(self) -> None:
+        """未确认、原 PID 未停、无占用与错 profile 都拒绝且不改写原行。"""
+        path = profile_runtime_path(self.root, "alpha")
+        with self._gate("alpha").write_guard(create=True):
+            pass
+        missing = self._gate("alpha")
+        with self.assertRaises(DeviceGateError) as no_row:
+            missing.recover(
+                profile_id="alpha",
+                profile_db_path=str(path),
+                owner=_owner(5151),
+                confirm_stopped=True,
+                stop_checker=lambda pid: "stopped",
+                now=LATER,
+            )
+        self.assertEqual(no_row.exception.reason_code, "device_not_held")
+
+        gate = self._gate("alpha")
+        self._acquire(gate)
+        before = self._gate("alpha").inspect()
+        with self.assertRaises(DeviceGateError) as unconfirmed:
+            self._gate("alpha").recover(
+                profile_id="alpha",
+                profile_db_path=str(path),
+                owner=_owner(5151),
+                confirm_stopped=False,
+                stop_checker=lambda pid: "stopped",
+                now=LATER,
+            )
+        self.assertEqual(unconfirmed.exception.reason_code, "device_not_held")
+        with self.assertRaises(DeviceGateError) as running:
+            self._gate("alpha").recover(
+                profile_id="alpha",
+                profile_db_path=str(path),
+                owner=_owner(5151),
+                confirm_stopped=True,
+                stop_checker=lambda pid: "running",
+                now=LATER,
+            )
+        self.assertEqual(running.exception.reason_code, "device_busy")
+        wrong_profile = SharedDeviceGate(
+            profile_id="beta",
+            profile_db_path=profile_runtime_path(self.root, "beta"),
+            os_root=self.os_root,
+        )
+        with self.assertRaises(DeviceGateError) as mismatch:
+            wrong_profile.recover(
+                profile_id="beta",
+                profile_db_path=str(profile_runtime_path(self.root, "beta")),
+                owner=_owner(5151),
+                confirm_stopped=True,
+                stop_checker=lambda pid: "stopped",
+                now=LATER,
+            )
+        self.assertEqual(mismatch.exception.reason_code, "device_gate_mismatch")
+        self.assertEqual(self._gate("alpha").inspect(), before)
+        gate.release(now=LATER, converged=True)
+
+    def test_write_guard_holds_transaction_without_writing_occupancy_row(self) -> None:
+        """门禁写事务首次初始化后不插入占用行，并在持有期间立即拒绝 acquire。"""
+        import time
+
+        gate = self._gate("alpha")
+        path = guard_database_path(self.os_root)
+        self.assertFalse(path.exists())
+        with gate.write_guard(create=True):
+            self.assertTrue(path.is_file())
+            self.assertIsNone(gate.inspect())
+            connection = sqlite3.connect(str(path))
+            try:
+                self.assertEqual(
+                    int(connection.execute("PRAGMA user_version").fetchone()[0]), 1
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
+                    ).fetchall(),
+                    [("device_guard",)],
+                )
+                self.assertIsNone(
+                    connection.execute("SELECT * FROM device_guard").fetchone()
+                )
+            finally:
+                connection.close()
+            started = time.perf_counter()
+            with self.assertRaises(DeviceGateError) as busy:
+                self._acquire(self._gate("beta"), "beta")
+            elapsed = time.perf_counter() - started
+            self.assertEqual(busy.exception.reason_code, "device_busy")
+            self.assertLess(elapsed, 2.0)
+        self.assertIsNone(gate.inspect())
+        other = self._gate("beta")
+        self._acquire(other, "beta")
+        other.release(now=LATER, converged=True)
+
+    def test_write_guard_same_profile_rejects_other_profile_allows(self) -> None:
+        """同 profile held/quarantined 拒绝；不同 profile 放行且不改动占用行。"""
+        alpha = self._gate("alpha")
+        self._acquire(alpha)
+        before = alpha.inspect()
+        with self.assertRaises(DeviceGateError) as held:
+            with self._gate("alpha").write_guard():
+                pass
+        self.assertEqual(held.exception.reason_code, "device_busy")
+        self.assertEqual(alpha.inspect(), before)
+
+        beta = self._gate("beta")
+        with beta.write_guard():
+            self.assertEqual(alpha.inspect(), before)
+        self.assertEqual(alpha.inspect(), before)
+        alpha.release(now=LATER, converged=True)
+        self._acquire(beta, "beta")
+        beta.release(now=LATER, converged=True)
+
+        quarantined = self._gate("gamma")
+        self._acquire(quarantined, "gamma")
+        quarantined.release(now=LATER, converged=False)
+        with self.assertRaises(DeviceGateError) as isolated:
+            with self._gate("gamma").write_guard():
+                pass
+        self.assertEqual(isolated.exception.reason_code, "device_quarantined")
+
+    def test_write_guard_rejects_unknown_schema_without_rewrite(self) -> None:
+        """未知门禁结构在事实写守卫路径同样失败关闭且不重写。"""
+        path = guard_database_path(self.os_root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(str(path))
+        try:
+            connection.execute("CREATE TABLE unexpected(value TEXT)")
+            connection.execute("PRAGMA user_version = 5")
+            connection.commit()
+        finally:
+            connection.close()
+        before = path.read_bytes()
+        with self.assertRaises(DeviceGateError) as caught:
+            with self._gate("alpha").write_guard():
+                pass
+        self.assertEqual(caught.exception.reason_code, "device_gate_io_error")
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_write_guard_releases_after_body_exception_and_process_death(self) -> None:
+        """body 异常与子进程直接退出都由 SQLite 释放事务锁，不需自动解锁行。"""
+        gate = self._gate("alpha")
+        with self.assertRaises(RuntimeError):
+            with gate.write_guard():
+                raise RuntimeError("synthetic body failure")
+        self._acquire(gate, "alpha")
+        gate.release(now=LATER, converged=True)
+
+        context = multiprocessing.get_context("spawn")
+        ready = context.Event()
+        worker = context.Process(
+            target=_guard_die_worker,
+            args=(str(self.os_root), str(self.root), "alpha", ready),
+        )
+        worker.start()
+        self.assertTrue(ready.wait(30))
+        worker.join(timeout=30)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(worker.exitcode, 7)
+        self.assertIsNone(self._gate("alpha").inspect())
+        after = self._gate("alpha")
+        self._acquire(after, "alpha")
+        after.release(now=LATER, converged=True)
 
     def test_nonce_tamper_and_profile_binding_mismatch_keep_row(self) -> None:
         """篡改 nonce 或换 profile 交付路径都不能通过复核或释放。"""
@@ -633,6 +895,39 @@ class GateReadOnlyTests(unittest.TestCase):
                 {"state": "released", "profile_id": "alpha"}, profile_id="alpha"
             )
         self.assertEqual(unknown.exception.reason_code, "device_gate_io_error")
+        with self.assertRaises(DeviceGateError) as other_unknown:
+            require_profile_writable(
+                {"state": "released", "profile_id": "alpha"}, profile_id="beta"
+            )
+        self.assertEqual(other_unknown.exception.reason_code, "device_gate_io_error")
+
+    def test_write_guard_rejects_unknown_state_for_any_profile(self) -> None:
+        """既存坏状态行先验证状态；不同 profile 也不能绕过，且不改写坏行。"""
+        def gate(profile_id: str) -> SharedDeviceGate:
+            """为临时根构造给定 profile 的固定路径门禁。"""
+            return SharedDeviceGate(
+                profile_id=profile_id,
+                profile_db_path=profile_runtime_path(self.root, profile_id),
+                os_root=self.os_root,
+            )
+
+        path = guard_database_path(self.os_root)
+        with gate("alpha").write_guard(create=True):
+            pass
+        alpha_path = str(profile_runtime_path(self.root, "alpha"))
+        _insert_bad_state_row(
+            path, profile_id="alpha", profile_db_path=alpha_path, state="released"
+        )
+        before = path.read_bytes()
+        for profile_id in ("alpha", "beta"):
+            with self.subTest(profile=profile_id):
+                with self.assertRaises(DeviceGateError) as caught:
+                    with gate(profile_id).write_guard():
+                        pass
+                self.assertEqual(
+                    caught.exception.reason_code, "device_gate_io_error"
+                )
+        self.assertEqual(path.read_bytes(), before)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,14 @@ import subprocess
 import time
 import uuid
 from pathlib import Path
+from typing import Callable
 
+from app.adapters.adb.command import (
+    ADB_TIMEOUT_SECONDS,
+    AdbCommandFailure,
+    run_adb,
+    save_evidence,
+)
 from app.ports.device_gate import DeviceGateError
 from app.ports.screen import (
     DeviceGate,
@@ -14,9 +21,8 @@ from app.ports.screen import (
     ScreenCapture,
     ScreenReadError,
 )
-from app.process_log import ProcessLog, elapsed_ms
+from app.process_log import REASON_CODES, ProcessLog, elapsed_ms
 
-ADB_TIMEOUT_SECONDS = 5
 DEVICE_TMP_XML = "/data/local/tmp/m3-ui.xml"
 
 
@@ -25,18 +31,28 @@ class AdbScreenReader:
 
     def __init__(
         self,
-        evidence_dir: Path,
+        evidence_dir: Path | None,
         adb: str = "adb",
         process_log: ProcessLog | None = None,
         gate: DeviceGate | None = None,
     ) -> None:
-        """保存 adb 文件名、证据目录、可选日志与共享门禁；构造不启动子进程。"""
+        """保存 adb 文件名、可选证据目录、日志与共享门禁；构造不启动子进程。"""
         self._adb = adb
-        self._evidence_dir = Path(evidence_dir)
+        self._evidence_dir = Path(evidence_dir) if evidence_dir is not None else None
         self._process_log = process_log
         self._gate = gate
 
-    def dump_hierarchy(self, serial: str) -> HierarchyCapture:
+    def dump_hierarchy(
+        self,
+        serial: str,
+        *,
+        before_command: object | None = None,
+        prefix: str = "hierarchy",
+        on_start: Callable[[], None] | None = None,
+        on_pid: Callable[[int], None] | None = None,
+        on_done: Callable[[int, bool, bool], None] | None = None,
+        on_fail: Callable[[], None] | None = None,
+    ) -> HierarchyCapture:
         """依次执行 dump 与 cat，保存 XML 证据并返回内存文本。"""
         self._require_gate()
         _require_serial(serial)
@@ -44,13 +60,23 @@ class AdbScreenReader:
             [self._adb, "-s", serial, "shell", "uiautomator", "dump", DEVICE_TMP_XML],
             stage="adb_hierarchy",
             command="adb_hierarchy_dump",
+            before_command=before_command,
+            on_start=on_start,
+            on_pid=on_pid,
+            on_done=on_done,
+            on_fail=on_fail,
         )
         xml_text = self._run_text(
             [self._adb, "-s", serial, "shell", "cat", DEVICE_TMP_XML],
             stage="adb_hierarchy",
             command="adb_hierarchy_cat",
+            before_command=before_command,
+            on_start=on_start,
+            on_pid=on_pid,
+            on_done=on_done,
+            on_fail=on_fail,
         )
-        name = f"hierarchy-{uuid.uuid4()}.xml"
+        name = f"{prefix}-{uuid.uuid4()}.xml"
         payload = xml_text.encode("utf-8")
         self._save(name, payload)
         return HierarchyCapture(
@@ -77,9 +103,30 @@ class AdbScreenReader:
         if self._gate is None:
             raise DeviceGateError("device_not_held")
 
-    def _run_text(self, args: list[str], *, stage: str, command: str) -> str:
+    def _run_text(
+        self,
+        args: list[str],
+        *,
+        stage: str,
+        command: str,
+        before_command: object | None = None,
+        on_start: Callable[[], None] | None = None,
+        on_pid: Callable[[int], None] | None = None,
+        on_done: Callable[[int, bool, bool], None] | None = None,
+        on_fail: Callable[[], None] | None = None,
+    ) -> str:
         """执行一条不重试的文本 ADB 命令，失败统一为断连。"""
-        completed = self._run(args, stage=stage, command=command, binary=False)
+        completed = self._run(
+            args,
+            stage=stage,
+            command=command,
+            binary=False,
+            before_command=before_command,
+            on_start=on_start,
+            on_pid=on_pid,
+            on_done=on_done,
+            on_fail=on_fail,
+        )
         return completed.stdout
 
     def _run_bytes(self, args: list[str], *, stage: str, command: str) -> bytes:
@@ -94,45 +141,51 @@ class AdbScreenReader:
         stage: str,
         command: str,
         binary: bool,
+        before_command: object | None = None,
+        on_start: Callable[[], None] | None = None,
+        on_pid: Callable[[int], None] | None = None,
+        on_done: Callable[[int, bool, bool], None] | None = None,
+        on_fail: Callable[[], None] | None = None,
     ) -> subprocess.CompletedProcess:
-        """每条 ADB 子命令前要求并复核共享门禁，再执行一次有界子进程。"""
+        """复用共享 ADB 边界；每条命令前复核门禁，单次 attempt 不重试。"""
         self._require_gate()
         assert self._gate is not None
-        self._gate.verify()
         started = time.perf_counter()
         self._record(stage, command, "started", 0)
         try:
-            completed = subprocess.run(
+            completed = run_adb(
                 args,
-                shell=False,
-                capture_output=True,
-                text=not binary,
-                encoding=None if binary else "utf-8",
-                errors=None if binary else "replace",
+                gate=self._gate,
                 timeout=ADB_TIMEOUT_SECONDS,
-                check=False,
+                binary=binary,
+                before=before_command,  # type: ignore[arg-type]
+                on_start=on_start,
+                on_pid=on_pid,
+                on_done=on_done,
+                on_fail=on_fail,
             )
-        except FileNotFoundError:
-            self._record_failure(stage, command, started, "adb_missing")
+        except AdbCommandFailure as error:
+            self._record_failure(stage, command, started, error.category)
             raise ScreenReadError("device_disconnected") from None
-        except subprocess.TimeoutExpired:
-            self._record_failure(stage, command, started, "adb_timeout")
+        except DeviceGateError:
+            self._record_failure(stage, command, started, "adb_gate")
             raise ScreenReadError("device_disconnected") from None
-        except OSError:
-            self._record_failure(stage, command, started, "adb_oserror")
-            raise ScreenReadError("device_disconnected") from None
-        if completed.returncode != 0:
-            self._record_failure(stage, command, started, "adb_nonzero")
-            raise ScreenReadError("device_disconnected")
+        except Exception as error:
+            reason = getattr(error, "reason_code", "invalid_input")
+            if not isinstance(reason, str) or reason not in REASON_CODES:
+                reason = "invalid_input"
+            self._record_guard_failure(stage, command, started, reason)
+            raise
         self._record(stage, command, "ok", elapsed_ms(started))
         return completed
 
     def _save(self, name: str, payload: bytes) -> None:
         """把证据写到调用方指定的本机目录；失败不伪造已保存。"""
         started = time.perf_counter()
+        self._record_evidence("started", 0)
         try:
-            self._evidence_dir.mkdir(parents=True, exist_ok=True)
-            (self._evidence_dir / name).write_bytes(payload)
+            if self._evidence_dir is not None:
+                save_evidence(self._evidence_dir, name, payload)
         except OSError:
             self._record_evidence_failure(started)
             raise ScreenReadError("invalid_fixture") from None
@@ -180,6 +233,25 @@ class AdbScreenReader:
                 result="failed",
                 reason_code="device_disconnected",
                 error_category=error_category,
+                duration_ms=elapsed_ms(started),
+                command=command,
+                mode="device",
+            )
+        except Exception:
+            return
+
+    def _record_guard_failure(
+        self, stage: str, command: str, started: float, reason_code: str
+    ) -> None:
+        """记录调用方 guard 的固定拒绝类别，再按原语义传播，不写异常原文。"""
+        if self._process_log is None:
+            return
+        try:
+            self._process_log.record(
+                stage=stage,
+                result="failed",
+                reason_code=reason_code,
+                error_category="action_guard",
                 duration_ms=elapsed_ms(started),
                 command=command,
                 mode="device",

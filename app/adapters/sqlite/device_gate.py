@@ -8,6 +8,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from typing import Callable
 
 from app.adapters.path_state import (
     PATH_FILE,
@@ -36,6 +37,23 @@ GATE_TABLE_SQL = """CREATE TABLE device_guard (
     acquired_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 ) STRICT"""
+
+
+class _GateBusy(Exception):
+    """内部标记门禁库写锁竞争；只按调用路径映射，不暴露原始异常。"""
+
+
+def _is_busy(error: BaseException) -> bool:
+    """判断 SQLite 错误是否为忙/锁定，含扩展错误码，不读取异常原文。"""
+    code = getattr(error, "sqlite_errorcode", None)
+    if isinstance(code, int):
+        for name in ("SQLITE_BUSY", "SQLITE_LOCKED"):
+            base = getattr(sqlite3, name, None)
+            if isinstance(base, int) and code & 0xFF == base & 0xFF:
+                return True
+    text = str(error).lower()
+    return "locked" in text or "busy" in text
+
 
 
 def guard_database_path(os_root: Path | None = None, *, platform_name: str | None = None) -> Path:
@@ -100,7 +118,7 @@ class SharedDeviceGate:
             if self._nonce is not None:
                 raise DeviceGateError("device_busy")
             nonce = str(uuid.uuid4())
-            connection = self._connect(create=True)
+            connection = self._connect(create=True, busy_timeout_ms=0)
             try:
                 connection.execute("BEGIN IMMEDIATE")
                 existing = _read_gate_row(connection)
@@ -128,13 +146,21 @@ class SharedDeviceGate:
                 connection.execute("COMMIT")
             except DeviceGateError:
                 raise
-            except (sqlite3.Error, OSError):
+            except sqlite3.Error as error:
+                _rollback(connection)
+                if _is_busy(error):
+                    raise DeviceGateError("device_busy") from None
+                raise DeviceGateError("device_gate_io_error") from None
+            except OSError:
                 _rollback(connection)
                 raise DeviceGateError("device_gate_io_error") from None
             finally:
                 connection.close()
             self._nonce = nonce
             self._owner = owner
+        except _GateBusy:
+            self._record(operation, "failed", started, "device_busy")
+            raise DeviceGateError("device_busy") from None
         except DeviceGateError as error:
             self._record(operation, "failed", started, error.reason_code)
             raise
@@ -199,7 +225,12 @@ class SharedDeviceGate:
             except DeviceGateError:
                 _rollback(connection)
                 raise
-            except (sqlite3.Error, OSError):
+            except sqlite3.Error as error:
+                _rollback(connection)
+                if _is_busy(error):
+                    raise DeviceGateError("device_busy") from None
+                raise DeviceGateError("device_gate_io_error") from None
+            except OSError:
                 _rollback(connection)
                 raise DeviceGateError("device_gate_io_error") from None
             finally:
@@ -213,6 +244,102 @@ class SharedDeviceGate:
             self._record(operation, "failed", started)
             raise
         self._record(operation, "ok", started)
+
+    def recover(
+        self,
+        *,
+        profile_id: str,
+        profile_db_path: str,
+        owner: Owner,
+        confirm_stopped: bool,
+        stop_checker: Callable[[int], str],
+        now: str,
+    ) -> str:
+        """受控接管原 profile 的 held/quarantined 占用；需明确确认且原进程已停止。"""
+        operation = "recover"
+        started = time.perf_counter()
+        self._record(operation, "started")
+        try:
+            if profile_id != self._profile_id:
+                raise DeviceGateError("device_gate_mismatch")
+            if Path(profile_db_path).resolve() != Path(self._profile_db_path):
+                raise DeviceGateError("device_gate_mismatch")
+            if (
+                not is_uuid(owner.id)
+                or not is_hash(owner.host)
+                or type(owner.pid) is not int
+                or owner.pid <= 0
+            ):
+                raise ValueError("owner is invalid")
+            parse_utc(now)
+            if confirm_stopped is not True:
+                raise DeviceGateError("device_not_held")
+            if self._nonce is not None:
+                raise DeviceGateError("device_busy")
+            connection = self._connect(create=False)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = _read_gate_row(connection)
+                if row is None:
+                    raise DeviceGateError("device_not_held")
+                if (
+                    row["profile_id"] != self._profile_id
+                    or Path(str(row["profile_db_path"])).resolve()
+                    != Path(self._profile_db_path)
+                    or row["state"] not in {"held", "quarantined"}
+                    or row["owner_host"] != owner.host
+                ):
+                    raise DeviceGateError("device_gate_mismatch")
+                try:
+                    pid = int(row["owner_pid"])
+                except (TypeError, ValueError):
+                    raise DeviceGateError("device_gate_io_error") from None
+                if stop_checker(pid) != "stopped":
+                    raise DeviceGateError("device_busy")
+                nonce = str(uuid.uuid4())
+                cursor = connection.execute(
+                    "UPDATE device_guard SET owner_id = ?, owner_pid = ?, "
+                    "owner_host = ?, nonce = ?, state = 'held', acquired_at = ?, "
+                    "updated_at = ? WHERE device_key = 'primary' AND nonce = ?",
+                    (
+                        owner.id,
+                        owner.pid,
+                        owner.host,
+                        nonce,
+                        now,
+                        now,
+                        str(row["nonce"]),
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise DeviceGateError("device_gate_mismatch")
+                connection.execute("COMMIT")
+            except DeviceGateError:
+                _rollback(connection)
+                raise
+            except sqlite3.Error as error:
+                _rollback(connection)
+                if _is_busy(error):
+                    raise DeviceGateError("device_busy") from None
+                raise DeviceGateError("device_gate_io_error") from None
+            except OSError:
+                _rollback(connection)
+                raise DeviceGateError("device_gate_io_error") from None
+            finally:
+                connection.close()
+            self._nonce = nonce
+            self._owner = owner
+        except _GateBusy:
+            self._record(operation, "failed", started, "device_busy")
+            raise DeviceGateError("device_busy") from None
+        except DeviceGateError as error:
+            self._record(operation, "failed", started, error.reason_code)
+            raise
+        except Exception:
+            self._record(operation, "failed", started)
+            raise
+        self._record(operation, "ok", started)
+        return self._nonce
 
     def session_identity(self) -> DeviceSessionIdentity:
         """一次读取并完整核验同一行后返回 profile/原库/owner/nonce 身份。"""
@@ -262,6 +389,10 @@ class SharedDeviceGate:
         """只读返回固定白名单占用行；明确不存在返回 None，其它异常状态拒绝。"""
         return _inspect_path(self._path)
 
+    def write_guard(self, *, create: bool = True) -> "GateWriteGuard":
+        """返回覆盖后续 profile 写的固定门禁排他事务守卫。"""
+        return GateWriteGuard(self, create=create)
+
     def _matches_session(self, row: sqlite3.Row) -> bool:
         """比较取得时完整 owner 身份、nonce、profile 绑定与 held 状态。"""
         if self._nonce is None or self._owner is None:
@@ -288,7 +419,7 @@ class SharedDeviceGate:
         started: float | None = None,
         reason_code: str | None = None,
     ) -> None:
-        """由门禁适配器唯一记录 acquire/verify/release/quarantine 日志。"""
+        """由门禁适配器唯一记录 acquire/verify/release/quarantine/facts_guard 日志。"""
         if self._process_log is None:
             return
         try:
@@ -303,9 +434,90 @@ class SharedDeviceGate:
         except Exception:
             return
 
-    def _connect(self, *, create: bool) -> sqlite3.Connection:
+    def _connect(
+        self, *, create: bool, busy_timeout_ms: int = BUSY_TIMEOUT_MS
+    ) -> sqlite3.Connection:
         """打开固定门禁库；委托模块级连接函数并保留实例路径。"""
-        return _connect_gate(self._path, create=create)
+        return _connect_gate(
+            self._path, create=create, busy_timeout_ms=busy_timeout_ms
+        )
+
+
+class GateWriteGuard:
+    """在固定门禁库持有排他写事务，覆盖同 profile 校验与后续 profile 写。"""
+
+    _OPERATION = "facts_guard"
+
+    def __init__(self, gate: SharedDeviceGate, *, create: bool) -> None:
+        """保存门禁实例与是否允许首次初始化空门禁库。"""
+        self._gate = gate
+        self._create = create
+        self._connection: sqlite3.Connection | None = None
+        self._started: float | None = None
+
+    def __enter__(self) -> "GateWriteGuard":
+        """取得门禁 `BEGIN IMMEDIATE` 并校验同 profile 占用；不插入或改写行。"""
+        started = time.perf_counter()
+        self._started = started
+        self._gate._record(self._OPERATION, "started")
+        try:
+            connection = self._gate._connect(create=self._create)
+            self._connection = connection
+            connection.execute("BEGIN IMMEDIATE")
+            row = _read_gate_row(connection)
+            if row is not None:
+                state = str(row["state"])
+                if state not in {"held", "quarantined"}:
+                    raise DeviceGateError("device_gate_io_error")
+                if row["profile_id"] == self._gate._profile_id:
+                    if state == "held":
+                        raise DeviceGateError("device_busy")
+                    raise DeviceGateError("device_quarantined")
+        except _GateBusy:
+            self._rollback_and_close()
+            self._gate._record(self._OPERATION, "failed", started, "device_busy")
+            raise DeviceGateError("device_busy") from None
+        except DeviceGateError as error:
+            self._rollback_and_close()
+            self._gate._record(self._OPERATION, "failed", started, error.reason_code)
+            raise
+        except sqlite3.Error as error:
+            self._rollback_and_close()
+            reason = "device_busy" if _is_busy(error) else "device_gate_io_error"
+            self._gate._record(self._OPERATION, "failed", started, reason)
+            raise DeviceGateError(reason) from None
+        except OSError:
+            self._rollback_and_close()
+            self._gate._record(
+                self._OPERATION, "failed", started, "device_gate_io_error"
+            )
+            raise DeviceGateError("device_gate_io_error") from None
+        except Exception:
+            self._rollback_and_close()
+            self._gate._record(self._OPERATION, "failed", started)
+            raise
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> bool:
+        """结束门禁写事务并关闭连接；body 异常不吞掉，仍回滚释放锁。
+
+        事务本身无论成功或异常都回滚（守卫不写占用行）；日志终态反映被守卫的
+        写区间是否无异常完成，body 失败不会记成完整成功。
+        """
+        del exc, traceback
+        self._rollback_and_close()
+        if exc_type is not None:
+            self._gate._record(self._OPERATION, "failed", self._started)
+        else:
+            self._gate._record(self._OPERATION, "ok", self._started)
+        return False
+
+    def _rollback_and_close(self) -> None:
+        """尽力回滚并关闭本地连接；进程死亡时由 SQLite 释放事务锁。"""
+        if self._connection is not None:
+            _rollback(self._connection)
+            self._connection.close()
+            self._connection = None
 
 
 def inspect_gate_occupancy(
@@ -347,13 +559,17 @@ def _gate_row_payload(row: sqlite3.Row) -> dict[str, object]:
     }
 
 
-def _connect_gate(path: Path, *, create: bool) -> sqlite3.Connection:
-    """打开固定门禁库；首次创建允许少量本地文件/SQLite 竞争重试。"""
+def _connect_gate(
+    path: Path, *, create: bool, busy_timeout_ms: int = BUSY_TIMEOUT_MS
+) -> sqlite3.Connection:
+    """打开固定门禁库；首次创建允许少量文件/SQLite IO 重试，忙不重试。"""
     attempts = 3 if create else 1
     last: DeviceGateError | None = None
     for attempt in range(attempts):
         try:
-            return _connect_gate_once(path, create=create)
+            return _connect_gate_once(
+                path, create=create, busy_timeout_ms=busy_timeout_ms
+            )
         except DeviceGateError as error:
             last = error
             if error.reason_code != "device_gate_io_error" or attempt + 1 >= attempts:
@@ -363,7 +579,9 @@ def _connect_gate(path: Path, *, create: bool) -> sqlite3.Connection:
     raise last
 
 
-def _connect_gate_once(path: Path, *, create: bool) -> sqlite3.Connection:
+def _connect_gate_once(
+    path: Path, *, create: bool, busy_timeout_ms: int = BUSY_TIMEOUT_MS
+) -> sqlite3.Connection:
     """实际执行一次打开与建表/核验，失败关闭连接并映射固定错误。"""
     state = probe_path(path)
     if state == PATH_UNKNOWN:
@@ -375,13 +593,15 @@ def _connect_gate_once(path: Path, *, create: bool) -> sqlite3.Connection:
     try:
         if create:
             path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(str(path), timeout=BUSY_TIMEOUT_MS / 1000)
+        connection = sqlite3.connect(str(path), timeout=busy_timeout_ms / 1000)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
-    except sqlite3.OperationalError:
+        connection.execute(f"PRAGMA busy_timeout = {busy_timeout_ms}")
+    except sqlite3.Error as error:
+        if _is_busy(error):
+            raise _GateBusy() from None
         raise DeviceGateError("device_gate_io_error") from None
-    except (sqlite3.Error, OSError):
+    except OSError:
         raise DeviceGateError("device_gate_io_error") from None
     try:
         _ensure_gate_schema(connection, create=create)
@@ -417,7 +637,12 @@ def _ensure_gate_schema(connection: sqlite3.Connection, *, create: bool) -> None
     except DeviceGateError:
         _rollback(connection)
         raise
-    except (sqlite3.Error, OSError):
+    except sqlite3.Error as error:
+        _rollback(connection)
+        if _is_busy(error):
+            raise _GateBusy() from None
+        raise DeviceGateError("device_gate_io_error") from None
+    except OSError:
         _rollback(connection)
         raise DeviceGateError("device_gate_io_error") from None
 
@@ -425,7 +650,7 @@ def _ensure_gate_schema(connection: sqlite3.Connection, *, create: bool) -> None
 def _read_gate_schema(
     connection: sqlite3.Connection,
 ) -> tuple[int, dict[str, tuple[str, str]]]:
-    """读取版本与完整用户对象集；读取失败固定为门禁 IO 错误。"""
+    """读取版本与完整用户对象集；忙单独标记，其它读取失败为门禁 IO 错误。"""
     try:
         version = int(connection.execute("PRAGMA user_version").fetchone()[0])
         objects = {
@@ -435,7 +660,11 @@ def _read_gate_schema(
                 "WHERE name NOT LIKE 'sqlite_%'"
             )
         }
-    except (sqlite3.Error, TypeError, ValueError):
+    except sqlite3.Error as error:
+        if _is_busy(error):
+            raise _GateBusy() from None
+        raise DeviceGateError("device_gate_io_error") from None
+    except (TypeError, ValueError):
         raise DeviceGateError("device_gate_io_error") from None
     return version, objects
 

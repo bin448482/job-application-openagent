@@ -36,16 +36,19 @@ def occupancy_payload(row: dict[str, object] | None) -> dict[str, object]:
 def require_profile_writable(
     row: dict[str, object] | None, *, profile_id: str
 ) -> None:
-    """同 profile 存在 held/quarantined 占用时拒绝写入；其它 profile 不受影响。
+    """先验证占用状态，再只对同 profile 的 held/quarantined 拒绝写入。
 
     占用行缺失表示已确认无设备会话；行在但状态无法识别时按未知处理，
-    不做写入放行。调用方负责把门禁库不可读等读取失败按失败关闭处理。
+    任何 profile 都不做写入放行，避免不同 profile 绕过坏行保护。
+    调用方负责把门禁库不可读等读取失败按失败关闭处理。
     """
-    if row is None or row["profile_id"] != profile_id:
+    if row is None:
         return
     state = row["state"]
+    if state not in GATE_OCCUPIED_STATES:
+        raise DeviceGateError("device_gate_io_error")
+    if row["profile_id"] != profile_id:
+        return
     if state == "held":
         raise DeviceGateError("device_busy")
-    if state == "quarantined":
-        raise DeviceGateError("device_quarantined")
-    raise DeviceGateError("device_gate_io_error")
+    raise DeviceGateError("device_quarantined")

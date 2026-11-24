@@ -41,6 +41,18 @@ class DeviceSessionIdentity:
     state: str
 
 
+class DeviceWriteGuard(Protocol):
+    """覆盖事实写全过程的固定门禁排他事务；不插入或改写占用行。"""
+
+    def __enter__(self) -> "DeviceWriteGuard":
+        """取得门禁写事务并复核同 profile 占用后返回自身。"""
+        ...
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> bool:
+        """结束门禁写事务并释放 SQLite 锁；不吞掉 body 异常。"""
+        ...
+
+
 class SharedDeviceGatePort(Protocol):
     """抽象整个真实会话共享唯一 primary 设备占用的取得/复核/释放。"""
 
@@ -48,6 +60,10 @@ class SharedDeviceGatePort(Protocol):
         self, *, profile_id: str, profile_db_path: str, owner: Owner, now: str
     ) -> str:
         """在共享库 BEGIN IMMEDIATE 条件插入唯一 primary 行，返回本次 nonce。"""
+        ...
+
+    def write_guard(self, *, create: bool = True) -> DeviceWriteGuard:
+        """返回覆盖事实写的固定门禁排他事务守卫；不改变占用行。"""
         ...
 
     def verify(self, *, now: str | None = None) -> None:
@@ -64,4 +80,17 @@ class SharedDeviceGatePort(Protocol):
 
     def session_identity(self) -> DeviceSessionIdentity:
         """复核本会话并返回 profile/原库/owner/nonce 的完整可信身份。"""
+        ...
+
+    def recover(
+        self,
+        *,
+        profile_id: str,
+        profile_db_path: str,
+        owner: Owner,
+        confirm_stopped: bool,
+        stop_checker: object,
+        now: str,
+    ) -> str:
+        """受控接管原 profile 的 held/quarantined 占用并返回新 nonce。"""
         ...

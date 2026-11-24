@@ -9,10 +9,15 @@ import platform
 import sys
 import time
 import uuid
+from contextlib import ExitStack
 from pathlib import Path
-from typing import NoReturn
+from typing import Callable, NoReturn
 
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
+from app.adapters.adb.actions import AdbActionExecutor
+from app.adapters.adb.command import CommandIdentityStore
+from app.adapters.adb.recovery import AdbRecoveryObserver
+from app.adapters.adb.screen import AdbScreenReader
 from app.adapters.boss.list import load_and_parse_snapshot
 from app.adapters.boss.read import load_and_read_fixture
 from app.adapters.path_state import PATH_FILE, PATH_MISSING, probe_path
@@ -20,22 +25,42 @@ from app.adapters.files.evals import FileEvalStore
 from app.adapters.files.policy import FilePolicyRepository
 from app.adapters.llm.bridge_a import ExternalAgentBridge
 from app.adapters.llm.bridge_b import LocalProcessBridge
+from app.adapters.simulated.actions import ScriptedActionExecutor
 from app.adapters.sqlite.activity import ProfilePolicyActivity
 from app.adapters.sqlite.device_gate import SharedDeviceGate, inspect_gate_occupancy
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
-from app.adapters.sqlite.repo import SqliteStore
+from app.adapters.sqlite.repo import (
+    SqliteStore,
+    default_command_stop_checker,
+    default_stop_checker,
+)
 from app.adapters.sqlite.schema import initialize_database
-from app.domain.models import Owner, canonical_hash
+from app.domain.actions import (
+    ActionAuthorization,
+    ActionError,
+    ActionIdentity,
+    ReconciliationObservation,
+    action_key_for,
+    human_card,
+)
+from app.domain.models import APP, Evidence, Owner, add_seconds, canonical_hash
 from app.ports.device import ProbeSnapshot
 from app.ports.device_gate import DeviceGateError
 from app.ports.policy import PolicyError
 from app.ports.profile import ProfileError
 from app.ports.store import StoreError
 from app.domain.json_input import load_json_object as _load_json_object
-from app.domain.policy import FACT_KEYS, PolicyIssue, utc_now
+from app.domain.policy import (
+    FACT_KEYS,
+    PolicyIssue,
+    compute_base_hash,
+    effective_limits,
+    utc_now,
+)
 from app.process_log import ProcessLog, elapsed_ms
 from app.profile_open import open_profile_store
 from app.usecases import acceptance as acceptance_usecases
+from app.usecases import actions as action_usecases
 from app.usecases import device as device_usecases
 from app.usecases import facts as facts_usecases
 from app.usecases import policy as policy_usecases
@@ -414,6 +439,251 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     run_check.add_argument(
         "--model-config-hash", action=_UniqueStore, metavar="<摘要>", default=None
+    )
+    action = subparsers.add_parser(
+        "action",
+        allow_abbrev=False,
+        help="离线运行 M5 单次动作、文本资格、人工卡与对账。",
+        description=(
+            "perform 只在 draft_only、当前验收、本轮分动作授权与合成执行器下运行；"
+            "reconcile 另行本轮确认；不提供真实设备入口，不自动发送。"
+        ),
+    )
+    action_commands = action.add_subparsers(
+        dest="action_command",
+        required=True,
+        parser_class=_StrictArgumentParser,
+    )
+    action_perform = action_commands.add_parser(
+        "perform",
+        allow_abbrev=False,
+        help="领取并开始一条候选后执行一次动作。",
+        description="合成执行器经同一生产用例；不启动 ADB、模型或网络。",
+    )
+    action_perform.add_argument(
+        "--profile", action=_UniqueStore, required=True, metavar="<profile_id>"
+    )
+    action_perform.add_argument(
+        "--pack", action=_UniqueStore, required=True, metavar="<prompts/local/名称>"
+    )
+    action_perform.add_argument(
+        "--action-kind",
+        action=_UniqueStore,
+        required=True,
+        choices=(
+            "send_text",
+            "send_resume",
+            "change_wechat",
+            "change_phone",
+            "delete_conversation",
+        ),
+        metavar="<动作>",
+    )
+    action_perform.add_argument(
+        "--target-key", action=_UniqueStore, required=True, metavar="<动作目标键>"
+    )
+    action_perform.add_argument(
+        "--seed-fixture",
+        action=_UniqueStore,
+        metavar="<合成未读夹具>",
+        default=None,
+        help="可选：先向本 profile 库 upsert 合成未读快照并 claim。",
+    )
+    action_perform.add_argument(
+        "--fixture", action=_UniqueStore, required=True, metavar="<合成动作脚本>"
+    )
+    action_perform.add_argument(
+        "--credential", action=_UniqueStore, required=True, metavar="<验收凭证>"
+    )
+    action_perform.add_argument(
+        "--provider", action=_UniqueStore, required=True, metavar="<provider_id>"
+    )
+    action_perform.add_argument(
+        "--model-id", action=_UniqueStore, required=True, metavar="<model_id>"
+    )
+    action_perform.add_argument(
+        "--model-config-hash", action=_UniqueStore, required=True, metavar="<摘要>"
+    )
+    action_perform.add_argument(
+        "--authorize",
+        action="append",
+        default=[],
+        choices=(
+            "send_text",
+            "send_resume",
+            "change_wechat",
+            "change_phone",
+            "delete_conversation",
+        ),
+        metavar="<动作>",
+        help="本轮仅对该动作类型授权；可重复，文本授权不覆盖其它动作。",
+    )
+    action_perform.add_argument(
+        "--authorization-expires-at",
+        action=_UniqueStore,
+        metavar="<UTC时间>",
+        default=None,
+    )
+    action_perform.add_argument(
+        "--mode",
+        action=_UniqueStore,
+        required=True,
+        choices=("read_only", "draft_only"),
+        metavar="<read_only|draft_only>",
+    )
+    action_perform.add_argument(
+        "--body-text", action=_UniqueStore, metavar="<合成正文>", default=None
+    )
+    action_perform.add_argument(
+        "--attachment-name", action=_UniqueStore, metavar="<合成附件名>", default=None
+    )
+    action_perform.add_argument(
+        "--contact",
+        action=_UniqueStore,
+        required=True,
+        metavar="<姓名>",
+        help="完整任务会话身份的姓名；与公司/职位重算会话键并核对。",
+    )
+    action_perform.add_argument(
+        "--company",
+        action=_UniqueStore,
+        required=True,
+        metavar="<公司>",
+        help="完整任务会话身份的公司；三个分量必须与持久任务一致。",
+    )
+    action_perform.add_argument(
+        "--position",
+        action=_UniqueStore,
+        required=True,
+        metavar="<职位>",
+        help="完整任务会话身份的职位；缺失或与任务冲突在执行前拒绝。",
+    )
+    action_perform.add_argument(
+        "--anchor-label", action=_UniqueStore, metavar="<合成锚点标签>", default="消息"
+    )
+    action_perform.add_argument(
+        "--ime-component", action=_UniqueStore, metavar="<键盘组件>", default=None
+    )
+    action_perform.add_argument(
+        "--tap", action="append", default=[], metavar="<x,y>", help="可重复；仅合成执行器使用。"
+    )
+    action_perform.add_argument(
+        "--confirm-action",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="确认本轮针对该动作的授权；未确认不写 pending。",
+    )
+    action_perform.add_argument(
+        "--confirm-device",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="确认本轮设备独占；未确认不取得共享占用。",
+    )
+    action_eligibility = action_commands.add_parser(
+        "eligibility",
+        allow_abbrev=False,
+        help="只计算文本拟执行资格，不执行动作。",
+        description="合成有效本轮授权且 not_sent 时可为真；固定 C 与真实 A 开关独立。",
+    )
+    for name in ("profile", "pack", "action-kind", "target-key", "conversation-key", "task-key"):
+        action_eligibility.add_argument(
+            f"--{name}", action=_UniqueStore, required=True, metavar=f"<{name}>"
+        )
+    action_eligibility.add_argument(
+        "--credential", action=_UniqueStore, required=True, metavar="<验收凭证>"
+    )
+    action_eligibility.add_argument(
+        "--provider", action=_UniqueStore, required=True, metavar="<provider_id>"
+    )
+    action_eligibility.add_argument(
+        "--model-id", action=_UniqueStore, required=True, metavar="<model_id>"
+    )
+    action_eligibility.add_argument(
+        "--model-config-hash", action=_UniqueStore, required=True, metavar="<摘要>"
+    )
+    action_eligibility.add_argument(
+        "--authorize", action="append", default=[], choices=("send_text",), metavar="<动作>"
+    )
+    action_eligibility.add_argument(
+        "--authorization-expires-at",
+        action=_UniqueStore,
+        metavar="<UTC时间>",
+        default=None,
+    )
+    action_eligibility.add_argument(
+        "--confirm-action",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="确认本轮授权的合成拟执行资格计算；不执行发送。",
+    )
+    action_eligibility.add_argument(
+        "--mode",
+        action=_UniqueStore,
+        required=True,
+        choices=("read_only", "draft_only"),
+        metavar="<read_only|draft_only>",
+    )
+    action_card = action_commands.add_parser(
+        "card",
+        allow_abbrev=False,
+        help="只读列出 pending/unknown 动作的人工卡。",
+        description="abandon 后锁仍保留；卡片只含固定无正文字段。",
+    )
+    action_card.add_argument(
+        "--profile", action=_UniqueStore, required=True, metavar="<profile_id>"
+    )
+    action_reconcile = action_commands.add_parser(
+        "reconcile",
+        allow_abbrev=False,
+        help="人工确认已执行/未执行或放弃任务。",
+        description="会写业务终态，只允许 draft_only；确认需本轮显式确认、原命令停止与现场/IME 收敛；abandon 不解锁。",
+    )
+    action_reconcile.add_argument(
+        "--profile", action=_UniqueStore, required=True, metavar="<profile_id>"
+    )
+    action_reconcile.add_argument(
+        "--pack", action=_UniqueStore, required=True, metavar="<prompts/local/名称>"
+    )
+    action_reconcile.add_argument(
+        "--action-key", action=_UniqueStore, required=True, metavar="<动作键>"
+    )
+    action_reconcile.add_argument(
+        "--resolution",
+        action=_UniqueStore,
+        required=True,
+        choices=("confirm_performed", "confirm_not_performed", "abandon"),
+        metavar="<处置>",
+    )
+    action_reconcile.add_argument(
+        "--fixture", action=_UniqueStore, required=True, metavar="<合成对账脚本>"
+    )
+    action_reconcile.add_argument(
+        "--device",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="用显式 serial 一次性读取实际层级/IME 作为现场；仍需 fixture 提供证据。",
+    )
+    action_reconcile.add_argument(
+        "--serial", action=_UniqueStore, default=None, metavar="<serial>"
+    )
+    action_reconcile.add_argument(
+        "--mode",
+        action=_UniqueStore,
+        required=True,
+        choices=("read_only", "draft_only"),
+        metavar="<read_only|draft_only>",
+    )
+    action_reconcile.add_argument(
+        "--confirm-action", action=_UniqueStoreTrue, default=False
+    )
+    action_reconcile.add_argument(
+        "--confirm-device", action=_UniqueStoreTrue, default=False
+    )
+    action_reconcile.add_argument(
+        "--confirm-recovery",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="确认按原 profile/共享身份受控接管隔离占用。",
     )
     policy = subparsers.add_parser(
         "policy",
@@ -1162,22 +1432,21 @@ def _gate_owner() -> Owner:
     )
 
 
-def _gate_row(
+def _facts_write_gate(
     os_root: Path | None, profile_id: str, log: ProcessLog
-) -> dict[str, object] | None:
-    """只读读取同 profile 的共享占用行；不取得、不改写、不释放占用。
+) -> SharedDeviceGate | None:
+    """为确认事实写构造固定门禁写保护；非 Windows 结构性无门禁返回 None。
 
     非 Windows 平台没有共享门禁库，本进程也不可能与本机设备会话同时存在，
-    因此把该唯一结构性不可用视为无占用；其它不可判定状态仍按失败关闭处理。
+    因此把该唯一结构性不可用视为无设备会话；其它不可判定状态仍失败关闭。
     """
     try:
-        gate = SharedDeviceGate(
+        return SharedDeviceGate(
             profile_id=profile_id,
             profile_db_path=profile_runtime_path(PROJECT_ROOT, profile_id),
             os_root=os_root,
             process_log=log,
         )
-        return gate.inspect()
     except DeviceGateError as error:
         if error.reason_code == "device_gate_unavailable" and sys.platform != "win32":
             return None
@@ -1270,92 +1539,94 @@ def _run_facts(
     log.record(stage="facts", operation=operation, result="started")
     store: SqliteProfileStore | None = None
     try:
-        repo = FilePolicyRepository(PROJECT_ROOT)
-        pack = _facts_pack(repo, getattr(args, "pack", None), log)
-        if pack is not None and pack.profile_id != args.profile:
-            raise ProfileError("profile_mismatch")
-        path = profile_runtime_path(PROJECT_ROOT, args.profile)
-        if operation in ("set", "revoke", "forget") and args.confirm:
-            device_usecases.require_profile_writable(
-                _gate_row(os_root, args.profile, log), profile_id=args.profile
-            )
-        path_state = probe_path(path)
-        if operation == "show" and path_state == PATH_MISSING:
-            result: dict[str, object] = {
-                "profile_id": args.profile,
-                "facts": [],
-                "active_keys": [],
-                "registered_keys": sorted(FACT_KEYS),
-                "pending": [],
-                "allowed": [],
-                "scoped_by_pack": pack is not None,
-            }
-        else:
-            if operation != "set" and path_state == PATH_MISSING:
-                raise ProfileError("fact_not_found")
-            if path_state not in (PATH_MISSING, PATH_FILE):
-                raise ProfileError("profile_io_error")
-            store = SqliteProfileStore(
-                PROJECT_ROOT,
-                args.profile,
-                create=operation == "set",
-                now=now,
-            )
-            open_profile_store(store, log)
-            if operation == "set":
-                if args.confirm:
-                    result = facts_usecases.apply_set(
-                        store,
-                        profile_id=args.profile,
-                        key=args.key,
-                        value=args.value,
-                        expires_at=args.expires_at,
-                        replace=args.replace,
-                        now=now,
-                        pack=pack,
-                    )
-                else:
-                    result = facts_usecases.propose_set(
-                        store,
-                        profile_id=args.profile,
-                        key=args.key,
-                        value=args.value,
-                        expires_at=args.expires_at,
-                        replace=args.replace,
-                        now=now,
-                    )
-            elif operation == "show":
-                result = facts_usecases.show_facts(
-                    store, profile_id=args.profile, pack=pack, now=now
-                )
-            elif operation == "revoke":
-                if args.confirm:
-                    result = facts_usecases.apply_revoke(
-                        store,
-                        profile_id=args.profile,
-                        key=args.key,
-                        now=now,
-                        pack=pack,
-                    )
-                else:
-                    result = facts_usecases.propose_revoke(
-                        store, profile_id=args.profile, key=args.key
-                    )
-            elif operation == "forget":
-                if args.confirm:
-                    result = facts_usecases.apply_forget(
-                        store,
-                        profile_id=args.profile,
-                        key=args.key,
-                        now=now,
-                        pack=pack,
-                    )
-                else:
-                    result = facts_usecases.propose_forget(
-                        store, profile_id=args.profile, key=args.key
-                    )
+        with ExitStack() as stack:
+            repo = FilePolicyRepository(PROJECT_ROOT)
+            pack = _facts_pack(repo, getattr(args, "pack", None), log)
+            if pack is not None and pack.profile_id != args.profile:
+                raise ProfileError("profile_mismatch")
+            path = profile_runtime_path(PROJECT_ROOT, args.profile)
+            if operation in ("set", "revoke", "forget") and args.confirm:
+                gate = _facts_write_gate(os_root, args.profile, log)
+                if gate is not None:
+                    stack.enter_context(gate.write_guard(create=True))
+            path_state = probe_path(path)
+            if operation == "show" and path_state == PATH_MISSING:
+                result: dict[str, object] = {
+                    "profile_id": args.profile,
+                    "facts": [],
+                    "active_keys": [],
+                    "registered_keys": sorted(FACT_KEYS),
+                    "pending": [],
+                    "allowed": [],
+                    "scoped_by_pack": pack is not None,
+                }
             else:
-                raise ProfileError("invalid_fact")
+                if operation != "set" and path_state == PATH_MISSING:
+                    raise ProfileError("fact_not_found")
+                if path_state not in (PATH_MISSING, PATH_FILE):
+                    raise ProfileError("profile_io_error")
+                store = SqliteProfileStore(
+                    PROJECT_ROOT,
+                    args.profile,
+                    create=operation == "set",
+                    now=now,
+                )
+                stack.callback(store.close)
+                open_profile_store(store, log)
+                if operation == "set":
+                    if args.confirm:
+                        result = facts_usecases.apply_set(
+                            store,
+                            profile_id=args.profile,
+                            key=args.key,
+                            value=args.value,
+                            expires_at=args.expires_at,
+                            replace=args.replace,
+                            now=now,
+                            pack=pack,
+                        )
+                    else:
+                        result = facts_usecases.propose_set(
+                            store,
+                            profile_id=args.profile,
+                            key=args.key,
+                            value=args.value,
+                            expires_at=args.expires_at,
+                            replace=args.replace,
+                            now=now,
+                        )
+                elif operation == "show":
+                    result = facts_usecases.show_facts(
+                        store, profile_id=args.profile, pack=pack, now=now
+                    )
+                elif operation == "revoke":
+                    if args.confirm:
+                        result = facts_usecases.apply_revoke(
+                            store,
+                            profile_id=args.profile,
+                            key=args.key,
+                            now=now,
+                            pack=pack,
+                        )
+                    else:
+                        result = facts_usecases.propose_revoke(
+                            store, profile_id=args.profile, key=args.key
+                        )
+                elif operation == "forget":
+                    if args.confirm:
+                        result = facts_usecases.apply_forget(
+                            store,
+                            profile_id=args.profile,
+                            key=args.key,
+                            now=now,
+                            pack=pack,
+                        )
+                    else:
+                        result = facts_usecases.propose_forget(
+                            store, profile_id=args.profile, key=args.key
+                        )
+                else:
+                    raise ProfileError("invalid_fact")
     except DeviceGateError as error:
         log.record(
             stage="facts",
@@ -1406,9 +1677,6 @@ def _run_facts(
             "profile_io_error",
             "internal",
         )
-    finally:
-        if store is not None:
-            store.close()
     log.record(
         stage="facts",
         operation=operation,
@@ -1426,6 +1694,636 @@ def _run_facts(
         {
             "schema_version": 1,
             "status": status,
+            "reason_code": None,
+            "result": result,
+        },
+        0,
+        None,
+        None,
+    )
+
+
+def _parse_taps(values: list[str]) -> tuple[tuple[int, int], ...]:
+    """解析可重复的 `x,y` 非负整数点击点；空列表给一个合成默认点。"""
+    points: list[tuple[int, int]] = []
+    for raw in values:
+        parts = raw.split(",") if isinstance(raw, str) else []
+        if len(parts) != 2:
+            raise _CliArgumentError()
+        try:
+            x, y = int(parts[0]), int(parts[1])
+        except ValueError:
+            raise _CliArgumentError() from None
+        if x < 0 or y < 0 or str(x) != parts[0].strip() or str(y) != parts[1].strip():
+            raise _CliArgumentError()
+        points.append((x, y))
+    return tuple(points) if points else ((100, 100),)
+
+
+def _action_limits(pack: object) -> tuple[int, int]:
+    """从当前包有效限制读取文本日额度与冷却秒数。"""
+    limits = effective_limits(pack)  # type: ignore[arg-type]
+    return int(limits["daily_sends"]), int(limits["reply_cooldown_seconds"])
+
+
+def _action_key(
+    action_kind: str, target_key: str, conversation_key: str
+) -> str:
+    """按动作类型计算文档规定的唯一动作键。"""
+    if action_kind == "send_text":
+        return action_key_for(
+            action_kind, app=APP, message_key=target_key
+        )
+    if target_key != conversation_key:
+        raise ActionError("invalid_action")
+    return action_key_for(
+        action_kind, app=APP, conversation_key=conversation_key
+    )
+
+
+def _action_authorization(
+    *,
+    args: argparse.Namespace,
+    pack: object,
+    acceptance: dict[str, object],
+    task_key: str,
+    action_key: str,
+    now: str,
+) -> ActionAuthorization:
+    """由当前验收摘要、本轮种类与显式确认构造分动作授权。"""
+    expires_at = args.authorization_expires_at or add_seconds(now, 300)
+    return ActionAuthorization(
+        profile_id=pack.profile_id,  # type: ignore[attr-defined]
+        base_hash=str(acceptance["base_hash"]),
+        pack_hash=str(acceptance["pack_hash"]),
+        acceptance_base_hash=str(acceptance["base_hash"]),
+        acceptance_pack_hash=str(acceptance["pack_hash"]),
+        task_key=task_key,
+        action_key=action_key,
+        authorized_kinds=tuple(dict.fromkeys(args.authorize)),
+        expires_at=expires_at,
+        confirmed=bool(args.confirm_action),
+        nonce=str(uuid.uuid4()),
+    )
+
+
+def _open_action_guard(
+    *,
+    gate: SharedDeviceGate,
+    profile_store: SqliteProfileStore,
+    owner: Owner,
+    profile_id: str,
+    profile_path: Path,
+    now: str,
+    log: ProcessLog,
+) -> None:
+    """先占共享门禁再打开/迁移 profile 库；失败保留隔离。"""
+    gate.acquire(
+        profile_id=profile_id,
+        profile_db_path=str(profile_path),
+        owner=owner,
+        now=now,
+    )
+    try:
+        gate.verify(now=now)
+        open_profile_store(profile_store, log)
+    except Exception:
+        try:
+            gate.release(now=now, converged=False)
+        except Exception:
+            pass
+        raise
+    finally:
+        profile_store.close()
+
+
+def _run_action(
+    log: ProcessLog,
+    started: float,
+    args: argparse.Namespace,
+    os_root: Path | None,
+    stop_checker: object | None,
+    command_stop_checker: object | None,
+) -> int:
+    """执行 action perform/eligibility/card/reconcile；默认零设备零网络。"""
+    operation = args.action_command
+    now = utc_now()
+    stage_started = time.perf_counter()
+    log.record(stage="action", operation=operation, result="started")
+    gate: SharedDeviceGate | None = None
+    gate_held = False
+    store: SqliteStore | None = None
+    continue_with_gate = False
+    try:
+        if operation == "card":
+            result = _action_card(args, log)
+            return _action_success(log, started, stage_started, result, operation)
+        # 对账会写业务终态，固定只允许 draft_only；read_only 必须在打开/迁移
+        # profile、取得/恢复共享门禁、读取设备或写状态之前拒绝。
+        if operation == "reconcile" and args.mode != "draft_only":
+            raise ActionError("authorization_required")
+        if operation not in {"perform", "eligibility", "reconcile"}:
+            raise ActionError("invalid_action")
+
+        repo = FilePolicyRepository(PROJECT_ROOT)
+        _pack_rel, base_files, _files, _guides, pack = (
+            policy_usecases.load_active_pack(repo, args.pack, process_log=log)
+        )
+        if args.profile != pack.profile_id:
+            raise ProfileError("profile_mismatch")
+        profile_path = profile_runtime_path(PROJECT_ROOT, pack.profile_id)
+        daily_sends, cooldown = _action_limits(pack)
+        acceptance: dict[str, object] | None = None
+        if operation in {"perform", "eligibility"}:
+            acceptance = acceptance_usecases.check_acceptance(
+                FileEvalStore(PROJECT_ROOT),
+                args.credential,
+                base_files=base_files,
+                pack=pack,
+                provider_id=args.provider,
+                model_id=args.model_id,
+                model_config_hash=args.model_config_hash,
+            )
+
+        owner = _gate_owner()
+        gate = SharedDeviceGate(
+            profile_id=pack.profile_id,
+            profile_db_path=profile_path,
+            os_root=os_root,
+            process_log=log,
+        )
+        profile_store = SqliteProfileStore(
+            PROJECT_ROOT, pack.profile_id, create=args.mode == "draft_only", now=now
+        )
+        checker = stop_checker or default_stop_checker
+        command_checker = (
+            command_stop_checker
+            if command_stop_checker is not None
+            else (stop_checker if stop_checker is not None else default_command_stop_checker)
+        )
+
+        if operation == "eligibility":
+            open_profile_store(profile_store, log)
+            profile_store.close()
+            store = SqliteStore(
+                profile_path,
+                profile_id=pack.profile_id,
+                process_log=log,
+            )
+            action_key = _action_key(
+                args.action_kind, args.target_key, args.conversation_key
+            )
+            authorization = _action_authorization(
+                args=args,
+                pack=pack,
+                acceptance=acceptance,
+                task_key=args.task_key,
+                action_key=action_key,
+                now=now,
+            )
+            result = action_usecases.evaluate_text_eligibility(
+                store=store,
+                authorization=authorization,
+                action_kind=args.action_kind,
+                action_key=action_key,
+                target_key=args.target_key,
+                conversation_key=args.conversation_key,
+                task_key=args.task_key,
+                current_base_hash=str(acceptance["base_hash"]),
+                current_pack_hash=str(acceptance["pack_hash"]),
+                daily_sends=daily_sends,
+                reply_cooldown_seconds=cooldown,
+                profile_db_path=str(profile_path),
+                now=now,
+            )
+            return _action_success(log, started, stage_started, result, operation)
+
+        if operation == "perform":
+            if args.mode != "draft_only":
+                raise ActionError("authorization_required")
+            if not args.confirm_device or not args.confirm_action:
+                raise ActionError("authorization_required")
+            if not args.authorize:
+                raise ActionError("authorization_required")
+            _open_action_guard(
+                gate=gate,
+                profile_store=profile_store,
+                owner=owner,
+                profile_id=pack.profile_id,
+                profile_path=profile_path,
+                now=now,
+                log=log,
+            )
+            gate_held = True
+            store = SqliteStore(
+                profile_path,
+                profile_id=pack.profile_id,
+                local_host=owner.host,
+                process_log=log,
+            )
+            if args.seed_fixture is not None:
+                seed_path = _resolve_project_path(args.seed_fixture)
+                seed = load_and_parse_snapshot(seed_path, str(uuid.uuid4()), now=now)
+                if seed.status != "ok":
+                    raise ActionError("precondition_failed")
+                store.upsert_snapshot(seed)
+            lease = store.claim(APP, "unread", owner, now)
+            if lease is None:
+                lease = store.claim(APP, "new_message", owner, now)
+            if lease is None:
+                raise ActionError("action_not_ready")
+            lease = store.start(lease, now)
+            conversation_key = store.task_conversation(lease, now=now)
+            if conversation_key is None:
+                raise ActionError("authorization_required")
+            action_key = _action_key(
+                args.action_kind, args.target_key, conversation_key
+            )
+            authorization = _action_authorization(
+                args=args,
+                pack=pack,
+                acceptance=acceptance,
+                task_key=lease.key,
+                action_key=action_key,
+                now=now,
+            )
+
+            def reload_snapshot() -> dict[str, str]:
+                """在每条命令与提交前重读当前包/base 与当前验收摘要。"""
+                _, base_now, _, _, pack_now = policy_usecases.load_active_pack(
+                    repo, _pack_rel, process_log=log
+                )
+                acceptance_now = acceptance_usecases.check_acceptance(
+                    FileEvalStore(PROJECT_ROOT),
+                    args.credential,
+                    base_files=base_now,
+                    pack=pack_now,
+                    provider_id=args.provider,
+                    model_id=args.model_id,
+                    model_config_hash=args.model_config_hash,
+                )
+                return {
+                    "base_hash": compute_base_hash(base_now),
+                    "pack_hash": pack_now.pack_hash,
+                    "acceptance_base_hash": str(acceptance_now["base_hash"]),
+                    "acceptance_pack_hash": str(acceptance_now["pack_hash"]),
+                }
+
+            fixture = _load_json_object(_resolve_project_path(args.fixture).read_text("utf-8"))
+            executor = ScriptedActionExecutor(fixture)
+            body_text = (
+                args.body_text
+                if args.body_text is not None
+                else ("合成回复正文" if args.action_kind == "send_text" else None)
+            )
+            attachment_name = (
+                args.attachment_name
+                if args.attachment_name is not None
+                else ("合成附件简历.pdf" if args.action_kind == "send_resume" else None)
+            )
+            result = action_usecases.perform_action(
+                store=store,
+                gate=gate,
+                authorization=authorization,
+                lease=lease,
+                action_kind=args.action_kind,
+                action_key=action_key,
+                target_key=args.target_key,
+                conversation_key=conversation_key,
+                body_text=body_text,
+                attachment_name=attachment_name,
+                identity=ActionIdentity(
+                    args.contact, args.company, args.position
+                ),
+                anchor_label=args.anchor_label or "消息",
+                ime_component=args.ime_component,
+                tap_points=_parse_taps(args.tap),
+                current_base_hash=str(acceptance["base_hash"]),
+                current_pack_hash=str(acceptance["pack_hash"]),
+                daily_sends=daily_sends,
+                reply_cooldown_seconds=cooldown,
+                profile_db_path=str(profile_path),
+                executor=executor,
+                now=now,
+                process_log=log,
+                clock=utc_now,
+                reload_snapshot=reload_snapshot,
+            )
+            converged = bool(result.get("gate_converged"))
+            gate.release(now=now, converged=converged)
+            gate_held = False
+            result["acceptance_valid"] = True
+            result["mode"] = args.mode
+            result["production_execution"] = False
+            return _action_success(log, started, stage_started, result, operation)
+
+        # reconcile
+        path_state = probe_path(profile_path)
+        if path_state == PATH_MISSING:
+            raise ActionError("action_not_found")
+        if path_state != PATH_FILE:
+            raise ProfileError("profile_io_error")
+        occupant = gate.inspect()
+        if occupant is not None:
+            if not args.confirm_recovery or not args.confirm_device:
+                raise DeviceGateError("device_busy")
+            gate.recover(
+                profile_id=pack.profile_id,
+                profile_db_path=str(profile_path),
+                owner=owner,
+                confirm_stopped=True,
+                stop_checker=checker,
+                now=now,
+            )
+        else:
+            if not args.confirm_device:
+                raise ActionError("authorization_required")
+            gate.acquire(
+                profile_id=pack.profile_id,
+                profile_db_path=str(profile_path),
+                owner=owner,
+                now=now,
+            )
+        gate_held = True
+        gate.verify(now=now)
+        profile_store = SqliteProfileStore(
+            PROJECT_ROOT, pack.profile_id, create=False, now=now
+        )
+        open_profile_store(profile_store, log)
+        profile_store.close()
+        store = SqliteStore(
+            profile_path,
+            profile_id=pack.profile_id,
+            stop_checker=checker,
+            process_log=log,
+        )
+        fixture = _load_json_object(_resolve_project_path(args.fixture).read_text("utf-8"))
+        base_observation = _reconciliation_observation(
+            fixture=fixture,
+            action_key=args.action_key,
+            resolution=args.resolution,
+            now=now,
+            confirmed=bool(args.confirm_action),
+        )
+        if command_stop_checker is None and stop_checker is None:
+            tracker = CommandIdentityStore(
+                PROJECT_ROOT / "data" / "runtime" / "action-commands"
+            )
+
+            def tracker_checker(pid: int) -> str:
+                """同时检查原 owner 与已记录命令 PID 的停止状态。"""
+                return tracker.check(args.action_key, pid, default_command_stop_checker)
+
+            command_checker = tracker_checker
+        observation = base_observation
+        if args.device:
+            observation = _device_reconciliation_observation(
+                args=args,
+                gate=gate,
+                store=store,
+                evidence=base_observation.evidence,
+                command_checker=command_checker,
+                now=now,
+                log=log,
+            )
+        result = action_usecases.reconcile_action(
+            store=store,
+            gate=gate,
+            observation=observation,
+            profile_id=pack.profile_id,
+            profile_db_path=str(profile_path),
+            explicit_confirm=bool(args.confirm_action),
+            command_stop_checker=command_checker,
+            now=now,
+            process_log=log,
+        )
+        gate.release(
+            now=now, converged=bool(result.get("gate_converged"))
+        )
+        gate_held = False
+        result["production_execution"] = False
+        return _action_success(log, started, stage_started, result, operation)
+    except (ActionError, PolicyError, DeviceGateError, ProfileError, StoreError) as error:
+        if gate is not None and gate_held:
+            try:
+                gate.release(now=now, converged=False)
+            except Exception:
+                pass
+        log.record(
+            stage="action",
+            operation=operation,
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="action",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "action",
+        )
+    except (_CliArgumentError, ValueError):
+        if gate is not None and gate_held:
+            try:
+                gate.release(now=now, converged=False)
+            except Exception:
+                pass
+        log.record(
+            stage="action",
+            operation=operation,
+            result="failed",
+            reason_code="invalid_input",
+            error_category="action",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log, started, _error_payload("invalid_input"), 2, "invalid_input", "action"
+        )
+    except Exception:
+        if gate is not None and gate_held:
+            try:
+                gate.release(now=now, converged=False)
+            except Exception:
+                pass
+        log.record(
+            stage="action",
+            operation=operation,
+            result="failed",
+            error_category="internal",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("store_io_error"),
+            2,
+            "store_io_error",
+            "internal",
+        )
+    finally:
+        if store is not None:
+            store.close()
+
+
+def _action_card(args: argparse.Namespace, log: ProcessLog) -> dict[str, object]:
+    """只读列出未决动作人工卡；v1 事实库视为无动作，不伪造空库。"""
+    profile_path = profile_runtime_path(PROJECT_ROOT, args.profile)
+    if probe_path(profile_path) == PATH_MISSING:
+        return {"profile_id": args.profile, "cards": [], "count": 0}
+    profile_store = SqliteProfileStore(
+        PROJECT_ROOT, args.profile, create=False, now=utc_now()
+    )
+    open_profile_store(profile_store, log)
+    profile_store.close()
+    try:
+        store = SqliteStore(
+            profile_path, profile_id=args.profile, process_log=log
+        )
+    except ProfileError as error:
+        if error.reason_code == "profile_mismatch":
+            return {"profile_id": args.profile, "cards": [], "count": 0}
+        raise
+    try:
+        records = store.pending_actions(APP)
+    finally:
+        store.close()
+    cards = [human_card(record) for record in records]
+    return {"profile_id": args.profile, "cards": cards, "count": len(cards)}
+
+
+def _device_reconciliation_observation(
+    *,
+    args: argparse.Namespace,
+    gate: SharedDeviceGate,
+    store: SqliteStore,
+    evidence: Evidence | None,
+    command_checker: Callable[[int], str],
+    now: str,
+    log: ProcessLog,
+) -> ReconciliationObservation:
+    """用实际 serial 一次读取层级/IME 作为恢复现场；命令停止仍需真实账本。"""
+    serial = args.serial
+    if not isinstance(serial, str) or not serial.strip():
+        raise ActionError("precondition_failed")
+    record = store.get_action(args.action_key)
+    if record is None:
+        raise ActionError("action_not_found")
+    owner_pid = int(record["owner_pid"])
+    command_stopped = command_checker(owner_pid) == "stopped"
+    ime_original: str | None = None
+    ime_state = store.load_ime_state()
+    if (
+        ime_state is not None
+        and ime_state.get("action_key") == args.action_key
+        and isinstance(ime_state.get("original_ime"), str)
+        and ime_state["original_ime"]
+    ):
+        ime_original = str(ime_state["original_ime"])
+    screen = AdbScreenReader(evidence_dir=None, process_log=log, gate=gate)
+    actions = AdbActionExecutor(
+        serial=serial, gate=gate, process_log=log, screen_reader=screen
+    )
+    observer = AdbRecoveryObserver(
+        serial=serial, gate=gate, screen_reader=screen, action_reader=actions
+    )
+    return observer.observe(
+        action_key=args.action_key,
+        action_kind=str(record["action_kind"]),
+        resolution=args.resolution,
+        evidence=evidence,
+        ime_original=ime_original,
+        command_stopped=command_stopped,
+        confirmed=bool(args.confirm_action),
+        observed_at=now,
+    )
+
+
+def _reconciliation_observation(
+    *,
+    fixture: dict[str, object],
+    action_key: str,
+    resolution: str,
+    now: str,
+    confirmed: bool,
+) -> ReconciliationObservation:
+    """把合成对账脚本转为严格人工观察；不接受直接给出的任务成功字段。"""
+    allowed = {"current_ime", "observation"}
+    if set(fixture) - allowed or "observation" not in fixture:
+        raise ActionError("invalid_observation")
+    raw = fixture["observation"]
+    if not isinstance(raw, dict):
+        raise ActionError("invalid_observation")
+    expected = {
+        "evidence",
+        "command_quiet",
+        "scene_settled",
+        "confirmation_open",
+        "ime_original",
+        "ime_current",
+        "matched_action_key",
+        "confirmed",
+    }
+    if set(raw) != expected:
+        raise ActionError("invalid_observation")
+    evidence_data = raw["evidence"]
+    evidence = None
+    if evidence_data is not None:
+        if not isinstance(evidence_data, dict) or set(evidence_data) != {
+            "outcome",
+            "effect",
+            "reason_code",
+            "before_snapshot_id",
+            "after_snapshot_id",
+            "observed_at",
+        }:
+            raise ActionError("invalid_observation")
+        evidence = Evidence(
+            action_key=action_key,
+            outcome=str(evidence_data["outcome"]),
+            effect=str(evidence_data["effect"]),
+            reason_code=evidence_data["reason_code"],  # type: ignore[arg-type]
+            before_snapshot_id=evidence_data["before_snapshot_id"],  # type: ignore[arg-type]
+            after_snapshot_id=evidence_data["after_snapshot_id"],  # type: ignore[arg-type]
+            observed_at=now,
+        )
+    return ReconciliationObservation(
+        action_key=action_key,
+        resolution=resolution,
+        observed_at=now,
+        evidence=evidence,
+        command_quiet=raw["command_quiet"],  # type: ignore[arg-type]
+        scene_settled=raw["scene_settled"],  # type: ignore[arg-type]
+        confirmation_open=raw["confirmation_open"],  # type: ignore[arg-type]
+        ime_original=raw["ime_original"],  # type: ignore[arg-type]
+        ime_current=raw["ime_current"],  # type: ignore[arg-type]
+        matched_action_key=str(raw["matched_action_key"]),
+        confirmed=confirmed and raw["confirmed"] is True,
+    )
+
+
+def _action_success(
+    log: ProcessLog,
+    started: float,
+    stage_started: float,
+    result: dict[str, object],
+    operation: str,
+) -> int:
+    """记录动作阶段成功并输出四键结果；不授予真实执行或发送权限。"""
+    log.record(
+        stage="action",
+        operation=operation,
+        result="ok",
+        duration_ms=elapsed_ms(stage_started),
+    )
+    return _finalize_output(
+        log,
+        started,
+        {
+            "schema_version": 1,
+            "status": "ok",
             "reason_code": None,
             "result": result,
         },
@@ -1900,11 +2798,14 @@ def main(
     *,
     process_log: ProcessLog | None = None,
     os_root: Path | None = None,
+    stop_checker: object | None = None,
+    command_stop_checker: object | None = None,
 ) -> int:
     """执行一次 CLI 命令并返回 0 或 2，不向 stderr 回显输入或异常。
 
-    `os_root` 只供测试注入临时应用数据根；生产 CLI 不提供该参数，固定使用
-    LOCALAPPDATA 下的共享设备门禁位置。
+    `os_root`/`stop_checker`/`command_stop_checker` 只供测试注入临时应用数据根、
+    合成本机停止判据与合成父子命令停止判据；生产 CLI 固定使用本机位置与
+    保守未知命令检查器。
     """
     log = process_log if process_log is not None else ProcessLog()
     started = time.perf_counter()
@@ -2014,6 +2915,15 @@ def main(
         return _run_facts(log, started, args, os_root)
     if args.command == "device":
         return _run_device(log, started, args, os_root)
+    if args.command == "action":
+        return _run_action(
+            log,
+            started,
+            args,
+            os_root,
+            stop_checker,
+            command_stop_checker,
+        )
     if args.command == "run":
         return _run_run(log, started, args, os_root)
     if args.command == "policy":

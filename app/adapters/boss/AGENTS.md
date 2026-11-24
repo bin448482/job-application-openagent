@@ -10,7 +10,7 @@
 - `list.py`：M2 `validate_profile`、`load_sense_fixture`、`load_and_parse_snapshot`、纯函数 `parse_snapshot` 与 `merge_snapshots`；严格 JSON/路径边界、四源判定、区域内角标、全局标签、身份去重、分页最长整行重叠、覆盖率证明、指纹与候选重算。
 - `read.py`：M3 `validate_read_profile`、`load_read_fixture`、`load_and_read_fixture` 与纯函数 `parse_page/parse_job_list/parse_job_detail/parse_unread/parse_conversation_page/merge_conversations`；页面分类、职位卡/详情、未读行阶梯、聊天方向/稳定身份/跨屏合并。
 - `pixel.py`：`parse_screen_header`、`validate_calibration` 与纯 `parse_pixel_row_badge`；16 字节小端 RGBA 头、分辨率/格式/区域/颜色/阈值校验，像素结论只输出 `FieldReading`。
-- `support.py`：M2/M3 共用的严格 JSON/XML/夹具路径、bounds、resource-id、比例区域、coverage proof、行/父节点遍历与区域角标核心；不包含业务结果类型。M2/M3 各自只保留结果映射。
+- `support.py`：M2/M3 共用的严格 JSON/XML/夹具路径、bounds、resource-id、比例区域、coverage proof、行/父节点遍历与区域角标核心；`parse_bounds`/`rect_inside`/`parent_map` 也是 M5 动作列表覆盖的唯一几何实现；不包含业务结果类型。M2/M3 各自只保留结果映射。
 
 ## 三、行为契约
 
