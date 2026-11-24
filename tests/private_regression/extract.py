@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 TOOL_NAME = "private-regression-extractor"
-TOOL_VERSION = "0.4.0"
+TOOL_VERSION = "0.5.0"
 SCHEMA_RECEIPT = "private-regression-safe-receipt/v1"
 SCHEMA_VALIDATION = "private-regression-validation/v1"
 SCHEMA_MANIFEST = "private-regression-manifest/v1"
@@ -2285,6 +2285,8 @@ def _enumerate_batch_entries(directory: Path) -> tuple[set[str], set[str]]:
                         raise ExtractionError("symlink_rejected")
                     relative = path.relative_to(directory).as_posix()
                     if entry.is_dir(follow_symlinks=False):
+                        if depth + 1 > MAX_VALIDATE_DEPTH:
+                            raise ExtractErrorSize()
                         dirs.add(relative)
                         if len(dirs) > MAX_VALIDATE_DIRS:
                             raise ExtractErrorSize()

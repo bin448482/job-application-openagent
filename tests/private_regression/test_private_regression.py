@@ -124,6 +124,56 @@ def _scandir_factory() -> tuple[object, list[tuple[Path, _CountingScandir]]]:
     return factory, probes
 
 
+class _FakeDirEntry:
+    """测试专用的最小 DirEntry，只用于把超深目录固定为首个条目。"""
+
+    def __init__(self, path: Path) -> None:
+        """保存真实路径。"""
+        self.path = str(path)
+        self.name = path.name
+
+    def is_dir(self, follow_symlinks: bool = True) -> bool:
+        """把目标目录声明为目录。"""
+        return True
+
+    def is_file(self, follow_symlinks: bool = True) -> bool:
+        """目标不是普通文件。"""
+        return False
+
+
+class _FirstEntryScandir:
+    """先产出指定目录条目，其余真实条目仅在继续迭代时消费。"""
+
+    def __init__(self, forced: Path, remaining: object) -> None:
+        """保存超深目录与真实剩余迭代器。"""
+        self._forced = forced
+        self._remaining = remaining
+        self.yielded = 0
+        self.remaining_yielded = 0
+        self.closed = False
+
+    def __iter__(self) -> "_FirstEntryScandir":
+        """返回自身。"""
+        return self
+
+    def __next__(self) -> object:
+        """首发强制条目，之后才消费真实目录。"""
+        if self.yielded == 0:
+            self.yielded = 1
+            return _FakeDirEntry(self._forced)
+        entry = next(self._remaining)
+        self.remaining_yielded += 1
+        self.yielded += 1
+        return entry
+
+    def close(self) -> None:
+        """关闭真实剩余迭代器并记录。"""
+        if not self.closed:
+            self.closed = True
+            self._remaining.close()
+
+
+
 
 class PrivateRegressionTests(unittest.TestCase):
     """覆盖白名单、异常输入、路径/预算、时序、验证器与泄露边界。"""
@@ -1708,6 +1758,80 @@ class PrivateRegressionTests(unittest.TestCase):
         self.assertEqual(result5["status"], "invalid")
         self.assertNotIn(depth5 / "d0" / "d1" / "d2" / "d3" / "d4", scanned5)
         self.assertTrue(all(probe.closed for _, probe in probes))
+
+    def test_depth_cap_stops_at_first_sibling_and_never_consumes_rest(self) -> None:
+        """发现超深目录的当下停止，当前目录其余 100 兄弟与更深 scandir 零消费。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        current = batch
+        chain = []
+        for name in ("d0", "d1", "d2", "d3"):
+            current = current / name
+            current.mkdir()
+            chain.append(current)
+        d3 = chain[-1]
+        d4 = d3 / "d4"
+        d4.mkdir()
+        for index in range(100):
+            (d3 / f"f-{index:03d}.txt").write_text("x", encoding="utf-8")
+
+        real = extract.os.scandir
+        probes: list[tuple[Path, object]] = []
+        d3_probe: list[_FirstEntryScandir] = []
+
+        def factory(path: Path) -> object:
+            """让 d3 的首个条目固定为超深 d4。"""
+            if Path(path) == d3:
+                probe = _FirstEntryScandir(d4, real(path))
+                d3_probe.append(probe)
+            else:
+                probe = _CountingScandir(real(path))
+            probes.append((Path(path), probe))
+            return probe
+
+        with mock.patch.object(extract.os, "scandir", side_effect=factory):
+            result = extract.validate_batch(batch)
+        scanned = {path for path, _ in probes}
+        self.assertEqual(result["status"], "invalid")
+        self.assertEqual(len(d3_probe), 1)
+        self.assertEqual(d3_probe[0].yielded, 1)
+        self.assertEqual(d3_probe[0].remaining_yielded, 0)
+        self.assertTrue(d3_probe[0].closed)
+        self.assertNotIn(d4, scanned)
+        self.assertTrue(all(probe.closed for _, probe in probes))
+
+        small_root = self.tmp / "small-depth"
+        small_root.mkdir()
+        small_repo = _make_repo(small_root)
+        small_source = _make_source(small_root)
+        (small_source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        small_receipt = extract.run_extraction(
+            small_source, small_repo / "data" / "private-regression"
+        )
+        small_batch = (
+            small_repo / "data" / "private-regression" / small_receipt["batch_id"]
+        )
+        small_current = small_batch
+        small_chain = []
+        for name in ("s0", "s1", "s2"):
+            small_current = small_current / name
+            small_current.mkdir()
+            small_chain.append(small_current)
+        factory, small_probes = _scandir_factory()
+        with mock.patch.object(extract, "MAX_VALIDATE_DEPTH", 2):
+            with mock.patch.object(extract.os, "scandir", side_effect=factory):
+                small_result = extract.validate_batch(small_batch)
+        small_scanned = {path for path, _ in small_probes}
+        self.assertEqual(small_result["status"], "invalid")
+        self.assertNotIn(small_chain[2], small_scanned)
+        self.assertTrue(all(probe.closed for _, probe in small_probes))
 
 
 if __name__ == "__main__":
