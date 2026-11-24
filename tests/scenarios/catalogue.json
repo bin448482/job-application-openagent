@@ -21271,6 +21271,14 @@
                     "equals": 0
                   },
                   {
+                    "path": "fact_writes",
+                    "equals": 0
+                  },
+                  {
+                    "path": "device_calls",
+                    "equals": 0
+                  },
+                  {
                     "path": "bridge_submissions",
                     "equals": 1
                   }
@@ -21290,6 +21298,14 @@
                   {
                     "path": "fact_count",
                     "equals": 0
+                  },
+                  {
+                    "path": "fact_writes",
+                    "equals": 0
+                  },
+                  {
+                    "path": "device_calls",
+                    "equals": 0
                   }
                 ]
               },
@@ -21306,6 +21322,14 @@
                   },
                   {
                     "path": "fact_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "fact_writes",
+                    "equals": 0
+                  },
+                  {
+                    "path": "device_calls",
                     "equals": 0
                   }
                 ]
@@ -21736,6 +21760,10 @@
                   {
                     "path": "content_max_bytes",
                     "equals": 65536
+                  },
+                  {
+                    "path": "over_content_bytes",
+                    "equals": 65537
                   },
                   {
                     "path": "over_reason",
@@ -22469,6 +22497,7 @@
       ],
       "offline_subscenarios": [
         "public_contract",
+        "public_contract_terms",
         "holdout_freeze",
         "holdout_first_failure",
         "holdout_io_failures",
@@ -22528,6 +22557,14 @@
                   {
                     "path": "transport_markers",
                     "equals": 0
+                  },
+                  {
+                    "path": "role_call_count",
+                    "equals": 6
+                  },
+                  {
+                    "path": "metadata_case_id_count",
+                    "equals": 6
                   }
                 ]
               }
@@ -22550,6 +22587,69 @@
             "eval": "m4/policy/packs/eval"
           },
           "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "public_contract_terms",
+          "label": "合法普通词不误拒",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_eval_terms.json"
+          ],
+          "fixture": "fixtures/m4/eval/public_terms/public.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D11/public_contract_terms",
+          "device_gate": false,
+          "assertions": [
+            "合法 inbound 含 expected/case_id 普通词仍通过",
+            "metadata case_id 值不进入任何角色",
+            "零误拒"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "eval_status",
+                    "equals": "measured"
+                  },
+                  {
+                    "path": "transport_markers",
+                    "equals": 0
+                  },
+                  {
+                    "path": "bridge_calls",
+                    "equals": 6
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [
+            "prompts/base"
+          ],
+          "local_packs": {
+            "eval": "m4/policy/packs/eval"
+          },
+          "fixture_copies": {
+            "evals/policy-suite": "m4/eval/public_terms"
+          },
           "junctions": {}
         },
         {
@@ -23067,6 +23167,8 @@
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_admission_fail.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_registry_fail.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_audit.json"
           ],
           "fixture": "fixtures/m4/eval/holdout/suite.json",
@@ -23095,6 +23197,18 @@
                   {
                     "path": "registry_unchanged",
                     "equals": true
+                  },
+                  {
+                    "path": "registry_bytes_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "registry_existed_before",
+                    "equals": false
+                  },
+                  {
+                    "path": "tmp_files_after",
+                    "equals": 0
                   },
                   {
                     "path": "injection_hits",
@@ -23135,6 +23249,14 @@
                     "equals": true
                   },
                   {
+                    "path": "registry_bytes_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "tmp_files_after",
+                    "equals": 0
+                  },
+                  {
                     "path": "regression_case_count",
                     "equals": 0
                   },
@@ -23172,6 +23294,14 @@
                     "equals": true
                   },
                   {
+                    "path": "registry_bytes_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "tmp_files_after",
+                    "equals": 0
+                  },
+                  {
                     "path": "regression_case_count",
                     "equals": 0
                   },
@@ -23204,6 +23334,38 @@
                     "path": "registry_statuses",
                     "equals": [
                       "frozen"
+                    ]
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "regression_ref_present",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "regression_case_count",
+                    "equals": 2
+                  },
+                  {
+                    "path": "registry_statuses",
+                    "equals": [
+                      "retired"
                     ]
                   }
                 ]

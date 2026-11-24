@@ -194,7 +194,11 @@ def _seed(request: dict, db: Path) -> dict:
     if extra is not None:
         fixtures.append(_relative(extra, "extra_fixture", must_exist=True))
     log = ProcessLog(path=db.parent / f"m2-probe-{uuid.uuid4().hex}.jsonl")
-    store = SqliteStore(db, process_log=log)
+    store = SqliteStore(
+        db,
+        local_host=canonical_hash(["scenario", "m2", "probe", "synthetic-host"]),
+        process_log=log,
+    )
     try:
         for index, active_fixture in enumerate(fixtures):
             active_snapshot = snapshot_id if index == 0 else str(uuid.uuid4())

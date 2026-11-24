@@ -1706,13 +1706,14 @@ def build_support_fixtures() -> None:
             "pack": "prompts/local/eval",
             "suite": "public",
             "mode": "eval",
-            "forbidden_markers": [
-                "case_id",
-                "assertions",
-                "expected",
-                "memory_updates",
-                "can_send",
-            ],
+            "forbid_case_ids": True,
+        },
+        "d11_eval_terms": {
+            "operation": "eval",
+            "pack": "prompts/local/eval",
+            "suite": "public",
+            "mode": "eval",
+            "forbid_case_ids": True,
         },
         "d11_bridge_auth": {
             "operation": "decision_run",
@@ -1752,6 +1753,12 @@ def build_support_fixtures() -> None:
         case["input"]["task_id"] = f"holdout-task-{index}"
         case["input"]["nonce"] = f"00000000-0000-4000-8000-0000000006{index:02d}"
     holdout_case_digests = [digest(case["input"]) for case in holdout_cases]
+    public_terms = copy.deepcopy(public_suite)
+    public_terms["cases"][0]["input"]["inbound"] = (
+        str(public_terms["cases"][0]["input"]["inbound"])
+        + " 这里只是合法普通词 expected case_id assertions。"
+    )
+    write_json("fixtures/m4/eval/public_terms/public.json", public_terms)
     write_json(
         "fixtures/m4/eval/holdout/suite.json",
         {
@@ -5971,15 +5978,21 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     probe_ok(
                         {"path": "resolved_tier", "equals": "C"},
                         {"path": "fact_count", "equals": 0},
+                        {"path": "fact_writes", "equals": 0},
+                        {"path": "device_calls", "equals": 0},
                         {"path": "bridge_submissions", "equals": 1},
                     ),
                     probe_ok(
                         {"path": "resolved_tier", "equals": "C"},
                         {"path": "fact_count", "equals": 0},
+                        {"path": "fact_writes", "equals": 0},
+                        {"path": "device_calls", "equals": 0},
                     ),
                     probe_ok(
                         {"path": "resolved_tier", "equals": "C"},
                         {"path": "fact_count", "equals": 0},
+                        {"path": "fact_writes", "equals": 0},
+                        {"path": "device_calls", "equals": 0},
                     ),
                 ]},
             ),
@@ -6085,6 +6098,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     ),
                     probe_ok(
                         {"path": "content_max_bytes", "equals": 65536},
+                        {"path": "over_content_bytes", "equals": 65537},
                         {"path": "over_reason", "equals": "input_too_large"},
                         {"path": "bridge_calls", "equals": 0},
                     ),
@@ -6223,6 +6237,23 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     {"path": "bridge_calls", "equals": 6},
                     {"path": "descriptor_simulated", "equals": True},
                     {"path": "transport_markers", "equals": 0},
+                    {"path": "role_call_count", "equals": 6},
+                    {"path": "metadata_case_id_count", "equals": 6},
+                )]},
+            ),
+            ready_variant(
+                "public_contract_terms",
+                label="合法普通词不误拒",
+                steps=[m4_cmd("d11_eval_terms")],
+                fixture="fixtures/m4/eval/public_terms/public.json",
+                shared_inputs=["prompts/base"],
+                local_packs={"eval": "m4/policy/packs/eval"},
+                fixture_copies={"evals/policy-suite": "m4/eval/public_terms"},
+                assertions=["合法 inbound 含 expected/case_id 普通词仍通过", "metadata case_id 值不进入任何角色", "零误拒"],
+                acceptance={"steps": [probe_ok(
+                    {"path": "eval_status", "equals": "measured"},
+                    {"path": "transport_markers", "equals": 0},
+                    {"path": "bridge_calls", "equals": 6},
                 )]},
             ),
             ready_variant(
@@ -6366,6 +6397,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     m4_cmd("d11_retire_admission_fail"),
                     m4_cmd("d11_retire_registry_fail"),
                     m4_cmd("d11_regression_check"),
+                    m4_cmd("d11_retire"),
+                    m4_cmd("d11_regression_check"),
                     m4_cmd("d11_holdout_audit"),
                 ],
                 fixture="fixtures/m4/eval/holdout/suite.json",
@@ -6378,6 +6411,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         probe_error(
                             "policy_io_error",
                             {"path": "registry_unchanged", "equals": True},
+                            {"path": "registry_bytes_unchanged", "equals": True},
+                            {"path": "registry_existed_before", "equals": False},
+                            {"path": "tmp_files_after", "equals": 0},
                             {"path": "injection_hits", "equals": 1},
                             {"path": "replace_hits", "equals": 1},
                         ),
@@ -6385,6 +6421,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         probe_error(
                             "policy_io_error",
                             {"path": "registry_unchanged", "equals": True},
+                            {"path": "registry_bytes_unchanged", "equals": True},
+                            {"path": "tmp_files_after", "equals": 0},
                             {"path": "regression_case_count", "equals": 0},
                             {"path": "regression_error", "equals": "policy_io_error"},
                             {"path": "injection_hits", "equals": 1},
@@ -6394,6 +6432,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         probe_error(
                             "policy_io_error",
                             {"path": "registry_unchanged", "equals": True},
+                            {"path": "registry_bytes_unchanged", "equals": True},
+                            {"path": "tmp_files_after", "equals": 0},
                             {"path": "regression_case_count", "equals": 0},
                             {"path": "injection_hits", "equals": 1},
                             {"path": "replace_hits", "equals": 1},
@@ -6402,6 +6442,11 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         probe_ok(
                             {"path": "regression_case_count", "equals": 0},
                             {"path": "registry_statuses", "equals": ["frozen"]},
+                        ),
+                        probe_ok({"path": "regression_ref_present", "equals": True}),
+                        probe_ok(
+                            {"path": "regression_case_count", "equals": 2},
+                            {"path": "registry_statuses", "equals": ["retired"]},
                         ),
                         probe_ok(
                             {"path": "round_count", "equals": 0},

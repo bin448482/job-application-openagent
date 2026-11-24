@@ -3,11 +3,5 @@
   "pack": "prompts/local/eval",
   "suite": "public",
   "mode": "eval",
-  "forbidden_markers": [
-    "case_id",
-    "assertions",
-    "expected",
-    "memory_updates",
-    "can_send"
-  ]
+  "forbid_case_ids": true
 }

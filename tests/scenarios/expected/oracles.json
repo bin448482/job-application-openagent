@@ -5587,6 +5587,14 @@
                 "path": "fact_count"
               },
               {
+                "equals": 0,
+                "path": "fact_writes"
+              },
+              {
+                "equals": 0,
+                "path": "device_calls"
+              },
+              {
                 "equals": 1,
                 "path": "bridge_submissions"
               }
@@ -5606,6 +5614,14 @@
               {
                 "equals": 0,
                 "path": "fact_count"
+              },
+              {
+                "equals": 0,
+                "path": "fact_writes"
+              },
+              {
+                "equals": 0,
+                "path": "device_calls"
               }
             ]
           },
@@ -5623,6 +5639,14 @@
               {
                 "equals": 0,
                 "path": "fact_count"
+              },
+              {
+                "equals": 0,
+                "path": "fact_writes"
+              },
+              {
+                "equals": 0,
+                "path": "device_calls"
               }
             ]
           }
@@ -6200,6 +6224,10 @@
               {
                 "equals": 65536,
                 "path": "content_max_bytes"
+              },
+              {
+                "equals": 65537,
+                "path": "over_content_bytes"
               },
               {
                 "equals": "input_too_large",
@@ -7306,6 +7334,18 @@
                 "path": "registry_unchanged"
               },
               {
+                "equals": true,
+                "path": "registry_bytes_unchanged"
+              },
+              {
+                "equals": false,
+                "path": "registry_existed_before"
+              },
+              {
+                "equals": 0,
+                "path": "tmp_files_after"
+              },
+              {
                 "equals": 1,
                 "path": "injection_hits"
               },
@@ -7342,6 +7382,14 @@
               {
                 "equals": true,
                 "path": "registry_unchanged"
+              },
+              {
+                "equals": true,
+                "path": "registry_bytes_unchanged"
+              },
+              {
+                "equals": 0,
+                "path": "tmp_files_after"
               },
               {
                 "equals": 0,
@@ -7381,6 +7429,14 @@
                 "path": "registry_unchanged"
               },
               {
+                "equals": true,
+                "path": "registry_bytes_unchanged"
+              },
+              {
+                "equals": 0,
+                "path": "tmp_files_after"
+              },
+              {
                 "equals": 0,
                 "path": "regression_case_count"
               },
@@ -7412,6 +7468,38 @@
               {
                 "equals": [
                   "frozen"
+                ],
+                "path": "registry_statuses"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "regression_ref_present"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 2,
+                "path": "regression_case_count"
+              },
+              {
+                "equals": [
+                  "retired"
                 ],
                 "path": "registry_statuses"
               }
@@ -7696,6 +7784,14 @@
               {
                 "equals": 0,
                 "path": "transport_markers"
+              },
+              {
+                "equals": 6,
+                "path": "role_call_count"
+              },
+              {
+                "equals": 6,
+                "path": "metadata_case_id_count"
               }
             ]
           }
@@ -7730,6 +7826,60 @@
         "场景方案 §8"
       ],
       "variant_id": "public_contract"
+    },
+    "SC-D11/public_contract_terms": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "measured",
+                "path": "eval_status"
+              },
+              {
+                "equals": 0,
+                "path": "transport_markers"
+              },
+              {
+                "equals": 6,
+                "path": "bridge_calls"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "合法 inbound 含 expected/case_id 普通词仍通过",
+        "metadata case_id 值不进入任何角色",
+        "零误拒"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "合法 inbound 含 expected/case_id 普通词仍通过",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 eval 已交付",
+        "无合规本机 provider 即未测"
+      ],
+      "scenario_id": "SC-D11",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "public_contract_terms"
     },
     "SC-D11/unknown_case": {
       "acceptance": {

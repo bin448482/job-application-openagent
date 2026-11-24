@@ -743,6 +743,8 @@ def _bridge_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         "bridge_attempts": run["audit"]["bridge_attempts"],
         "bridge_submissions": run["audit"]["bridge_submissions"],
         "fact_count": len(envelope["allowed_facts"]),
+        "fact_writes": 0,
+        "device_calls": 0,
     }
 
 
@@ -1051,7 +1053,25 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         )
         confirmed = bool(request.get("authorize", True))
         markers = [str(item) for item in request.get("forbidden_markers", [])]
-        observed = {"authorize_viewed": None, "authorize_rounds": None}
+        metadata_case_ids: list[str] = []
+        if request.get("forbid_case_ids"):
+            try:
+                public_suite = json.loads(
+                    (ROOT / "evals/policy-suite/public.json").read_text(encoding="utf-8")
+                )
+                metadata_case_ids = [
+                    str(case.get("input", {}).get("case_id"))
+                    for case in public_suite.get("cases", [])
+                    if isinstance(case, dict)
+                ]
+            except (OSError, ValueError):
+                metadata_case_ids = []
+            markers.extend(metadata_case_ids)
+        observed = {
+            "authorize_viewed": None,
+            "authorize_rounds": None,
+            "metadata_case_id_count": len(metadata_case_ids),
+        }
 
         def authorize(_plan: dict[str, object]) -> bool:
             """授权回调前观察本次 holdout intent 是否已落盘。"""
@@ -1249,6 +1269,9 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             raise OSError("synthetic link failure")
 
         before = _registry_snapshot(store)
+        registry_path = ROOT / "data/evals/holdout-registry.local.json"
+        before_bytes = registry_path.read_bytes() if registry_path.is_file() else None
+        before_tmp = len(list((ROOT / "data/evals").rglob("*.tmp")))
         boundary = (
             failing_link
             if mode == "retire_admission_fail"
@@ -1277,6 +1300,8 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 )
         except Exception as error:
             after = _registry_snapshot(store)
+            after_bytes = registry_path.read_bytes() if registry_path.is_file() else None
+            after_tmp = len(list((ROOT / "data/evals").rglob("*.tmp")))
             regression_error = None
             try:
                 suite = store.read_suite("regression")
@@ -1289,6 +1314,10 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 "status": "error",
                 "reason_code": getattr(error, "reason_code", None),
                 "registry_unchanged": before == after,
+                "registry_bytes_unchanged": before_bytes == after_bytes,
+                "registry_existed_before": before_bytes is not None,
+                "tmp_files_before": before_tmp,
+                "tmp_files_after": after_tmp,
                 "regression_case_count": len(cases or []),
                 "regression_error": regression_error,
                 "injection_hits": hits["replace"] + hits["link"],
@@ -1419,10 +1448,23 @@ def _render_size_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         padding = max(0, desired - len(original.encode("utf-8")) - 1)
         (target / name).write_text(original + "\n" + " " * padding + "\n", encoding="utf-8")
 
-    def attempt(tone_bytes: int) -> tuple[int | None, str | None]:
-        """写入指定 tone 大小并真实渲染，返回内容字节或固定超限原因。"""
+    from app.domain import policy as policy_module
+
+    def attempt(tone_bytes: int) -> tuple[int | None, str | None, int | None]:
+        """写入指定 tone 大小并真实渲染，记录真实 content 字节或超限原因。"""
         text = original_tone.rstrip("\n") + "\n" + " " * max(0, tone_bytes - len(original_tone.encode("utf-8")) - 1)
         (target / "tone.md").write_text(text + "\n", encoding="utf-8")
+        recorded: list[int] = []
+        original_bytes = policy_module.canonical_json_bytes
+
+        def tracking(value):
+            """在真实 render 调用内部记录 content 的规范化字节数。"""
+            raw = original_bytes(value)
+            if isinstance(value, dict) and set(value) == {"base", "pack", "data"}:
+                recorded.append(len(raw))
+            return raw
+
+        policy_module.canonical_json_bytes = tracking
         try:
             _normalized, loaded_base, _files, _guides, pack = policy_usecases.load_active_pack(
                 repo, "prompts/local/size_render"
@@ -1442,18 +1484,20 @@ def _render_size_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             rendered = render_request(
                 loaded_base, pack, envelope, now=str(case["now"])
             )
-            return _canonical_bytes(rendered.content), None
+            return _canonical_bytes(rendered.content), None, recorded[-1] if recorded else None
         except DecisionError as error:
-            return None, error.reason_code
+            return None, error.reason_code, recorded[-1] if recorded else None
         except PolicyError as error:
-            return None, error.reason_code
+            return None, error.reason_code, recorded[-1] if recorded else None
+        finally:
+            policy_module.canonical_json_bytes = original_bytes
 
     low, high = 20000, 32768
     best_size = None
     best_tone = None
     while low <= high:
         middle = (low + high) // 2
-        size, reason = attempt(middle)
+        size, reason, _recorded = attempt(middle)
         if size is not None:
             best_size = size
             best_tone = middle
@@ -1462,11 +1506,11 @@ def _render_size_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             high = middle - 1
         else:
             return {"status": "error", "reason_code": reason or "invalid_policy"}
-    over_size, over_reason = attempt((best_tone or 0) + 1)
+    over_size, over_reason, over_recorded = attempt((best_tone or 0) + 1)
     return {
         "status": "ok",
         "content_max_bytes": best_size,
-        "over_content_bytes": over_size,
+        "over_content_bytes": over_recorded,
         "over_reason": over_reason,
         "bridge_calls": 0,
     }

@@ -53,6 +53,7 @@
 - `d11_bridge_auth.json`：合成输入文件。
 - `d11_eval_missing.json`：合成输入文件。
 - `d11_eval_public.json`：合成输入文件。
+- `d11_eval_terms.json`：合成输入文件。
 - `d11_holdout_after_failed.json`：合成输入文件。
 - `d11_holdout_after_retire.json`：合成输入文件。
 - `d11_holdout_audit.json`：合成输入文件。

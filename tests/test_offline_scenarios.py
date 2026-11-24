@@ -1996,6 +1996,17 @@ class M1DriverBoundaryTests(unittest.TestCase):
             differences = compare_invocation(invocation, oracle)
             self.assertTrue(any("attempts" in item or "bridge_calls" in item for item in differences), differences)
 
+    def test_m2_probe_seed_uses_synthetic_host_without_platform_lookup(self) -> None:
+        """M2 探针 seed 使用固定合成 host，不触发 platform.node/WMI 回退。"""
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m2/probe/seed_blocked.json").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            db = Path(temporary) / "m2-host.sqlite3"
+            with mock.patch("platform.node", side_effect=AssertionError("platform.node called")):
+                result = m2_probe._seed(request, db)
+        self.assertEqual(result["state"], "blocked")
+
     def test_real_m4_constant_hash_mutant_is_caught_by_d08_oracle(self) -> None:
         """真实摘要函数被常量替换时，D08 独立手算摘要 oracle 必须拒绝。"""
         assets = load_assets()
@@ -2154,9 +2165,9 @@ class M1DriverBoundaryTests(unittest.TestCase):
         original = m4_probe._EvalBridge.complete
 
         def leaking_complete(self, **kwargs):
-            """在真实桥调用成功后向 developer 载荷注入合成 expected 标记。"""
+            """在真实桥调用成功后向 developer 载荷注入真实合成 case_id 值。"""
             text = original(self, **kwargs)
-            self.role_payloads[-1]["developer"] += " expected"
+            self.role_payloads[-1]["developer"] += " eval-greeting-location"
             return text
 
         with tempfile.TemporaryDirectory() as temporary:
