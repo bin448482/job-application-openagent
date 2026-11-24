@@ -1860,6 +1860,53 @@ def build_support_fixtures() -> None:
         },
     )
     write_json(
+        "fixtures/m4/probe/d11_conflict_same_batch.json",
+        {
+            "operation": "eval",
+            "pack": "prompts/local/eval",
+            "mode": "register_domain",
+            "suite_source": "holdout",
+            "batch_id": "synthetic-batch",
+            "sample_count": 2,
+        },
+    )
+    write_json(
+        "fixtures/m4/probe/d11_conflict_samples.json",
+        {
+            "operation": "eval",
+            "pack": "prompts/local/eval",
+            "mode": "register_domain",
+            "suite_source": "holdout",
+            "batch_id": "synthetic-duplicate",
+            "sample_count": 2,
+            "candidate_release": "synthetic-other-release",
+        },
+    )
+    write_json(
+        "fixtures/m4/probe/d11_conflict_release.json",
+        {
+            "operation": "eval",
+            "pack": "prompts/local/eval",
+            "mode": "register_domain",
+            "suite_source": "holdout-alt",
+            "batch_id": "synthetic-alt",
+            "sample_count": 2,
+            "candidate_release": "synthetic-release",
+        },
+    )
+    write_json(
+        "fixtures/m4/probe/d11_conflict_success.json",
+        {
+            "operation": "eval",
+            "pack": "prompts/local/eval",
+            "mode": "register_domain",
+            "suite_source": "holdout-alt",
+            "batch_id": "synthetic-alt-other",
+            "sample_count": 2,
+            "candidate_release": "synthetic-alt-release",
+        },
+    )
+    write_json(
         "fixtures/m4/probe/d11_register_alt.json",
         {
             "operation": "eval",
@@ -1924,6 +1971,14 @@ def build_support_fixtures() -> None:
             "suite": "holdout",
             "mode": "eval",
             "edit_tone": True,
+        },
+    )
+    write_json(
+        "fixtures/m4/probe/d11_io_non_target.json",
+        {
+            "operation": "eval",
+            "pack": "prompts/local/eval",
+            "mode": "io_non_target",
         },
     )
     write_json(
@@ -5982,6 +6037,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         {"path": "user_equals_rendered", "equals": True},
                         {"path": "inbound_only_user", "equals": True},
                         {"path": "system_is_base", "equals": True},
+                        {"path": "echo_keys", "equals": ["input_hash", "nonce", "task_id"]},
                         {"path": "bridge_attempts", "equals": 1},
                     ),
                     probe_ok(
@@ -6383,6 +6439,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "holdout.outcome", "equals": "completed"},
                             {"path": "acceptance", "equals": False},
                             {"path": "bridge_intent_all_ok", "equals": True},
+                            {"path": "bridge_attempt_matches_report", "equals": True},
+                            {"path": "authorize_attempt_matches_report", "equals": True},
+                            {"path": "authorize_intent_count", "equals": 1},
                             {"path": "bridge_rounds", "equals": [1]},
                             {"path": "bridge_attempt_ids", "length_equals": 1},
                         ),
@@ -6391,12 +6450,17 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "holdout.new_evidence", "equals": False},
                             {"path": "acceptance", "equals": False},
                             {"path": "bridge_intent_all_ok", "equals": True},
+                            {"path": "bridge_attempt_matches_report", "equals": True},
+                            {"path": "authorize_attempt_matches_report", "equals": True},
+                            {"path": "authorize_intent_count", "equals": 1},
                             {"path": "bridge_rounds", "equals": [2]},
                         ),
                         probe_error(
                             "authorization_required",
                             {"path": "authorize_viewed", "equals": True},
                             {"path": "authorize_rounds", "equals": 3},
+                            {"path": "authorize_intent_count", "equals": 1},
+                            {"path": "authorize_attempt_matches_persisted", "equals": True},
                         ),
                         probe_ok(
                             {"path": "round_count", "equals": 3},
@@ -6408,6 +6472,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "holdout.new_evidence", "equals": False},
                             {"path": "acceptance", "equals": False},
                             {"path": "bridge_intent_all_ok", "equals": True},
+                            {"path": "bridge_attempt_matches_report", "equals": True},
+                            {"path": "authorize_attempt_matches_report", "equals": True},
+                            {"path": "authorize_intent_count", "equals": 1},
                             {"path": "bridge_rounds", "equals": [4]},
                         ),
                         probe_ok(
@@ -6458,6 +6525,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             "authorization_required",
                             {"path": "authorize_viewed", "equals": True},
                             {"path": "authorize_rounds", "equals": 1},
+                            {"path": "authorize_intent_count", "equals": 1},
+                            {"path": "authorize_attempt_matches_persisted", "equals": True},
                         ),
                         probe_ok(
                             {"path": "round_count", "equals": 1},
@@ -6470,6 +6539,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "holdout.repeat_access", "equals": True},
                             {"path": "holdout.new_evidence", "equals": False},
                             {"path": "bridge_intent_all_ok", "equals": True},
+                            {"path": "bridge_attempt_matches_report", "equals": True},
+                            {"path": "authorize_attempt_matches_report", "equals": True},
+                            {"path": "authorize_intent_count", "equals": 1},
                             {"path": "bridge_rounds", "equals": [2]},
                         ),
                         probe_ok(
@@ -6485,9 +6557,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 label="批次/样本/候选发布冲突",
                 steps=[
                     m4_cmd("d11_register"),
-                    m4_cmd("d11_register_same_batch"),
-                    m4_cmd("d11_register_duplicate"),
-                    m4_cmd("d11_register_alt"),
+                    m4_cmd("d11_conflict_same_batch"),
+                    m4_cmd("d11_conflict_samples"),
+                    m4_cmd("d11_conflict_release"),
+                    m4_cmd("d11_conflict_success"),
                 ],
                 fixture="fixtures/m4/eval/holdout/suite.json",
                 shared_inputs=["prompts/base"],
@@ -6496,13 +6569,14 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     "evals/private/holdout": "m4/eval/holdout",
                     "evals/private/holdout-alt": "m4/eval/holdout_alt",
                 },
-                assertions=["同批重复、跨批样本占用、candidate_release 冻结冲突分别拒绝", "旧 registry 不变"],
+                assertions=["同批重复、跨批样本占用、candidate_release 冻结冲突分别给出独立原因", "不同 release/不同样本可登记", "失败前后 registry bytes 不变"],
                 acceptance={
                     "steps": [
                         probe_ok({"path": "batch", "equals": "synthetic-batch"}),
-                        probe_error("eval_failed"),
-                        probe_error("eval_failed"),
-                        probe_error("eval_failed"),
+                        probe_error("eval_failed", {"path": "detail", "equals": "holdout batch exists"}, {"path": "registry_bytes_unchanged", "equals": True}),
+                        probe_error("eval_failed", {"path": "detail", "equals": "holdout samples already occupied"}, {"path": "registry_bytes_unchanged", "equals": True}),
+                        probe_error("eval_failed", {"path": "detail", "equals": "holdout candidate already frozen"}, {"path": "registry_bytes_unchanged", "equals": True}),
+                        probe_ok({"path": "detail", "equals": None}),
                     ]
                 },
             ),
@@ -6514,6 +6588,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     m4_cmd("d11_register"),
                     m4_cmd("d11_retire_admission_fail"),
                     m4_cmd("d11_retire_registry_fail"),
+                    m4_cmd("d11_io_non_target"),
                     m4_cmd("d11_regression_check"),
                     m4_cmd("d11_retire"),
                     m4_cmd("d11_regression_check"),
@@ -6562,6 +6637,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "matched_targets", "equals": ["holdout-registry.local.json"]},
                             {"path": "source_existed", "equals": True},
                             {"path": "admission_written", "equals": True},
+                        ),
+                        probe_ok(
+                            {"path": "replace_ok", "equals": True},
+                            {"path": "link_ok", "equals": True},
                         ),
                         probe_ok(
                             {"path": "regression_case_count", "equals": 0},

@@ -5699,6 +5699,14 @@
                 "path": "system_is_base"
               },
               {
+                "equals": [
+                  "input_hash",
+                  "nonce",
+                  "task_id"
+                ],
+                "path": "echo_keys"
+              },
+              {
                 "equals": 1,
                 "path": "bridge_attempts"
               }
@@ -7024,6 +7032,14 @@
               {
                 "equals": "eval_failed",
                 "path": "reason_code"
+              },
+              {
+                "equals": "holdout batch exists",
+                "path": "detail"
+              },
+              {
+                "equals": true,
+                "path": "registry_bytes_unchanged"
               }
             ]
           },
@@ -7037,6 +7053,14 @@
               {
                 "equals": "eval_failed",
                 "path": "reason_code"
+              },
+              {
+                "equals": "holdout samples already occupied",
+                "path": "detail"
+              },
+              {
+                "equals": true,
+                "path": "registry_bytes_unchanged"
               }
             ]
           },
@@ -7050,18 +7074,40 @@
               {
                 "equals": "eval_failed",
                 "path": "reason_code"
+              },
+              {
+                "equals": "holdout candidate already frozen",
+                "path": "detail"
+              },
+              {
+                "equals": true,
+                "path": "registry_bytes_unchanged"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "detail"
               }
             ]
           }
         ]
       },
       "assertions": [
-        "同批重复、跨批样本占用、candidate_release 冻结冲突分别拒绝",
-        "旧 registry 不变"
+        "同批重复、跨批样本占用、candidate_release 冻结冲突分别给出独立原因",
+        "不同 release/不同样本可登记",
+        "失败前后 registry bytes 不变"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "同批重复、跨批样本占用、candidate_release 冻结冲突分别拒绝",
+      "expected_summary": "同批重复、跨批样本占用、candidate_release 冻结冲突分别给出独立原因",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -7116,6 +7162,14 @@
               {
                 "equals": 1,
                 "path": "authorize_rounds"
+              },
+              {
+                "equals": 1,
+                "path": "authorize_intent_count"
+              },
+              {
+                "equals": true,
+                "path": "authorize_attempt_matches_persisted"
               }
             ]
           },
@@ -7172,6 +7226,18 @@
               {
                 "equals": true,
                 "path": "bridge_intent_all_ok"
+              },
+              {
+                "equals": true,
+                "path": "bridge_attempt_matches_report"
+              },
+              {
+                "equals": true,
+                "path": "authorize_attempt_matches_report"
+              },
+              {
+                "equals": 1,
+                "path": "authorize_intent_count"
               },
               {
                 "equals": [
@@ -7308,6 +7374,18 @@
                 "path": "bridge_intent_all_ok"
               },
               {
+                "equals": true,
+                "path": "bridge_attempt_matches_report"
+              },
+              {
+                "equals": true,
+                "path": "authorize_attempt_matches_report"
+              },
+              {
+                "equals": 1,
+                "path": "authorize_intent_count"
+              },
+              {
                 "equals": [
                   1
                 ],
@@ -7343,6 +7421,18 @@
                 "path": "bridge_intent_all_ok"
               },
               {
+                "equals": true,
+                "path": "bridge_attempt_matches_report"
+              },
+              {
+                "equals": true,
+                "path": "authorize_attempt_matches_report"
+              },
+              {
+                "equals": 1,
+                "path": "authorize_intent_count"
+              },
+              {
                 "equals": [
                   2
                 ],
@@ -7368,6 +7458,14 @@
               {
                 "equals": 3,
                 "path": "authorize_rounds"
+              },
+              {
+                "equals": 1,
+                "path": "authorize_intent_count"
+              },
+              {
+                "equals": true,
+                "path": "authorize_attempt_matches_persisted"
               }
             ]
           },
@@ -7422,6 +7520,18 @@
               {
                 "equals": true,
                 "path": "bridge_intent_all_ok"
+              },
+              {
+                "equals": true,
+                "path": "bridge_attempt_matches_report"
+              },
+              {
+                "equals": true,
+                "path": "authorize_attempt_matches_report"
+              },
+              {
+                "equals": 1,
+                "path": "authorize_intent_count"
               },
               {
                 "equals": [
@@ -7771,6 +7881,23 @@
               {
                 "equals": true,
                 "path": "admission_written"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "replace_ok"
+              },
+              {
+                "equals": true,
+                "path": "link_ok"
               }
             ]
           },

@@ -21096,6 +21096,14 @@
                     "equals": true
                   },
                   {
+                    "path": "echo_keys",
+                    "equals": [
+                      "input_hash",
+                      "nonce",
+                      "task_id"
+                    ]
+                  },
+                  {
                     "path": "bridge_attempts",
                     "equals": 1
                   }
@@ -22917,6 +22925,18 @@
                     "equals": true
                   },
                   {
+                    "path": "bridge_attempt_matches_report",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_attempt_matches_report",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_intent_count",
+                    "equals": 1
+                  },
+                  {
                     "path": "bridge_rounds",
                     "equals": [
                       1
@@ -22952,6 +22972,18 @@
                     "equals": true
                   },
                   {
+                    "path": "bridge_attempt_matches_report",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_attempt_matches_report",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_intent_count",
+                    "equals": 1
+                  },
+                  {
                     "path": "bridge_rounds",
                     "equals": [
                       2
@@ -22977,6 +23009,14 @@
                   {
                     "path": "authorize_rounds",
                     "equals": 3
+                  },
+                  {
+                    "path": "authorize_intent_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "authorize_attempt_matches_persisted",
+                    "equals": true
                   }
                 ]
               },
@@ -23031,6 +23071,18 @@
                   {
                     "path": "bridge_intent_all_ok",
                     "equals": true
+                  },
+                  {
+                    "path": "bridge_attempt_matches_report",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_attempt_matches_report",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_intent_count",
+                    "equals": 1
                   },
                   {
                     "path": "bridge_rounds",
@@ -23257,6 +23309,14 @@
                   {
                     "path": "authorize_rounds",
                     "equals": 1
+                  },
+                  {
+                    "path": "authorize_intent_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "authorize_attempt_matches_persisted",
+                    "equals": true
                   }
                 ]
               },
@@ -23313,6 +23373,18 @@
                   {
                     "path": "bridge_intent_all_ok",
                     "equals": true
+                  },
+                  {
+                    "path": "bridge_attempt_matches_report",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_attempt_matches_report",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_intent_count",
+                    "equals": 1
                   },
                   {
                     "path": "bridge_rounds",
@@ -23379,9 +23451,10 @@
           "entry_state": "frozen",
           "steps": [
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_same_batch.json",
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_duplicate.json",
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_alt.json"
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_conflict_same_batch.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_conflict_samples.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_conflict_release.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_conflict_success.json"
           ],
           "fixture": "fixtures/m4/eval/holdout/suite.json",
           "setup": null,
@@ -23389,8 +23462,9 @@
           "expected_ref": "SC-D11/holdout_conflicts",
           "device_gate": false,
           "assertions": [
-            "同批重复、跨批样本占用、candidate_release 冻结冲突分别拒绝",
-            "旧 registry 不变"
+            "同批重复、跨批样本占用、candidate_release 冻结冲突分别给出独立原因",
+            "不同 release/不同样本可登记",
+            "失败前后 registry bytes 不变"
           ],
           "acceptance": {
             "steps": [
@@ -23417,6 +23491,14 @@
                   {
                     "path": "reason_code",
                     "equals": "eval_failed"
+                  },
+                  {
+                    "path": "detail",
+                    "equals": "holdout batch exists"
+                  },
+                  {
+                    "path": "registry_bytes_unchanged",
+                    "equals": true
                   }
                 ]
               },
@@ -23430,6 +23512,14 @@
                   {
                     "path": "reason_code",
                     "equals": "eval_failed"
+                  },
+                  {
+                    "path": "detail",
+                    "equals": "holdout samples already occupied"
+                  },
+                  {
+                    "path": "registry_bytes_unchanged",
+                    "equals": true
                   }
                 ]
               },
@@ -23443,6 +23533,27 @@
                   {
                     "path": "reason_code",
                     "equals": "eval_failed"
+                  },
+                  {
+                    "path": "detail",
+                    "equals": "holdout candidate already frozen"
+                  },
+                  {
+                    "path": "registry_bytes_unchanged",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "detail",
+                    "equals": null
                   }
                 ]
               }
@@ -23479,6 +23590,7 @@
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_admission_fail.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_registry_fail.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_io_non_target.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
@@ -23658,6 +23770,23 @@
                   },
                   {
                     "path": "admission_written",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "replace_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "link_ok",
                     "equals": true
                   }
                 ]

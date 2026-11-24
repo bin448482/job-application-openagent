@@ -2231,6 +2231,95 @@ class M1DriverBoundaryTests(unittest.TestCase):
         differences = compare_invocation(invocation, oracle)
         self.assertTrue(any("bridge_intent" in item for item in differences), differences)
 
+    def test_real_m4_sample_occupancy_mutant_is_caught_by_conflict_oracle(self) -> None:
+        """删除真实样本占用检查后，D11 冲突 oracle 必须拒绝。"""
+        from app.domain import eval as eval_domain
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D11/holdout_conflicts"]["acceptance"]["steps"][2]
+        requests = {
+            name: json.loads(
+                (SCENARIO_ROOT / f"fixtures/m4/probe/{name}.json").read_text(encoding="utf-8")
+            )
+            for name in ("d11_register", "d11_conflict_samples")
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            shutil.copytree(
+                SCENARIO_ROOT / "fixtures/m4/eval/holdout_alt",
+                root / "evals/private/holdout-alt",
+                dirs_exist_ok=True,
+            )
+            with mock.patch.object(m4_probe, "ROOT", root):
+                m4_probe._eval_operation(requests["d11_register"])
+                with mock.patch.object(
+                    eval_domain, "occupied_sample_fingerprints", return_value=set()
+                ):
+                    actual = m4_probe._eval_operation(requests["d11_conflict_samples"])
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("detail" in item or "status" in item for item in differences), differences)
+
+    def test_real_m4_wrong_attempt_id_mutant_is_caught_by_d11_oracle(self) -> None:
+        """桥窗口把 intent attempt_id 换成另一合法 ID 时，D11 oracle 必须拒绝。"""
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D11/holdout_freeze"]["acceptance"]["steps"][3]
+        requests = {
+            name: json.loads(
+                (SCENARIO_ROOT / f"fixtures/m4/probe/{name}.json").read_text(encoding="utf-8")
+            )
+            for name in ("d11_register", "d11_holdout_first")
+        }
+        original = m4_probe._EvalBridge.complete
+
+        def wrong_attempt(self, **kwargs):
+            """只在真实桥窗口把 intent attempt_id 替换为另一合成 UUID。"""
+            original_read = self.store.read_holdout_registry
+
+            def changed():
+                registry = original_read()
+                for batch in registry.get("batches", []):
+                    for entry in batch.get("access_rounds", []):
+                        if entry.get("phase") == "intent":
+                            entry["attempt_id"] = "00000000-0000-4000-8000-00000000ffff"
+                return registry
+
+            self.store.read_holdout_registry = changed
+            try:
+                return original(self, **kwargs)
+            finally:
+                self.store.read_holdout_registry = original_read
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root):
+                m4_probe._eval_operation(requests["d11_register"])
+                with mock.patch.object(
+                    m4_probe._EvalBridge, "complete", wrong_attempt
+                ):
+                    actual = m4_probe._eval_operation(requests["d11_holdout_first"])
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("bridge_attempt" in item for item in differences), differences)
+
     def test_real_m4_expected_marker_leak_is_caught_by_terms_oracle(self) -> None:
         """评测 assertion 侧唯一 expected 标记进入 developer 时，terms oracle 必须拒绝。"""
         assets = load_assets()

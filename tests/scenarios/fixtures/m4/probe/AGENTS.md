@@ -51,6 +51,10 @@
 - `d10_restore_stopped.json`：合成输入文件。
 - `d10_restore_unknown.json`：合成输入文件。
 - `d11_bridge_auth.json`：合成输入文件。
+- `d11_conflict_release.json`：合成输入文件。
+- `d11_conflict_same_batch.json`：合成输入文件。
+- `d11_conflict_samples.json`：合成输入文件。
+- `d11_conflict_success.json`：合成输入文件。
 - `d11_eval_missing.json`：合成输入文件。
 - `d11_eval_public.json`：合成输入文件。
 - `d11_eval_terms.json`：合成输入文件。
@@ -61,6 +65,7 @@
 - `d11_holdout_first.json`：合成输入文件。
 - `d11_holdout_pack_edit.json`：合成输入文件。
 - `d11_holdout_repeat.json`：合成输入文件。
+- `d11_io_non_target.json`：合成输入文件。
 - `d11_provider_auth.json`：合成输入文件。
 - `d11_provider_quota.json`：合成输入文件。
 - `d11_provider_timeout.json`：合成输入文件。

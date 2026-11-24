@@ -1,0 +1,9 @@
+{
+  "operation": "eval",
+  "pack": "prompts/local/eval",
+  "mode": "register_domain",
+  "suite_source": "holdout",
+  "batch_id": "synthetic-duplicate",
+  "sample_count": 2,
+  "candidate_release": "synthetic-other-release"
+}

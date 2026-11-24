@@ -26,7 +26,7 @@ from app.adapters.files.policy import FilePolicyRepository
 from app.adapters.llm import support as bridge_support
 from app.adapters.llm.bridge_a import ExternalAgentBridge
 from app.adapters.llm.bridge_b import LocalProcessBridge
-from app.domain.eval import suite_hash
+from app.domain.eval import register_holdout_batch, suite_fingerprints, suite_hash
 from app.domain.models import add_seconds
 from app.domain.policy import (
     DecisionError,
@@ -1036,9 +1036,14 @@ def _transport_marker_count(bridge: _EvalBridge, markers: list[str]) -> int:
     return total
 
 
-def _bridge_observation_summary(bridge: _EvalBridge) -> dict[str, Any]:
-    """汇总每次实际 bridge 调用前观察到的 intent/viewed/attempt。"""
+def _bridge_observation_summary(
+    bridge: _EvalBridge, report_attempt_id: str | None = None
+) -> dict[str, Any]:
+    """汇总每次实际 bridge 调用前观察到的 intent/viewed/attempt 并与报告关联。"""
     observations = bridge.bridge_observations
+    attempt_ids = sorted(
+        {str(item["attempt_id"]) for item in observations if item["attempt_id"]}
+    )
     return {
         "bridge_intent_all_ok": bool(observations)
         and all(
@@ -1046,9 +1051,10 @@ def _bridge_observation_summary(bridge: _EvalBridge) -> dict[str, Any]:
             for item in observations
         ),
         "bridge_rounds": sorted({item["rounds"] for item in observations}),
-        "bridge_attempt_ids": sorted(
-            {str(item["attempt_id"]) for item in observations if item["attempt_id"]}
-        ),
+        "bridge_attempt_ids": attempt_ids,
+        "bridge_attempt_matches_report": bool(attempt_ids)
+        and report_attempt_id is not None
+        and attempt_ids == [str(report_attempt_id)],
     }
 
 
@@ -1120,6 +1126,8 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         observed = {
             "authorize_viewed": None,
             "authorize_rounds": None,
+            "authorize_intent_count": None,
+            "authorize_attempt_id": None,
             "metadata_case_id_count": len(metadata_case_ids),
             "expected_marker_count": expected_marker_count,
         }
@@ -1140,8 +1148,18 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                         None,
                     )
                     if isinstance(batch, dict):
+                        rounds = batch.get("access_rounds") or []
+                        intent = [
+                            item
+                            for item in rounds
+                            if isinstance(item, dict) and item.get("phase") == "intent"
+                        ]
                         observed["authorize_viewed"] = bool(batch.get("viewed"))
-                        observed["authorize_rounds"] = len(batch.get("access_rounds") or [])
+                        observed["authorize_rounds"] = len(rounds)
+                        observed["authorize_intent_count"] = len(intent)
+                        observed["authorize_attempt_id"] = (
+                            intent[0].get("attempt_id") if intent else None
+                        )
                 except Exception:
                     pass
             return confirmed
@@ -1174,12 +1192,33 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                     )
                 except (OSError, ValueError):
                     reasons = []
+            persisted_attempt = None
+            try:
+                registry = store.read_holdout_registry()
+                batches = registry.get("batches") or []
+                batch = next(
+                    (
+                        item
+                        for item in batches
+                        if isinstance(item, dict) and item.get("batch_id") == bridge.batch_id
+                    ),
+                    None,
+                )
+                rounds = batch.get("access_rounds") or [] if isinstance(batch, dict) else []
+                if rounds:
+                    persisted_attempt = rounds[-1].get("attempt_id")
+            except Exception:
+                persisted_attempt = None
             return {
                 "status": "error",
                 "reason_code": getattr(error, "reason_code", None),
                 "case_reasons": reasons,
                 "bridge_calls": bridge.calls,
                 "transport_markers": _transport_marker_count(bridge, markers),
+                "authorize_attempt_matches_persisted": bool(
+                    observed["authorize_attempt_id"]
+                )
+                and observed["authorize_attempt_id"] == persisted_attempt,
                 **_bridge_observation_summary(bridge),
                 **observed,
             }
@@ -1202,7 +1241,12 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "descriptor_simulated": bridge.descriptor().simulated,
             "transport_markers": _transport_marker_count(bridge, markers),
             "role_call_count": len(bridge.role_payloads),
-            **_bridge_observation_summary(bridge),
+            **_bridge_observation_summary(
+                bridge, holdout.get("attempt_id") if isinstance(holdout, dict) else None
+            ),
+            "authorize_attempt_matches_report": bool(observed["authorize_attempt_id"])
+            and isinstance(holdout, dict)
+            and observed["authorize_attempt_id"] == holdout.get("attempt_id"),
             **observed,
             "holdout": holdout,
         }
@@ -1220,13 +1264,58 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 annotator="synthetic-annotator",
                 maintainer="synthetic-maintainer",
                 frozen_at="2026-11-24T00:00:00.000Z",
-                candidate_release="synthetic-release",
+                candidate_release=str(
+                    request.get("candidate_release", "synthetic-release")
+                ),
             )
         except Exception as error:
             return {"status": "error", "reason_code": getattr(error, "reason_code", None)}
         finally:
             holdout_path.write_bytes(original)
         return {"status": "ok", "reason_code": None, "batch": result.get("batch", {}).get("batch_id")}
+    if mode == "register_domain":
+        source = str(request.get("suite_source", "holdout"))
+        suite_path = (
+            ROOT / "evals/private/holdout/suite.json"
+            if source == "holdout"
+            else ROOT / "evals/private/holdout-alt/suite.json"
+        )
+        suite = json.loads(suite_path.read_text(encoding="utf-8"))
+        registry_before = store.read_holdout_registry()
+        raw_before = (
+            (ROOT / "data/evals/holdout-registry.local.json").read_bytes()
+            if (ROOT / "data/evals/holdout-registry.local.json").is_file()
+            else None
+        )
+        copy_registry = json.loads(json.dumps(registry_before))
+        try:
+            register_holdout_batch(
+                copy_registry,
+                batch_id=str(request.get("batch_id", "synthetic-batch")),
+                suite_digest=suite_hash(suite),
+                version="2026-11-24",
+                sample_count=int(request.get("sample_count", 2)),
+                sample_fingerprints=suite_fingerprints(suite),
+                annotator="synthetic-annotator",
+                maintainer="synthetic-maintainer",
+                frozen_at="2026-11-24T00:00:00.000Z",
+                candidate_release=str(
+                    request.get("candidate_release", "synthetic-release")
+                ),
+            )
+        except ValueError as error:
+            raw_after = (
+                (ROOT / "data/evals/holdout-registry.local.json").read_bytes()
+                if (ROOT / "data/evals/holdout-registry.local.json").is_file()
+                else None
+            )
+            return {
+                "status": "error",
+                "reason_code": "eval_failed",
+                "detail": str(error),
+                "registry_bytes_unchanged": raw_before == raw_after,
+            }
+        return {"status": "ok", "reason_code": None, "detail": None}
     if mode == "register":
         try:
             result = eval_usecases.register_holdout(
@@ -1237,7 +1326,9 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 annotator="synthetic-annotator",
                 maintainer="synthetic-maintainer",
                 frozen_at=str(request.get("frozen_at", "2026-11-24T00:00:00.000Z")),
-                candidate_release="synthetic-release",
+                candidate_release=str(
+                    request.get("candidate_release", "synthetic-release")
+                ),
             )
         except Exception as error:
             return {"status": "error", "reason_code": getattr(error, "reason_code", None)}
@@ -1324,6 +1415,44 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "regression_case_count": len(case_ids or []),
             "registry_statuses": statuses,
             "frozen_absent": "frozen" not in statuses,
+        }
+    if mode == "io_non_target":
+        import app.adapters.files.evals as evals_module
+
+        base = ROOT / "data/evals/non-target"
+        base.mkdir(parents=True, exist_ok=True)
+        src_a = base / "a.tmp"
+        dst_a = base / "a.out"
+        src_b = base / "b.tmp"
+        dst_b = base / "b.out"
+        src_a.write_text("replace-synthetic", encoding="utf-8")
+        src_b.write_text("link-synthetic", encoding="utf-8")
+        registry_target = (ROOT / "data/evals/holdout-registry.local.json").resolve()
+        original_replace = evals_module.os.replace
+        original_link = evals_module.os.link
+
+        def filtered_replace(source, destination, *args, **kwargs):
+            if Path(destination).resolve() == registry_target:
+                raise OSError("synthetic target failure")
+            return original_replace(source, destination, *args, **kwargs)
+
+        def filtered_link(source, destination, *args, **kwargs):
+            if Path(destination).resolve() == registry_target:
+                raise OSError("synthetic target failure")
+            return original_link(source, destination, *args, **kwargs)
+
+        evals_module.os.replace = filtered_replace
+        evals_module.os.link = filtered_link
+        try:
+            evals_module.os.replace(src_a, dst_a)
+            evals_module.os.link(src_b, dst_b)
+        finally:
+            evals_module.os.replace = original_replace
+            evals_module.os.link = original_link
+        return {
+            "status": "ok",
+            "replace_ok": dst_a.read_text(encoding="utf-8") == "replace-synthetic",
+            "link_ok": dst_b.read_text(encoding="utf-8") == "link-synthetic",
         }
     if mode in {"register_write_fail", "retire_admission_fail", "retire_registry_fail"}:
         import app.adapters.files.evals as evals_module
