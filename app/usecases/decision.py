@@ -232,7 +232,37 @@ def decide(
                 retry_now = _current_time(clock)
                 retry_base, retry_pack = _reload_snapshot(snapshot)
                 _check_snapshot(rendered, retry_base, retry_pack)
+                retry_pack_object, issues = parse_and_validate_pack(retry_pack)
+                if issues or retry_pack_object is None:
+                    raise DecisionRunError(
+                        "policy_changed",
+                        submitted=False,
+                        attempts=attempts - 1,
+                        submissions=submissions,
+                    )
+                verify_rendered_request(
+                    rendered,
+                    retry_base,
+                    retry_pack_object,
+                    envelope,
+                    now=retry_now,
+                )
                 lease_expiry = _lease_expiry(lease, retry_now)
+            except DecisionError as error:
+                _record_stage(
+                    process_log,
+                    "verify",
+                    "failed",
+                    started=retry_started,
+                    reason_code=error.reason_code,
+                    error_category="decision",
+                )
+                raise DecisionRunError(
+                    error.reason_code,
+                    submitted=False,
+                    attempts=attempts - 1,
+                    submissions=submissions,
+                ) from None
             except DecisionRunError as error:
                 error.attempts = attempts - 1
                 error.submissions = submissions

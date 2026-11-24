@@ -169,20 +169,27 @@ class SubprocessBridge:
         user_message: str,
         echo: Mapping[str, str],
     ) -> str:
-        """在总预算内用本机临时文件承载 stdin/stdout；超时/超限受控回收。"""
+        """在总预算内用本机临时文件承载 stdin/stdout；超时/超限/IO 失败受控回收。"""
         request = self._request(system_message, developer_message, user_message, echo)
         deadline = time.monotonic() + self._timeout
+        request_file = None
+        output = None
+        process = None
         try:
-            request_file = tempfile.TemporaryFile()
-            output = tempfile.TemporaryFile()
-        except OSError:
-            raise BridgeError("bridge_protocol", submitted=False) from None
-        try:
+            try:
+                request_file = tempfile.TemporaryFile()
+                output = tempfile.TemporaryFile()
+            except OSError:
+                raise BridgeError("bridge_protocol", submitted=False) from None
+            if time.monotonic() >= deadline:
+                raise BridgeError("bridge_timeout", submitted=False)
             try:
                 request_file.write(request)
                 request_file.seek(0)
             except OSError:
                 raise BridgeError("bridge_start_failed", submitted=False) from None
+            if time.monotonic() >= deadline:
+                raise BridgeError("bridge_timeout", submitted=False)
             try:
                 process = subprocess.Popen(
                     list(self._argv),
@@ -200,48 +207,52 @@ class SubprocessBridge:
 
             timed_out = False
             overflow = False
+            io_error = False
             while True:
                 try:
                     output.seek(0, os.SEEK_END)
                     if output.tell() > BRIDGE_MAX_OUTPUT_BYTES:
                         overflow = True
-                        try:
-                            process.kill()
-                        except OSError:
-                            pass
+                        self._safe_kill(process)
                         break
                 except (OSError, ValueError):
-                    pass
+                    io_error = True
+                    self._safe_kill(process)
+                    break
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     timed_out = True
-                    try:
-                        process.kill()
-                    except OSError:
-                        pass
+                    self._safe_kill(process)
                     break
                 try:
                     process.wait(timeout=min(0.02, remaining))
                     break
                 except subprocess.TimeoutExpired:
                     continue
+                except OSError:
+                    io_error = True
+                    self._safe_kill(process)
+                    break
             try:
                 process.wait(timeout=0.2)
             except subprocess.TimeoutExpired:
+                self._safe_kill(process)
                 try:
-                    process.kill()
                     process.wait(timeout=0.2)
                 except (OSError, subprocess.TimeoutExpired):
-                    pass
+                    io_error = True
+            except OSError:
+                io_error = True
+                self._safe_kill(process)
             try:
                 output.seek(0, os.SEEK_END)
                 if output.tell() > BRIDGE_MAX_OUTPUT_BYTES:
                     overflow = True
             except (OSError, ValueError):
-                pass
+                io_error = True
             if timed_out:
                 raise BridgeError("bridge_timeout", submitted=True)
-            if overflow:
+            if io_error or overflow:
                 raise BridgeError("bridge_protocol", submitted=True)
             try:
                 output.seek(0)
@@ -255,8 +266,24 @@ class SubprocessBridge:
                 raise self._error_from_stdout(text)
             return self._content_from_stdout(text)
         finally:
+            if process is not None:
+                try:
+                    poll = getattr(process, "poll", None)
+                    if poll is None or poll() is None:
+                        self._safe_kill(process)
+                except (OSError, AttributeError):
+                    pass
             for stream in (request_file, output):
                 try:
-                    stream.close()
+                    if stream is not None:
+                        stream.close()
                 except OSError:
                     pass
+
+    @staticmethod
+    def _safe_kill(process: subprocess.Popen) -> None:
+        """尽力终止直接子进程并忽略已退出/无权限等清理噪声。"""
+        try:
+            process.kill()
+        except OSError:
+            pass

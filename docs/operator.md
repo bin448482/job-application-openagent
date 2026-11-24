@@ -249,9 +249,9 @@ M4a 尚无 M4c 的真实运行/停止/未决租约检查，生产 CLI `restore` 
 M4b 在 M4a 唯一契约/渲染/校验之上增加架构 A 外部 agent 与架构 B 本机进程桥，以及实际加载当前包的 `policy eval`。桥的固定信任边界：
 
 - 请求只有三条消息：base 为 `system`、已校验有效策略为独立 `developer`、envelope 投影为独立 `user` JSON 字符串；协议回显字段放在顶层独立 `echo` 对象，`tools=[]`、`history=[]`。不可信输入不能指定 role、tool 或额外消息；单字符串拼接不具备角色隔离，拒绝接入。
-- 桥程序只用显式 argv 数组、`shell=False`、`stderr=DEVNULL`、20 秒总预算与 `tempfile.TemporaryFile` 承载 stdin/stdout；临时文件位于本机系统临时目录，使用系统默认权限，正常/超时/超限/异常返回均 close 删除，不写入报告或日志。运行中每 20ms 检查输出增长，超过 `64KiB` 立即 kill，结束后再查一次并只读取 `64KiB+1`；超时/超限 kill/回收直接子进程，不启动读取线程。若桥自行派生短命后代并继承句柄，只保证适配器自身有界返回与直接子进程回收，不推断所有后代已退出。桥程序自己的认证由它按本机环境/受保护凭据存储配置，本程序不展示变量值。
+- 桥程序只用显式 argv 数组、`shell=False`、`stderr=DEVNULL`、20 秒总预算与 `tempfile.TemporaryFile` 承载 stdin/stdout；总预算覆盖临时文件创建、输入写入与 Popen 前提交边界，准备阶段超预算以 `bridge_timeout`/零 Popen 拒绝。临时文件位于本机系统临时目录，使用系统默认权限，正常/超时/超限/异常返回均 close 删除，不写入报告或日志。运行中每 20ms 检查输出增长，超过 `64KiB` 立即 kill，结束后再查一次并只读取 `64KiB+1`；输出监测 seek/tell 或 wait 的 OSError 转固定 `bridge_protocol` 并 kill/close。超时/超限 kill/回收直接子进程，不启动读取线程。若桥自行派生短命后代并继承句柄，只保证适配器自身有界返回与直接子进程回收，不推断所有后代已退出。桥程序自己的认证由它按本机环境/受保护凭据存储配置，本程序不展示变量值。
 - 只有传输层直接观察到“进程尚未启动”的固定错误可重试一次；重试前再次重读当前 base/pack、可信租约与时钟。进程启动后的超时、坏 JSON、重复键、坏 UTF-8、坏回显、角色声明不符、认证/额度/断连都按可能已提交处理，不自动重发。模型输出只解析、不执行命令或模板。
-- 可信时钟与租约在桥前、每次重试前、桥后重读；桥期间时钟跨截止即 `stale_decision`，启动前已到期零桥调用。离线 eval 以 case_now 加真实单调耗时推进，避免历史 case_now 对真实墙钟全拒绝；生产默认系统时钟。
+- 可信时钟与租约在桥前、每次重试前、桥后重读；桥期间时钟跨截止即 `stale_decision`，事实在重试前到期即 `invalid_decision`，启动前已到期零桥调用。离线 eval 以 case_now 加真实单调耗时推进，避免历史 case_now 对真实墙钟全拒绝；生产默认系统时钟。重试前复用唯一 render 校验器复核当前包/base、envelope/rendered 与事实有效期。
 - 桥返回的 `roles/tools/history` 只是协议声明，不能独立证明任意外部 provider 的真实运行行为；没有可信三角色支持的接法受控拒绝。
 
 `policy eval` 命令形状：
@@ -265,7 +265,7 @@ python -m app policy eval --pack prompts/local/<profile> --suite public `
 
 - `--provider` 只接受 `external-agent`（`m4b-agent-v1`）或 `local-process`（`m4b-local-v1`）；`echo`、`reference-provider`、smoke 冒充与未知名字在启动桥前返回 `invalid_provider`。
 - `--confirm-external-send` 仅是使用者对本轮模型评测外发与计费的显式确认，**不**授予设备操作、个人事实写入或业务发送权限。没有该确认时返回 `authorization_required`，不会启动桥；模拟 transport 也走同一授权回调。
-- `--suite` 为 `public`、`regression`、`holdout`。公开套件固定 `evals/policy-suite/public.json`；私有回归/留出固定 `evals/private/regression|holdout/suite.json` 且被 Git 忽略。当前私有套件不存在；缺失/零样本返回 `not_measured`、`authorization.confirmed=false`、零授权回调与零桥调用。
+- `--suite` 为 `public`、`regression`、`holdout`。公开套件固定 `evals/policy-suite/public.json`；私有回归/留出固定 `evals/private/regression|holdout/suite.json` 且被 Git 忽略。当前私有套件不存在；缺失/零样本返回 `not_measured`、`authorization.confirmed=false`、零授权回调与零桥调用；缺 public suite 的 suite 阶段与 authorize 拒绝只记 started→failed。只有 regression 读取并合并退役准入副本，public/holdout 不受无关坏 regression 准入影响。
 - 留出运行必须同时有本机合同 `data/evals/holdout-attestation.local.json`：`scope=holdout_local_no_upload`、`provider_id=local-process`，并与当前桥的 `model_id`/`model_config_hash` 一致；`no_upload/no_cache/no_share/no_telemetry/cloud_fallback_disabled` 全为 true，`host_scope=local`、`operator` 非空、`attested_at` 有效。缺/不匹配/非真时 `authorization_required` 且零调用。该合同是 operator/host 显式声明，不证明子进程真实无网络；通用 `--confirm-external-send` 不替代留出许可。
 - 每例只把 `input` 十键投影进 envelope；断言、答案、metadata 与其它案例不进入桥请求。报告逐例只留安全序号、固定诊断、摘要、attempts/submissions，不保存回复正文。
 - 公开套件的地点/薪资正控制要求当前包 `facts.allow_keys` 允许对应键；若包故意禁止事实，这些案例应按策略失败或转待办，不应改断言或绕过包白名单。空事实流程（缺失薪资、注入转人工）可独立运行。
@@ -285,7 +285,7 @@ python -m app policy holdout register --batch-id <批次ID> --version <版本> `
 python -m app policy holdout retire --batch-id <批次ID>
 ```
 
-登记必须有维护者、独立标注者、版本、数量、冻结时间与候选关联，且 `--sample-count` 必须即时等于当前留出套件实际数；登记同时保存每例样本身份指纹（排除 case/task/nonce/now 等运行字段）。所有历史批次占用过的样本身份不得换 batch/候选/套件或拆子集重新冻结。访问意向在授权/桥调用前先原子持久化；中断/写失败/重跑均按已看访问记录处理，只有同摘要重跑标记为重复、不产生新证据。退役必须整批写入 `data/evals/regression-admissions/<batch-id>/suite.json` 冻结副本并在登记写 `regression_ref`/`regression_eligible=true`，之后同一 regression 生产路径可实际读取运行；失败不覆盖原登记。零样本、无登记或缺无上传条件时记未测，不以 100% 或公开集替代。
+登记必须有维护者、独立标注者、版本、数量、冻结时间与候选关联，且 `--sample-count` 必须即时等于当前留出套件实际数；登记同时保存每例样本身份指纹（排除 case/task/nonce/now 等运行字段）。所有历史批次占用过的样本身份不得换 batch/候选/套件或拆子集重新冻结。访问意向在授权/桥调用前先原子持久化；中断/写失败/重跑均按已看访问记录处理，只有同摘要重跑标记为重复、不产生新证据。退役必须整批写入 `data/evals/regression-admissions/<batch-id>/suite.json` 冻结副本并在登记写 `regression_ref`/`regression_eligible=true`，之后同一 regression 生产路径可实际读取运行；登记写失败时只清理本次新建准入副本，原登记不变且 regression 不可运行。零样本、无登记或缺无上传条件时记未测，不以 100% 或公开集替代。
 
 M4c 事实来源选择/确认/撤销、M5 授权/动作与本轮设备确认仍分别归后续里程碑；M4b 的 nonce/租约不证明发送授权，`policy eval` 通过不证明语义安全、A 档资格或真实模型能力。
 
@@ -380,8 +380,8 @@ M2 `sense` 的合成输入另用 `tests/fixtures/sensor/` 的 manifest/profile/X
 每行固定包含 `schema_version/ts/correlation_id/stage/operation/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count/case_index`：
 
 - `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/sense/read/policy/eval/adb_hierarchy/adb_screen/adb_evidence/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、ADB 命令与证据保存、sense 解析、M3 read 解析/像素/合并/门禁、M4a policy 文件阶段、M4b eval/decision 桥阶段、业务判定、store 初始化/核验与 upsert/unresolved、输出和出口。M4b `operation` 含 `verify/bridge/validate/suite/authorize/case/report/holdout/acceptance`；报告写入同一 `correlation_id`，逐例只带安全序号 `case_index` 与摘要，不写正文、事实值、用户标识或绝对路径。
-- `operation` 仅在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，`sense` 阶段取 `parse/aggregate/stop_reason`，`read` 阶段取 `load/page/job_list/job_detail/unread/conversation/merge/pixel/gate`，`policy` 阶段取 `load/validate/render/publish` 及命令名 `init/validate/preview/list/snapshot/restore`，其它阶段为 `null`；公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时；`sense/parse`、`read/load` 与各 read 操作按 `ReadResult.status` 记 `ok/undetermined/failed`，内部异常记 `failed/error_category=internal` 后继续公共安全出口；`policy` 在真实执行边界分别记录阶段 `started` 与终态，命令级再记 `started`/终态，恢复活动未知记 `undetermined`；不记 PID/host/nonce/键/正文/XML/SQL/文件内容/路径/异常。
-- `result` 固定为 `started/ok/undetermined/failed`；`reason_code` 沿用计划词表（含 `identity_ambiguous`、字段未知/像素原因与 gate 原因）与 M4a `invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case`；`error_category` 固定为 `argument/config/fixture/probe/business/store/sense/read/policy/pixel/gate/evidence/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
+- `operation` 在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，`sense` 阶段取 `parse/aggregate/stop_reason`，`read` 阶段取 `load/page/job_list/job_detail/unread/conversation/merge/pixel/gate`，`policy` 阶段取 `load/validate/render/publish` 及命令名 `init/validate/preview/list/snapshot/restore/eval/holdout`，`eval` 阶段取 `suite/authorize/case/report/acceptance/holdout`，`decision` 阶段取 `verify/bridge/validate`；只有未承载操作的 stage 才为 `null`。公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时；`sense/parse`、`read/load` 与各 read 操作按 `ReadResult.status` 记 `ok/undetermined/failed`，内部异常记 `failed/error_category=internal` 后继续公共安全出口；`policy`/`eval` 在真实执行边界分别记录阶段 `started` 与唯一终态，命令级再记 `started`/终态，恢复活动未知记 `undetermined`；不记 PID/host/nonce/键/正文/XML/SQL/文件内容/路径/异常。
+- `result` 固定为 `started/ok/undetermined/failed`；`reason_code` 沿用计划词表（含 `identity_ambiguous`、字段未知/像素原因与 gate 原因）、M4a `invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case` 与 M4b `invalid_provider/eval_failed/authorization_required/invalid_decision/stale_decision/stale_evidence/decision_timeout/bridge_*`；`error_category` 固定为 `argument/config/fixture/probe/business/store/sense/read/policy/eval/decision/bridge/pixel/gate/evidence/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
 - `command` 只写 `adb_devices/adb_window/adb_hierarchy_dump/adb_hierarchy_cat/adb_screencap`；每次命令先记 `started`，完成后再记 `ok` 或固定失败类别。
 - `store` 阶段先记 `started`，再记 `ok` 或带固定仓储原因与 `error_category=store` 的 `failed`；非预期异常只把失败事件记为 `reason_code=null`/`error_category=internal`，业务 stdout 仍为 `store_io_error`/退出 `2`，最终 exit 分类与失败事件分类分别记录、互不替代。不写数据库路径。
 - `output` 只为 JSON 收尾：写出成功记 `ok`，写出失败记 `failed`（`error_category=internal`）并安全退出 `2`；不能据此假称 JSON 已输出。
@@ -402,7 +402,7 @@ git check-ignore data/logs/m0-process.jsonl data/runtime/m1-acceptance.sqlite3 d
 Select-String -Path data/logs/m0-process-*.jsonl -Pattern '"correlation_id":"<UUID>"'
 ```
 
-stdout 不包含 `correlation_id`。按单次运行核对时，优先读取该次独立的 `start`→`exit` 文件；同一 `correlation_id` 不应跨两个运行文件。fixture 模式仍保持零设备、零网络、零子进程和零业务库；`store init` 只写项目内本机 SQLite；`policy` 只写项目内 `prompts/local`/history 与本次日志。日志按运行累积且没有自动轮转/保留期，需要时由使用者在本机清理旧文件。
+stdout 不包含 `correlation_id`。按单次运行核对时，优先读取该次独立的 `start`→`exit` 文件；同一 `correlation_id` 不应跨两个运行文件。fixture 模式仍保持零设备、零网络、零子进程和零业务库；`store init` 只写项目内本机 SQLite；`policy` 写项目内 `prompts/local`/history，`policy eval`/`holdout` 另写被忽略的 `data/evals` 报告/凭证/登记/准入副本与本次日志。日志按运行累积且没有自动轮转/保留期，需要时由使用者在本机清理旧文件。
 
 ## 十二、尚未实现
 

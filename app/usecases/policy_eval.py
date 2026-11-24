@@ -321,6 +321,8 @@ def eval_pack(
         try:
             raw_suite = eval_store.read_suite(suite_name)
             if raw_suite is None:
+                if suite_name == "public":
+                    raise PolicyError("eval_failed", [_issue(None, "missing")])
                 suite = None
             else:
                 suite = validate_suite(raw_suite, suite_name)
@@ -328,16 +330,6 @@ def eval_pack(
             raise PolicyError("eval_failed", [_issue(None, "format")]) from None
 
     if suite is None:
-        if suite_name == "public":
-            if process_log is not None:
-                process_log.record(
-                    stage="eval",
-                    operation="suite",
-                    result="failed",
-                    reason_code="eval_failed",
-                    error_category="eval",
-                )
-            raise PolicyError("eval_failed", [_issue(None, "missing")])
         report = _base_report(
             run_id=run_id,
             created_at=created_at,
@@ -467,12 +459,23 @@ def eval_pack(
             except ValueError:
                 raise PolicyError("eval_failed", [_issue(None, "conflict")]) from None
 
-    with _eval_stage(process_log, "authorize"):
-        try:
-            confirmed = bool(authorize(plan))
-        except Exception:
-            confirmed = False
+    authorize_started = time.perf_counter()
+    if process_log is not None:
+        process_log.record(stage="eval", operation="authorize", result="started")
+    try:
+        confirmed = bool(authorize(plan))
+    except Exception:
+        confirmed = False
     if not confirmed:
+        if process_log is not None:
+            process_log.record(
+                stage="eval",
+                operation="authorize",
+                result="failed",
+                reason_code="authorization_required",
+                error_category="eval",
+                duration_ms=elapsed_ms(authorize_started),
+            )
         if attempt_entry is not None:
             try:
                 _finish_holdout(
@@ -488,6 +491,13 @@ def eval_pack(
             except PolicyError:
                 pass
         raise PolicyError("authorization_required", [_issue(None, "conflict")])
+    if process_log is not None:
+        process_log.record(
+            stage="eval",
+            operation="authorize",
+            result="ok",
+            duration_ms=elapsed_ms(authorize_started),
+        )
 
     results: list[dict[str, object]] = []
     passed = 0
@@ -822,6 +832,7 @@ def retire_holdout(
             or batch["sample_fingerprints"] != suite_fingerprints(suite)
         ):
             raise PolicyError("eval_failed", [_issue(None, "conflict")])
+        admission_existed = eval_store.regression_admission_exists(batch_id)
         regression_ref = eval_store.write_regression_admission(batch_id, suite)
 
         def mutate(current: dict[str, object]) -> object:
@@ -837,6 +848,11 @@ def retire_holdout(
 
         try:
             result = eval_store.update_holdout_registry(mutate)
-        except ValueError:
+        except (PolicyError, ValueError):
+            if not admission_existed:
+                try:
+                    eval_store.remove_regression_admission(batch_id)
+                except PolicyError:
+                    pass
             raise PolicyError("eval_failed", [_issue(None, "conflict")]) from None
     return {"regression_ref": regression_ref, **result}  # type: ignore[dict-item]

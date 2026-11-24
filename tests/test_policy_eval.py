@@ -602,6 +602,18 @@ class PolicyEvalTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "eval_failed")
         self.assertEqual(bridge.requests, [])
 
+    def test_unrelated_bad_regression_admission_does_not_break_public_or_holdout(self) -> None:
+        """public/holdout 不读取 regression 准入；只有 regression 自身坏输入失败。"""
+        self._install_holdout(register=False)
+        bad = self.root / "data/evals/regression-admissions/bad/suite.json"
+        bad.parent.mkdir(parents=True, exist_ok=True)
+        bad.write_text("{bad", encoding="utf-8")
+        self.assertIsNotNone(self.store.read_suite("public"))
+        self.assertIsNotNone(self.store.read_suite("holdout"))
+        with self.assertRaises(PolicyError) as caught:
+            self.store.read_suite("regression")
+        self.assertEqual(caught.exception.reason_code, "policy_io_error")
+
     def test_holdout_concurrent_first_access_is_not_double_counted(self) -> None:
         """并发登记事务串行：只有一次首次访问，另一条标记重复，记录不丢失。"""
         self._install_holdout()
@@ -762,6 +774,31 @@ class PolicyEvalTests(unittest.TestCase):
             self._eval(mismatched, "holdout", attest=False)
         self.assertEqual(caught.exception.reason_code, "authorization_required")
         self.assertEqual(mismatched.requests, [])
+
+    def test_retire_registry_failure_removes_admission_and_keeps_registry(self) -> None:
+        """退役登记写失败时清理本次准入副本，regression 不可运行且原登记不变。"""
+        self._install_holdout()
+        before = self.store.read_holdout_registry()
+
+        class FailingRetireStore(FileEvalStore):
+            """退役登记写入固定失败。"""
+
+            def update_holdout_registry(self, mutator):
+                """不执行 mutator，模拟锁内写失败。"""
+                raise PolicyError("policy_io_error", [])
+
+        with self.assertRaises(PolicyError) as caught:
+            eval_usecases.retire_holdout(
+                FailingRetireStore(self.root),
+                batch_id="batch-1",
+                retired_at=self.now,
+            )
+        self.assertEqual(caught.exception.reason_code, "eval_failed")
+        self.assertEqual(self.store.read_holdout_registry(), before)
+        self.assertIsNone(self.store.read_suite("regression"))
+        self.assertFalse(
+            (self.root / "data/evals/regression-admissions/batch-1/suite.json").exists()
+        )
 
     def test_holdout_rejects_external_provider(self) -> None:
         """留出只允许本机 provider，外部 agent 在调用前拒绝。"""
@@ -979,6 +1016,60 @@ class PolicyEvalTests(unittest.TestCase):
                 for event in events
             )
         )
+
+    def test_missing_public_suite_logs_started_failed_only(self) -> None:
+        """缺 public suite 时 suite 阶段只有 started→failed，不先记 ok。"""
+        (self.root / "evals/policy-suite/public.json").unlink()
+        log = ProcessLog(self.root / "logs" / "missing.jsonl")
+        with self.assertRaises(PolicyError):
+            eval_usecases.eval_pack(
+                self.repo,
+                self.store,
+                "prompts/local/demo",
+                "public",
+                SimulatedBridge(public_decisions()),
+                lambda plan: True,
+                now=self.now,
+                process_log=log,
+            )
+        events = [
+            json.loads(line)
+            for line in log.path.read_text(encoding="utf-8").splitlines()
+        ]
+        suite_results = [
+            event["result"]
+            for event in events
+            if event["stage"] == "eval" and event.get("operation") == "suite"
+        ]
+        self.assertEqual(suite_results, ["started", "failed"])
+
+    def test_authorization_denied_logs_started_failed_only(self) -> None:
+        """authorize 返回 false 时同一阶段只有 started→failed，无 ok。"""
+        log = ProcessLog(self.root / "logs" / "denied.jsonl")
+        bridge = SimulatedBridge(public_decisions())
+        with self.assertRaises(PolicyError) as caught:
+            eval_usecases.eval_pack(
+                self.repo,
+                self.store,
+                "prompts/local/demo",
+                "public",
+                bridge,
+                lambda plan: False,
+                now=self.now,
+                process_log=log,
+            )
+        self.assertEqual(caught.exception.reason_code, "authorization_required")
+        events = [
+            json.loads(line)
+            for line in log.path.read_text(encoding="utf-8").splitlines()
+        ]
+        results = [
+            event["result"]
+            for event in events
+            if event["stage"] == "eval" and event.get("operation") == "authorize"
+        ]
+        self.assertEqual(results, ["started", "failed"])
+        self.assertEqual(bridge.requests, [])
 
     def test_unknown_bridge_exception_is_logged_and_fixed(self) -> None:
         """未知桥异常映射 bridge_protocol，日志有终态且不写原异常。"""

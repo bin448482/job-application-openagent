@@ -13,9 +13,11 @@ from unittest.mock import patch
 
 from app.adapters.llm.bridge_a import ExternalAgentBridge
 from app.adapters.llm.bridge_b import LocalProcessBridge
+from app.domain.models import add_seconds
 from app.domain.policy import (
     build_envelope,
     compute_pack_hash,
+    parse_and_validate_pack,
     render_request,
 )
 from app.ports.decision import BridgeError
@@ -152,7 +154,7 @@ class BridgeTests(unittest.TestCase):
         """构造测试桩参数数组。"""
         return [sys.executable, str(STUB), mode, str(self.decisions), str(self.capture)]
 
-    def _run(self, bridge, *, snapshot=None, lease=None, rendered=None, clock=None):
+    def _run(self, bridge, *, snapshot=None, lease=None, rendered=None, clock=None, pack=None, envelope=None):
         """按当前合成输入运行一次决策用例。"""
         kwargs = {}
         if clock is not None:
@@ -161,9 +163,9 @@ class BridgeTests(unittest.TestCase):
             kwargs["now"] = str(self.case["now"])
         return decide(
             rendered=rendered or self.rendered,
-            envelope=self.envelope,
+            envelope=envelope or self.envelope,
             base_files=self.base_files,
-            pack=self.pack,
+            pack=pack or self.pack,
             bridge=bridge,
             snapshot=snapshot or self.snapshot,
             lease=lease or self.lease,
@@ -309,6 +311,136 @@ class BridgeTests(unittest.TestCase):
         self.assertFalse(
             any(thread.name.startswith("m4b-bridge-") for thread in threading.enumerate())
         )
+
+    def test_total_budget_covers_temp_creation_and_write_before_popen(self) -> None:
+        """临时文件创建或输入写耗尽预算时，Popen 前 bridge_timeout 且句柄关闭。"""
+        class SlowFile:
+            """可注入创建/写入延迟的临时文件替身。"""
+
+            instances: list["SlowFile"] = []
+
+            def __init__(self, delay: float = 0.0, write_delay: float = 0.0) -> None:
+                """记录实例并按需延迟创建。"""
+                self.delay = delay
+                self.write_delay = write_delay
+                self.closed = False
+                SlowFile.instances.append(self)
+                time.sleep(delay)
+
+            def write(self, data: bytes) -> int:
+                """按配置延迟写入。"""
+                time.sleep(self.write_delay)
+                return len(data)
+
+            def seek(self, *args: object) -> int:
+                """忽略 seek 偏移。"""
+                return 0
+
+            def close(self) -> None:
+                """标记显式关闭。"""
+                self.closed = True
+
+        bridge = ExternalAgentBridge(self._argv(), model_id="synthetic-model")
+        bridge._set_timeout_for_test(0.05)
+        SlowFile.instances = []
+        with patch(
+            "app.adapters.llm.support.tempfile.TemporaryFile",
+            side_effect=lambda: SlowFile(delay=0.12),
+        ), patch(
+            "app.adapters.llm.support.subprocess.Popen",
+            side_effect=AssertionError("popen must not run"),
+        ):
+            with self.assertRaises(DecisionRunError) as caught:
+                self._run(bridge)
+        self.assertEqual(caught.exception.reason_code, "decision_timeout")
+        self.assertEqual(caught.exception.submissions, 0)
+        self.assertTrue(SlowFile.instances and all(item.closed for item in SlowFile.instances))
+
+        SlowFile.instances = []
+        with patch(
+            "app.adapters.llm.support.tempfile.TemporaryFile",
+            side_effect=lambda: SlowFile(write_delay=0.2),
+        ), patch(
+            "app.adapters.llm.support.subprocess.Popen",
+            side_effect=AssertionError("popen must not run"),
+        ):
+            with self.assertRaises(DecisionRunError) as caught:
+                self._run(bridge)
+        self.assertEqual(caught.exception.reason_code, "decision_timeout")
+        self.assertEqual(caught.exception.submissions, 0)
+        self.assertTrue(SlowFile.instances and all(item.closed for item in SlowFile.instances))
+
+    def test_output_monitor_and_wait_oserror_are_controlled(self) -> None:
+        """输出监测 seek/wait 的 OSError 转 bridge_protocol、kill 与关闭资源。"""
+        class FakeFile:
+            """可正常写入但 seek 失败的临时文件替身。"""
+
+            def __init__(self, bad_seek: bool = False) -> None:
+                """保存 seek 行为与关闭状态。"""
+                self.bad_seek = bad_seek
+                self.closed = False
+
+            def write(self, data: bytes) -> int:
+                """返回写入长度。"""
+                return len(data)
+
+            def seek(self, *args: object) -> int:
+                """按配置抛 OSError。"""
+                if self.bad_seek:
+                    raise OSError("seek")
+                return 0
+
+            def tell(self) -> int:
+                """报告空文件大小。"""
+                return 0
+
+            def close(self) -> None:
+                """标记关闭。"""
+                self.closed = True
+
+        class FakeProcess:
+            """最小 Popen 替身，可让 wait 抛 OSError。"""
+
+            def __init__(self, wait_error: bool = False) -> None:
+                """初始化 returncode 与 kill 计数。"""
+                self.returncode = 0
+                self.wait_error = wait_error
+                self.killed = 0
+                self.stdin = None
+                self.stdout = None
+
+            def wait(self, timeout: float | None = None) -> int:
+                """按配置抛 OSError。"""
+                if self.wait_error:
+                    raise OSError("wait")
+                return 0
+
+            def kill(self) -> None:
+                """记录终止。"""
+                self.killed += 1
+
+            def poll(self) -> int:
+                """报告已退出。"""
+                return 0
+
+        for wait_error, bad_seek in ((False, True), (True, False)):
+            process = FakeProcess(wait_error=wait_error)
+            request_file = FakeFile()
+            output = FakeFile(bad_seek=bad_seek)
+            bridge = ExternalAgentBridge(self._argv(), model_id="synthetic-model")
+            bridge._set_timeout_for_test(1.0)
+            with patch(
+                "app.adapters.llm.support.tempfile.TemporaryFile",
+                side_effect=[request_file, output],
+            ), patch(
+                "app.adapters.llm.support.subprocess.Popen",
+                return_value=process,
+            ):
+                with self.assertRaises(DecisionRunError) as caught:
+                    self._run(bridge)
+            self.assertEqual(caught.exception.reason_code, "bridge_protocol")
+            self.assertGreaterEqual(process.killed, 1)
+            self.assertTrue(request_file.closed and output.closed)
 
     def test_fork_held_stdout_returns_within_budget(self) -> None:
         """父进程已退出但孙进程短暂持有 stdout 时，超时收尾不得等待 EOF。"""
@@ -510,6 +642,98 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(caught.exception.attempts, 1)
         self.assertEqual(caught.exception.submissions, 0)
         self.assertFalse(self.capture.exists())
+
+    def test_retry_gate_rechecks_fact_expiry(self) -> None:
+        """首次未启动失败后，重试前事实到期即 invalid_decision，零第二次提交。"""
+        pack_files = dict(self.pack.files)
+        pack_files["pack.toml"] = pack_files["pack.toml"].replace(
+            "allow_keys = []", 'allow_keys = ["salary_expectation"]'
+        )
+        pack, issues = parse_and_validate_pack(pack_files)
+        self.assertFalse(issues)
+        assert pack is not None
+        now = str(self.case["now"])
+        envelope = build_envelope(
+            task_id=str(self.case["task_id"]),
+            nonce=str(self.case["nonce"]),
+            kind=str(self.case["kind"]),
+            subject=self.case["subject"],
+            inbound=str(self.case["inbound"]),
+            context=list(self.case["context"]),
+            allowed_facts=[
+                {
+                    "key": "salary_expectation",
+                    "value": "15-20k",
+                    "source": "user_confirmed",
+                    "expires_at": add_seconds(now, 30),
+                }
+            ],
+            base_files=self.base_files,
+            pack=pack,
+            now=now,
+        )
+        rendered = render_request(self.base_files, pack, envelope, now=now)
+        snapshot = StaticSnapshot(self.base_files, pack.files)
+        bridge = FlakyStartBridge(
+            ExternalAgentBridge(self._argv(), model_id="synthetic-model")
+        )
+        with self.assertRaises(DecisionRunError) as caught:
+            self._run(
+                bridge,
+                snapshot=snapshot,
+                rendered=rendered,
+                pack=pack,
+                envelope=envelope,
+                clock=ManualClock([now, add_seconds(now, 40)]),
+            )
+        self.assertEqual(caught.exception.reason_code, "invalid_decision")
+        self.assertEqual(caught.exception.attempts, 1)
+        self.assertEqual(caught.exception.submissions, 0)
+        self.assertFalse(self.capture.exists())
+
+    def test_retry_gate_accepts_still_valid_fact(self) -> None:
+        """事实在重试检查时刻仍有效时，一次未启动失败后正常重试成功。"""
+        pack_files = dict(self.pack.files)
+        pack_files["pack.toml"] = pack_files["pack.toml"].replace(
+            "allow_keys = []", 'allow_keys = ["salary_expectation"]'
+        )
+        pack, issues = parse_and_validate_pack(pack_files)
+        self.assertFalse(issues)
+        assert pack is not None
+        now = str(self.case["now"])
+        envelope = build_envelope(
+            task_id=str(self.case["task_id"]),
+            nonce=str(self.case["nonce"]),
+            kind=str(self.case["kind"]),
+            subject=self.case["subject"],
+            inbound=str(self.case["inbound"]),
+            context=list(self.case["context"]),
+            allowed_facts=[
+                {
+                    "key": "salary_expectation",
+                    "value": "15-20k",
+                    "source": "user_confirmed",
+                    "expires_at": add_seconds(now, 30),
+                }
+            ],
+            base_files=self.base_files,
+            pack=pack,
+            now=now,
+        )
+        rendered = render_request(self.base_files, pack, envelope, now=now)
+        bridge = FlakyStartBridge(
+            ExternalAgentBridge(self._argv(), model_id="synthetic-model")
+        )
+        result = self._run(
+            bridge,
+            snapshot=StaticSnapshot(self.base_files, pack.files),
+            rendered=rendered,
+            pack=pack,
+            envelope=envelope,
+            clock=ManualClock([now, add_seconds(now, 10)]),
+        )
+        self.assertEqual(result["audit"]["bridge_attempts"], 2)
+        self.assertEqual(result["audit"]["bridge_submissions"], 1)
 
     def test_tampered_rendered_content_is_rejected_before_bridge(self) -> None:
         """既有 RenderedRequest 被替换后重渲染比对失败，桥不启动。"""

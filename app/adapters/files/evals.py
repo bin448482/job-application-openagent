@@ -112,9 +112,9 @@ class FileEvalStore:
         base = self._read_json(rel, SUITE_MAX_BYTES)
         if base is not None and not isinstance(base, dict):
             raise PolicyError("policy_io_error", [PolicyIssue(rel, None, None, "format")])
-        admissions = self._read_regression_admissions()
         if suite_name != "regression":
             return base
+        admissions = self._read_regression_admissions()
         if not admissions:
             return base
         cases: list[object] = []
@@ -288,14 +288,7 @@ class FileEvalStore:
         self, batch_id: str, suite: dict[str, object]
     ) -> str:
         """写退役留出整批回归准入副本；同内容重试幂等，不同内容不覆盖。"""
-        if (
-            not isinstance(batch_id, str)
-            or not batch_id
-            or len(batch_id) > 64
-            or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for char in batch_id)
-        ):
-            raise PolicyError("policy_io_error", [PolicyIssue(REGRESSION_ADMISSION_ROOT, None, None, "path")])
-        rel = f"{REGRESSION_ADMISSION_ROOT}/{batch_id}/suite.json"
+        rel = self._admission_rel(batch_id)
         payload = dict(suite)
         payload["suite"] = "regression"
         path, posix = self._resolve(rel)
@@ -320,3 +313,39 @@ class FileEvalStore:
                 return posix
             raise PolicyError("policy_exists", [PolicyIssue(posix, None, None, "conflict")])
         return self._write_new_json(rel, payload, SUITE_MAX_BYTES)
+
+    def _admission_rel(self, batch_id: str) -> str:
+        """校验批次 ID 字面并返回该批次唯一准入副本相对路径。"""
+        if (
+            not isinstance(batch_id, str)
+            or not batch_id
+            or len(batch_id) > 64
+            or any(
+                char
+                not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
+                for char in batch_id
+            )
+        ):
+            raise PolicyError(
+                "policy_io_error", [PolicyIssue(REGRESSION_ADMISSION_ROOT, None, None, "path")]
+            )
+        return f"{REGRESSION_ADMISSION_ROOT}/{batch_id}/suite.json"
+
+    def regression_admission_exists(self, batch_id: str) -> bool:
+        """判断该批次准入副本是否为普通文件；链接/junction 由解析拒绝。"""
+        path, _posix = self._resolve(self._admission_rel(batch_id))
+        return path.is_file() and not is_link_like(path)
+
+    def remove_regression_admission(self, batch_id: str) -> None:
+        """仅删除该批次自己的准入文件与空目录；不递归、不 glob 清理。"""
+        rel = self._admission_rel(batch_id)
+        path, posix = self._resolve(rel)
+        try:
+            path.unlink(missing_ok=True)
+            path.parent.rmdir()
+        except FileNotFoundError:
+            return
+        except OSError:
+            raise PolicyError(
+                "policy_io_error", [PolicyIssue(posix, None, None, "path")]
+            ) from None
