@@ -1006,6 +1006,235 @@ class AdbActionPrimitiveTests(unittest.TestCase):
                     "performed",
                 )
 
+    def test_delete_intermediate_inner_clip_blocks_each_phase(self) -> None:
+        """列表内中间祖先裁剪在有意义节点链上被三阶段拒绝。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+
+        def page(row: str, clip: bool) -> str:
+            """把行放入列表容器，可选中间 FrameLayout 裁剪。"""
+            if clip:
+                inner = (
+                    '<node class="android.widget.FrameLayout"'
+                    ' bounds="[0,0][500,200]">' + row + '</node>'
+                )
+            else:
+                inner = row
+            return (
+                '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+                ' scrollable="false" bounds="[0,0][1000,1800]">'
+                + inner
+                + '</node></hierarchy>'
+            )
+
+        row = (
+            '<node text="合成联系人" bounds="[0,0][1000,200]">'
+            '<node text="消息" bounds="[10,10][500,60]" /></node>'
+        )
+        after_row = (
+            '<node text="消息" bounds="[10,10][500,60]" />'
+            '<node text="另一行" bounds="[0,1700][1000,2200]" />'
+        )
+        complete = page(row, False)
+        with self.subTest(phase="before"):
+            invalid = page(row, True)
+            runner, calls = self._custom_run((invalid, invalid, invalid))
+            with patch("subprocess.run", side_effect=runner):
+                executor.execute(delete)
+            self.assertEqual([c for c in calls if "tap" in c], [])
+        with self.subTest(phase="dialog"):
+            dialog = page(row, True)
+            runner, calls = self._custom_run((complete, dialog, complete))
+            with patch("subprocess.run", side_effect=runner):
+                observation = executor.execute(delete)
+            self.assertEqual(len([c for c in calls if "tap" in c]), 2)
+            self.assertNotEqual(
+                derive_action_outcome(observation).evidence.outcome, "performed"
+            )
+        with self.subTest(phase="after"):
+            after = page(after_row, True)
+            runner, calls = self._custom_run((complete, complete, after))
+            with patch("subprocess.run", side_effect=runner):
+                observation = executor.execute(delete)
+            self.assertEqual(len([c for c in calls if "tap" in c]), 3)
+            self.assertNotEqual(
+                derive_action_outcome(observation).evidence.outcome, "performed"
+            )
+
+    def test_delete_content_desc_leaf_missing_bounds_blocks_each_phase(self) -> None:
+        """仅有 content-desc 的可见叶节点缺 bounds 在三阶段拒绝。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+
+        def page(row: str) -> str:
+            """放入合法列表容器。"""
+            return (
+                '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+                ' scrollable="false" bounds="[0,0][1000,1800]">'
+                + row
+                + '</node></hierarchy>'
+            )
+
+        bad_row = (
+            '<node text="合成联系人" bounds="[0,0][1000,200]">'
+            '<node text="消息" bounds="[10,10][500,60]" />'
+            '<node content-desc="描述叶" /></node>'
+        )
+        good_row = (
+            '<node text="合成联系人" bounds="[0,0][1000,200]">'
+            '<node text="消息" bounds="[10,10][500,60]" />'
+            '<node content-desc="描述叶" bounds="[10,60][200,100]" /></node>'
+        )
+        good_after = (
+            '<node text="消息" bounds="[10,10][500,60]" />'
+            '<node content-desc="描述叶" bounds="[10,60][200,100]" />'
+        )
+        bad_after = (
+            '<node text="消息" bounds="[10,10][500,60]" />'
+            '<node content-desc="描述叶" />'
+        )
+        complete = page(good_row)
+        with self.subTest(phase="before"):
+            invalid = page(bad_row)
+            runner, calls = self._custom_run((invalid, invalid, invalid))
+            with patch("subprocess.run", side_effect=runner):
+                executor.execute(delete)
+            self.assertEqual([c for c in calls if "tap" in c], [])
+        with self.subTest(phase="dialog"):
+            runner, calls = self._custom_run(
+                (complete, page(bad_row), complete)
+            )
+            with patch("subprocess.run", side_effect=runner):
+                observation = executor.execute(delete)
+            self.assertEqual(len([c for c in calls if "tap" in c]), 2)
+            self.assertNotEqual(
+                derive_action_outcome(observation).evidence.outcome, "performed"
+            )
+        with self.subTest(phase="after"):
+            runner, calls = self._custom_run(
+                (complete, complete, page(bad_after))
+            )
+            with patch("subprocess.run", side_effect=runner):
+                observation = executor.execute(delete)
+            self.assertEqual(len([c for c in calls if "tap" in c]), 3)
+            self.assertNotEqual(
+                derive_action_outcome(observation).evidence.outcome, "performed"
+            )
+        with self.subTest(phase="after-good"):
+            runner, calls = self._custom_run(
+                (complete, complete, page(good_after))
+            )
+            with patch("subprocess.run", side_effect=runner):
+                observation = executor.execute(delete)
+            self.assertEqual(
+                derive_action_outcome(observation).evidence.outcome, "performed"
+            )
+
+    def test_delete_non_target_leaf_inner_scroll_blocks_each_phase(self) -> None:
+        """非目标可见叶节点内部中间 ScrollView scrollable=true 三阶段拒绝。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+
+        def page(row: str) -> str:
+            """放入合法列表容器。"""
+            return (
+                '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+                ' scrollable="false" bounds="[0,0][1000,1800]">'
+                + row
+                + '</node></hierarchy>'
+            )
+
+        clean_row = (
+            '<node text="合成联系人" bounds="[0,0][1000,400]">'
+            '<node text="消息" bounds="[10,10][500,60]" />'
+            '</node>'
+        )
+        inner_row = (
+            '<node text="合成联系人" bounds="[0,0][1000,400]">'
+            '<node text="消息" bounds="[10,10][500,60]" />'
+            '<node class="android.widget.ScrollView" scrollable="true"'
+            ' bounds="[0,60][1000,400]">'
+            '<node text="非目标叶" bounds="[10,70][500,120]" />'
+            '</node></node>'
+        )
+        after_inner = (
+            '<node text="消息" bounds="[10,10][500,60]" />'
+            '<node class="android.widget.ScrollView" scrollable="true"'
+            ' bounds="[0,60][1000,400]">'
+            '<node text="非目标叶" bounds="[10,70][500,120]" />'
+            '</node>'
+        )
+        clean = page(clean_row)
+        invalid_before = page(inner_row)
+        with self.subTest(phase="before"):
+            runner, calls = self._custom_run(
+                (invalid_before, invalid_before, invalid_before)
+            )
+            with patch("subprocess.run", side_effect=runner):
+                executor.execute(delete)
+            self.assertEqual([c for c in calls if "tap" in c], [])
+        with self.subTest(phase="dialog"):
+            runner, calls = self._custom_run(
+                (clean, page(inner_row), clean)
+            )
+            with patch("subprocess.run", side_effect=runner):
+                observation = executor.execute(delete)
+            self.assertEqual(len([c for c in calls if "tap" in c]), 2)
+            self.assertNotEqual(
+                derive_action_outcome(observation).evidence.outcome, "performed"
+            )
+        with self.subTest(phase="after"):
+            after = page(after_inner)
+            runner, calls = self._custom_run((clean, clean, after))
+            with patch("subprocess.run", side_effect=runner):
+                observation = executor.execute(delete)
+            self.assertEqual(len([c for c in calls if "tap" in c]), 3)
+            self.assertNotEqual(
+                derive_action_outcome(observation).evidence.outcome, "performed"
+            )
+
     def test_delete_complete_list_removal_is_performed(self) -> None:
         """完整列表内目标消失且锚点仍在时为 deleted 正例。"""
         gate = FakeGate()
@@ -1389,19 +1618,24 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         from app.adapters.adb.command import CommandIdentityStore, run_adb
 
         class Proc:
-            """最小 Popen 替身。"""
+            """最小 Popen 替身，记录是否被执行。"""
 
             def __init__(self) -> None:
-                """固定 PID。"""
+                """固定 PID 与未执行标志。"""
                 self.pid = 4100
                 self.returncode = 0
+                self.communicated = False
+                self.killed = False
 
             def communicate(self, timeout: float | None = None):
-                """返回成功输出。"""
+                """正常执行才会用默认预算；收尾回收使用 1 秒。"""
+                if timeout != 1:
+                    self.communicated = True
                 return "ok", ""
 
             def kill(self) -> None:
-                """无 kill。"""
+                """记录 kill。"""
+                self.killed = True
 
             def wait(self, timeout: float | None = None) -> int:
                 """立即回收。"""
@@ -1415,44 +1649,34 @@ class AdbActionPrimitiveTests(unittest.TestCase):
                 return False
 
             def resume(self, pid: int) -> bool:
-                """替身进程无需真实恢复。"""
-                return True
+                """不应被调用。"""
+                raise AssertionError
 
             def close(self) -> None:
                 """无关闭。"""
 
+        from app.adapters.adb.command import AdbCommandFailure
+
         with tempfile.TemporaryDirectory() as directory:
             store = CommandIdentityStore(Path(directory))
             key = "boss:conv:test:resume"
-
-            def on_pid(pid: int) -> None:
-                """启动时无后代。"""
-                store.begin_family(key, pid, lambda p: [])
-
-            def on_done(pid: int, bounded: bool, proven: bool) -> None:
-                """结束时发现仍挂树后代。"""
-                store.finish_family(
-                    key,
-                    pid,
-                    lambda p: [4200] if p == 4100 else [],
-                    bounded=bounded,
-                    proven=proven,
-                )
-
-            with patch("subprocess.Popen", return_value=Proc()):
-                run_adb(
-                    ["adb"],
-                    gate=FakeGate(),
-                    on_pid=on_pid,
-                    on_done=on_done,
-                    bound_factory=lambda: Bound(),
-                    real_process_check=lambda process: True,
-                )
-            self.assertIn(4200, store.identities(key))
-            states = {4100: "stopped", 4200: "alive"}
+            process = Proc()
+            with patch("subprocess.Popen", return_value=process):
+                with self.assertRaises(AdbCommandFailure) as caught:
+                    run_adb(
+                        ["adb"],
+                        gate=FakeGate(),
+                        on_start=lambda: store.mark_started(key),
+                        on_pid=lambda pid: store.record(key, pid),
+                        on_fail=lambda: store.record_unresolved(key),
+                        bound_factory=lambda: Bound(),
+                        real_process_check=lambda value: True,
+                    )
+            self.assertEqual(caught.exception.category, "adb_oserror")
+            self.assertFalse(process.communicated)
+            self.assertTrue(process.killed)
             self.assertEqual(
-                store.check(key, 4100, lambda pid: states.get(pid, "unknown")),
-                "unknown",
+                store.check(key, 4100, lambda pid: "stopped"), "unknown"
             )
 
     def test_real_windows_job_bounds_synthetic_child(self) -> None:
@@ -1498,6 +1722,302 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             except OSError:
                 pass
         self.assertEqual(state, "stopped")
+
+    def test_run_adb_unclosed_fact_survives_execution_start_interruption(self) -> None:
+        """执行起点前写入未闭合事实；中断后旧完成命令不能冒充 stopped。"""
+        import tempfile
+        from pathlib import Path
+
+        from app.adapters.adb.command import (
+            AdbCommandFailure,
+            CommandIdentityStore,
+            run_adb,
+        )
+
+        class Bound:
+            """成功 assign、记录终止/关闭；resume 失败即断言不应恢复执行。"""
+
+            def __init__(self) -> None:
+                """初始化标志。"""
+                self.terminated = False
+                self.closed = False
+
+            def assign(self, pid: int) -> bool:
+                """成功加入。"""
+                return True
+
+            def resume(self, pid: int) -> bool:
+                """执行前中断不应恢复。"""
+                raise AssertionError("resume must not run")
+
+            def terminate(self) -> bool:
+                """记录终止。"""
+                self.terminated = True
+                return True
+
+            def close(self) -> None:
+                """记录关闭。"""
+                self.closed = True
+
+        class Proc:
+            """最小 Popen 替身。"""
+
+            def __init__(self) -> None:
+                """固定 PID。"""
+                self.pid = 7301
+                self.returncode = 0
+                self.killed = False
+
+            def communicate(self, timeout: float | None = None):
+                """不应被调用。"""
+                raise AssertionError
+
+            def kill(self) -> None:
+                """记录 kill。"""
+                self.killed = True
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = CommandIdentityStore(Path(directory))
+            key = "boss:conv:test:resume"
+            store.mark_started(key)
+            store.record(key, 7300)
+            store.finish_family(key, 7300, lambda pid: [], bounded=True, proven=True)
+            bound = Bound()
+            process = Proc()
+
+            def interrupted_start() -> None:
+                """先写未闭合事实，再模拟 owner 级中断。"""
+                store.mark_started(key)
+                raise BaseException("owner_exit")
+
+            with patch("subprocess.Popen", return_value=process):
+                with self.assertRaises(AdbCommandFailure) as caught:
+                    run_adb(
+                        ["adb"],
+                        gate=FakeGate(),
+                        on_start=interrupted_start,
+                        on_pid=lambda pid: None,
+                        bound_factory=lambda: bound,
+                        real_process_check=lambda value: True,
+                    )
+            self.assertEqual(caught.exception.category, "adb_oserror")
+            self.assertFalse(process.killed)
+            self.assertTrue(bound.closed)
+            self.assertEqual(
+                store.check(key, 7300, lambda pid: "stopped"), "unknown"
+            )
+
+            interrupted_pid = {"called": False}
+
+            def interrupted_on_pid(pid: int) -> None:
+                """assign 成功、恢复前中断。"""
+                interrupted_pid["called"] = True
+                store.record(key, pid)
+                raise BaseException("owner_exit")
+
+            bound2 = Bound()
+            process2 = Proc()
+            with patch("subprocess.Popen", return_value=process2):
+                with self.assertRaises(AdbCommandFailure):
+                    run_adb(
+                        ["adb"],
+                        gate=FakeGate(),
+                        on_start=lambda: store.mark_started(key),
+                        on_pid=interrupted_on_pid,
+                        on_fail=lambda: None,
+                        bound_factory=lambda: bound2,
+                        real_process_check=lambda value: True,
+                    )
+            self.assertTrue(interrupted_pid["called"])
+            self.assertTrue(process2.killed)
+            self.assertTrue(bound2.closed)
+            self.assertEqual(
+                store.check(key, 7300, lambda pid: "stopped"), "unknown"
+            )
+
+    def test_run_adb_resume_failure_does_not_execute_and_closes(self) -> None:
+        """resume 失败时不 communicate、不重发，未闭合事实保持 unknown。"""
+        import tempfile
+        from pathlib import Path
+
+        from app.adapters.adb.command import (
+            AdbCommandFailure,
+            CommandIdentityStore,
+            run_adb,
+        )
+
+        class Bound:
+            """assign 成功、resume 失败。"""
+
+            def __init__(self) -> None:
+                """初始化标志。"""
+                self.terminated = False
+                self.closed = False
+
+            def assign(self, pid: int) -> bool:
+                """成功加入。"""
+                return True
+
+            def resume(self, pid: int) -> bool:
+                """返回失败。"""
+                return False
+
+            def terminate(self) -> bool:
+                """记录终止。"""
+                self.terminated = True
+                return True
+
+            def close(self) -> None:
+                """记录关闭。"""
+                self.closed = True
+
+        class Proc:
+            """最小 Popen 替身。"""
+
+            def __init__(self) -> None:
+                """固定 PID。"""
+                self.pid = 7400
+                self.returncode = 0
+                self.killed = False
+                self.executed = False
+
+            def communicate(self, timeout: float | None = None):
+                """正常预算表示执行，回收预算表示收尾。"""
+                if timeout != 1:
+                    self.executed = True
+                return "", ""
+
+            def kill(self) -> None:
+                """记录 kill。"""
+                self.killed = True
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = CommandIdentityStore(Path(directory))
+            key = "boss:conv:test:resume"
+            bound = Bound()
+            process = Proc()
+            with patch("subprocess.Popen", return_value=process):
+                with self.assertRaises(AdbCommandFailure):
+                    run_adb(
+                        ["adb"],
+                        gate=FakeGate(),
+                        on_start=lambda: store.mark_started(key),
+                        on_pid=lambda pid: store.record(key, pid),
+                        on_fail=lambda: store.record_unresolved(key),
+                        bound_factory=lambda: bound,
+                        real_process_check=lambda value: True,
+                    )
+            self.assertFalse(process.executed)
+            self.assertTrue(process.killed)
+            self.assertTrue(bound.terminated)
+            self.assertTrue(bound.closed)
+            self.assertEqual(
+                store.check(key, 7400, lambda pid: "stopped"), "unknown"
+            )
+
+    def test_run_adb_double_timeout_and_oserror_always_finalize(self) -> None:
+        """二次 communicate 超时、wait 再超时与 communicate OSError 都执行收尾。"""
+        import tempfile
+        from pathlib import Path
+
+        from app.adapters.adb.command import (
+            AdbCommandFailure,
+            CommandIdentityStore,
+            run_adb,
+        )
+
+        class Bound:
+            """记录终止/关闭并证明空族。"""
+
+            def __init__(self) -> None:
+                """初始化标志。"""
+                self.terminated = False
+                self.closed = False
+
+            def assign(self, pid: int) -> bool:
+                """成功加入。"""
+                return True
+
+            def resume(self, pid: int) -> bool:
+                """成功恢复。"""
+                return True
+
+            def terminate(self) -> bool:
+                """记录终止。"""
+                self.terminated = True
+                return True
+
+            def active(self) -> int:
+                """证明空族。"""
+                return 0
+
+            def close(self) -> None:
+                """记录关闭。"""
+                self.closed = True
+
+        class Proc:
+            """按次数抛出超时或 OSError。"""
+
+            def __init__(self, mode: str) -> None:
+                """保存模式。"""
+                self.mode = mode
+                self.pid = 7500
+                self.returncode = 0
+                self.calls = 0
+                self.killed = False
+
+            def communicate(self, timeout: float | None = None):
+                """模拟超时/OSError。"""
+                self.calls += 1
+                if timeout == 1:
+                    raise subprocess.TimeoutExpired(["adb"], 1)
+                if self.mode == "timeout":
+                    raise subprocess.TimeoutExpired(["adb"], 5)
+                raise OSError("synthetic")
+
+            def kill(self) -> None:
+                """记录 kill。"""
+                self.killed = True
+
+            def wait(self, timeout: float | None = None) -> int:
+                """模拟 wait 再超时。"""
+                raise subprocess.TimeoutExpired(["adb"], 1)
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = CommandIdentityStore(Path(directory))
+            key = "boss:conv:test:resume"
+            for mode, expected in (("timeout", "adb_timeout"), ("oserror", "adb_oserror")):
+                with self.subTest(mode=mode):
+                    bound = Bound()
+                    process = Proc(mode)
+                    done: list[tuple[bool, bool]] = []
+                    with patch("subprocess.Popen", return_value=process):
+                        with self.assertRaises(AdbCommandFailure) as caught:
+                            run_adb(
+                                ["adb"],
+                                gate=FakeGate(),
+                                on_start=lambda: store.mark_started(key),
+                                on_pid=lambda pid: store.record(key, pid),
+                                on_done=lambda pid, bounded, proven: done.append(
+                                    (bounded, proven)
+                                ),
+                                on_fail=lambda: store.record_unresolved(key),
+                                bound_factory=lambda: bound,
+                                real_process_check=lambda value: True,
+                            )
+                    self.assertEqual(caught.exception.category, expected)
+                    self.assertTrue(process.killed)
+                    self.assertTrue(bound.terminated)
+                    self.assertTrue(bound.closed)
+                    self.assertTrue(done)
 
     def test_run_adb_records_descendant_tree_through_pid_callback(self) -> None:
         """实际 Popen 回调记录命令族子孙，末端口活时恢复检查拒绝。"""

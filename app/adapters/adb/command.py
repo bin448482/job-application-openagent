@@ -23,17 +23,77 @@ class ProcessFamilyBound:
 
     @classmethod
     def create(cls) -> "ProcessFamilyBound | None":
-        """创建不限制退出行为的空 Job；非 Windows 或 API 不可用时返回 None。"""
+        """创建 kill-on-close 的空 Job；非 Windows 或 API 不可用时返回 None。"""
         if os.name != "nt":
             return None
         try:
             import ctypes
+            from ctypes import wintypes
+
+            class IoCounters(ctypes.Structure):
+                """IO_COUNTERS 固定字段。"""
+
+                _fields_ = [
+                    ("ReadOperationCount", ctypes.c_ulonglong),
+                    ("WriteOperationCount", ctypes.c_ulonglong),
+                    ("OtherOperationCount", ctypes.c_ulonglong),
+                    ("ReadTransferCount", ctypes.c_ulonglong),
+                    ("WriteTransferCount", ctypes.c_ulonglong),
+                    ("OtherTransferCount", ctypes.c_ulonglong),
+                ]
+
+            class BasicLimit(ctypes.Structure):
+                """JOBOBJECT_BASIC_LIMIT_INFORMATION 固定字段。"""
+
+                _fields_ = [
+                    ("PerProcessUserTimeLimit", ctypes.c_longlong),
+                    ("PerJobUserTimeLimit", ctypes.c_longlong),
+                    ("LimitFlags", wintypes.DWORD),
+                    ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t),
+                    ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t),
+                    ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD),
+                ]
+
+            class ExtendedLimit(ctypes.Structure):
+                """JOBOBJECT_EXTENDED_LIMIT_INFORMATION 固定字段。"""
+
+                _fields_ = [
+                    ("BasicLimitInformation", BasicLimit),
+                    ("IoInfo", IoCounters),
+                    ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t),
+                ]
 
             kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
             kernel32.CreateJobObjectW.argtypes = (ctypes.c_void_p, ctypes.c_wchar_p)
             kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+            kernel32.SetInformationJobObject.argtypes = (
+                ctypes.c_void_p,
+                ctypes.c_int,
+                ctypes.c_void_p,
+                ctypes.c_uint,
+            )
+            kernel32.SetInformationJobObject.restype = ctypes.c_int
+            kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+            kernel32.CloseHandle.restype = ctypes.c_int
             handle = kernel32.CreateJobObjectW(None, None)
             if not handle:
+                return None
+            info = ExtendedLimit()
+            info.BasicLimitInformation.LimitFlags = 0x00002000  # KILL_ON_JOB_CLOSE
+            configured = kernel32.SetInformationJobObject(
+                handle,
+                9,  # JobObjectExtendedLimitInformation
+                ctypes.byref(info),
+                ctypes.sizeof(info),
+            )
+            if not configured:
+                kernel32.CloseHandle(handle)
                 return None
             return cls(int(handle))
         except Exception:
@@ -229,6 +289,10 @@ class CommandIdentityStore:
         """保存本机忽略目录；构造不创建文件。"""
         self._directory = Path(directory)
 
+    def mark_started(self, action_key: str) -> None:
+        """在命令执行起点之前写入未闭合事实，供 owner 中断后保持 unknown。"""
+        self._append(action_key, {"begin": True})
+
     def record(self, action_key: str, pid: int) -> None:
         """追加一个命令 PID，供同一动作恢复时核对。"""
         if type(pid) is not int or pid <= 0:
@@ -278,7 +342,7 @@ class CommandIdentityStore:
         child_scan: Callable[[int], list[int] | None],
     ) -> None:
         """一次性记录命令 PID、可见后代并在完整时闭合；供单次采集/测试使用。"""
-        self._append(action_key, {"begin": True})
+        self.mark_started(action_key)
         complete = self._expand(action_key, [pid], child_scan)
         self._append(
             action_key, {"complete": True} if complete else {"unresolved": True}
@@ -407,8 +471,10 @@ def run_adb(
     timeout: float = ADB_TIMEOUT_SECONDS,
     before: Callable[[], None] | None = None,
     binary: bool = False,
+    on_start: Callable[[], None] | None = None,
     on_pid: Callable[[int], None] | None = None,
     on_done: Callable[[int, bool, bool], None] | None = None,
+    on_fail: Callable[[], None] | None = None,
     bound_factory: Callable[[], ProcessFamilyBound | None] | None = None,
     real_process_check: Callable[[object], bool] | None = None,
 ) -> subprocess.CompletedProcess:
@@ -438,6 +504,13 @@ def run_adb(
             raise AdbCommandFailure("adb_nonzero")
         return completed
     bound = (bound_factory or ProcessFamilyBound.create)()
+    if on_start is not None:
+        try:
+            on_start()
+        except BaseException:
+            if bound is not None:
+                bound.close()
+            raise AdbCommandFailure("adb_oserror") from None
     creationflags = 0x00000004 if bound is not None else 0  # CREATE_SUSPENDED
     try:
         process = subprocess.Popen(
@@ -453,53 +526,56 @@ def run_adb(
     except FileNotFoundError:
         if bound is not None:
             bound.close()
+        _notify(on_fail)
         raise AdbCommandFailure("adb_missing") from None
     except OSError:
         if bound is not None:
             bound.close()
+        _notify(on_fail)
         raise AdbCommandFailure("adb_oserror") from None
     real_process = (real_process_check or _is_real_process)(process)
     if bound is not None:
         if not real_process:
             bound.close()
             bound = None
-        else:
-            assigned = bound.assign(process.pid)
-            resumed = bound.resume(process.pid)
-            if not resumed:
-                process.kill()
-                try:
-                    process.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    pass
-                bound.close()
-                raise AdbCommandFailure("adb_oserror") from None
-            if not assigned:
-                bound.close()
-                bound = None
+        elif not bound.assign(process.pid):
+            _kill_reap(process)
+            bound.close()
+            _notify(on_fail)
+            raise AdbCommandFailure("adb_oserror") from None
     try:
         on_pid(process.pid)
-    except Exception:
-        process.kill()
-        try:
-            process.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            pass
+    except BaseException:
+        _kill_reap(process)
         if bound is not None:
             bound.terminate()
             bound.close()
+        _notify(on_fail)
         raise AdbCommandFailure("adb_oserror") from None
+    if bound is not None and not bound.resume(process.pid):
+        _kill_reap(process)
+        bound.terminate()
+        bound.close()
+        _notify(on_fail)
+        raise AdbCommandFailure("adb_oserror") from None
+    timed_out = False
+    failed = False
+    stdout: str | bytes = ""
+    stderr: str | bytes = ""
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        process.kill()
-        try:
-            process.communicate(timeout=1)
-        except subprocess.TimeoutExpired:
-            process.wait(timeout=1)
+        timed_out = True
+        _kill_reap(process)
+    except Exception:
+        failed = True
+        _kill_reap(process)
+    finally:
         _finalize(on_done, process.pid, bound)
+    if timed_out:
         raise AdbCommandFailure("adb_timeout") from None
-    _finalize(on_done, process.pid, bound)
+    if failed:
+        raise AdbCommandFailure("adb_oserror") from None
     completed = subprocess.CompletedProcess(
         args=args, returncode=process.returncode, stdout=stdout, stderr=stderr
     )
@@ -515,6 +591,41 @@ def _is_real_process(process: object) -> bool:
     except TypeError:
         return False
     return real_class and isinstance(getattr(process, "_handle", None), int)
+
+
+def _kill_reap(process: object) -> None:
+    """有界 kill 并回收本命令进程；任何等待异常都不外泄。"""
+    try:
+        process.kill()  # type: ignore[attr-defined]
+    except OSError:
+        pass
+    except Exception:
+        pass
+    try:
+        process.communicate(timeout=1)  # type: ignore[attr-defined]
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    except OSError:
+        pass
+    except Exception:
+        pass
+    try:
+        process.wait(timeout=1)  # type: ignore[attr-defined]
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    except Exception:
+        pass
+
+
+def _notify(on_fail: Callable[[], None] | None) -> None:
+    """把未闭合/失败事实写给账本；写失败仍由已存在的 begin 保持 unknown。"""
+    if on_fail is None:
+        return
+    try:
+        on_fail()
+    except Exception:
+        return
 
 
 def _finalize(

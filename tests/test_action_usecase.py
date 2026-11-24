@@ -685,6 +685,74 @@ class ActionUseCaseTests(unittest.TestCase):
         self.assertFalse(result["gate_converged"])
         self.assertIsNotNone(result["card"])
 
+    def test_finish_write_failure_marks_family_unproven(self) -> None:
+        """平台已证明但完成写入失败时必须让现场保持未收敛。"""
+        from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore
+
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-finish-fail-"
+        ) as directory:
+            store = CommandIdentityStore(Path(directory))
+            executor = AdbActionExecutor(
+                serial="<serial>", gate=self.gate, command_store=store
+            )
+            executor.bind_action(TEXT_KEY)
+            store.finish_family = lambda *args, **kwargs: (_ for _ in ()).throw(  # type: ignore[method-assign]
+                OSError("synthetic")
+            )
+            with self.assertRaises(OSError):
+                executor._record_command_end(9000, True, True)
+            self.assertTrue(executor._family_unproven)
+
+    def test_empty_ime_early_exit_keeps_scene_unconverged(self) -> None:
+        """首次 IME 返回空且账本 unknown 时不得硬编码 quiet=True。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore
+
+        class Proc:
+            """所有命令返回空输出。"""
+
+            def __init__(self, args: list[str]) -> None:
+                """保存参数与 PID。"""
+                self.args = args
+                self.pid = 8000
+                self.returncode = 0
+
+            def communicate(self, timeout: float | None = None):
+                """返回空。"""
+                return "", ""
+
+            def kill(self) -> None:
+                """无 kill。"""
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-empty-ime-"
+        ) as directory:
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=self.gate,
+                command_store=CommandIdentityStore(Path(directory)),
+                child_scan=lambda pid: [],
+            )
+            with patch(
+                "subprocess.Popen",
+                side_effect=lambda args, **kwargs: Proc(args),
+            ):
+                result = self._perform(
+                    executor, ime_component="com.example/.Ime"
+                )
+        self.assertEqual(result["evidence"]["outcome"], "not_performed")
+        self.assertEqual(result["state"], "pending")
+        self.assertFalse(result["gate_converged"])
+        self.assertIsNotNone(result["card"])
+
     def test_leased_without_start_has_zero_device_calls(self) -> None:
         """leased 未 start 时，即使需要 IME 也不读设备、不写 pending。"""
         other_tmp = tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-leased-")

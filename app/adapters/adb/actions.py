@@ -104,7 +104,7 @@ class AdbActionExecutor:
                 clicked=False,
                 scene_settled=True,
                 input_box_empty=True,
-                command_quiet=True,
+                command_quiet=not self._family_unproven,
                 ime_restored=True,
             )
         return value
@@ -655,12 +655,15 @@ class AdbActionExecutor:
             + phase
         )
         try:
+            hooks = self._command_hooks()
             capture = self._screen.dump_hierarchy(
                 self._serial,
                 before_command=before_command,
                 prefix=prefix,
-                on_pid=self._command_hooks()[0],
-                on_done=self._command_hooks()[1],
+                on_start=hooks[0],
+                on_pid=hooks[1],
+                on_done=hooks[2],
+                on_fail=hooks[3],
             )
         except ScreenReadError as error:
             reason = (
@@ -699,13 +702,16 @@ class AdbActionExecutor:
         started = time.perf_counter()
         self._record(command, "started", 0)
         try:
+            hooks = self._command_hooks()
             completed = run_adb(
                 args,
                 gate=self._gate,
                 timeout=self._timeout,
                 before=before_command,
-                on_pid=self._command_hooks()[0],
-                on_done=self._command_hooks()[1],
+                on_start=hooks[0],
+                on_pid=hooks[1],
+                on_done=hooks[2],
+                on_fail=hooks[3],
             )
         except AdbCommandFailure as error:
             self._record_failure(command, started, error.category)
@@ -728,35 +734,68 @@ class AdbActionExecutor:
     def _command_hooks(
         self,
     ) -> tuple[
+        Callable[[], None] | None,
         Callable[[int], None] | None,
         Callable[[int, bool, bool], None] | None,
+        Callable[[], None] | None,
     ]:
-        """返回本次命令的开始/结束身份回调；无账本或未绑定动作时不记录。"""
+        """返回开始/根PID/结束/失败身份回调；无账本或未绑定动作时不记录。"""
         if self._command_store is None or self._current_action_key is None:
-            return None, None
-        return self._record_command_pid, self._record_command_end
-
-    def _record_command_pid(self, pid: int) -> None:
-        """把本动作命令 PID 写入本机命令身份账本；不写命令参数。"""
-        if self._command_store is None or self._current_action_key is None:
-            return
-        self._command_store.begin_family(
-            self._current_action_key, pid, self._child_scan
+            return None, None, None, None
+        return (
+            self._record_command_start,
+            self._record_command_pid,
+            self._record_command_end,
+            self._record_command_fail,
         )
 
+    def _record_command_start(self) -> None:
+        """在命令执行起点前写入未闭合事实；失败让执行器保持未收敛。"""
+        if self._command_store is None or self._current_action_key is None:
+            return
+        try:
+            self._command_store.mark_started(self._current_action_key)
+        except Exception:
+            self._family_unproven = True
+            raise
+
+    def _record_command_pid(self, pid: int) -> None:
+        """把本动作命令根 PID 写入账本；失败让执行器保持未收敛。"""
+        if self._command_store is None or self._current_action_key is None:
+            return
+        try:
+            self._command_store.record(self._current_action_key, pid)
+        except Exception:
+            self._family_unproven = True
+            raise
+
+    def _record_command_fail(self) -> None:
+        """命令未执行或未正常结束：写不可证明标记并保持未收敛。"""
+        if self._command_store is None or self._current_action_key is None:
+            return
+        self._family_unproven = True
+        try:
+            self._command_store.record_unresolved(self._current_action_key)
+        except Exception:
+            return
+
     def _record_command_end(self, pid: int, bounded: bool, proven: bool) -> None:
-        """命令结束后闭合命令族；未证明全停时让公开观察保持现场未收敛。"""
+        """命令结束后闭合命令族；写失败或未证明全停都让公开观察未收敛。"""
         if self._command_store is None or self._current_action_key is None:
             return
         if not bounded or not proven:
             self._family_unproven = True
-        self._command_store.finish_family(
-            self._current_action_key,
-            pid,
-            self._child_scan,
-            bounded=bounded,
-            proven=proven,
-        )
+        try:
+            self._command_store.finish_family(
+                self._current_action_key,
+                pid,
+                self._child_scan,
+                bounded=bounded,
+                proven=proven,
+            )
+        except Exception:
+            self._family_unproven = True
+            raise
 
     def _index_evidence(
         self,
@@ -946,6 +985,7 @@ def _list_complete(xml_text: str, label: str) -> bool:
         rect = _support_parse_bounds(node)
         visible = bool(
             node.get("text")
+            or node.get("content-desc")
             or node.get("clickable") == "true"
             or node.get("resource-id")
         )
@@ -953,8 +993,20 @@ def _list_complete(xml_text: str, label: str) -> bool:
             if visible or node.get("bounds") is not None:
                 return False
             continue
-        if not _support_rect_inside(rect, container_rect):
-            return False
+        current = parents.get(node)
+        while current is not None:
+            cls = current.get("class") or ""
+            if current.get("scrollable") == "true" and any(
+                token in cls for token in LIST_CONTAINER_TOKENS
+            ):
+                return False
+            if current.get("bounds") is not None:
+                outer_rect = _support_parse_bounds(current)
+                if outer_rect is None or not _support_rect_inside(
+                    rect, outer_rect
+                ):
+                    return False
+            current = parents.get(current)
     current = parents.get(container)
     while current is not None:
         cls = current.get("class") or ""

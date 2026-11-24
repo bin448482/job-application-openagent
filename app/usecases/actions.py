@@ -332,7 +332,7 @@ def perform_action(
                     clicked=False,
                     scene_settled=True,
                     input_box_empty=True,
-                    command_quiet=True,
+                    command_quiet=False,
                     ime_restored=True,
                 )
             store.save_ime_state(action_key, ime_original, now=now)
