@@ -8,10 +8,10 @@
 
 ## 二、当前结构
 
-- `extract.py`：标准库工具。受控发现、路径/链接/重叠/覆盖防护、XML 白名单重构与异常合成代表、日志固定类别时序与失败窗口、安全回执、provenance、本机校验器。
-- `test_private_regression.py`：45 项 `unittest` 纯合成自测，覆盖拓扑递归、属性/文本白名单、DTD/实体/编码/超限/深度/节点异常、路径逃逸、junction 祖先与子目录、输出重叠/覆盖/未忽略、源不变、去重/抽样、provenance 对齐、时序感知去重、长簇分片与尾部类别、物理行上限、NaN/Infinity、固定时序类别、缺时钟/乱序/截断、旧 oracle 不可信、stdout/异常泄露、只含 `needs_label`、XML 字符正文、未知自由字段、验证器拒绝坏产物。
-- `README.md`：公开使用说明、预算、输出 schema、固定类别与限制。
-- `SELF_REVIEW.md`：R1 数据边界/脱敏、R2 故障输入/抽样限制/独立 expected、R3 真实执行/隔离/报告/待提交内容三轮自审记录；R3 只记录一次放行的实际只读抽取、验证器、脱敏后的安全回执结论与 `partial` 局限，不含真实样本/扫描规模、业务计数分布、字节数、批次 ID 或本机路径，精确统计仅留在本机 Git 忽略目录的安全回执。
+- `extract.py`：标准库工具。受控发现、路径/链接/重叠/覆盖防护、XML 白名单重构与异常合成代表、日志固定类别时序与失败窗口、安全回执、provenance、本机校验器。预算命中（单文件/深度/节点/样本/扫描）会进入 `xml.truncated`/总 `truncated` 并给出 `partial`；读取期间大小/mtime 变化与日志边界失败按源改变 `error`；验证器有界枚举全批次、拒绝未知文件/链接、解析前拒绝 DTD/实体/其他声明/注释/CDATA/PI，并重算状态与安全语义。
+- `test_private_regression.py`：69 项 `unittest` 纯合成自测（45 项原有判据 + 24 项整改新增），覆盖拓扑递归、属性/文本白名单、DTD/实体/编码/超限/深度/节点异常、注释/处理指令、路径逃逸、junction 祖先与子目录、输出重叠/覆盖/未忽略、源不变与读取期间增长/缩短/替换、去重/抽样、provenance 对齐与绝对根行为、时序感知去重、长簇分片与尾部类别、物理行上限、NaN/Infinity、固定时序类别、缺时钟/乱序/截断、旧 oracle 不可信、stdout/异常泄露、只含 `needs_label`、XML 字符正文、未知自由字段、验证器拒绝重复 manifest/代表、未知文件/链接、总文件预算、矛盾 status 与坏产物。
+- `README.md`：公开使用说明、预算、状态/安全语义、输出 schema、固定类别与限制。
+- `SELF_REVIEW.md`：R1 数据边界/脱敏、R2 故障输入/抽样限制/独立 expected、R3 较早版本真实执行的作者声明，以及整改后 R4–R6 作者自审；旧 R3 明确未在新实现重跑、不能为当前实现盖章，整改三轮记录问题矩阵、修订、合成复验与未测边界。
 - `AGENTS.md`：本文件，目录索引与维护要求。
 - `CLAUDE.md`：只包含 `@AGENTS.md`，引用本指南。
 
@@ -37,13 +37,16 @@ python tests/private_regression/extract.py --validate "<main-repo>/data/private-
 - 异常 XML 只生成同故障类别的纯合成代表，不复制原始片段。
 - 日志只提取固定事件/原因/状态/动作类别、重映射序号、相对时间和有界数值；绝对日期、原始事件 ID 和任意源字符串不进入样本或回执。
 - 所有 `expected` 固定 `needs_label`；旧日志结果不作为 oracle。
-- 发现/读取/校验全程有界；命中上限在回执标记 `truncated`/`partial`，不静默继续。
-- 源在抽取期间改变时工具以 `error`/退出码 2 结束，不能把安全条件失败当作成功。
+- 发现/读取/校验全程有界；命中上限在回执标记 `truncated`/`partial`，不静默继续。XML 单文件/深度/节点命中保持真实故障计数，同时置 `xml.truncated=true` 并给出 `partial`；发现阶段已知超限不误报源改变。
+- 源在抽取期间大小、mtime 或读取窗口变化，以及日志边界/链接复核失败时，工具以 `error`/退出码 2 结束；结束复核覆盖全部已发现候选（未读候选仅 stat 范围）与已读 XML/完整日志的哈希，不能把未复核候选或读取失败候选当成已证明未变。
+- provenance 只写本机 Git 忽略批次，`not_for_model=true`，实际保存绝对 `source_root` 与选中样本相对路径/大小/SHA-256；该绝对根不进入 stdout、回执或 manifest，公开文档不写实际值。
+- 本机验证器有界枚举全批次文件（总量 ≤256），拒绝未知顶层/嵌套/非 JSON 文件、链接与非普通文件；派生 XML 解析前拒绝 DTD/实体/其他声明/注释/CDATA/PI；manifest 的 case_id 与代表 fault 必须唯一；验证器重算状态、输出、截断与可复核安全项，不把回执布尔当作独立测量。
+- 安全布尔区分动态可复核项（源/输出 Git/内容扫描等）与构造性不变量（新目录、无重叠、无 DTD、stdout 脱敏等）；`valid` 只代表当前批次符合本机合同，不证明历史来源未变或真实业务正确。
 - 不新增第三方依赖；Python >=3.13 标准库。
 
 ## 五、验证方式
 
-`python -m unittest discover -s tests/private_regression -p "test_*.py"` 运行纯合成自测，不需要真实源、Git 远端、设备、网络或模型；部分 junction 用例在无法创建 junction 时跳过。实际抽取与 `--validate` 需协调端阶段放行；本轮 R3 已执行一次只读抽取与验证，结果与 `partial` 局限见 `SELF_REVIEW.md`。
+`python -m unittest discover -s tests/private_regression -p "test_*.py"` 运行纯合成自测，不需要真实源、Git 远端、设备、网络或模型；部分 junction 用例在无法创建 junction 时跳过。实际抽取与 `--validate` 需协调端阶段放行。较早版本曾执行一次只读抽取与验证（作者声明，见 `SELF_REVIEW.md` §3），整改后的候选未重跑真实数据，旧结果不能为当前实现盖章。
 
 ## 六、已知限制
 
@@ -52,6 +55,8 @@ python tests/private_regression/extract.py --validate "<main-repo>/data/private-
 - 日志白名单覆盖有限，未识别事件如实计为 `unknown`，失败窗口覆盖可能为 0。
 - 相对时间只在窗口内有效；缺失/乱序/截断只标记，不修复。
 - 日志被预算截断时只做大小/时间完整性校验，并标记 `log_integrity_scope=prefix`。
+- 验证器对 XML 的自由文本通道采用解析前词法拒绝，不等于完整 XML 安全审计；真实 ACL/重解析点矩阵与并发竞态未测。
+- 旧 R3 真实只读结论属较早版本作者声明，新实现未复验；`valid` 与合成测试绿灯都不构成独立审核、真实数据覆盖或业务 PASS。
 - 不验证 SQLite 持久化、跨会话检索、设备执行或真实业务正确性。
 
 ## 七、同步维护要求

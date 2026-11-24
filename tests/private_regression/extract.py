@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 TOOL_NAME = "private-regression-extractor"
-TOOL_VERSION = "0.1.0"
+TOOL_VERSION = "0.2.0"
 SCHEMA_RECEIPT = "private-regression-safe-receipt/v1"
 SCHEMA_VALIDATION = "private-regression-validation/v1"
 SCHEMA_MANIFEST = "private-regression-manifest/v1"
@@ -54,9 +54,11 @@ MAX_COORDINATE = 20_000
 MAX_BOUNDED_NUMBER = 1_000_000_000
 MAX_JSON_BYTES = 1024 * 1024
 MAX_VALIDATE_FILES = 256
+MAX_VALIDATE_DEPTH = 4
 
 XML_FAULTS = (
     "dtd_or_entity",
+    "unsafe_markup",
     "invalid_encoding",
     "malformed_xml",
     "oversize",
@@ -164,7 +166,11 @@ SYNTHETIC_DESC = "DESC"
 SYNTHETIC_ROTATION_MAX = 3
 BOUNDS_RE = re.compile(r"^\[(\d{1,6}),(\d{1,6})\]\[(\d{1,6}),(\d{1,6})\]$")
 DATE_RE = re.compile(r"\b(19|20)\d{2}-\d{2}-\d{2}\b")
-NODE_TAG_RE = re.compile(r"<(/?)node\b[^>]*>")
+# 标签无关的粗扫：任何元素名都计入深度/宽度，未知标签也不能绕过解析前预算。
+TAG_RE = re.compile(r"<\s*(/?)\s*([A-Za-z_][A-Za-z0-9_.:-]*)((?:[^>\"']|\"[^\"]*\"|'[^']*')*)>")
+DECLARATION_RE = re.compile(r"<!\s*(doctype|entity|element|attlist|notation)\b", re.IGNORECASE)
+UNSAFE_DECLARATION_RE = re.compile(r"<!(?!--|\[CDATA\[)", re.IGNORECASE)
+XML_DECLARATION_RE = re.compile(r"^\s*<\?xml\b[^>]*\?>", re.IGNORECASE)
 
 # 日志字段白名单：只读取这些键，不把任意键或任意值带出。
 EVENT_KEYS = ("event", "event_name", "name", "type")
@@ -325,6 +331,10 @@ class _BudgetExceeded(Exception):
     """读取预算耗尽，调用方按截断处理。"""
 
 
+class _SourceChanged(Exception):
+    """读取期间源文件大小、时间或内容边界变化，调用方必须按源改变失败。"""
+
+
 @dataclass
 class DiscoveryStats:
     """受控发现阶段的计数与上限命中状态。"""
@@ -339,8 +349,18 @@ class DiscoveryStats:
     depth_cap_hit: bool = False
     xml_candidates: list[Path] = field(default_factory=list)
     oversize_candidates: list[Path] = field(default_factory=list)
+    candidate_stats: dict[str, "SourceStat"] = field(default_factory=dict)
     log_path: Path | None = None
     log_present: bool = False
+
+
+@dataclass
+class SourceStat:
+    """发现时记录的候选大小/mtime，用于结束时复核所有已发现候选。"""
+
+    relative: str
+    size: int
+    mtime_ns: int
 
 
 @dataclass
@@ -541,7 +561,7 @@ def _new_batch_id() -> str:
     return "b-" + secrets.token_hex(6)
 
 
-def _walk_xml(root: Path, stats: DiscoveryStats) -> None:
+def _walk_xml(root: Path, source_root: Path, stats: DiscoveryStats) -> None:
     """在单一受控根内有限深度、有限文件数地发现 XML 候选。"""
     for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
         if stats.file_cap_hit:
@@ -586,11 +606,17 @@ def _walk_xml(root: Path, stats: DiscoveryStats) -> None:
                 stats.skipped_nonregular += 1
                 continue
             try:
-                size = candidate.stat().st_size
+                candidate_stat = candidate.stat()
             except OSError:
                 stats.skipped_nonregular += 1
                 continue
-            if size > MAX_XML_BYTES:
+            relative = str(candidate.relative_to(source_root)).replace(os.sep, "/")
+            stats.candidate_stats[relative] = SourceStat(
+                relative=relative,
+                size=candidate_stat.st_size,
+                mtime_ns=candidate_stat.st_mtime_ns,
+            )
+            if candidate_stat.st_size > MAX_XML_BYTES:
                 stats.oversize_candidates.append(candidate)
                 stats.skipped_oversize += 1
             else:
@@ -608,7 +634,7 @@ def discover_source(source_root: Path) -> DiscoveryStats:
             stats.skipped_symlink += 1
             continue
         stats.roots_present += 1
-        _walk_xml(root, stats)
+        _walk_xml(root, source_root, stats)
     log_path = source_root / "data" / "operations.log"
     if log_path.exists() and not _is_link_like(log_path) and log_path.is_file():
         try:
@@ -653,21 +679,41 @@ def _normalize_bool(value: str) -> str | None:
 
 
 def _scan_node_structure(text: str) -> tuple[int, int]:
-    """在解析前粗略统计 node 数量与嵌套深度，避免超大树/深树进入解析器。"""
+    """在解析前按任意元素名粗扫数量与嵌套深度，未知标签也不能绕过预算。"""
     count = 0
-    depth = 0
+    open_elements = 0
     maximum = 0
-    for match in NODE_TAG_RE.finditer(text):
+    first = True
+    for match in TAG_RE.finditer(text):
         closing = match.group(1) == "/"
-        self_closing = match.group(0).rstrip().endswith("/>")
+        self_closing = match.group(3).rstrip().endswith("/")
         if closing:
-            depth = max(0, depth - 1)
+            open_elements = max(0, open_elements - 1)
+            continue
+        if first:
+            first = False
+            if not self_closing:
+                open_elements = 1
             continue
         count += 1
+        maximum = max(maximum, open_elements)
         if not self_closing:
-            depth += 1
-            maximum = max(maximum, depth)
+            open_elements += 1
     return count, maximum
+
+
+def _detect_unsafe_markup(text: str) -> str | None:
+    """在解析前拒绝 DTD/实体/其他声明、注释、CDATA 与处理指令。"""
+    if DECLARATION_RE.search(text):
+        return "dtd_or_entity"
+    if "<!--" in text or "<![cdata[" in text.lower():
+        return "unsafe_markup"
+    if UNSAFE_DECLARATION_RE.search(text):
+        return "unsafe_markup"
+    remainder = XML_DECLARATION_RE.sub("", text, count=1)
+    if "<?" in remainder:
+        return "unsafe_markup"
+    return None
 
 
 def _representative_xml(fault: str) -> str:
@@ -754,10 +800,10 @@ def sanitize_xml(raw: bytes, aliases: AliasBook) -> SanitizeOutcome:
         text = _decode_xml(raw)
     except UnicodeDecodeError:
         return SanitizeOutcome(_representative_xml("invalid_encoding"), 1, 1, faults, "invalid_encoding")
-    lowered = text.lower()
-    if "<!doctype" in lowered or "<!entity" in lowered or "<!element" in lowered or "<!attlist" in lowered:
-        return SanitizeOutcome(_representative_xml("dtd_or_entity"), 1, 1, faults, "dtd_or_entity")
-    text = re.sub(r"^\s*<\?xml[^>]*\?>", "", text, count=1)
+    unsafe_fault = _detect_unsafe_markup(text)
+    if unsafe_fault is not None:
+        return SanitizeOutcome(_representative_xml(unsafe_fault), 1, 1, faults, unsafe_fault)
+    text = XML_DECLARATION_RE.sub("", text, count=1)
     node_count, node_depth = _scan_node_structure(text)
     if node_depth > MAX_XML_DEPTH:
         return SanitizeOutcome(_representative_xml("too_deep"), 1, 1, faults, "too_deep")
@@ -794,27 +840,42 @@ def sanitize_xml(raw: bytes, aliases: AliasBook) -> SanitizeOutcome:
 
 
 def _read_xml(path: Path, root: Path, budget: ReadBudget, size: int) -> tuple[bytes, ReadRecord]:
-    """在路径安全检查与读取预算内读取一份 XML，并记录本地完整性信息。"""
+    """在路径安全检查与预算内读取一份 XML，并识别读取期间的大小/时间变化。"""
     _assert_within(root, path)
     if _is_link_like(path):
         raise ExtractionError("symlink_rejected")
+    try:
+        before = path.stat()
+    except OSError as exc:
+        raise _SourceChanged() from exc
+    if before.st_size != size:
+        raise _SourceChanged()
     if size > MAX_XML_BYTES:
         raise _Anomaly("oversize")
     if size > budget.remaining():
         budget.exhausted = True
         raise _BudgetExceeded
-    with open(path, "rb") as handle:
-        data = handle.read(size + 1)
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read(size + 1)
+    except OSError as exc:
+        raise _SourceChanged() from exc
     budget.consume(len(data))
     if len(data) > size:
-        raise _Anomaly("oversize")
-    if len(data) > MAX_XML_BYTES:
-        raise _Anomaly("oversize")
-    st = path.stat()
+        # 读取窗口内增长：不能再降级成 oversize 代表，否则会误报源未变。
+        raise _SourceChanged()
+    if len(data) < size:
+        raise _SourceChanged()
+    try:
+        after = path.stat()
+    except OSError as exc:
+        raise _SourceChanged() from exc
+    if after.st_size != before.st_size or after.st_mtime_ns != before.st_mtime_ns:
+        raise _SourceChanged()
     return data, ReadRecord(
         relative=str(path.relative_to(root)).replace(os.sep, "/"),
-        size=st.st_size,
-        mtime_ns=st.st_mtime_ns,
+        size=after.st_size,
+        mtime_ns=after.st_mtime_ns,
         sha256=hashlib.sha256(data).hexdigest(),
     )
 
@@ -893,9 +954,12 @@ def _to_event(record: dict[str, object]) -> TimelineEvent:
 
 
 def _read_log_events(
-    log_path: Path, budget: ReadBudget
+    log_path: Path, root: Path, budget: ReadBudget
 ) -> tuple[list[TimelineEvent], dict[str, object], ReadRecord]:
-    """流式读取精确白名单日志，全程扣减预算并记录完整性语义。"""
+    """流式读取精确白名单日志；打开前重核路径边界与链接。"""
+    _assert_within(root, log_path)
+    if _is_link_like(log_path):
+        raise ExtractionError("symlink_rejected")
     events: list[TimelineEvent] = []
     stats: dict[str, object] = {
         "lines": 0,
@@ -903,7 +967,10 @@ def _read_log_events(
         "truncated": False,
     }
     digest = hashlib.sha256()
-    st = log_path.stat()
+    try:
+        st = log_path.stat()
+    except OSError as exc:
+        raise _SourceChanged() from exc
     with open(log_path, "rb") as handle:
         while True:
             if budget.remaining() <= 0:
@@ -1249,12 +1316,22 @@ def _hash_file_bounded(path: Path, budget: ReadBudget, expected_size: int) -> st
 
 def _verify_source_unchanged(
     source_root: Path,
+    candidate_stats: dict[str, SourceStat],
     xml_records: list[ReadRecord],
     log_record: ReadRecord | None,
     xml_budget: ReadBudget,
     log_budget: ReadBudget,
 ) -> tuple[bool, bool]:
-    """有界校验源未变；返回 (是否未变, 日志是否仅前缀时间校验)。"""
+    """有界校验全部已发现候选与已读源的边界未变；返回 (是否未变, 日志是否仅前缀)。"""
+    for stat_record in candidate_stats.values():
+        path = source_root / stat_record.relative
+        try:
+            _assert_within(source_root, path)
+            st = path.stat()
+        except (ExtractionError, OSError):
+            return False, False
+        if st.st_size != stat_record.size or st.st_mtime_ns != stat_record.mtime_ns:
+            return False, False
     for record in xml_records:
         path = source_root / record.relative
         try:
@@ -1328,6 +1405,7 @@ def run_extraction(
     fault_totals = _zero_faults()
     duplicates = 0
     cap_hit = False
+    observed_source_change = False
     nodes_total = 0
     depth_max = 0
 
@@ -1344,17 +1422,22 @@ def run_extraction(
         try:
             size = path.stat().st_size
         except OSError:
+            observed_source_change = True
             continue
         try:
             raw, record = _read_xml(path, source, read_budget, size)
         except _BudgetExceeded:
             cap_hit = True
             break
+        except _SourceChanged:
+            observed_source_change = True
+            continue
         except _Anomaly as exc:
             representations.setdefault(exc.fault, _representative_xml(exc.fault))
             fault_totals[exc.fault] += 1
             continue
         except ExtractionError:
+            observed_source_change = True
             continue
         xml_read_records.append(record)
         outcome = sanitize_xml(raw, aliases)
@@ -1431,8 +1514,11 @@ def run_extraction(
     log_record: ReadRecord | None = None
     if discovery.log_path is not None:
         try:
-            events, log_stats, log_record = _read_log_events(discovery.log_path, log_read_budget)
-        except OSError:
+            events, log_stats, log_record = _read_log_events(
+                discovery.log_path, source / "data", log_read_budget
+            )
+        except (OSError, ExtractionError, _SourceChanged):
+            observed_source_change = True
             log_summary["present"] = True
             log_summary["uncovered_reason"] = "log_read_error"
         else:
@@ -1450,17 +1536,31 @@ def run_extraction(
                 _write_json(batch_dir / "failure_windows" / f"{window['case_id']}.json", window)
 
     source_unchanged, log_prefix_only = _verify_source_unchanged(
-        source, xml_read_records, log_record, verify_xml_budget, verify_log_budget
+        source,
+        discovery.candidate_stats,
+        xml_read_records,
+        log_record,
+        verify_xml_budget,
+        verify_log_budget,
     )
+    if observed_source_change:
+        source_unchanged = False
     ignored, tracked = _git_ignore_status(batch_dir)
-    truncated = (
-        cap_hit
+    xml_truncated = (
+        bool(discovery.oversize_candidates)
+        or fault_totals["oversize"] > 0
+        or fault_totals["too_deep"] > 0
+        or fault_totals["too_many_nodes"] > 0
+        or cap_hit
         or discovery.file_cap_hit
         or discovery.depth_cap_hit
+        or read_budget.exhausted
+    )
+    truncated = (
+        xml_truncated
         or bool(log_summary["truncated"])
         or bool(log_summary["window_truncated"])
         or log_summary["uncovered_reason"] == "log_read_error"
-        or read_budget.exhausted
         or log_read_budget.exhausted
     )
     has_output = bool(samples) or bool(windows)
@@ -1485,7 +1585,7 @@ def run_extraction(
         "depth_max": depth_max,
         "attribute_faults": attr_totals,
         "faults": fault_totals,
-        "truncated": bool(cap_hit or discovery.file_cap_hit or discovery.depth_cap_hit or read_budget.exhausted),
+        "truncated": bool(xml_truncated),
         "uncovered_reason": xml_uncovered,
     }
     safety = {
@@ -1634,6 +1734,8 @@ def _blank_character_data(element: ET.Element) -> bool:
 
 def _check_xml_file(text: str, kind: str, fault: str | None) -> tuple[bool, int, int]:
     """按固定属性/文本白名单与节点关系检查单份派生 XML。"""
+    if _detect_unsafe_markup(text) is not None:
+        return False, 0, 0
     try:
         root = ET.fromstring(text)
     except ET.ParseError:
@@ -2004,9 +2106,16 @@ def _check_manifest_structure(manifest: object) -> bool:
     samples = manifest.get("samples")
     if not isinstance(samples, list):
         return False
+    seen_case_ids: set[str] = set()
+    seen_rep_faults: set[str] = set()
     for sample in samples:
         if not isinstance(sample, dict):
             return False
+        case_id = sample.get("case_id")
+        if isinstance(case_id, str):
+            if case_id in seen_case_ids:
+                return False
+            seen_case_ids.add(case_id)
         kind = sample.get("kind")
         if kind == "sanitized_xml":
             if set(sample) != {
@@ -2038,9 +2147,97 @@ def _check_manifest_structure(manifest: object) -> bool:
                 return False
             if sample.get("expected") != "needs_label" or sample.get("fault") not in XML_FAULTS:
                 return False
+            fault = sample["fault"]
+            if fault in seen_rep_faults:
+                return False
+            seen_rep_faults.add(fault)
         else:
             return False
     return True
+
+
+def _check_provenance_structure(
+    provenance: object, batch_id: object, sanitized_ids: set[str]
+) -> bool:
+    """校验本机 provenance 的固定字段与样本映射，不把本地绝对根写入公开产物。"""
+    if not isinstance(provenance, dict):
+        return False
+    if set(provenance) != {"schema", "not_for_model", "batch_id", "source_root", "files", "log"}:
+        return False
+    if (
+        provenance.get("schema") != SCHEMA_PROVENANCE
+        or provenance.get("not_for_model") is not True
+        or provenance.get("batch_id") != batch_id
+        or not isinstance(provenance.get("source_root"), str)
+        or not provenance.get("source_root")
+    ):
+        return False
+    files = provenance.get("files")
+    if not isinstance(files, list):
+        return False
+    seen: set[str] = set()
+    for item in files:
+        if not isinstance(item, dict) or set(item) != {"case_id", "relative", "size", "sha256"}:
+            return False
+        case_id = item.get("case_id")
+        if not isinstance(case_id, str) or case_id in seen or case_id not in sanitized_ids:
+            return False
+        seen.add(case_id)
+        if not isinstance(item.get("relative"), str) or not item.get("relative"):
+            return False
+        if not _is_nonneg_int(item.get("size")):
+            return False
+        if not isinstance(item.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]):
+            return False
+    if seen != sanitized_ids:
+        return False
+    log = provenance.get("log")
+    if not isinstance(log, dict):
+        return False
+    if log.get("present") is False:
+        return set(log) == {"present"}
+    if log.get("present") is not True:
+        return False
+    if set(log) != {"present", "relative", "size", "sha256", "complete", "sha256_scope"}:
+        return False
+    if log.get("relative") != "data/operations.log":
+        return False
+    if log.get("size") is not None and not _is_nonneg_int(log.get("size")):
+        return False
+    if log.get("sha256") is not None and (
+        not isinstance(log.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", log["sha256"])
+    ):
+        return False
+    if not isinstance(log.get("complete"), bool) or log.get("sha256_scope") not in {"full", "read_prefix"}:
+        return False
+    return True
+
+
+def _enumerate_batch_files(directory: Path) -> set[str]:
+    """有界枚举批次内全部文件，拒绝链接/非普通文件并返回 POSIX 相对路径。"""
+    found: set[str] = set()
+    stack: list[tuple[Path, int]] = [(directory, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > MAX_VALIDATE_DEPTH:
+            raise ExtractErrorSize()
+        try:
+            entries = list(os.scandir(current))
+        except OSError as exc:
+            raise ExtractionError("internal_error") from exc
+        for entry in entries:
+            path = Path(entry.path)
+            if _is_link_like(path):
+                raise ExtractionError("symlink_rejected")
+            if entry.is_dir(follow_symlinks=False):
+                stack.append((path, depth + 1))
+            elif entry.is_file(follow_symlinks=False):
+                found.add(path.relative_to(directory).as_posix())
+                if len(found) > MAX_VALIDATE_FILES:
+                    raise ExtractErrorSize()
+            else:
+                raise ExtractionError("symlink_rejected")
+    return found
 
 
 def validate_batch(batch_dir: Path) -> dict[str, object]:
@@ -2058,6 +2255,7 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
         "windows_schema_ok": False,
         "windows_expected_needs_label": False,
         "window_files_match": False,
+        "batch_layout_ok": False,
         "counts_consistent": False,
         "status_consistent": False,
         "safety_all_true": False,
@@ -2065,6 +2263,7 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
         "output_git_ignored": False,
         "output_not_tracked": False,
         "provenance_present": False,
+        "provenance_ok": False,
         "no_forbidden_keys": False,
         "no_absolute_dates": False,
     }
@@ -2074,6 +2273,7 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
         if not directory.is_dir() or _is_link_like(directory):
             raise ExtractionError("symlink_rejected")
         checks["batch_path_safe"] = True
+        actual_files = _enumerate_batch_files(directory)
         read_budget = ReadBudget(MAX_TOTAL_READ_BYTES)
         receipt = json.loads(
             _read_text_bounded(
@@ -2083,6 +2283,11 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
         manifest = json.loads(
             _read_text_bounded(
                 directory / "manifest.json", directory, read_budget, MAX_JSON_BYTES
+            )
+        )
+        provenance = json.loads(
+            _read_text_bounded(
+                directory / "provenance.local.json", directory, read_budget, MAX_JSON_BYTES
             )
         )
         checks["receipt_schema_ok"] = _check_receipt_structure(receipt)
@@ -2113,6 +2318,8 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
         sanitized: list[dict[str, object]] = []
         representatives: list[dict[str, object]] = []
         manifest_ok = isinstance(samples, list)
+        seen_case_ids: set[str] = set()
+        seen_rep_faults: set[str] = set()
         if manifest_ok:
             for sample in samples:
                 if not isinstance(sample, dict):
@@ -2123,6 +2330,10 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
                 if sample.get("expected") != "needs_label" or not isinstance(case_id, str):
                     manifest_ok = False
                     break
+                if case_id in seen_case_ids:
+                    manifest_ok = False
+                    break
+                seen_case_ids.add(case_id)
                 if kind == "sanitized_xml":
                     if not re.fullmatch(r"XML-\d{4}", case_id):
                         manifest_ok = False
@@ -2142,16 +2353,22 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
                     if not re.fullmatch(r"XREP-\d{4}", case_id) or sample.get("fault") not in XML_FAULTS:
                         manifest_ok = False
                         break
+                    fault = sample["fault"]
+                    if fault in seen_rep_faults:
+                        manifest_ok = False
+                        break
+                    seen_rep_faults.add(fault)
                     representatives.append(sample)
                 else:
                     manifest_ok = False
                     break
         checks["manifest_entries_ok"] = manifest_ok
+        checks["provenance_ok"] = _check_provenance_structure(
+            provenance, batch_id, {sample["case_id"] for sample in sanitized}
+        )
         xml_dir = directory / "xml"
         xml_files = sorted(xml_dir.glob("*.xml"))
         rep_files = sorted((xml_dir / "representatives").glob("*.xml"))
-        if len(xml_files) + len(rep_files) > MAX_VALIDATE_FILES:
-            raise ExtractErrorSize()
         expected_xml = {xml_dir / f"{sample['case_id']}.xml" for sample in sanitized}
         expected_rep = {
             xml_dir / "representatives" / f"{sample['fault']}.xml"
@@ -2180,8 +2397,6 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
                 break
         checks["xml_manifest_shape_ok"] = shape_ok
         window_files = sorted((directory / "failure_windows").glob("*.json"))
-        if len(window_files) > MAX_VALIDATE_FILES:
-            raise ExtractErrorSize()
         payloads: list[dict[str, object]] = []
         windows_ok = True
         for path in window_files:
@@ -2203,6 +2418,20 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
         checks["window_files_match"] = {
             f"{payload.get('case_id')}.json" for payload in payloads
         } == {path.name for path in window_files}
+        expected_files = {
+            "manifest.json",
+            "safe_receipt.json",
+            "provenance.local.json",
+        }
+        expected_files |= {f"xml/{sample['case_id']}.xml" for sample in sanitized}
+        expected_files |= {
+            f"xml/representatives/{sample['fault']}.xml" for sample in representatives
+        }
+        if windows_ok:
+            expected_files |= {
+                f"failure_windows/{payload['case_id']}.json" for payload in payloads
+            }
+        checks["batch_layout_ok"] = bool(windows_ok and actual_files == expected_files)
         log_summary = receipt.get("log", {}) if isinstance(receipt, dict) else {}
         xml_summary = receipt.get("xml", {}) if isinstance(receipt, dict) else {}
         discovery = receipt.get("discovery", {}) if isinstance(receipt, dict) else {}
@@ -2214,6 +2443,7 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
             and xml_summary.get("representatives") == len(representatives)
             and log_summary.get("failure_windows") == len(payloads)
             and log_summary.get("needs_label") == len(payloads)
+            and len({payload.get("case_id") for payload in payloads}) == len(payloads)
             and len(samples) == len(sanitized) + len(representatives)
             and all(
                 isinstance(value, int) and not isinstance(value, bool) and value >= 0
@@ -2304,21 +2534,38 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
             )
         )
         status_ok = status in {"ok", "partial", "no_candidates", "error"}
+        has_output = bool(samples) or bool(payloads)
+        safety_broken = isinstance(safety, dict) and (
+            safety.get("source_unchanged") is False
+            or safety.get("output_git_ignored") is False
+            or safety.get("output_not_tracked") is False
+        )
+        truncation_reason = (
+            xml_summary.get("truncated") is True
+            or log_summary.get("truncated") is True
+            or log_summary.get("window_truncated") is True
+            or budget.get("xml_read_exhausted") is True
+            or budget.get("log_read_exhausted") is True
+            or xml_summary.get("uncovered_reason") not in (None, "none")
+            or log_summary.get("uncovered_reason") in {"truncated_before_evidence", "log_read_error"}
+        )
         if status == "error":
-            status_ok = status_ok and receipt.get("error_reason") in ERROR_REASONS
+            error_reason = receipt.get("error_reason")
+            status_ok = (
+                status_ok
+                and error_reason in ERROR_REASONS
+                and bool(safety_broken)
+            )
+            if error_reason == "source_changed" and isinstance(safety, dict):
+                status_ok = status_ok and safety.get("source_unchanged") is False
         else:
             status_ok = status_ok and "error_reason" not in receipt
         if status == "ok":
-            status_ok = (
-                status_ok
-                and xml_summary.get("truncated") is False
-                and log_summary.get("truncated") is False
-                and log_summary.get("window_truncated") is False
-                and budget.get("xml_read_exhausted") is False
-                and budget.get("log_read_exhausted") is False
-            )
+            status_ok = status_ok and has_output and not truncation_reason
+        if status == "partial":
+            status_ok = status_ok and has_output and bool(truncation_reason)
         if status == "no_candidates":
-            status_ok = status_ok and not samples and not payloads
+            status_ok = status_ok and not has_output
         checks["status_consistent"] = bool(status_ok)
         ignored, tracked = _git_ignore_status(directory)
         checks["output_git_ignored"] = ignored

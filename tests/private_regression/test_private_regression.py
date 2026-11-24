@@ -911,6 +911,423 @@ class PrivateRegressionTests(unittest.TestCase):
         result = extract.validate_batch(batch)
         self.assertFalse(result["checks"]["no_forbidden_keys"])
 
+    # ---------- 独立审核 B-1：预算命中必须 truncated/partial ----------
+
+    def test_oversize_budget_marks_partial_and_validates(self) -> None:
+        """单文件超限时 xml.truncated=true、status=partial，且代表计数真实。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "big.xml").write_text(
+            _xml(_node(**{"class": "android.widget.TextView", "text": "SYNTH_BIG"})) * 10,
+            encoding="utf-8",
+        )
+        with mock.patch.object(extract, "MAX_XML_BYTES", 80):
+            receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        self.assertEqual(receipt["status"], "partial")
+        self.assertTrue(receipt["xml"]["truncated"])
+        self.assertEqual(receipt["xml"]["faults"]["oversize"], 1)
+        self.assertEqual(receipt["xml"]["representatives"], 1)
+        self.assertTrue(receipt["safety"]["source_unchanged"])
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        self.assertEqual(extract.validate_batch(batch)["status"], "valid")
+
+    def test_too_deep_budget_marks_partial(self) -> None:
+        """深度超限时回执必须 partial，不能只记代表计数。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        deep = "<hierarchy>" + "<node>" * 5 + "</node>" * 5 + "</hierarchy>"
+        (source / "screenshots" / "deep.xml").write_text(deep, encoding="utf-8")
+        with mock.patch.object(extract, "MAX_XML_DEPTH", 2):
+            receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        self.assertEqual(receipt["status"], "partial")
+        self.assertTrue(receipt["xml"]["truncated"])
+        self.assertEqual(receipt["xml"]["faults"]["too_deep"], 1)
+
+    def test_too_many_nodes_budget_marks_partial(self) -> None:
+        """节点数超限时回执必须 partial，并保留真实故障计数。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        wide = _xml(*[_node(**{"class": "android.view.View"}) for _ in range(5)])
+        (source / "screenshots" / "wide.xml").write_text(wide, encoding="utf-8")
+        with mock.patch.object(extract, "MAX_XML_NODES", 2):
+            receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        self.assertEqual(receipt["status"], "partial")
+        self.assertTrue(receipt["xml"]["truncated"])
+        self.assertEqual(receipt["xml"]["faults"]["too_many_nodes"], 1)
+
+    def test_budget_boundary_negative_stays_ok(self) -> None:
+        """未命中预算的普通批次仍为 ok 且 truncated=false。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        with mock.patch.object(extract, "MAX_XML_BYTES", 4096):
+            receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        self.assertEqual(receipt["status"], "ok")
+        self.assertFalse(receipt["xml"]["truncated"])
+
+    # ---------- 独立审核 B-2：读取期间源变化必须 error/退出 2 ----------
+
+    def test_growth_after_stat_sets_source_changed_error(self) -> None:
+        """stat 后增长不能被降级为 oversize，必须 source_changed 且退出 2。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        target = source / "screenshots" / "grow.xml"
+        target.write_text(_xml(_node(**{"class": "android.view.View"})), encoding="utf-8")
+        original = extract._read_xml
+
+        def growing(path: Path, root: Path, budget: extract.ReadBudget, size: int):
+            """在 stat 与读取之间向目标追加合成字节。"""
+            if path == target:
+                with path.open("ab") as handle:
+                    handle.write(b"<!-- SYNTH_GROWTH -->")
+            return original(path, root, budget, size)
+
+        with mock.patch.object(extract, "_read_xml", side_effect=growing):
+            code, out, _ = _run_main(
+                ["--source", str(source), "--output", str(repo / "data" / "private-regression")]
+            )
+        receipt = json.loads(out)
+        self.assertEqual(code, 2)
+        self.assertEqual(receipt["status"], "error")
+        self.assertEqual(receipt["error_reason"], "source_changed")
+        self.assertFalse(receipt["safety"]["source_unchanged"])
+        self.assertEqual(receipt["xml"]["faults"]["oversize"], 0)
+
+    def test_shrink_during_read_sets_source_changed(self) -> None:
+        """读取期间缩短同样必须按源改变失败，而不是静默跳过。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        target = source / "screenshots" / "shrink.xml"
+        target.write_text(_xml(_node(**{"class": "android.view.View"})), encoding="utf-8")
+        original = extract._read_xml
+
+        def shrinking(path: Path, root: Path, budget: extract.ReadBudget, size: int):
+            """在读取前清空目标，模拟并发截断。"""
+            if path == target:
+                path.write_bytes(b"")
+            return original(path, root, budget, size)
+
+        with mock.patch.object(extract, "_read_xml", side_effect=shrinking):
+            receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        self.assertEqual(receipt["status"], "error")
+        self.assertEqual(receipt["error_reason"], "source_changed")
+        self.assertFalse(receipt["safety"]["source_unchanged"])
+
+    def test_replacement_after_discovery_sets_source_changed(self) -> None:
+        """发现后同大小替换也必须在结束复核中判为源改变。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        target = source / "screenshots" / "replace.xml"
+        target.write_text(_xml(_node(**{"class": "android.view.View"})), encoding="utf-8")
+        original = extract._read_xml
+
+        def replacing(path: Path, root: Path, budget: extract.ReadBudget, size: int):
+            """写入等长但不同内容，并强制不同 mtime。"""
+            if path == target:
+                path.write_text(
+                    _xml(_node(**{"class": "android.view.VieW"})), encoding="utf-8"
+                )
+                stamp = target.stat().st_mtime_ns + 1_000_000_000
+                os.utime(target, ns=(stamp, stamp))
+            return original(path, root, budget, size)
+
+        with mock.patch.object(extract, "_read_xml", side_effect=replacing):
+            receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        self.assertEqual(receipt["status"], "error")
+        self.assertEqual(receipt["error_reason"], "source_changed")
+        self.assertFalse(receipt["safety"]["source_unchanged"])
+
+    def test_discovery_oversize_is_not_source_change(self) -> None:
+        """发现阶段已知超限只算预算截断，不误报源改变。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "big.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})) * 10, encoding="utf-8"
+        )
+        with mock.patch.object(extract, "MAX_XML_BYTES", 50):
+            receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        self.assertEqual(receipt["status"], "partial")
+        self.assertTrue(receipt["safety"]["source_unchanged"])
+
+    # ---------- 独立审核 B-3：manifest 唯一性与 XML 自由文本通道 ----------
+
+    def test_validator_rejects_duplicate_manifest_case_id(self) -> None:
+        """重复 sanitized case_id 必须被拒绝，不能靠集合折叠掩盖文件数不足。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        manifest = _read_json(batch / "manifest.json")
+        manifest["samples"].append(json.loads(json.dumps(manifest["samples"][0])))
+        (batch / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        receipt_payload = _read_json(batch / "safe_receipt.json")
+        receipt_payload["xml"]["selected"] = 2
+        (batch / "safe_receipt.json").write_text(json.dumps(receipt_payload), encoding="utf-8")
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["manifest_schema_ok"])
+        self.assertFalse(result["checks"]["manifest_entries_ok"])
+
+    def test_validator_rejects_duplicate_representative_fault(self) -> None:
+        """同一故障类别出现两个代表条目必须被拒绝。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "bad.xml").write_text(
+            '<!DOCTYPE hierarchy [<!ENTITY x "y">]><hierarchy/>', encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        manifest = _read_json(batch / "manifest.json")
+        duplicate = next(
+            sample for sample in manifest["samples"] if sample["kind"].startswith("derived")
+        )
+        manifest["samples"].append(json.loads(json.dumps(duplicate)))
+        (batch / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["manifest_schema_ok"])
+
+    def test_validator_rejects_xml_comment_channel(self) -> None:
+        """派生 XML 注释/处理指令/CDATA 中的自由文本必须在解析前被拒绝。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        payloads = (
+            '<hierarchy><!-- SYNTH_SECRET_COMMENT --><node class="android.view.View"/></hierarchy>',
+            '<hierarchy><?target SYNTH_SECRET_PI?><node class="android.view.View"/></hierarchy>',
+            '<hierarchy><![CDATA[SYNTH_SECRET_CDATA]]><node class="android.view.View"/></hierarchy>',
+        )
+        for payload in payloads:
+            (batch / "xml" / "XML-0001.xml").write_text(payload, encoding="utf-8")
+            result = extract.validate_batch(batch)
+            self.assertEqual(result["status"], "invalid")
+            self.assertFalse(result["checks"]["xml_safety_ok"])
+
+    def test_validator_rejects_xml_doctype_and_entity(self) -> None:
+        """派生 XML 的 DTD/实体必须在解析前被拒绝，不能靠默认解析器展开。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        (batch / "xml" / "XML-0001.xml").write_text(
+            '<!DOCTYPE hierarchy [<!ENTITY t "TEXT">]>'
+            '<hierarchy><node class="android.view.View" text="&t;"/></hierarchy>',
+            encoding="utf-8",
+        )
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["xml_safety_ok"])
+
+    def test_sanitizer_rejects_comment_and_processing_instruction(self) -> None:
+        """抽取器同样在解析前拒绝注释/处理指令，代表不含原文。"""
+        for payload, fault in (
+            ('<hierarchy><!-- SYNTH_SECRET --><node/></hierarchy>', "unsafe_markup"),
+            ('<?target SYNTH_SECRET?><hierarchy><node/></hierarchy>', "unsafe_markup"),
+        ):
+            outcome = extract.sanitize_xml(
+                payload.encode("utf-8"), extract.AliasBook(_alias_factory())
+            )
+            self.assertEqual(outcome.anomaly, fault)
+            self.assertNotIn("SYNTH_SECRET", outcome.xml_text)
+
+    # ---------- 独立审核 N-1：状态与输出/安全语义自洽 ----------
+
+    def test_validator_rejects_error_with_all_safety_true(self) -> None:
+        """status=error 但安全布尔全 true 的矛盾回执必须被拒绝。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        payload = _read_json(batch / "safe_receipt.json")
+        payload["status"] = "error"
+        payload["error_reason"] = "source_changed"
+        (batch / "safe_receipt.json").write_text(json.dumps(payload), encoding="utf-8")
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["status_consistent"])
+
+    def test_validator_rejects_ok_without_output(self) -> None:
+        """没有任何样本/窗口却声明 status=ok 必须被拒绝。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        payload = _read_json(batch / "safe_receipt.json")
+        payload["status"] = "ok"
+        (batch / "safe_receipt.json").write_text(json.dumps(payload), encoding="utf-8")
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["status_consistent"])
+
+    def test_validator_rejects_partial_without_truncation(self) -> None:
+        """没有截断/未覆盖原因却声明 partial 必须被拒绝。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        payload = _read_json(batch / "safe_receipt.json")
+        payload["status"] = "partial"
+        (batch / "safe_receipt.json").write_text(json.dumps(payload), encoding="utf-8")
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["status_consistent"])
+
+    # ---------- 独立审核 N-2：批次目录边界与总文件预算 ----------
+
+    def test_validator_rejects_extra_nested_and_nonjson_files(self) -> None:
+        """未声明的嵌套 XML/自由文本文件即使不被 glob 读取也必须拒绝。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        (batch / "xml" / "extra").mkdir()
+        (batch / "xml" / "extra" / "raw.xml").write_text("<hierarchy/>", encoding="utf-8")
+        (batch / "failure_windows" / "notes.txt").write_text(
+            "SYNTH_SECRET_FREE_TEXT", encoding="utf-8"
+        )
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["batch_layout_ok"])
+
+    def test_validator_rejects_unknown_top_level_file(self) -> None:
+        """批次根目录出现未声明文件时验证器拒绝。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        (batch / "notes.txt").write_text("SYNTH_SECRET", encoding="utf-8")
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["batch_layout_ok"])
+
+    def test_validator_file_budget_is_total_not_per_category(self) -> None:
+        """文件数上限按批次总量计算，而不是 XML/窗口各自放宽。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        (source / "data" / "operations.log").write_text(
+            json.dumps({"event": "executor_error"}) + "\n", encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        with mock.patch.object(extract, "MAX_VALIDATE_FILES", 4):
+            limited = extract.validate_batch(batch)
+        self.assertEqual(limited["status"], "invalid")
+        with mock.patch.object(extract, "MAX_VALIDATE_FILES", 5):
+            exact = extract.validate_batch(batch)
+        self.assertEqual(exact["status"], "valid", exact)
+
+    def test_validator_rejects_link_inside_batch(self) -> None:
+        """批次内新增 junction 必须在枚举时拒绝，不能跟随到源外。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        outside = self.tmp / "outside-windows"
+        outside.mkdir()
+        self._make_junction(batch / "failure_windows" / "linked", outside)
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["batch_layout_ok"])
+
+    # ---------- 独立审核 N-3/N-4：日志竞态与未知标签预扫 ----------
+
+    def test_log_read_rechecks_boundary_and_link(self) -> None:
+        """发现后把日志替换为 junction 时读取前拒绝，且不打开源外文件。"""
+        source = _make_source(self.tmp)
+        log = source / "data" / "operations.log"
+        log.write_text(json.dumps({"event": "executor_error"}) + "\n", encoding="utf-8")
+        discovery = extract.discover_source(source)
+        self.assertTrue(discovery.log_present)
+        outside = self.tmp / "outside-log"
+        outside.mkdir()
+        (outside / "operations.log").write_text(
+            json.dumps({"event": "executor_error", "note": "SYNTH_SECRET"}) + "\n",
+            encoding="utf-8",
+        )
+        log.unlink()
+        self._make_junction(log, outside)
+        with mock.patch.object(
+            extract, "open", create=True, side_effect=AssertionError("must not open")
+        ):
+            with self.assertRaises(extract.ExtractionError) as raised:
+                extract._read_log_events(
+                    discovery.log_path,
+                    source / "data",
+                    extract.ReadBudget(extract.MAX_LOG_BYTES),
+                )
+        self.assertEqual(raised.exception.reason, "symlink_rejected")
+
+    def test_prescan_blocks_deep_unknown_tags_before_parsing(self) -> None:
+        """未知标签的深树在解析前触发 too_deep，不进入 ElementTree。"""
+        deep = "<hierarchy>" + "<weird>" * 5 + "</weird>" * 5 + "</hierarchy>"
+        with mock.patch.object(extract, "MAX_XML_DEPTH", 2), mock.patch.object(
+            extract.ET, "fromstring", side_effect=AssertionError("must not parse")
+        ):
+            outcome = extract.sanitize_xml(
+                deep.encode("utf-8"), extract.AliasBook(_alias_factory())
+            )
+        self.assertEqual(outcome.anomaly, "too_deep")
+
+    def test_prescan_blocks_wide_unknown_tags_before_parsing(self) -> None:
+        """未知标签的宽树在解析前触发 too_many_nodes，不进入 ElementTree。"""
+        wide = "<hierarchy>" + "<weird/>" * 5 + "</hierarchy>"
+        with mock.patch.object(extract, "MAX_XML_NODES", 2), mock.patch.object(
+            extract.ET, "fromstring", side_effect=AssertionError("must not parse")
+        ):
+            outcome = extract.sanitize_xml(
+                wide.encode("utf-8"), extract.AliasBook(_alias_factory())
+            )
+        self.assertEqual(outcome.anomaly, "too_many_nodes")
+
+    # ---------- 独立审核 N-5/N-6：provenance 与安全布尔语义 ----------
+
+    def test_provenance_is_local_absolute_and_not_for_model(self) -> None:
+        """provenance 只在批次目录保存绝对 source_root，且 not_for_model=true。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        provenance = _read_json(batch / "provenance.local.json")
+        self.assertIs(provenance["not_for_model"], True)
+        self.assertEqual(provenance["source_root"], str(source.resolve()))
+        self.assertNotIn("source_root", receipt)
+        self.assertNotIn(str(source), json.dumps(receipt))
+        self.assertNotIn(str(source), (batch / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(extract.validate_batch(batch)["status"], "valid")
+
 
 if __name__ == "__main__":
     unittest.main()
