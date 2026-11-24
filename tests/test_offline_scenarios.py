@@ -2281,6 +2281,7 @@ class M1DriverBoundaryTests(unittest.TestCase):
             original_read = self.store.read_holdout_registry
 
             def changed():
+                """返回把 intent attempt_id 替换后的登记视图。"""
                 registry = original_read()
                 for batch in registry.get("batches", []):
                     for entry in batch.get("access_rounds", []):

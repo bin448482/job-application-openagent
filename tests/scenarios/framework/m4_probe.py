@@ -1480,11 +1480,13 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         original_link = evals_module.os.link
 
         def filtered_replace(source, destination, *args, **kwargs):
+            """只对 registry 目标失败，其它路径委托原实现。"""
             if Path(destination).resolve() == registry_target:
                 raise OSError("synthetic target failure")
             return original_replace(source, destination, *args, **kwargs)
 
         def filtered_link(source, destination, *args, **kwargs):
+            """只对 registry 目标失败，其它路径委托原实现。"""
             if Path(destination).resolve() == registry_target:
                 raise OSError("synthetic target failure")
             return original_link(source, destination, *args, **kwargs)
