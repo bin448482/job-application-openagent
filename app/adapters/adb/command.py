@@ -28,18 +28,59 @@ class CommandIdentityStore:
         """标记该动作命令族无法完整枚举；恢复时必须保持 unknown。"""
         self._append(action_key, {"unresolved": True})
 
+    def begin_family(
+        self,
+        action_key: str,
+        pid: int,
+        child_scan: Callable[[int], list[int] | None],
+    ) -> None:
+        """开始一段命令族：先写 begin，再记录当前可见后代；失败不写完成标记。"""
+        if type(pid) is not int or pid <= 0:
+            raise ValueError("pid is invalid")
+        self._append(action_key, {"begin": True})
+        complete = self._expand(action_key, [pid], child_scan)
+        if not complete:
+            self.record_unresolved(action_key)
+
+    def finish_family(
+        self,
+        action_key: str,
+        pid: int,
+        child_scan: Callable[[int], list[int] | None],
+    ) -> None:
+        """命令结束后再展开一次，只有完整枚举才写完成标记。"""
+        complete = self._expand(action_key, [pid], child_scan)
+        if complete:
+            self._append(action_key, {"complete": True})
+        else:
+            self.record_unresolved(action_key)
+
     def record_tree(
         self,
         action_key: str,
         pid: int,
         child_scan: Callable[[int], list[int] | None],
     ) -> None:
-        """记录命令 PID 及其当前可见后代；枚举失败写不可证明标记。"""
+        """一次性记录命令 PID、可见后代并在完整时闭合；供单次采集/测试使用。"""
+        self._append(action_key, {"begin": True})
+        complete = self._expand(action_key, [pid], child_scan)
+        self._append(
+            action_key, {"complete": True} if complete else {"unresolved": True}
+        )
+
+    def _expand(
+        self,
+        action_key: str,
+        roots: list[int],
+        child_scan: Callable[[int], list[int] | None],
+    ) -> bool:
+        """从根展开并记录新后代；任何一次枚举失败都返回 False 并标记 unknown。"""
         seen: set[int] = set()
-        pending = [pid]
+        pending = [pid for pid in roots if type(pid) is int and pid > 0]
+        complete = True
         while pending:
             current = pending.pop()
-            if current in seen or current <= 0:
+            if current in seen:
                 continue
             seen.add(current)
             self.record(action_key, current)
@@ -48,14 +89,17 @@ class CommandIdentityStore:
             except Exception:
                 children = None
             if children is None:
+                complete = False
                 self.record_unresolved(action_key)
                 continue
-            pending.extend(children)
+            pending.extend(
+                child for child in children if type(child) is int and child > 0
+            )
+        return complete
 
     def identities(self, action_key: str) -> list[int]:
         """只读返回动作已记录的 PID 去重列表；缺失/损坏返回空。"""
-        pids, _unresolved = self._load(action_key)
-        return pids
+        return self._load(action_key)[0]
 
     def check(
         self,
@@ -63,9 +107,9 @@ class CommandIdentityStore:
         owner_pid: int,
         checker: Callable[[int], str],
     ) -> str:
-        """核对 owner 与已记录命令族；无记录/损坏/不可枚举或任一存活均拒绝。"""
-        pids, unresolved = self._load(action_key)
-        if unresolved or not pids:
+        """核对 owner 与已记录命令族；无记录/损坏/未闭合或任一存活均拒绝。"""
+        pids, unresolved, begins, completes = self._load(action_key)
+        if unresolved or not pids or begins == 0 or begins != completes:
             return "unknown"
         for pid in [owner_pid, *pids]:
             state = checker(pid)
@@ -73,36 +117,42 @@ class CommandIdentityStore:
                 return state
         return "stopped"
 
-    def _load(self, action_key: str) -> tuple[list[int], bool]:
-        """解析账本为 PID 列表与不可证明标志；缺失/坏行按不可证明处理。"""
+    def _load(self, action_key: str) -> tuple[list[int], bool, int, int]:
+        """解析账本为 PID、不可证明标志与 begin/complete 计数；坏行按不可证明。"""
         path = self._path(action_key)
         if not path.is_file():
-            return [], True
+            return [], True, 0, 0
         pids: set[int] = set()
         unresolved = False
+        begins = 0
+        completes = 0
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except OSError:
-            return [], True
+            return [], True, 0, 0
         for line in lines:
             if not line.strip():
                 continue
             try:
                 item = json.loads(line)
             except ValueError:
-                return [], True
+                return [], True, 0, 0
             if not isinstance(item, dict):
-                return [], True
+                return [], True, 0, 0
             if item.get("unresolved") is True:
                 unresolved = True
+            elif item.get("begin") is True:
+                begins += 1
+            elif item.get("complete") is True:
+                completes += 1
             elif "pid" in item:
                 pid = item["pid"]
                 if type(pid) is not int or pid <= 0:
-                    return [], True
+                    return [], True, 0, 0
                 pids.add(pid)
             else:
-                return [], True
-        return sorted(pids), unresolved
+                return [], True, 0, 0
+        return sorted(pids), unresolved, begins, completes
 
     def _append(self, action_key: str, item: dict[str, object]) -> None:
         """追加一条固定形状记录；写入失败向上抛出，不伪造记录。"""
@@ -142,6 +192,7 @@ def run_adb(
     before: Callable[[], None] | None = None,
     binary: bool = False,
     on_pid: Callable[[int], None] | None = None,
+    on_done: Callable[[int], None] | None = None,
 ) -> subprocess.CompletedProcess:
     """在共享门禁复核后执行一次有界命令；可选记录进程身份，失败不重试。"""
     if before is not None:
@@ -199,13 +250,25 @@ def run_adb(
             process.communicate(timeout=1)
         except subprocess.TimeoutExpired:
             process.wait(timeout=1)
+        _finalize(on_done, process.pid)
         raise AdbCommandFailure("adb_timeout") from None
+    _finalize(on_done, process.pid)
     completed = subprocess.CompletedProcess(
         args=args, returncode=process.returncode, stdout=stdout, stderr=stderr
     )
     if completed.returncode != 0:
         raise AdbCommandFailure("adb_nonzero")
     return completed
+
+
+def _finalize(on_done: Callable[[int], None] | None, pid: int) -> None:
+    """命令结束后尝试闭合命令族；闭合失败只让账本保持 unknown，不掩盖结果。"""
+    if on_done is None:
+        return
+    try:
+        on_done(pid)
+    except Exception:
+        return
 
 
 def save_evidence(directory: Path | None, name: str, payload: bytes) -> None:

@@ -126,8 +126,10 @@ class ActionCliTests(unittest.TestCase):
         seed_rel = self.seed if seed is None else seed
         if seed_rel is not False:
             args += ["--seed-fixture", str(seed_rel)]
-        for value in helpers.IDENTITY[1:]:
-            args += ["--identity-label", value]
+        for flag, value in zip(
+            ("--contact", "--company", "--position"), helpers.IDENTITY
+        ):
+            args += [flag, value]
         for value in authorize if authorize is not None else [kind]:
             args += ["--authorize", value]
         if expires_at is not None:

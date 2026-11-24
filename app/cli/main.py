@@ -37,6 +37,7 @@ from app.adapters.sqlite.schema import initialize_database
 from app.domain.actions import (
     ActionAuthorization,
     ActionError,
+    ActionIdentity,
     ReconciliationObservation,
     action_key_for,
     human_card,
@@ -504,14 +505,25 @@ def _build_parser() -> argparse.ArgumentParser:
         "--attachment-name", action=_UniqueStore, metavar="<合成附件名>", default=None
     )
     action_perform.add_argument(
-        "--target-label", action=_UniqueStore, metavar="<合成目标标签>", default=None
+        "--contact",
+        action=_UniqueStore,
+        required=True,
+        metavar="<姓名>",
+        help="完整任务会话身份的姓名；与公司/职位重算会话键并核对。",
     )
     action_perform.add_argument(
-        "--identity-label",
-        action="append",
-        default=[],
-        metavar="<合成身份标签>",
-        help="可重复；姓名/公司/职位等完整目标身份，适配器逐阶段核对。",
+        "--company",
+        action=_UniqueStore,
+        required=True,
+        metavar="<公司>",
+        help="完整任务会话身份的公司；三个分量必须与持久任务一致。",
+    )
+    action_perform.add_argument(
+        "--position",
+        action=_UniqueStore,
+        required=True,
+        metavar="<职位>",
+        help="完整任务会话身份的职位；缺失或与任务冲突在执行前拒绝。",
     )
     action_perform.add_argument(
         "--anchor-label", action=_UniqueStore, metavar="<合成锚点标签>", default="消息"
@@ -1840,11 +1852,12 @@ def _run_action(
                 conversation_key=conversation_key,
                 body_text=body_text,
                 attachment_name=attachment_name,
-                target_label=args.target_label or "合成目标",
+                identity=ActionIdentity(
+                    args.contact, args.company, args.position
+                ),
                 anchor_label=args.anchor_label or "消息",
                 ime_component=args.ime_component,
                 tap_points=_parse_taps(args.tap),
-                identity_labels=tuple(args.identity_label),
                 current_base_hash=str(acceptance["base_hash"]),
                 current_pack_hash=str(acceptance["pack_hash"]),
                 daily_sends=daily_sends,

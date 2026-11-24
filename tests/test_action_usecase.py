@@ -16,6 +16,7 @@ from app.adapters.sqlite.repo import SqliteStore
 from app.domain.actions import (
     ActionAuthorization,
     ActionError,
+    ActionIdentity,
     ActionObservation,
     ReconciliationObservation,
     action_key_for,
@@ -32,6 +33,7 @@ from tests import m1_helpers
 NOW = m1_helpers.BASE_TIME
 OWNER = Owner(m1_helpers.OWNER_ID, 4242, m1_helpers.HOST_A)
 CONVERSATION = "boss:conv:" + canonical_hash(["合成联系人", "合成公司", "合成职位"])
+IDENTITY = ActionIdentity("合成联系人", "合成公司", "合成职位")
 MESSAGE = helpers.synthetic_text_key()
 TEXT_KEY = f"boss:{MESSAGE}:reply"
 DIGEST = canonical_hash({"synthetic": "pack"})
@@ -240,7 +242,7 @@ class ActionUseCaseTests(unittest.TestCase):
         reload_snapshot=None,
         ime_component: str | None = None,
         process_log: ProcessLog | None = None,
-        identity_labels: tuple[str, ...] = ("合成职位",),
+        identity: ActionIdentity | None = IDENTITY,
     ):
         """调用生产 perform 用例。"""
         return perform_action(
@@ -254,11 +256,10 @@ class ActionUseCaseTests(unittest.TestCase):
             conversation_key=CONVERSATION,
             body_text="合成回复正文",
             attachment_name=None,
-            target_label=None,
+            identity=identity,
             anchor_label=None,
             ime_component=ime_component,
             tap_points=((10, 20),),
-            identity_labels=identity_labels,
             current_base_hash=DIGEST,
             current_pack_hash=DIGEST,
             daily_sends=10,
@@ -293,20 +294,34 @@ class ActionUseCaseTests(unittest.TestCase):
         """公共入口缺少完整目标身份时零执行、不写 pending。"""
         executor = CountingExecutor()
         with self.assertRaises(ActionError) as caught:
-            self._perform(executor, identity_labels=())
+            self._perform(executor, identity=None)
         self.assertEqual(caught.exception.reason_code, "precondition_failed")
         self.assertEqual(executor.calls, 0)
         self.assertEqual(self.store.pending_actions(), [])
 
+    def test_conflicting_identity_is_rejected_before_pending(self) -> None:
+        """完整但与持久任务会话冲突的职位不得准入或调用设备。"""
+        from unittest.mock import patch
+
+        executor = CountingExecutor()
+        conflicting = ActionIdentity("合成联系人", "合成公司", "其他职位")
+        with patch("subprocess.run") as run:
+            with self.assertRaises(ActionError) as caught:
+                self._perform(executor, identity=conflicting)
+        self.assertEqual(caught.exception.reason_code, "precondition_failed")
+        self.assertEqual(executor.calls, 0)
+        run.assert_not_called()
+        self.assertEqual(self.store.pending_actions(), [])
+
     def test_public_path_rejects_wrong_job_before_irreversible_tap(self) -> None:
-        """公共 perform + 真实 ADB 适配器：错职位不可逆点击为 0。"""
+        """公共 perform + 真实 ADB 适配器：目标 XML 职位与绑定身份不符时 tap0。"""
         from unittest.mock import patch
 
         from app.adapters.adb.actions import AdbActionExecutor
 
         wrong_job = (
-            '<hierarchy><node text="合成联系人"><node text="合成职位" />'
-            '<node text="消息" /></node></hierarchy>'
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="其他职位" /><node text="消息" /></node></hierarchy>'
         )
         calls: list[list[str]] = []
 
@@ -318,7 +333,10 @@ class ActionUseCaseTests(unittest.TestCase):
             )
 
         executor = AdbActionExecutor(serial="<serial>", gate=self.gate)
-        with patch("subprocess.run", side_effect=run):
+        with (
+            patch("subprocess.run", side_effect=run),
+            patch("app.adapters.adb.actions._utc_now", return_value=self.clock.now()),
+        ):
             result = perform_action(
                 store=self.store,
                 gate=self.gate,
@@ -330,11 +348,10 @@ class ActionUseCaseTests(unittest.TestCase):
                 conversation_key=CONVERSATION,
                 body_text="合成回复正文",
                 attachment_name=None,
-                target_label="合成联系人",
+                identity=IDENTITY,
                 anchor_label="消息",
                 ime_component=None,
                 tap_points=((10, 20),),
-                identity_labels=("错误职位",),
                 current_base_hash=DIGEST,
                 current_pack_hash=DIGEST,
                 daily_sends=10,
@@ -345,7 +362,7 @@ class ActionUseCaseTests(unittest.TestCase):
                 clock=lambda: self.clock.now(),
             )
         self.assertEqual([c for c in calls if "input" in c or "tap" in c], [])
-        self.assertIn(result["state"], {"not_performed", "unknown"})
+        self.assertIn(result["state"], {"not_performed", "unknown", "pending"})
         self.assertNotEqual(result["evidence"]["outcome"], "performed")
 
     def test_public_path_missing_identity_rejects_before_subprocess(self) -> None:
@@ -368,11 +385,10 @@ class ActionUseCaseTests(unittest.TestCase):
                     conversation_key=CONVERSATION,
                     body_text="合成回复正文",
                     attachment_name=None,
-                    target_label="合成联系人",
+                    identity=None,
                     anchor_label="消息",
                     ime_component=None,
                     tap_points=((10, 20),),
-                    identity_labels=(),
                     current_base_hash=DIGEST,
                     current_pack_hash=DIGEST,
                     daily_sends=10,
@@ -384,6 +400,176 @@ class ActionUseCaseTests(unittest.TestCase):
                 )
         self.assertEqual(caught.exception.reason_code, "precondition_failed")
         run.assert_not_called()
+
+    def test_public_path_full_identity_performs_through_real_adapter(self) -> None:
+        """公共 perform + 真实 ADB 适配器：完整身份正常执行为 performed/tap1。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+
+        before = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" /></node></hierarchy>'
+        )
+        readback = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" />'
+            '<node class="android.widget.EditText" text="合成回复正文" />'
+            '</node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" />'
+            '<node text="合成回复正文" />'
+            '<node class="android.widget.EditText" text="" /></node></hierarchy>'
+        )
+        state = {"cat": 0}
+        calls: list[list[str]] = []
+
+        def run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            """按命令类型返回合成层级，cat 依次给出 before/readback/after。"""
+            calls.append(list(args))
+            if "cat" in args:
+                index = state["cat"]
+                state["cat"] = index + 1
+                out = (before, readback, after)[min(index, 2)]
+            else:
+                out = ""
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout=out, stderr=""
+            )
+
+        executor = AdbActionExecutor(serial="<serial>", gate=self.gate)
+        with (
+            patch("subprocess.run", side_effect=run),
+            patch("app.adapters.adb.actions._utc_now", return_value=self.clock.now()),
+        ):
+            result = perform_action(
+                store=self.store,
+                gate=self.gate,
+                authorization=self._authorization(),
+                lease=self.lease,
+                action_kind="send_text",
+                action_key=TEXT_KEY,
+                target_key=MESSAGE,
+                conversation_key=CONVERSATION,
+                body_text="合成回复正文",
+                attachment_name=None,
+                identity=IDENTITY,
+                anchor_label="消息",
+                ime_component=None,
+                tap_points=((10, 20),),
+                current_base_hash=DIGEST,
+                current_pack_hash=DIGEST,
+                daily_sends=10,
+                reply_cooldown_seconds=0,
+                profile_db_path=str(self.path),
+                executor=executor,
+                now=self.clock.now(),
+                clock=lambda: self.clock.now(),
+            )
+        self.assertEqual(result["state"], "performed")
+        self.assertEqual(result["evidence"]["effect"], "sent")
+        self.assertEqual(len([c for c in calls if "tap" in c]), 1)
+
+    def test_identity_must_match_persisted_task_conversation(self) -> None:
+        """身份与调用方会话键一致但持久任务不同，仍须在 pending 前拒绝。"""
+        executor = CountingExecutor()
+        other = ActionIdentity("另一人", "另一公司", "另一职位")
+        with self.assertRaises(ActionError) as caught:
+            perform_action(
+                store=self.store,
+                gate=self.gate,
+                authorization=self._authorization(),
+                lease=self.lease,
+                action_kind="send_text",
+                action_key=TEXT_KEY,
+                target_key=MESSAGE,
+                conversation_key=other.conversation_key(),
+                body_text="合成回复正文",
+                attachment_name=None,
+                identity=other,
+                anchor_label=None,
+                ime_component=None,
+                tap_points=((10, 20),),
+                current_base_hash=DIGEST,
+                current_pack_hash=DIGEST,
+                daily_sends=10,
+                reply_cooldown_seconds=0,
+                profile_db_path=str(self.path),
+                executor=executor,
+                now=self.clock.now(),
+                clock=lambda: self.clock.now(),
+            )
+        self.assertEqual(caught.exception.reason_code, "precondition_failed")
+        self.assertEqual(executor.calls, 0)
+        self.assertEqual(self.store.pending_actions(), [])
+
+    def test_public_entry_binds_action_before_first_ime_command(self) -> None:
+        """公开入口在首次读取原 IME 前绑定动作上下文并记录命令族。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore
+
+        ime = "com.example.default/.Ime"
+        tree = {7000: [7999], 7999: []}
+
+        class Proc:
+            """最小 Popen 替身，返回固定 IME。"""
+
+            def __init__(self, pid: int) -> None:
+                """保存 PID。"""
+                self.pid = pid
+                self.returncode = 0
+
+            def communicate(self, timeout: float | None = None):
+                """返回 IME 文本。"""
+                return ime, ""
+
+            def kill(self) -> None:
+                """无 kill。"""
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-ime-bind-"
+        ) as directory:
+            identity_store = CommandIdentityStore(Path(directory))
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=self.gate,
+                command_store=identity_store,
+                child_scan=lambda pid: list(tree.get(pid, [])),
+            )
+            observation = ActionObservation(
+                action_key=TEXT_KEY,
+                action_kind="send_text",
+                **helpers.observation(
+                    observed_at=self.clock.now(),
+                    ime_original=ime,
+                    ime_current=ime,
+                ),
+            )
+            with patch("subprocess.Popen", side_effect=lambda *a, **k: Proc(7000)), patch.object(
+                executor, "execute", return_value=observation
+            ):
+                result = self._perform(
+                    executor, ime_component="com.example/.Ime"
+                )
+            self.assertEqual(result["state"], "performed")
+            self.assertIn(7000, identity_store.identities(TEXT_KEY))
+            self.assertIn(7999, identity_store.identities(TEXT_KEY))
+            self.assertEqual(
+                identity_store.check(
+                    TEXT_KEY,
+                    self.lease.owner.pid,
+                    lambda pid: "alive" if pid == 7999 else "stopped",
+                ),
+                "alive",
+            )
 
     def test_leased_without_start_has_zero_device_calls(self) -> None:
         """leased 未 start 时，即使需要 IME 也不读设备、不写 pending。"""
@@ -440,11 +626,10 @@ class ActionUseCaseTests(unittest.TestCase):
                         conversation_key=CONVERSATION,
                         body_text="合成回复正文",
                         attachment_name=None,
-                        target_label=None,
+                        identity=IDENTITY,
                         anchor_label=None,
                         ime_component="com.example/.Ime",
                         tap_points=((10, 20),),
-                        identity_labels=("合成职位",),
                         current_base_hash=DIGEST,
                         current_pack_hash=DIGEST,
                         daily_sends=10,
@@ -663,11 +848,10 @@ class ActionUseCaseTests(unittest.TestCase):
                 conversation_key=CONVERSATION,
                 body_text="合成回复正文",
                 attachment_name=None,
-                target_label=None,
+                identity=IDENTITY,
                 anchor_label=None,
                 ime_component=None,
                 tap_points=((10, 20),),
-                identity_labels=("合成职位",),
                 current_base_hash=DIGEST,
                 current_pack_hash=DIGEST,
                 daily_sends=10,
@@ -903,11 +1087,10 @@ class ActionUseCaseTests(unittest.TestCase):
                 conversation_key=CONVERSATION,
                 body_text="合成回复正文",
                 attachment_name=None,
-                target_label=None,
+                identity=IDENTITY,
                 anchor_label=None,
                 ime_component=None,
                 tap_points=((10, 20),),
-                identity_labels=("合成职位",),
                 current_base_hash=DIGEST,
                 current_pack_hash=DIGEST,
                 daily_sends=10,

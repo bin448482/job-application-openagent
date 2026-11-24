@@ -10,6 +10,7 @@ from typing import Callable
 from app.domain.actions import (
     ActionAuthorization,
     ActionError,
+    ActionIdentity,
     ActionObservation,
     ActionOutcome,
     ReconciliationObservation,
@@ -165,11 +166,10 @@ def perform_action(
     conversation_key: str,
     body_text: str | None,
     attachment_name: str | None,
-    target_label: str | None,
+    identity: ActionIdentity,
     anchor_label: str | None,
     ime_component: str | None,
     tap_points: tuple[tuple[int, int], ...],
-    identity_labels: tuple[str, ...] = (),
     current_base_hash: str,
     current_pack_hash: str,
     daily_sends: int,
@@ -241,8 +241,15 @@ def perform_action(
         if not is_action_key(action_kind, action_key):
             raise ActionError("invalid_action")
         validate_action_target(action_kind, action_key, target_key)
-        if not isinstance(identity_labels, tuple) or not identity_labels or any(
-            not isinstance(label, str) or not label for label in identity_labels
+        if (
+            not isinstance(identity, ActionIdentity)
+            or identity.conversation_key() != conversation_key
+        ):
+            raise ActionError("precondition_failed")
+        persisted_conversation = store.task_conversation(lease, now=now)
+        if (
+            persisted_conversation is None
+            or persisted_conversation != conversation_key
         ):
             raise ActionError("precondition_failed")
         if action_kind != "send_text" and target_key != conversation_key:
@@ -266,13 +273,13 @@ def perform_action(
         conversation_key=conversation_key,
         body_text=body_text,
         attachment_name=attachment_name,
-        target_label=target_label,
+        target_label=identity.contact,
         anchor_label=anchor_label,
         ime_component=ime_component,
         ime_original=None,
         irreversible_tap_index=len(tap_points) - 1 if tap_points else 0,
         tap_points=tap_points,
-        identity_labels=identity_labels,
+        identity_labels=identity.labels(),
     )
 
     _log(process_log, "action_admit", "started")
@@ -303,6 +310,9 @@ def perform_action(
     _log(process_log, "action_admit", "ok")
 
     _log(process_log, "action_execute", "started")
+    bind = getattr(executor, "bind_action", None)
+    if callable(bind):
+        bind(action_key)
     ime_original: str | None = None
     if ime_component is not None:
         try:

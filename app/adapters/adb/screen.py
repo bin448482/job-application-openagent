@@ -6,6 +6,7 @@ import subprocess
 import time
 import uuid
 from pathlib import Path
+from typing import Callable
 
 from app.adapters.adb.command import (
     ADB_TIMEOUT_SECONDS,
@@ -47,6 +48,8 @@ class AdbScreenReader:
         *,
         before_command: object | None = None,
         prefix: str = "hierarchy",
+        on_pid: Callable[[int], None] | None = None,
+        on_done: Callable[[int], None] | None = None,
     ) -> HierarchyCapture:
         """依次执行 dump 与 cat，保存 XML 证据并返回内存文本。"""
         self._require_gate()
@@ -56,12 +59,16 @@ class AdbScreenReader:
             stage="adb_hierarchy",
             command="adb_hierarchy_dump",
             before_command=before_command,
+            on_pid=on_pid,
+            on_done=on_done,
         )
         xml_text = self._run_text(
             [self._adb, "-s", serial, "shell", "cat", DEVICE_TMP_XML],
             stage="adb_hierarchy",
             command="adb_hierarchy_cat",
             before_command=before_command,
+            on_pid=on_pid,
+            on_done=on_done,
         )
         name = f"{prefix}-{uuid.uuid4()}.xml"
         payload = xml_text.encode("utf-8")
@@ -97,6 +104,8 @@ class AdbScreenReader:
         stage: str,
         command: str,
         before_command: object | None = None,
+        on_pid: Callable[[int], None] | None = None,
+        on_done: Callable[[int], None] | None = None,
     ) -> str:
         """执行一条不重试的文本 ADB 命令，失败统一为断连。"""
         completed = self._run(
@@ -105,6 +114,8 @@ class AdbScreenReader:
             command=command,
             binary=False,
             before_command=before_command,
+            on_pid=on_pid,
+            on_done=on_done,
         )
         return completed.stdout
 
@@ -121,6 +132,8 @@ class AdbScreenReader:
         command: str,
         binary: bool,
         before_command: object | None = None,
+        on_pid: Callable[[int], None] | None = None,
+        on_done: Callable[[int], None] | None = None,
     ) -> subprocess.CompletedProcess:
         """复用共享 ADB 边界；每条命令前复核门禁，单次 attempt 不重试。"""
         self._require_gate()
@@ -134,6 +147,8 @@ class AdbScreenReader:
                 timeout=ADB_TIMEOUT_SECONDS,
                 binary=binary,
                 before=before_command,  # type: ignore[arg-type]
+                on_pid=on_pid,
+                on_done=on_done,
             )
         except AdbCommandFailure as error:
             self._record_failure(stage, command, started, error.category)

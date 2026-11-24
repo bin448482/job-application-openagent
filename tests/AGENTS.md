@@ -27,8 +27,8 @@
 - `test_m4c_closed_loop.py`：M4c 闭环：真实活动 restore、目录路径不发布、三值一致、同 profile 事实/任务审计不重置、旧凭证摘要变化拒绝、唯一仓储快照重核、实际受控合成桥 CLI eval→snapshot→restore→validate/preview→eval 串行。
 - `test_action_domain.py`：M5 动作键精确规则、目标/动作绑定、观察→三态证据、前后快照/目标已存在/简历请求与交付/联系方式/删除锚点/列表完整/保护项、坏观察、现场与 IME 未收敛 pause、授权种类/摘要/期限/确认、人工卡。
 - `test_action_store.py`：M5 唯一仓储边界：pending 先落库、动作键-目标错配、leased 未 start 零准入、三态与设备处置、执行后失效冻结、合法真实续租后旧捕获 Lease 完成、事件/任务/设备故障回滚、过期租约、崩溃 pending、旧证据时间、UTC 跨日/额度/冷却/调低/重启、confirm/abandon/取消后受控 confirm、IME restored 账本、异 host/父子命令检查器、命令族账本缺失/损坏/枚举失败 unknown 与 v1→v2 备份迁移。
-- `test_action_usecase.py`：M5 生产用例：默认动态 clock、实际 store/profile/gate 绑定、验收四字段缺失/漂移、公共入口缺完整身份零子进程、公共+真实 ADB 适配器错职位不可逆 tap0、leased 未 start 零设备调用、执行中/提交前包/共享身份漂移冻结 unknown、unknown 单次调用且不重放、performed 不改事实、同动作键新任务拒绝、完整七字段证据、坏观察 unknown、持久 IME 绑定/错误原值不收敛/正常恢复、原命令停止恢复门禁、成对 safe 日志与单终态。
-- `test_action_executor.py`：M5 ADB 原语参数数组/`shell=False`/5 秒/不重试/每命令门禁复核、唯一姓名+完整身份/唯一目标 editor/显式非滚动目标列表/可点 enabled 未处理槽位/目标子树差分、联系方式类型专属效果、dialog 同类型槽位状态重核、删除 dialog/after 独立覆盖、单 tap 拒绝、既有/无关提示不算新变化、点击前后失败事实、IME 前置后切换/早退恢复/读回、固定命令标签、复用 screen 证据+动作索引、真实 Popen 回调记录命令族/身份写失败与超时有界回收、坏 XML 恢复拒绝与合成执行器严格观察。
+- `test_action_usecase.py`：M5 生产用例：默认动态 clock、实际 store/profile/gate 绑定、验收四字段缺失/漂移、结构化身份缺失/冲突在 pending 前拒绝、公共+真实 ADB 适配器目标职位不符不可逆 tap0、首次 IME 前绑定动作上下文并记录命令族、leased 未 start 零设备调用、执行中/提交前包/共享身份漂移冻结 unknown、unknown 单次调用且不重放、performed 不改事实、同动作键新任务拒绝、完整七字段证据、坏观察 unknown、持久 IME 绑定/错误原值不收敛/正常恢复、原命令停止恢复门禁、成对 safe 日志与单终态。
+- `test_action_executor.py`：M5 ADB 原语参数数组/`shell=False`/5 秒/不重试/每命令门禁复核、唯一姓名+完整身份/唯一目标 editor/真正列表容器覆盖/可点 enabled 且未处理的唯一类型槽位/目标子树差分、嵌套槽位单一定位与另一类型已处理不污染、dialog 同类型槽位状态重核、删除 dialog/after 独立覆盖与行/锚点 false 拒绝、单 tap 拒绝、既有/无关提示不算新变化、点击前后失败事实、IME 前置后切换/早退恢复/读回、固定命令标签、复用 screen 证据+动作索引、真实 Popen 回调记录命令族与结束展开/身份写失败与超时有界回收、坏 XML 恢复拒绝与合成执行器严格观察。
 - `test_action_cli.py`：M5 实际 CLI 组合根：五动作正例、read_only/未确认/未授权/包漂移拒绝、缺身份拒绝、not_performed 与未收敛、unknown 不重放、资格正例/同动作历史/冷却负例、confirm/abandon 对账、设备现场对账坏 XML 拒绝后再正例、人工卡与 restore unknown。
 - `action_helpers.py`：M5 测试共用的临时项目根、策略包/验收凭证、profile 匹配 seed、动作/对账脚本、合成观察与 CLI 运行辅助。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。

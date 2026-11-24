@@ -67,6 +67,12 @@ class AdbActionExecutor:
             gate=gate,
         )
 
+    def bind_action(self, action_key: str) -> None:
+        """在首次设备命令前绑定动作上下文，确保命令身份账本归属同一动作。"""
+        if not isinstance(action_key, str) or not action_key:
+            raise ValueError("action key is invalid")
+        self._current_action_key = action_key
+
     def read_current_ime(
         self, *, before_command: Callable[[], None] | None = None
     ) -> str:
@@ -647,6 +653,8 @@ class AdbActionExecutor:
                 self._serial,
                 before_command=before_command,
                 prefix=prefix,
+                on_pid=self._command_hooks()[0],
+                on_done=self._command_hooks()[1],
             )
         except ScreenReadError as error:
             reason = (
@@ -690,11 +698,8 @@ class AdbActionExecutor:
                 gate=self._gate,
                 timeout=self._timeout,
                 before=before_command,
-                on_pid=(
-                    self._record_command_pid
-                    if self._command_store is not None
-                    else None
-                ),
+                on_pid=self._command_hooks()[0],
+                on_done=self._command_hooks()[1],
             )
         except AdbCommandFailure as error:
             self._record_failure(command, started, error.category)
@@ -714,11 +719,27 @@ class AdbActionExecutor:
         self._record(command, "ok", elapsed_ms(started))
         return completed.stdout
 
+    def _command_hooks(
+        self,
+    ) -> tuple[Callable[[int], None] | None, Callable[[int], None] | None]:
+        """返回本次命令的开始/结束身份回调；无账本或未绑定动作时不记录。"""
+        if self._command_store is None or self._current_action_key is None:
+            return None, None
+        return self._record_command_pid, self._record_command_end
+
     def _record_command_pid(self, pid: int) -> None:
         """把本动作命令 PID 写入本机命令身份账本；不写命令参数。"""
         if self._command_store is None or self._current_action_key is None:
             return
-        self._command_store.record_tree(
+        self._command_store.begin_family(
+            self._current_action_key, pid, self._child_scan
+        )
+
+    def _record_command_end(self, pid: int) -> None:
+        """命令结束后再展开命令族；完整才闭合，否则保留 unknown。"""
+        if self._command_store is None or self._current_action_key is None:
+            return
+        self._command_store.finish_family(
             self._current_action_key, pid, self._child_scan
         )
 
@@ -854,28 +875,129 @@ def _target_scope_texts(
     ]
 
 
+LIST_CONTAINER_TOKENS = (
+    "RecyclerView",
+    "ListView",
+    "GridView",
+    "ScrollView",
+    "ViewPager",
+)
+
+
 def _list_complete(xml_text: str, label: str) -> bool:
-    """要求目标/锚点祖先链存在显式非滚动容器且没有可滚动视口。"""
+    """要求目标/锚点位于真正的列表容器内，且该容器显式非滚动并完整覆盖。
+
+    目标行/锚点按钮自身的 scrollable 或其它无关节点 false 不构成列表覆盖。
+    """
     try:
         root = ET.fromstring(xml_text)
     except (ET.ParseError, ValueError):
         return False
-    stack: list[tuple[ET.Element, list[ET.Element]]] = [(root, [])]
-    while stack:
-        node, ancestors = stack.pop()
+    parents: dict[ET.Element, ET.Element] = {}
+    for parent in root.iter("node"):
+        for child in parent:
+            if child.tag == "node":
+                parents[child] = parent
+    found: ET.Element | None = None
+    for node in root.iter("node"):
         if node.get("text") == label:
-            chain = [*ancestors, node]
-            scrollables = [
-                item.get("scrollable")
-                for item in chain
-                if item.get("scrollable") is not None
-            ]
-            return bool(scrollables) and all(
-                value == "false" for value in scrollables
-            )
-        if len(node):
-            stack.extend((child, [*ancestors, node]) for child in node)
-    return False
+            found = node
+            break
+    if found is None:
+        return False
+    containers: list[ET.Element] = []
+    current = parents.get(found)
+    while current is not None:
+        cls = current.get("class") or ""
+        if current.get("scrollable") is not None and any(
+            token in cls for token in LIST_CONTAINER_TOKENS
+        ):
+            containers.append(current)
+        current = parents.get(current)
+    if not containers:
+        return False
+    if any(container.get("scrollable") != "false" for container in containers):
+        return False
+    inner = containers[0]
+    if not _bounds_contain(inner.get("bounds"), found.get("bounds")):
+        return False
+    return True
+
+
+def _bounds_contain(outer: str | None, inner: str | None) -> bool:
+    """比较 `[x1,y1][x2,y2]`；缺失或不可解析时不额外拒绝。"""
+    outer_box = _parse_bounds(outer)
+    inner_box = _parse_bounds(inner)
+    if outer_box is None or inner_box is None:
+        return True
+    return (
+        outer_box[0] <= inner_box[0]
+        and outer_box[1] <= inner_box[1]
+        and outer_box[2] >= inner_box[2]
+        and outer_box[3] >= inner_box[3]
+    )
+
+
+def _parse_bounds(value: str | None) -> tuple[int, int, int, int] | None:
+    """解析 Android bounds 字符串为四元组；坏格式返回 None。"""
+    if not isinstance(value, str):
+        return None
+    match = re.fullmatch(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", value)
+    if match is None:
+        return None
+    return tuple(int(part) for part in match.groups())  # type: ignore[return-value]
+
+
+def _slot_node(
+    xml_text: str,
+    target: str,
+    action_kind: str,
+    identity_labels: tuple[str, ...] = (),
+) -> ET.Element | None:
+    """返回本动作类型唯一槽位根：由可点按钮上溯到仅含本类型的最外层容器。"""
+    node = _target_node(xml_text, target, identity_labels)
+    if node is None or action_kind not in {"change_wechat", "change_phone"}:
+        return None
+    marker = "微信" if action_kind == "change_wechat" else "电话"
+    other = "电话" if action_kind == "change_wechat" else "微信"
+    parents: dict[ET.Element, ET.Element] = {}
+    for parent in node.iter("node"):
+        for child in parent:
+            if child.tag == "node":
+                parents[child] = parent
+
+    def texts(item: ET.Element) -> list[str]:
+        """返回节点自身与后代文本。"""
+        values = [
+            child.get("text") or ""
+            for child in item.iter("node")
+            if child.get("text")
+        ]
+        if item.get("text"):
+            values.append(item.get("text") or "")
+        return values
+
+    roots: list[ET.Element] = []
+    for child in node.iter("node"):
+        if child.get("clickable") != "true" or child.get("enabled") != "true":
+            continue
+        if not any(marker in text for text in texts(child)):
+            continue
+        top = child
+        current = parents.get(child)
+        while current is not None and current is not node:
+            if any(other in text for text in texts(current)):
+                break
+            if not any(marker in text for text in texts(current)):
+                break
+            top = current
+            current = parents.get(current)
+        roots.append(top)
+    unique: list[ET.Element] = []
+    for item in roots:
+        if not any(item is kept for kept in unique):
+            unique.append(item)
+    return unique[0] if len(unique) == 1 else None
 
 
 def _slot_scope_texts(
@@ -884,23 +1006,18 @@ def _slot_scope_texts(
     action_kind: str,
     identity_labels: tuple[str, ...] = (),
 ) -> list[str]:
-    """返回目标子树中对应类型联系方式槽位节点内的文本。"""
-    node = _target_node(xml_text, target, identity_labels)
-    if node is None or action_kind not in {"change_wechat", "change_phone"}:
+    """返回本动作类型唯一槽位子树内的文本。"""
+    node = _slot_node(xml_text, target, action_kind, identity_labels)
+    if node is None:
         return []
-    marker = "微信" if action_kind == "change_wechat" else "电话"
-    matches = [
-        child
-        for child in node.iter("node")
-        if marker in (child.get("text") or "")
-    ]
-    if len(matches) != 1:
-        return []
-    return [
+    texts = [
         child.get("text") or ""
-        for child in matches[0].iter("node")
+        for child in node.iter("node")
         if child.get("text")
-    ] or [matches[0].get("text") or ""]
+    ]
+    if node.get("text"):
+        texts.append(node.get("text") or "")
+    return texts
 
 
 def _slot_available(
@@ -909,14 +1026,13 @@ def _slot_available(
     action_kind: str,
     identity_labels: tuple[str, ...] = (),
 ) -> bool:
-    """要求目标子树存在对应类型、enabled 且可点击的未处理槽位。"""
-    node = _target_node(xml_text, target, identity_labels)
-    if node is None:
-        return False
-    marker = "微信" if action_kind == "change_wechat" else "电话"
+    """要求本动作类型唯一槽位存在 enabled 可点按钮且该槽位尚未处理。"""
     if action_kind not in {"change_wechat", "change_phone"}:
         return True
-    texts = _target_scope_texts(xml_text, target, identity_labels)
+    node = _slot_node(xml_text, target, action_kind, identity_labels)
+    if node is None:
+        return False
+    texts = _slot_scope_texts(xml_text, target, action_kind, identity_labels)
     if any(
         item in text
         for text in texts
@@ -924,14 +1040,12 @@ def _slot_available(
     ):
         return False
     for child in node.iter("node"):
-        text = child.get("text") or ""
         if (
-            marker in text
-            and child.get("clickable") == "true"
+            child.get("clickable") == "true"
             and child.get("enabled") == "true"
         ):
             return True
-    return False
+    return node.get("clickable") == "true" and node.get("enabled") == "true"
 
 
 def _editor_texts_in_target(

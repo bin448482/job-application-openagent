@@ -1004,6 +1004,71 @@ class CommandStopCheckerTests(unittest.TestCase):
                 "unknown",
             )
 
+    def test_command_identity_store_partial_write_is_unknown(self) -> None:
+        """首行 begin 成功后后代行写失败，账本未闭合仍必须 unknown。"""
+        from app.adapters.adb.command import CommandIdentityStore
+
+        with tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-cmd4-") as directory:
+            from unittest.mock import patch
+
+            store = CommandIdentityStore(Path(directory))
+            original = store._append
+            calls = {"count": 0}
+
+            def fail_second(action_key: str, item: dict[str, object]) -> None:
+                """让第三行（后代 PID）实际写失败。"""
+                calls["count"] += 1
+                if calls["count"] == 3:
+                    raise OSError("synthetic")
+                original(action_key, item)
+
+            with patch.object(store, "_append", side_effect=fail_second):
+                with self.assertRaises(OSError):
+                    store.begin_family(
+                        "boss:conv:test:resume",
+                        4100,
+                        lambda pid: [4200] if pid == 4100 else [],
+                    )
+            self.assertEqual(
+                store.check(
+                    "boss:conv:test:resume", 4100, lambda pid: "stopped"
+                ),
+                "unknown",
+            )
+
+    def test_command_identity_store_late_descendant_is_rejected(self) -> None:
+        """启动后晚生的后代在结束扫描时记录，仍存活则拒绝 stopped。"""
+        from app.adapters.adb.command import CommandIdentityStore
+
+        with tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-cmd5-") as directory:
+            store = CommandIdentityStore(Path(directory))
+            store.begin_family("boss:conv:test:resume", 4100, lambda pid: [])
+            tree = {4100: [4200], 4200: []}
+            store.finish_family(
+                "boss:conv:test:resume",
+                4100,
+                lambda pid: list(tree.get(pid, [])),
+            )
+            self.assertIn(4200, store.identities("boss:conv:test:resume"))
+            states = {4100: "stopped", 4200: "alive"}
+            self.assertEqual(
+                store.check(
+                    "boss:conv:test:resume",
+                    4100,
+                    lambda pid: states.get(pid, "unknown"),
+                ),
+                "alive",
+            )
+            states[4200] = "stopped"
+            self.assertEqual(
+                store.check(
+                    "boss:conv:test:resume",
+                    4100,
+                    lambda pid: states.get(pid, "unknown"),
+                ),
+                "stopped",
+            )
+
 
 class ProfileMigrationTests(unittest.TestCase):
     """v1 八表 profile 库可备份迁移；普通 M1 库与未知对象不宽放。"""

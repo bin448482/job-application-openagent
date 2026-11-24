@@ -10,6 +10,7 @@ from app.domain.models import (
     EVIDENCE_NOT_PERFORMED_REASONS,
     EVIDENCE_UNKNOWN_REASONS,
     Evidence,
+    conversation_key_for,
     is_conversation_key,
     is_hash,
     is_nonempty_text,
@@ -76,6 +77,35 @@ ACTION_REASON_CODES = frozenset(
         "policy_changed",
     }
 )
+
+
+@dataclass(frozen=True)
+class ActionIdentity:
+    """表示与持久任务会话绑定的完整姓名/公司/职位身份，不接受任意标签袋。"""
+
+    contact: str
+    company: str
+    position: str
+
+    def __post_init__(self) -> None:
+        """要求三个分量都是非空单行文本；缺失或空串直接拒绝。"""
+        for name, value in (
+            ("contact", self.contact),
+            ("company", self.company),
+            ("position", self.position),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} is invalid")
+            if "\n" in value or "\r" in value:
+                raise ValueError(f"{name} is invalid")
+
+    def conversation_key(self) -> str:
+        """返回由完整三元组重算的会话键，供与持久任务身份逐字核对。"""
+        return conversation_key_for(APP, self.contact, self.company, self.position)
+
+    def labels(self) -> tuple[str, str]:
+        """返回适配器定位所需的公司/职位标签；姓名由 contact 承担。"""
+        return (self.company, self.position)
 
 
 class ActionError(Exception):

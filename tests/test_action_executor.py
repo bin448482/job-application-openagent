@@ -426,6 +426,84 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             derive_action_outcome(observation).evidence.outcome, "performed"
         )
 
+    def test_nested_slot_container_and_button_count_as_one_slot(self) -> None:
+        """标签容器→交换按钮→状态视为同一槽位，不因两层含类型词而拒绝。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        before = (
+            '<hierarchy><node text="合成联系人">'
+            '<node><node text="微信" /><node text="交换微信" clickable="true"'
+            ' enabled="true" /></node>'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node text="合成联系人">'
+            '<node><node text="微信" /><node text="交换微信" clickable="true"'
+            ' enabled="true" /><node text="请求中" /></node>'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        wechat = ActionPlan(
+            action_key=f"{CONVERSATION}:wechat",
+            action_kind="change_wechat",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=1,
+            tap_points=((10, 20), (30, 40)),
+        )
+        runner, calls = self._custom_run((before, before, after))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(wechat)
+        self.assertEqual(len([c for c in calls if "tap" in c]), 2)
+        outcome = derive_action_outcome(observation)
+        self.assertEqual(outcome.evidence.outcome, "performed")
+        self.assertEqual(outcome.evidence.effect, "request_sent")
+
+    def test_other_type_handled_slot_does_not_block_current_type(self) -> None:
+        """另一类型已处理不污染本类型未处理槽位的准入与效果。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        before = (
+            '<hierarchy><node text="合成联系人">'
+            '<node><node text="微信" /><node text="已处理" /></node>'
+            '<node><node text="电话" /><node text="交换电话" clickable="true"'
+            ' enabled="true" /></node>'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node text="合成联系人">'
+            '<node><node text="微信" /><node text="已处理" /></node>'
+            '<node><node text="电话" /><node text="交换电话" clickable="true"'
+            ' enabled="true" /><node text="请求中" /></node>'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        phone = ActionPlan(
+            action_key=f"{CONVERSATION}:phone",
+            action_kind="change_phone",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=1,
+            tap_points=((10, 20), (30, 40)),
+        )
+        runner, calls = self._custom_run((before, before, after))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(phone)
+        self.assertEqual(len([c for c in calls if "tap" in c]), 2)
+        outcome = derive_action_outcome(observation)
+        self.assertEqual(outcome.evidence.outcome, "performed")
+        self.assertEqual(outcome.evidence.effect, "request_sent")
+
     def test_dialog_disabled_slot_is_not_confirmed(self) -> None:
         """打开槽位后 dialog 同类型槽位变 disabled 时不再确认点击。"""
         gate = FakeGate()
@@ -463,16 +541,67 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             derive_action_outcome(observation).evidence.outcome, "not_performed"
         )
 
+    def test_delete_row_or_anchor_false_is_not_list_coverage(self) -> None:
+        """行/锚点自身 false 或外层列表无覆盖事实都不构成完整列表。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        row_false = (
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' bounds="[0,0][1000,1800]">'
+            '<node class="android.widget.LinearLayout" scrollable="false">'
+            '<node text="合成联系人"><node text="消息" /></node></node>'
+            '</node></hierarchy>'
+        )
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+        runner, calls = self._custom_run((row_false, row_false, row_false))
+        with patch("subprocess.run", side_effect=runner):
+            executor.execute(delete)
+        self.assertEqual([c for c in calls if "tap" in c], [])
+
+        complete = (
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="false" bounds="[0,0][1000,1800]">'
+            '<node text="合成联系人"><node text="消息" /></node></node></hierarchy>'
+        )
+        anchor_false = (
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' bounds="[0,0][1000,1800]">'
+            '<node class="android.widget.Button" scrollable="false" text="消息" />'
+            '</node></hierarchy>'
+        )
+        runner, calls = self._custom_run((complete, complete, anchor_false))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(delete)
+        self.assertEqual(len([c for c in calls if "tap" in c]), 3)
+        self.assertNotEqual(
+            derive_action_outcome(observation).evidence.outcome, "performed"
+        )
+
     def test_delete_incomplete_after_viewport_is_not_performed(self) -> None:
         """删除后只看到可滚动不完整视口时不得判为已删除。"""
         gate = FakeGate()
         executor = AdbActionExecutor(serial="<serial>", gate=gate)
         before = (
-            '<hierarchy><node scrollable="false">'
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="false" bounds="[0,0][1000,1800]">'
             '<node text="合成联系人"><node text="消息" /></node></node></hierarchy>'
         )
         after = (
-            '<hierarchy><node scrollable="true">'
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="true" bounds="[0,0][1000,1800]">'
             '<node text="消息" /></node></hierarchy>'
         )
         delete = ActionPlan(
@@ -502,11 +631,13 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         gate = FakeGate()
         executor = AdbActionExecutor(serial="<serial>", gate=gate)
         before = (
-            '<hierarchy><node scrollable="false">'
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="false" bounds="[0,0][1000,1800]">'
             '<node text="合成联系人"><node text="消息" /></node></node></hierarchy>'
         )
         after = (
-            '<hierarchy><node scrollable="false">'
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="false" bounds="[0,0][1000,1800]">'
             '<node text="消息" /></node></hierarchy>'
         )
         delete = ActionPlan(
@@ -536,7 +667,8 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         gate = FakeGate()
         executor = AdbActionExecutor(serial="<serial>", gate=gate)
         scrollable = (
-            '<hierarchy><node scrollable="true"><node text="合成联系人">'
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="true" bounds="[0,0][1000,1800]"><node text="合成联系人">'
             '<node text="消息" /></node></node></hierarchy>'
         )
         delete = ActionPlan(
