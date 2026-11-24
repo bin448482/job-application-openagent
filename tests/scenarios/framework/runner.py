@@ -285,6 +285,29 @@ def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path
     return selected
 
 
+def _normalize_lf_inputs(root: Path, values: object) -> None:
+    """把显式声明的合成 UTF-8 输入统一为 LF，消除检出换行差异。"""
+    if values is None:
+        return
+    if not isinstance(values, list) or any(not isinstance(item, str) for item in values):
+        raise IsolationError("lf_inputs 必须是相对路径数组")
+    root_resolved = root.resolve()
+    for relative in values:
+        candidate = Path(relative)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise IsolationError("lf_inputs 不得绝对或包含 ..")
+        path = (root / candidate).resolve()
+        if not _within(path, root_resolved) or not path.is_file():
+            raise IsolationError("lf_inputs 文件越界或不存在")
+        if _is_link_like(path):
+            raise IsolationError("lf_inputs 不得是链接")
+        try:
+            text = path.read_bytes().decode("utf-8")
+        except (OSError, UnicodeError):
+            raise IsolationError("lf_inputs 不是可读 UTF-8 文件") from None
+        path.write_bytes(text.replace("\r\n", "\n").encode("utf-8"))
+
+
 def _prepare_isolation(
     target: Path,
     run_id: str,
@@ -435,6 +458,7 @@ def _prepare_isolation(
             target_file = destination / source.relative_to(source_root)
             target_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target_file)
+    _normalize_lf_inputs(root, variant.get("lf_inputs"))
     junctions = variant.get("junctions") or {}
     if not isinstance(junctions, dict):
         raise IsolationError("junctions 必须是对象")

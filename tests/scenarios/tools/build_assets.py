@@ -1261,7 +1261,10 @@ def build_support_fixtures() -> None:
         return hashlib.sha256(m4_canonical(value).encode("utf-8")).hexdigest()
 
     base_files = {
-        name: (PROJECT_ROOT / "prompts" / "base" / name).read_bytes().decode("utf-8")
+        name: (PROJECT_ROOT / "prompts" / "base" / name)
+        .read_bytes()
+        .decode("utf-8")
+        .replace("\r\n", "\n")
         for name in ("intent-and-reply.md", "job-evaluate.md")
     }
     base_hash_expected = m4_sha(
@@ -1270,6 +1273,8 @@ def build_support_fixtures() -> None:
             for name in ("intent-and-reply.md", "job-evaluate.md")
         }
     )
+    for name, text in base_files.items():
+        write_text(f"fixtures/m4/policy/base/{name}", text)
     pack_hash_expected = m4_sha(
         {
             "schema_version": 1,
@@ -2470,6 +2475,7 @@ def variant(
     shared_inputs: list[str] | None = None,
     local_packs: dict[str, str] | None = None,
     fixture_copies: dict[str, str] | None = None,
+    lf_inputs: list[str] | None = None,
     junctions: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """构造一个场景变体；READY 必须有 frozen 步骤与可执行预期。"""
@@ -2513,6 +2519,7 @@ def variant(
         "shared_inputs": shared_inputs or [],
         "local_packs": local_packs or {},
         "fixture_copies": fixture_copies or {},
+        "lf_inputs": lf_inputs or [],
         "junctions": junctions or {},
     }
 
@@ -2529,6 +2536,7 @@ def ready_variant(
     shared_inputs: list[str] | None = None,
     local_packs: dict[str, str] | None = None,
     fixture_copies: dict[str, str] | None = None,
+    lf_inputs: list[str] | None = None,
     junctions: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """构造已绑定冻结 CLI 的离线变体。"""
@@ -2545,6 +2553,7 @@ def ready_variant(
         shared_inputs=shared_inputs,
         local_packs=local_packs,
         fixture_copies=fixture_copies,
+        lf_inputs=lf_inputs,
         junctions=junctions,
     )
 
@@ -6526,6 +6535,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
     hash_expected = json.loads(
         (FIXTURES / "m4/hash/expected.json").read_text(encoding="utf-8")
     )
+    d08_lf_inputs = [
+        *(f"prompts/base/{name}" for name in ("intent-and-reply.md", "job-evaluate.md")),
+        *(f"prompts/local/valid/{name}" for name in ("pack.toml", "tone.md", "phrase-bank.md", "never-say.md")),
+    ]
     add(
         "SC-D08",
         "M4",
@@ -6539,6 +6552,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 fixture="fixtures/m4/probe/d08_hash.json",
                 shared_inputs=base_inputs,
                 local_packs={"valid": "m4/policy/packs/valid"},
+                fixture_copies={"prompts/base": "m4/policy/base"},
+                lf_inputs=d08_lf_inputs,
                 assertions=["先 base/pack，再 prompt_hash，最后 input_hash", "无自引用"],
                 acceptance={"steps": [probe_ok(
                     {"path": "base_hash", "equals": hash_expected["base_hash"]},
@@ -6555,6 +6570,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 fixture="fixtures/m4/probe/d08_hash.json",
                 shared_inputs=base_inputs,
                 local_packs={"valid": "m4/policy/packs/valid"},
+                lf_inputs=d08_lf_inputs,
                 assertions=["prompt_hash 不变，input_hash 变"],
                 acceptance={"steps": [probe_ok(
                     {"path": "prompt_excludes_nonce", "equals": True},
@@ -6568,6 +6584,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 fixture="fixtures/m4/probe/d08_mutations.json",
                 shared_inputs=base_inputs,
                 local_packs={"valid": "m4/policy/packs/valid"},
+                lf_inputs=d08_lf_inputs,
                 assertions=["目录不入摘要", "相同内容不要求不同 hash", "注释/换行/base 字节改变摘要"],
                 acceptance={"steps": [probe_ok(
                     {"path": "pack_hash_same_between_dirs", "equals": True},
@@ -6582,6 +6599,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 fixture="fixtures/m4/probe/d08_hash.json",
                 shared_inputs=base_inputs,
                 local_packs={"valid": "m4/policy/packs/valid"},
+                lf_inputs=d08_lf_inputs,
                 assertions=["H(RenderedRequest) 不符拒绝"],
                 acceptance={"steps": [probe_ok(
                     {"path": "tamper_reason", "equals": "invalid_decision"},
@@ -6594,6 +6612,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 fixture="fixtures/m4/probe/d08_envelope_size.json",
                 shared_inputs=base_inputs,
                 local_packs={"valid": "m4/policy/packs/valid"},
+                lf_inputs=d08_lf_inputs,
                 assertions=["限额不静默截断", "超限 input_too_large"],
                 acceptance={"steps": [
                     probe_ok(

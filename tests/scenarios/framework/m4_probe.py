@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sys
 import time
@@ -56,6 +57,9 @@ from app.ports.decision import (
     DecisionClockPort,
 )
 from app.ports.policy import PolicyError, PolicyIssue
+from app.ports.device_gate import DeviceGateError
+from app.ports.profile import ProfileError
+from app.ports.store import StoreError
 from app.usecases import policy as policy_usecases
 from app.usecases import policy_eval as eval_usecases
 from app.usecases.decision import DecisionRunError, decide
@@ -1897,6 +1901,14 @@ def run_request(request: Mapping[str, Any]) -> dict[str, Any]:
     raise ProbeError("未知 operation")
 
 
+def _safe_reason(error: BaseException) -> str:
+    """只返回固定 reason_code 或异常类名，不写异常原文/路径。"""
+    value = getattr(error, "reason_code", None)
+    if isinstance(value, str) and re.fullmatch(r"[a-z0-9_]{1,64}", value):
+        return value
+    return type(error).__name__
+
+
 def main(argv: list[str] | None = None) -> int:
     """读取受控请求文件并输出单个 JSON 摘要。"""
     parser = argparse.ArgumentParser(add_help=False)
@@ -1912,8 +1924,10 @@ def main(argv: list[str] | None = None) -> int:
         if not isinstance(request, dict):
             raise ProbeError("request 必须是对象")
         result = run_request(request)
-    except (ProbeError, OSError, ValueError, UnicodeError) as error:
-        result = {"status": "error", "reason_code": type(error).__name__}
+    except (ProbeError, PolicyError, ProfileError, StoreError, DeviceGateError, BridgeError, DecisionRunError, OSError, ValueError, UnicodeError) as error:
+        result = {"status": "error", "reason_code": _safe_reason(error)}
+    except Exception as error:  # noqa: BLE001 - 任何未预期异常也不得回显 traceback/路径
+        result = {"status": "error", "reason_code": _safe_reason(error)}
     payload = {"schema_version": 1, "status": result.pop("status", "error"), **result}
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0

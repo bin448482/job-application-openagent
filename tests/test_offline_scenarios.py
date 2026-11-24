@@ -58,14 +58,33 @@ def variant_index(assets: model.LoadedAssets) -> dict[str, dict]:
 def _make_m4_project(root: Path) -> None:
     """在临时根复制公开 base/示例/套件与合成包，供 M4 探针真实调用。"""
     repo_root = TESTS_DIR.parent
-    for relative in ("prompts/base", "tests/fixtures/policy-preview", "evals/policy-suite"):
+    for relative in ("tests/fixtures/policy-preview", "evals/policy-suite"):
         shutil.copytree(repo_root / relative, root / relative, dirs_exist_ok=True)
+    shutil.copytree(
+        SCENARIO_ROOT / "fixtures/m4/policy/base",
+        root / "prompts/base",
+        dirs_exist_ok=True,
+    )
+    for name in ("intent-and-reply.md", "job-evaluate.md"):
+        base_path = root / "prompts" / "base" / name
+        base_path.write_text(
+            base_path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+            newline="\n",
+        )
     for name in ("valid", "eval"):
         shutil.copytree(
             SCENARIO_ROOT / "fixtures/m4/policy/packs" / name,
             root / "prompts/local" / name,
             dirs_exist_ok=True,
         )
+        for file_name in ("pack.toml", "tone.md", "phrase-bank.md", "never-say.md"):
+            pack_path = root / "prompts/local" / name / file_name
+            pack_path.write_text(
+                pack_path.read_text(encoding="utf-8"),
+                encoding="utf-8",
+                newline="\n",
+            )
     shutil.copytree(
         SCENARIO_ROOT / "fixtures/m4/eval/holdout",
         root / "evals/private/holdout",
@@ -2755,6 +2774,48 @@ class P2M4CProbeBoundaryTests(unittest.TestCase):
         mutated = dict(payload, raw_fact_rows_after_forget=1)
         errors = compare_step(mutated, expected)
         self.assertTrue(any("raw_fact_rows_after_forget" in error for error in errors), errors)
+
+    def test_lf_inputs_normalizes_copy_and_rejects_invalid_paths(self) -> None:
+        """隔离副本的 LF 规范化只改传入根，并在越界路径前拒绝。"""
+        with self._temporary_root() as temporary:
+            root = Path(temporary).resolve()
+            target = root / "copy.txt"
+            target.write_bytes(b"a\r\nb\r\n")
+            runner._normalize_lf_inputs(root, ["copy.txt"])
+            self.assertEqual(target.read_bytes(), b"a\nb\n")
+            for invalid in ("../outside.txt", str(root / "copy.txt")):
+                with self.assertRaises(runner.IsolationError):
+                    runner._normalize_lf_inputs(root, [invalid])
+            with self.assertRaises(runner.IsolationError):
+                runner._normalize_lf_inputs(root, ["missing.txt"])
+
+    def test_m4_probe_contract_error_has_safe_json(self) -> None:
+        """真实 PolicyError 由探针输出固定 JSON，不回显 traceback 或绝对路径。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            request = {"operation": "hash_mutations", "pack": "prompts/local/valid"}
+            (root / "request.json").write_text(json.dumps(request), encoding="utf-8")
+            output = io.StringIO()
+            errors = io.StringIO()
+            with mock.patch.object(m4_probe, "ROOT", root):
+                with redirect_stdout(output), redirect_stderr(errors):
+                    normal = m4_probe.main(["--request", "request.json"])
+                (root / "prompts/local/valid/pack.toml").write_text(
+                    "invalid =\n", encoding="utf-8"
+                )
+                output = io.StringIO()
+                errors = io.StringIO()
+                with redirect_stdout(output), redirect_stderr(errors):
+                    broken = m4_probe.main(["--request", "request.json"])
+            self.assertEqual(normal, 0)
+            payload = json.loads(output.getvalue())
+            self.assertEqual(broken, 0)
+            self.assertEqual(payload["status"], "error")
+            self.assertEqual(payload["reason_code"], "invalid_policy")
+            self.assertEqual(errors.getvalue(), "")
+            self.assertNotIn("Traceback", output.getvalue())
+            self.assertNotIn(str(root), output.getvalue())
 
     def _race_payloads(self) -> tuple[dict, dict]:
         """构造一份 winner/loser 合成 payload，仅用于比较器自检。"""

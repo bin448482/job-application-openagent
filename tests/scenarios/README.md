@@ -40,7 +40,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --only SC-R --targe
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-D --target .
 ```
 
-- unittest：104 项，验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant，以及 M4c 探针正常执行/越界拒绝/junction 拒绝/生产字段变异被 oracle 拒绝、D06 forget 残留与并发 winner 关联。
+- unittest：106 项，验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant，以及 M4c 探针正常执行/越界拒绝/junction 拒绝/生产字段变异被 oracle 拒绝、D06 forget 残留、并发 winner 关联、隔离 LF 规范化边界和受控异常安全 JSON。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；
