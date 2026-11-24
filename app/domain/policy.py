@@ -7,6 +7,7 @@ import re
 import tomllib
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Iterable, Mapping
 
 from app.domain.json_input import load_json_object
@@ -152,15 +153,31 @@ _CONTACT_PATTERNS = (
     re.compile(r"(?i)(?:微信|wechat|weixin|wx|vx|qq)\s*[:：]?\s*[A-Za-z0-9_-]{4,}"),
 )
 _FACT_PATTERNS = (
-    ("years_experience", re.compile(r"(?:我有|拥有|具备)\s*(\d+)\s*年")),
+    (
+        "years_experience",
+        re.compile(
+            r"(?:我有|拥有|具备)\s*"
+            r"(\d+(?:\.\d+)?(?:\s*(?:到|至|-|~|～)\s*\d+(?:\.\d+)?)?"
+            r"\s*(?:个月|月|年)?)"
+        ),
+    ),
     (
         "work_location",
         re.compile(r"我(?:现在|目前)?(?:在|住在|位于)\s*([^\s，。；]{1,12})"),
     ),
     (
         "salary_expectation",
-        re.compile(r"(?:期望|要求|希望).{0,8}?(?:薪资|工资|月薪).{0,8}?(\d+)"),
+        re.compile(
+            r"(?:期望|要求|希望).{0,8}?(?:薪资|工资|月薪).{0,8}?"
+            r"(\d+(?:\.\d+)?(?:\s*(?:到|至|-|~|～)\s*\d+(?:\.\d+)?)?"
+            r"\s*(?:万元|万|千|k|K|元)?)"
+        ),
     ),
+)
+_NUMERIC_FACT_RE = re.compile(
+    r"^\s*(\d+(?:\.\d+)?)\s*"
+    r"(?:(?:到|至|-|~|～)\s*(\d+(?:\.\d+)?))?\s*"
+    r"([^\d\s].*?)?\s*$"
 )
 _FORBIDDEN_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
@@ -392,21 +409,62 @@ def _fact_claims(value: str) -> list[tuple[str, str]]:
     return claims
 
 
+def _normalize_fact_unit(key: str, unit: str) -> str | None:
+    """把已捕获单位映射为固定类别；未知/歧义单位返回 null。"""
+    text = unit.strip()
+    if key == "years_experience":
+        if text in {"", "年"}:
+            return "year"
+        if text in {"个月", "月"}:
+            return "month"
+        return None
+    if key == "salary_expectation":
+        return {
+            "": "none",
+            "k": "k",
+            "K": "k",
+            "千": "k",
+            "万": "wan",
+            "万元": "wan",
+            "元": "yuan",
+        }.get(text)
+    return None
+
+
+def _parse_numeric_fact(key: str, text: str) -> tuple[Decimal, Decimal | None, str] | None:
+    """把单个/范围数值事实解析为端点与单位；无法严格解析返回 null。"""
+    match = _NUMERIC_FACT_RE.fullmatch(text)
+    if match is None:
+        return None
+    start_text, end_text, unit_text = match.groups()
+    try:
+        start = Decimal(start_text)
+        end = Decimal(end_text) if end_text is not None else None
+    except InvalidOperation:
+        return None
+    unit = _normalize_fact_unit(key, unit_text or "")
+    if unit is None:
+        return None
+    if end is not None and start > end:
+        return None
+    return start, end, unit
+
+
 def _fact_value_matches(key: str, claimed: str, allowed: object) -> bool:
-    """比较已识别事实值与同键已确认值的最小一致形式。"""
+    """严格比较已识别事实值与同键已确认值，保留小数、范围、单位与地点全文。"""
     if not isinstance(allowed, str):
         return False
     claimed_text = claimed.strip()
     allowed_text = allowed.strip()
-    if key in {"years_experience", "salary_expectation"}:
-        claimed_digits = re.sub(r"\D", "", claimed_text)
-        allowed_digits = re.sub(r"\D", "", allowed_text)
-        return bool(claimed_digits) and claimed_digits == allowed_digits
-    return (
-        claimed_text == allowed_text
-        or (len(allowed_text) >= 2 and allowed_text in claimed_text)
-        or (len(claimed_text) >= 2 and claimed_text in allowed_text)
-    )
+    if not claimed_text or not allowed_text:
+        return False
+    if key == "work_location":
+        return claimed_text == allowed_text
+    if key not in {"years_experience", "salary_expectation"}:
+        return False
+    claimed_value = _parse_numeric_fact(key, claimed_text)
+    allowed_value = _parse_numeric_fact(key, allowed_text)
+    return claimed_value is not None and claimed_value == allowed_value
 
 
 def _issue(

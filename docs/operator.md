@@ -211,7 +211,7 @@ python -m app policy preview --pack prompts/local/my-profile --case policy-greet
 
 - ENVELOPE 全部键必填、拒绝额外键；`nonce` 为规范 UUID，摘要为 64 位小写十六进制，完整 envelope 按规范 UTF-8 不超过 2048 字节，超限 `input_too_large`，不截断原文。HR 的 `conversation_key` 必须是非空的 `boss:conv:<64hex>`；职位 `job_brief` 必须非空；按已采纳裁定，另一 subject 键是 string|null，允许合法空字符串，anomaly 两个 subject 键可为 null/空。
 - 构建器按显式 now 过滤事实：只保留注册表、包 `allow_keys`、`source=user_confirmed` 且未过期（`expires_at<=now` 丢弃）的候选；同一 key 重复或值/有效期冲突时整键受控丢弃、留给待办，不做同值去重；其它独立有效键保留。公开 Envelope 校验仍拒绝已到期事实、非法结构和重复 key，不通过放松 validator 掩盖构建器过滤。
-- Decision 的前三个标识逐字回显；`evidence` 必须是 inbound 非空原样子串；`reply` 0–300 码点、只允许 LF；程序非空追加披露后复验完整码点数、联系方式、`never-say`、额外禁谈主题与有限事实来源模式，超限/冲突不截断。当前已识别“我有 N 年/我在某地/期望薪资 N”等形式时，必须匹配同键已确认值；未识别语义不能因此放行，最终仍按 C 待办。
+- Decision 的前三个标识逐字回显；`evidence` 必须是 inbound 非空原样子串；`reply` 0–300 码点、只允许 LF；程序非空追加披露后复验完整码点数、联系方式、`never-say`、额外禁谈主题与有限事实来源模式，超限/冲突不截断。当前已识别“我有 N 年/我在某地/期望薪资 N”等形式时，必须匹配同键已确认值：数值保留小数点、范围端点与单位，未知单位/歧义/范围与单值不一致均 conflict；地点按全文严格相等，不做双向子串；未识别语义不能因此放行，最终仍按 C 待办。
 - 租约有效期不使用 Envelope 新字段：由调用方传入可信 `lease_expires_at`（M1 `Lease.expires_at`），`now>=lease_expires_at` 拒绝。M4a preview 不生成 Decision，也不证明模型语义安全。
 - 有限正则未命中不等于语义安全；v1 无独立 A 档前置判据时程序前置档位固定 C，最终档位再与包分档及硬下限取最严格者。
 

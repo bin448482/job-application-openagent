@@ -770,7 +770,7 @@ class ReplyValidationTests(unittest.TestCase):
         )
 
     def test_recognized_fact_values_must_match_confirmed_values(self) -> None:
-        """验证已识别事实形式与已确认值不一致时拒绝，一致时放行。"""
+        """验证已识别事实形式与已确认值严格一致，保留小数/范围/单位/地点全文。"""
         years = [
             {
                 "key": "years_experience",
@@ -783,6 +783,28 @@ class ReplyValidationTests(unittest.TestCase):
         with self.assertRaises(ReplyError) as raised:
             self.complete("我有99年经验", allowed_facts=years)
         self.assertEqual(raised.exception.code, "conflict")
+        decimal_years = [
+            {
+                "key": "years_experience",
+                "value": "3.5",
+                "source": "user_confirmed",
+                "expires_at": None,
+            }
+        ]
+        self.complete("我有3.5年经验", allowed_facts=decimal_years)
+        with self.assertRaises(ReplyError):
+            self.complete("我有35年经验", allowed_facts=decimal_years)
+        range_years = [
+            {
+                "key": "years_experience",
+                "value": "3到5年",
+                "source": "user_confirmed",
+                "expires_at": None,
+            }
+        ]
+        self.complete("我有3到5年经验", allowed_facts=range_years)
+        with self.assertRaises(ReplyError):
+            self.complete("我有35年经验", allowed_facts=range_years)
         location = [
             {
                 "key": "work_location",
@@ -794,7 +816,20 @@ class ReplyValidationTests(unittest.TestCase):
         self.complete("我目前在北京", allowed_facts=location)
         with self.assertRaises(ReplyError):
             self.complete("我目前在上海", allowed_facts=location)
+        with self.assertRaises(ReplyError):
+            self.complete("我在北京以外", allowed_facts=location)
         salary = [
+            {
+                "key": "salary_expectation",
+                "value": "30k",
+                "source": "user_confirmed",
+                "expires_at": None,
+            }
+        ]
+        self.complete("期望月薪30k", allowed_facts=salary)
+        with self.assertRaises(ReplyError):
+            self.complete("期望月薪30万元", allowed_facts=salary)
+        salary_yuan = [
             {
                 "key": "salary_expectation",
                 "value": "20000",
@@ -802,9 +837,9 @@ class ReplyValidationTests(unittest.TestCase):
                 "expires_at": None,
             }
         ]
-        self.complete("期望薪资 20000", allowed_facts=salary)
+        self.complete("期望薪资 20000", allowed_facts=salary_yuan)
         with self.assertRaises(ReplyError):
-            self.complete("期望薪资 30000", allowed_facts=salary)
+            self.complete("期望薪资 30000", allowed_facts=salary_yuan)
 
     def test_control_and_lone_surrogate_rejected(self) -> None:
         """验证 CR、TAB、其它控制字符与孤立代理被拒绝。"""

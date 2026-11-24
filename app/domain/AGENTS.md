@@ -34,7 +34,7 @@
 15. H 只使用键排序、UTF-8、紧凑分隔符的 SHA-256，不做 strip/换行/Unicode 规范化。`base_hash=H({项目相对 base 路径:原文})`；`pack_hash=H({schema_version:1,files:{四文件名:原文}})`；`prompt_hash=H({base:{version,hash,files},pack:{hash,config,files},data:envelope 去 task_id/nonce/input_hash/prompt_hash})`；`input_hash` 最后计算。唯一规范 `RenderedRequest.content` 恰为 `{base,pack,data}` 且 `H(content)=prompt_hash`；协议/preview 消息只作外层包装。摘要不得包含自身；目录名/时间不入 pack 摘要。
 16. 策略包 TOML 与三 md 全部键/语法必填；45 个 `intent.sub_intent` 恰好覆盖一次，通配只支持 `intent.*`，同档重复/跨档冲突/漏项拒绝。硬下限由唯一 `HARD_FLOOR_TIERS` 派生：仅 interested.greeting/job_question 可 A，interested.resume_request/interview/salary/jd_request 至少 B，其余 39 键固定 C；校验、`resolve_policy_tier` 与展示共用该源，拒绝越权但不全包强制 C。有效限制取 base min/max，禁止项取并集，事实键取注册表/包白名单交集输入。披露 1–80 码点、含 `AI助手`、单行、无联系方式，且不得命中 never-say。pack 文件大小/路径/链接/BOM/控制字符/联系方式/可确定个人事实模式在适配器与领域共同拒绝；有限模式不声称完整语义判断。
 17. `render_request` 只选当前 kind 的一份 base 作为 system，有效策略为 developer，envelope 投影为 user JSON；渲染前从四载荷原文重解析派生结构并复核摘要，避免同摘要不同实际策略内容；完整 `{base,pack,data}` 内容对象 ≤64 KiB，同时保留实际三分区消息上限；预览不调用桥/模型/设备，`v1_policy_tier()` 固定 C。
-18. 构建器 `select_allowed_facts` 以显式 now 取包白名单/注册表/`user_confirmed`/未过期交集；同一键重复或值/有效期冲突时整键受控丢弃、留给待办，不做同值去重；不猜测、不编造来源。公开 validator 仍严格拒绝到期/非法结构。回复复验对已识别的经验/地点/薪资形式要求匹配同键已确认值，未识别语义不因此放行。
+18. 构建器 `select_allowed_facts` 以显式 now 取包白名单/注册表/`user_confirmed`/未过期交集；同一键重复或值/有效期冲突时整键受控丢弃、留给待办，不做同值去重；不猜测、不编造来源。公开 validator 仍严格拒绝到期/非法结构。回复复验对已识别的经验/地点/薪资形式要求匹配同键已确认值；数值保留小数点、范围端点与单位，未知单位/歧义/范围与单值不一致均 conflict；地点按全文严格相等，不做双向子串；未识别语义不因此放行。
 
 ## 四、测试
 
