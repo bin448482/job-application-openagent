@@ -71,6 +71,14 @@ def _type_ok(actual: Any, name: str) -> bool:
     return isinstance(actual, target)
 
 
+def _declared_type_ok(actual: Any, declared: Any) -> bool | None:
+    """按单个类型名或类型名列表检查；未知类型名返回 None 表示声明非法。"""
+    names = declared if isinstance(declared, list) else [declared]
+    if not names or any(not isinstance(name, str) or name not in JSON_TYPES for name in names):
+        return None
+    return any(_type_ok(actual, name) for name in names)
+
+
 def compare_step(stdout: Any, step: dict[str, Any]) -> list[str]:
     """按一条步骤预期比较 stdout，返回按路径定位的差异。"""
     errors: list[str] = []
@@ -113,6 +121,44 @@ def compare_step(stdout: Any, step: dict[str, Any]) -> list[str]:
                 errors.append(f"{path or '<root>'} 不是对象，无法检查键集合")
             elif set(actual) != set(expected_keys):
                 errors.append(f"{path or '<root>'} 键集合必须恰为 {sorted(expected_keys)}")
+        if "element_keys" in assertion or "element_types" in assertion:
+            errors.extend(_compare_elements(actual, path, assertion))
+    return errors
+
+
+def _compare_elements(actual: Any, path: str, assertion: dict[str, Any]) -> list[str]:
+    """对数组每个元素检查固定键集合与必要字段类型，避免只验首项。"""
+    errors: list[str] = []
+    label = path or "<root>"
+    if not isinstance(actual, list):
+        return [f"{label} 不是数组，无法检查元素结构"]
+    expected_keys = assertion.get("element_keys")
+    if expected_keys is not None:
+        if not isinstance(expected_keys, list) or any(
+            not isinstance(key, str) for key in expected_keys
+        ):
+            return [f"{label} 的 element_keys 必须是字符串数组"]
+    declared_types = assertion.get("element_types", {})
+    if not isinstance(declared_types, dict) or any(
+        not isinstance(field, str) for field in declared_types
+    ):
+        return [f"{label} 的 element_types 必须是对象"]
+    for index, item in enumerate(actual):
+        item_label = f"{label}.{index}"
+        if not isinstance(item, dict):
+            errors.append(f"{item_label} 不是对象")
+            continue
+        if expected_keys is not None and set(item) != set(expected_keys):
+            errors.append(f"{item_label} 键集合必须恰为 {sorted(expected_keys)}")
+        for field, declared in declared_types.items():
+            if field not in item:
+                errors.append(f"{item_label} 缺少类型声明字段 {field}")
+                continue
+            verdict = _declared_type_ok(item[field], declared)
+            if verdict is None:
+                errors.append(f"{item_label}.{field} 声明了未知类型 {declared!r}")
+            elif not verdict:
+                errors.append(f"{item_label}.{field} 类型应为 {declared!r}")
     return errors
 
 

@@ -8492,6 +8492,15 @@
                 "path": "result.reason_code"
               },
               {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
+              },
+              {
                 "keys": [
                   "status",
                   "value",
@@ -8531,7 +8540,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "identity_hash",
                   "conversation_key",
                   "state",
@@ -8540,17 +8549,45 @@
                   "confidence",
                   "reason_code"
                 ],
-                "path": "result.value.rows.0"
+                "element_types": {
+                  "confidence": "string",
+                  "conversation_key": [
+                    "string",
+                    "null"
+                  ],
+                  "count": [
+                    "integer",
+                    "null"
+                  ],
+                  "identity_hash": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.rows"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "present",
@@ -8803,6 +8840,15 @@
                 "path": "result.reason_code"
               },
               {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
+              },
+              {
                 "keys": [
                   "status",
                   "value",
@@ -8849,7 +8895,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -8862,17 +8908,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": true,
@@ -9184,7 +9271,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -9197,17 +9284,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "unknown",
@@ -9261,6 +9389,15 @@
                 "path": "result.reason_code"
               },
               {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
+              },
+              {
                 "keys": [
                   "status",
                   "value",
@@ -9307,7 +9444,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -9320,17 +9457,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "known",
@@ -9430,7 +9608,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -9443,17 +9621,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "length_equals": 5,
@@ -9553,7 +9772,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -9566,17 +9785,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "length_equals": 2,
@@ -9676,7 +9936,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -9689,17 +9949,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "length_equals": 5,
@@ -10125,6 +10426,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -10138,7 +10447,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",
@@ -10218,7 +10528,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -10231,17 +10541,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "unknown",
@@ -10262,6 +10613,42 @@
               {
                 "equals": null,
                 "path": "result.value.messages.0.message_key"
+              },
+              {
+                "equals": "合成消息乙",
+                "path": "result.value.messages.1.text"
+              },
+              {
+                "equals": "21e96e93e55e02f7f2ba6189fe9cf3924a4e9a9a6c1af1e253a985f12c9e2a33",
+                "path": "result.value.messages.1.content_hash"
+              },
+              {
+                "equals": null,
+                "path": "result.value.messages.1.stable_identity_hash"
+              },
+              {
+                "equals": null,
+                "path": "result.value.messages.1.message_key"
+              },
+              {
+                "equals": "conversation_inbound",
+                "path": "result.value.field_evidence.1.field"
+              },
+              {
+                "equals": "hierarchy",
+                "path": "result.value.field_evidence.1.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.value.field_evidence.1.confidence"
+              },
+              {
+                "equals": "unknown",
+                "path": "result.value.field_evidence.1.state"
+              },
+              {
+                "equals": "stable_identity_unverified",
+                "path": "result.value.field_evidence.1.reason_code"
               },
               {
                 "equals": false,
@@ -10345,7 +10732,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -10358,17 +10745,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "unknown",
@@ -10464,7 +10892,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -10477,17 +10905,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "unknown",
@@ -10545,6 +11014,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -10558,7 +11035,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",
@@ -10600,6 +11078,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -10613,7 +11099,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",
@@ -10655,6 +11142,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -10668,7 +11163,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",
@@ -10696,6 +11192,15 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
               },
               {
                 "keys": [
@@ -10737,7 +11242,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "identity_hash",
                   "conversation_key",
                   "state",
@@ -10746,21 +11251,61 @@
                   "confidence",
                   "reason_code"
                 ],
-                "path": "result.value.rows.0"
+                "element_types": {
+                  "confidence": "string",
+                  "conversation_key": [
+                    "string",
+                    "null"
+                  ],
+                  "count": [
+                    "integer",
+                    "null"
+                  ],
+                  "identity_hash": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.rows"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "present",
                 "path": "result.value.unread_state"
+              },
+              {
+                "equals": "3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f",
+                "path": "result.value.rows.0.identity_hash"
+              },
+              {
+                "equals": "3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f",
+                "path": "result.value.rows.1.identity_hash"
+              },
+              {
+                "equals": "e69f2d1c72729b42e83bb891a6828904e5386f7dbf3a153fe93a08f11277883b",
+                "path": "result.value.rows.2.identity_hash"
               },
               {
                 "equals": null,
@@ -10873,6 +11418,15 @@
                 "path": "result.reason_code"
               },
               {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
+              },
+              {
                 "keys": [
                   "status",
                   "value",
@@ -10911,14 +11465,24 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "main",
@@ -10950,6 +11514,15 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
               },
               {
                 "keys": [
@@ -10990,7 +11563,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "job_key",
                   "identity_hash",
                   "title_raw",
@@ -11000,17 +11573,40 @@
                   "salary_raw",
                   "salary"
                 ],
-                "path": "result.value.cards.0"
+                "element_types": {
+                  "company": "string",
+                  "company_raw": "string",
+                  "identity_hash": "string",
+                  "job_key": [
+                    "string",
+                    "null"
+                  ],
+                  "salary": "string",
+                  "salary_raw": "string",
+                  "title": "string",
+                  "title_raw": "string"
+                },
+                "path": "result.value.cards"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "boss:job:3a7d1d627ba4309a469a7b956fc0a8ed93557424fd3a0c0259a44d05e61beae1",
@@ -11046,6 +11642,15 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
               },
               {
                 "keys": [
@@ -11101,14 +11706,24 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": true,
@@ -11154,6 +11769,15 @@
                 "path": "result.reason_code"
               },
               {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
+              },
+              {
                 "keys": [
                   "status",
                   "value",
@@ -11192,7 +11816,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "job_key",
                   "identity_hash",
                   "title_raw",
@@ -11202,17 +11826,40 @@
                   "salary_raw",
                   "salary"
                 ],
-                "path": "result.value.cards.0"
+                "element_types": {
+                  "company": "string",
+                  "company_raw": "string",
+                  "identity_hash": "string",
+                  "job_key": [
+                    "string",
+                    "null"
+                  ],
+                  "salary": "string",
+                  "salary_raw": "string",
+                  "title": "string",
+                  "title_raw": "string"
+                },
+                "path": "result.value.cards"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": null,
@@ -11225,6 +11872,18 @@
               {
                 "equals": "boss:job:b1869daadb096670088181b2b404c0b8bb0b426fea164e6789ebca136f2c9155",
                 "path": "result.value.cards.2.job_key"
+              },
+              {
+                "equals": "3a7d1d627ba4309a469a7b956fc0a8ed93557424fd3a0c0259a44d05e61beae1",
+                "path": "result.value.cards.0.identity_hash"
+              },
+              {
+                "equals": "3a7d1d627ba4309a469a7b956fc0a8ed93557424fd3a0c0259a44d05e61beae1",
+                "path": "result.value.cards.1.identity_hash"
+              },
+              {
+                "equals": "b1869daadb096670088181b2b404c0b8bb0b426fea164e6789ebca136f2c9155",
+                "path": "result.value.cards.2.identity_hash"
               },
               {
                 "equals": true,
@@ -11252,6 +11911,15 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
               },
               {
                 "keys": [
@@ -11292,14 +11960,24 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "popup",
@@ -11375,14 +12053,24 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "unknown",
@@ -11577,6 +12265,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -11590,7 +12286,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",
@@ -11652,6 +12349,15 @@
                 "path": "result.reason_code"
               },
               {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
+              },
+              {
                 "keys": [
                   "status",
                   "value",
@@ -11691,7 +12397,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "identity_hash",
                   "conversation_key",
                   "state",
@@ -11700,17 +12406,45 @@
                   "confidence",
                   "reason_code"
                 ],
-                "path": "result.value.rows.0"
+                "element_types": {
+                  "confidence": "string",
+                  "conversation_key": [
+                    "string",
+                    "null"
+                  ],
+                  "count": [
+                    "integer",
+                    "null"
+                  ],
+                  "identity_hash": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.rows"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "present",
@@ -11799,7 +12533,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "identity_hash",
                   "conversation_key",
                   "state",
@@ -11808,17 +12542,45 @@
                   "confidence",
                   "reason_code"
                 ],
-                "path": "result.value.rows.0"
+                "element_types": {
+                  "confidence": "string",
+                  "conversation_key": [
+                    "string",
+                    "null"
+                  ],
+                  "count": [
+                    "integer",
+                    "null"
+                  ],
+                  "identity_hash": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.rows"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "unknown",
@@ -11907,7 +12669,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "identity_hash",
                   "conversation_key",
                   "state",
@@ -11916,17 +12678,45 @@
                   "confidence",
                   "reason_code"
                 ],
-                "path": "result.value.rows.0"
+                "element_types": {
+                  "confidence": "string",
+                  "conversation_key": [
+                    "string",
+                    "null"
+                  ],
+                  "count": [
+                    "integer",
+                    "null"
+                  ],
+                  "identity_hash": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.rows"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "unknown",
@@ -11980,6 +12770,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -11993,7 +12791,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",
@@ -12021,6 +12820,15 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
               },
               {
                 "keys": [
@@ -12062,7 +12870,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "identity_hash",
                   "conversation_key",
                   "state",
@@ -12071,17 +12879,45 @@
                   "confidence",
                   "reason_code"
                 ],
-                "path": "result.value.rows.0"
+                "element_types": {
+                  "confidence": "string",
+                  "conversation_key": [
+                    "string",
+                    "null"
+                  ],
+                  "count": [
+                    "integer",
+                    "null"
+                  ],
+                  "identity_hash": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.rows"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "present",
@@ -12158,7 +12994,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "identity_hash",
                   "conversation_key",
                   "state",
@@ -12167,17 +13003,45 @@
                   "confidence",
                   "reason_code"
                 ],
-                "path": "result.value.rows.0"
+                "element_types": {
+                  "confidence": "string",
+                  "conversation_key": [
+                    "string",
+                    "null"
+                  ],
+                  "count": [
+                    "integer",
+                    "null"
+                  ],
+                  "identity_hash": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.rows"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "absent",
@@ -12231,6 +13095,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -12244,7 +13116,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",
@@ -12472,6 +13345,80 @@
       "acceptance": {
         "log_checks": [
           {
+            "events": [
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "started",
+                "stage": "start"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "arguments"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "config"
+              },
+              {
+                "operation": "load",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "unread",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "unread",
+                "reason_code": null,
+                "result": "ok",
+                "stage": "read"
+              },
+              {
+                "operation": "load",
+                "reason_code": null,
+                "result": "ok",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": null,
+                "result": "ok",
+                "stage": "read"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "decision"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "output"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "exit"
+              }
+            ],
             "forbid_operations": [
               "pixel"
             ],
@@ -12479,27 +13426,103 @@
               "合成联系人",
               "合成机构",
               "合成岗位",
+              "合成消息",
               "screen.rgba",
-              "calibration.json"
+              "calibration.json",
+              "fixture.json",
+              "page.xml"
             ],
-            "pairs": [
-              [
-                "unread",
-                "started"
-              ],
-              [
-                "unread",
-                "ok"
-              ],
-              [
-                "unread",
-                "failed"
-              ],
-              [
-                "gate",
-                "failed"
-              ]
-            ]
+            "step": 0
+          },
+          {
+            "events": [
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "started",
+                "stage": "start"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "arguments"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "config"
+              },
+              {
+                "operation": "load",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "unread",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "unread",
+                "reason_code": "invalid_xml",
+                "result": "failed",
+                "stage": "read"
+              },
+              {
+                "operation": "load",
+                "reason_code": "invalid_xml",
+                "result": "failed",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": "not_ok",
+                "result": "failed",
+                "stage": "read"
+              },
+              {
+                "operation": null,
+                "reason_code": "invalid_xml",
+                "result": "failed",
+                "stage": "decision"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "output"
+              },
+              {
+                "operation": null,
+                "reason_code": "invalid_xml",
+                "result": "failed",
+                "stage": "exit"
+              }
+            ],
+            "forbid_operations": [
+              "pixel"
+            ],
+            "forbidden": [
+              "合成联系人",
+              "合成机构",
+              "合成岗位",
+              "合成消息",
+              "screen.rgba",
+              "calibration.json",
+              "fixture.json",
+              "page.xml"
+            ],
+            "step": 1
           }
         ],
         "steps": [
@@ -12523,6 +13546,15 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "equals": true,
+                "path": "actionable",
+                "type": "boolean"
+              },
+              {
+                "equals": null,
+                "path": "gate_reason"
               },
               {
                 "keys": [
@@ -12564,7 +13596,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "identity_hash",
                   "conversation_key",
                   "state",
@@ -12573,17 +13605,45 @@
                   "confidence",
                   "reason_code"
                 ],
-                "path": "result.value.rows.0"
+                "element_types": {
+                  "confidence": "string",
+                  "conversation_key": [
+                    "string",
+                    "null"
+                  ],
+                  "count": [
+                    "integer",
+                    "null"
+                  ],
+                  "identity_hash": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.rows"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "present",
@@ -12625,6 +13685,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -12638,7 +13706,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",
@@ -12680,51 +13749,283 @@
       "acceptance": {
         "log_checks": [
           {
+            "events": [
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "started",
+                "stage": "start"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "arguments"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "config"
+              },
+              {
+                "operation": "load",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "unread",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "pixel",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "pixel",
+                "reason_code": "invalid_fixture",
+                "result": "failed",
+                "stage": "read"
+              },
+              {
+                "operation": "unread",
+                "reason_code": "invalid_fixture",
+                "result": "failed",
+                "stage": "read"
+              },
+              {
+                "operation": "load",
+                "reason_code": "invalid_fixture",
+                "result": "failed",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": "not_ok",
+                "result": "failed",
+                "stage": "read"
+              },
+              {
+                "operation": null,
+                "reason_code": "invalid_fixture",
+                "result": "failed",
+                "stage": "decision"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "output"
+              },
+              {
+                "operation": null,
+                "reason_code": "invalid_fixture",
+                "result": "failed",
+                "stage": "exit"
+              }
+            ],
             "forbidden": [
               "同文消息",
               "合成消息",
               "dup-1",
               "screen.rgba",
-              "calibration.json"
+              "calibration.json",
+              "fixture.json"
             ],
-            "pairs": [
-              [
-                "pixel",
-                "started"
-              ],
-              [
-                "pixel",
-                "failed"
-              ],
-              [
-                "conversation",
-                "started"
-              ],
-              [
-                "merge",
-                "started"
-              ],
-              [
-                "merge",
-                "ok"
-              ],
-              [
-                "conversation",
-                "ok"
-              ],
-              [
-                "job_detail",
-                "started"
-              ],
-              [
-                "job_detail",
-                "undetermined"
-              ],
-              [
-                "gate",
-                "failed"
-              ]
-            ]
+            "step": 0
+          },
+          {
+            "events": [
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "started",
+                "stage": "start"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "arguments"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "config"
+              },
+              {
+                "operation": "load",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "conversation",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "merge",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "merge",
+                "reason_code": null,
+                "result": "ok",
+                "stage": "read"
+              },
+              {
+                "operation": "conversation",
+                "reason_code": null,
+                "result": "ok",
+                "stage": "read"
+              },
+              {
+                "operation": "load",
+                "reason_code": null,
+                "result": "ok",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": "identity_ambiguous",
+                "result": "failed",
+                "stage": "read"
+              },
+              {
+                "operation": null,
+                "reason_code": "identity_ambiguous",
+                "result": "failed",
+                "stage": "decision"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "output"
+              },
+              {
+                "operation": null,
+                "reason_code": "identity_ambiguous",
+                "result": "failed",
+                "stage": "exit"
+              }
+            ],
+            "forbidden": [
+              "同文消息",
+              "合成消息",
+              "dup-1",
+              "screen.rgba",
+              "calibration.json",
+              "fixture.json"
+            ],
+            "step": 1
+          },
+          {
+            "events": [
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "started",
+                "stage": "start"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "arguments"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "config"
+              },
+              {
+                "operation": "load",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "job_detail",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "job_detail",
+                "reason_code": "incomplete_snapshot",
+                "result": "undetermined",
+                "stage": "read"
+              },
+              {
+                "operation": "load",
+                "reason_code": "incomplete_snapshot",
+                "result": "undetermined",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": null,
+                "result": "started",
+                "stage": "read"
+              },
+              {
+                "operation": "gate",
+                "reason_code": "not_ok",
+                "result": "failed",
+                "stage": "read"
+              },
+              {
+                "operation": null,
+                "reason_code": "incomplete_snapshot",
+                "result": "failed",
+                "stage": "decision"
+              },
+              {
+                "operation": null,
+                "reason_code": null,
+                "result": "ok",
+                "stage": "output"
+              },
+              {
+                "operation": null,
+                "reason_code": "incomplete_snapshot",
+                "result": "failed",
+                "stage": "exit"
+              }
+            ],
+            "forbidden": [
+              "同文消息",
+              "合成消息",
+              "dup-1",
+              "screen.rgba",
+              "calibration.json",
+              "fixture.json"
+            ],
+            "step": 2
           }
         ],
         "steps": [
@@ -12762,6 +14063,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -12775,7 +14084,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",
@@ -12855,7 +14165,7 @@
                 "path": "result.value"
               },
               {
-                "keys": [
+                "element_keys": [
                   "kind",
                   "direction",
                   "text",
@@ -12868,17 +14178,58 @@
                   "direction_evidence",
                   "message_key"
                 ],
-                "path": "result.value.messages.0"
+                "element_types": {
+                  "content_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "direction": "string",
+                  "direction_evidence": "array",
+                  "kind": "string",
+                  "message_key": [
+                    "string",
+                    "null"
+                  ],
+                  "repeat_safe": "boolean",
+                  "stable_identity_hash": [
+                    "string",
+                    "null"
+                  ],
+                  "stable_identity_source": [
+                    "string",
+                    "null"
+                  ],
+                  "text": [
+                    "string",
+                    "null"
+                  ],
+                  "time_hint": [
+                    "string",
+                    "null"
+                  ],
+                  "truncated": "boolean"
+                },
+                "path": "result.value.messages"
               },
               {
-                "keys": [
+                "element_keys": [
                   "field",
                   "source",
                   "confidence",
                   "state",
                   "reason_code"
                 ],
-                "path": "result.value.field_evidence.0"
+                "element_types": {
+                  "confidence": "string",
+                  "field": "string",
+                  "reason_code": [
+                    "string",
+                    "null"
+                  ],
+                  "source": "string",
+                  "state": "string"
+                },
+                "path": "result.value.field_evidence"
               },
               {
                 "equals": "unknown",
@@ -12924,6 +14275,14 @@
                 "path": "result.reason_code"
               },
               {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "result.observed_at"
+              },
+              {
                 "equals": null,
                 "path": "result.value"
               },
@@ -12937,7 +14296,8 @@
               },
               {
                 "equals": false,
-                "path": "actionable"
+                "path": "actionable",
+                "type": "boolean"
               },
               {
                 "equals": "not_ok",

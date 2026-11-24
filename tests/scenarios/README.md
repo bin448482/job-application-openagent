@@ -38,7 +38,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --only SC-L --targe
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-R --target .
 ```
 
-- unittest：75 项，验证资产完整性、严格比较反例、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径与真实阶梯 mutant。
+- unittest：80 项，验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异与非首项输出变异。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；
@@ -56,6 +56,7 @@ acceptance 对每个可执行变体：
 4. 用最小环境白名单启动 `python -m app`，本地应用数据、TEMP、PATH 与数据库全部落在隔离根内。
 5. `sitecustomize` tripwire 记录并拒绝网络、外部进程与 ADB 尝试；出现记录即 FAIL。
 6. 数据库断言使用 resolve 后 `relative_to` 边界与 `mode=ro`，不读取或创建真实运行库。
+7. 日志断言按单次 CLI 调用快照新增文件，只读该调用的唯一 correlation，校验完整有序事件序列、`started` 成对次数、固定字段白名单/类型与敏感标记；日志目录自身/祖先链接在读取前拒绝。无像素分支出现 pixel 即失败。
 
 这不构成完整 OS 沙箱；它只覆盖测试所需的设备/网络/配置边界，限制已在 `reviews/` 记录。
 
@@ -71,7 +72,7 @@ acceptance 对每个可执行变体：
 - M0 doctor 合成设备/配置/参数负例与真实探针协议；
 - M1 初始化、租约竞争、续租/旧 nonce、恢复隔离、finish 三态与跨表回滚、仓储输入；
 - M2 四源冲突、区域/bounds、9+/0+、新招呼语义、全覆盖否定、预览/时间、多页、时间窗、profile/路径、身份歧义、终态与时间倒退；
-- M3 页面/职位/未读/会话完整路径、字段阶梯/像素/上下文冲突、稳定消息身份/跨屏重叠/new_message_keys、定向核对 API 与边界、版本漂移、读侧不关闭发现；真实进入/返回/到达时序仍依赖 M4–M6 或设备；
+- M3 页面/职位/未读/会话完整路径、字段阶梯/像素/上下文冲突、稳定消息身份/跨屏重叠/new_message_keys、定向核对 API 与边界、版本漂移、读侧不关闭发现；rows/cards/messages/field_evidence 的每个元素校验固定键、必要类型与非首项身份/摘要/证据；真实日志按单次调用与 correlation 校验有序事件、成对次数和敏感字段；真实进入/返回/到达时序仍依赖 M4–M6 或设备；
 - M4 Decision 校验、超时、事实/注入、策略包 45 键、摘要、共享门禁、快照恢复、留出分桶；
 - M5 六个动作 × F-A 至 F-E、人工收敛、非法证据；
 - M6 安全点、第 6 次抢占、预算边界、双钟/续租、三个观察钩子；

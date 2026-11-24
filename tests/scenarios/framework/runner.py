@@ -454,43 +454,306 @@ def _run_step(
     }
 
 
-def _log_check(root: Path, check: dict[str, Any]) -> str | None:
-    """只读隔离根内过程日志，检查固定阶段配对、禁用操作与不泄露原文。"""
-    logs = sorted((root / "data" / "logs").glob("m0-process-*.jsonl"))
-    if not logs:
-        return "缺少 M3 过程日志"
-    events: list[dict[str, Any]] = []
-    raw_lines: list[str] = []
-    for path in logs:
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            return "过程日志不可读"
-        raw_lines.append(text)
-        for line in text.splitlines():
-            if not line.strip():
-                continue
-            try:
-                item = json.loads(line)
-            except json.JSONDecodeError:
-                return "过程日志不是有效 JSON Lines"
-            if not isinstance(item, dict):
-                return "过程日志事件不是对象"
-            events.append(item)
-    sequence = [(str(item.get("operation")), str(item.get("result"))) for item in events]
-    for pair in check.get("pairs", []):
-        if not isinstance(pair, list) or len(pair) != 2:
-            return "日志配对必须是 [operation,result]"
-        target = (str(pair[0]), str(pair[1]))
-        if target not in sequence:
-            return f"缺少日志配对 {target[0]}/{target[1]}"
-    for operation in check.get("forbid_operations", []):
-        if any(name == str(operation) for name, _ in sequence):
-            return f"日志出现禁止操作 {operation}"
-    joined = "\n".join(raw_lines)
+LOG_EVENT_KEYS = frozenset(
+    {
+        "schema_version",
+        "ts",
+        "correlation_id",
+        "stage",
+        "operation",
+        "result",
+        "reason_code",
+        "error_category",
+        "duration_ms",
+        "command",
+        "exit_code",
+        "mode",
+        "config_source",
+        "device_count",
+    }
+)
+LOG_STAGES = frozenset(
+    {
+        "start",
+        "arguments",
+        "config",
+        "mode",
+        "fixture",
+        "probe",
+        "adb_devices",
+        "adb_window",
+        "decision",
+        "store",
+        "sense",
+        "read",
+        "adb_hierarchy",
+        "adb_screen",
+        "adb_evidence",
+        "output",
+        "exit",
+    }
+)
+LOG_RESULTS = frozenset({"started", "ok", "undetermined", "failed"})
+LOG_OPERATIONS = frozenset(
+    {
+        "init",
+        "parse",
+        "aggregate",
+        "stop_reason",
+        "open_store",
+        "upsert_snapshot",
+        "claim",
+        "start",
+        "renew",
+        "finish",
+        "recover",
+        "unresolved_conversations",
+        "load",
+        "page",
+        "job_list",
+        "job_detail",
+        "unread",
+        "conversation",
+        "pixel",
+        "merge",
+        "gate",
+    }
+)
+LOG_REASON_CODES = frozenset(
+    {
+        "invalid_input",
+        "invalid_config",
+        "invalid_fixture",
+        "device_disconnected",
+        "device_ambiguous",
+        "device_offline",
+        "device_unauthorized",
+        "device_locked",
+        "wrong_page",
+        "invalid_xml",
+        "incomplete_snapshot",
+        "stale_snapshot",
+        "uncalibrated_profile",
+        "identity_ambiguous",
+        "unread_unverified",
+        "needs_targeted_verification",
+        "ambiguous_signal",
+        "uncalibrated_region",
+        "calibration_mismatch",
+        "missing_signal",
+        "stable_identity_unverified",
+        "unverified_identity",
+        "not_ok",
+        "field_unknown",
+        "incomplete",
+        "no_target",
+        "device_gate_unavailable",
+        "lease_busy",
+        "stale_lease",
+        "owner_not_stopped",
+        "clock_changed",
+        "store_busy",
+        "store_io_error",
+        "db_version_unsupported",
+        "migration_failed",
+    }
+)
+LOG_ERROR_CATEGORIES = frozenset(
+    {
+        "argument",
+        "config",
+        "fixture",
+        "probe",
+        "business",
+        "store",
+        "sense",
+        "read",
+        "pixel",
+        "gate",
+        "evidence",
+        "internal",
+        "adb_missing",
+        "adb_timeout",
+        "adb_nonzero",
+        "adb_oserror",
+    }
+)
+LOG_COMMANDS = frozenset(
+    {
+        "adb_devices",
+        "adb_window",
+        "adb_hierarchy_dump",
+        "adb_hierarchy_cat",
+        "adb_screencap",
+    }
+)
+LOG_MODES = frozenset({"fixture", "device"})
+LOG_CONFIG_SOURCES = frozenset({"default", "file"})
+LOG_TS_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z")
+LOG_CORRELATION_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+)
+
+
+def _safe_log_files(root: Path) -> list[Path]:
+    """先拒绝日志目录自身/祖先链接再解析，返回隔离根内的日志文件。"""
+    logs_dir = root / "data" / "logs"
+    _reject_link_ancestors(logs_dir, root, "过程日志目录")
+    if not _within(logs_dir.resolve(), root.resolve()):
+        raise IsolationError("过程日志目录越出隔离根")
+    if not logs_dir.is_dir():
+        return []
+    files: list[Path] = []
+    for path in sorted(logs_dir.glob("m0-process-*.jsonl")):
+        if _is_link_like(path):
+            raise IsolationError("过程日志不得是符号链接或 junction")
+        resolved = path.resolve()
+        if not _within(resolved, root.resolve()):
+            raise IsolationError("过程日志越出隔离根")
+        if resolved.is_file():
+            files.append(resolved)
+    return files
+
+
+def _valid_log_event(event: dict[str, Any]) -> str | None:
+    """按固定字段白名单与类型校验一条日志事件，拒绝额外键与路径值。"""
+    if set(event) != LOG_EVENT_KEYS:
+        return "过程日志事件键集合不符"
+    if type(event["schema_version"]) is not int or event["schema_version"] != 1:
+        return "过程日志 schema_version 非法"
+    if not isinstance(event["ts"], str) or LOG_TS_PATTERN.fullmatch(event["ts"]) is None:
+        return "过程日志时间戳非法"
+    if (
+        not isinstance(event["correlation_id"], str)
+        or LOG_CORRELATION_PATTERN.fullmatch(event["correlation_id"]) is None
+    ):
+        return "过程日志 correlation 非法"
+    if event["stage"] not in LOG_STAGES:
+        return "过程日志阶段非法"
+    if event["operation"] is not None and event["operation"] not in LOG_OPERATIONS:
+        return "过程日志操作非法"
+    if event["result"] not in LOG_RESULTS:
+        return "过程日志结果非法"
+    if event["reason_code"] is not None and event["reason_code"] not in LOG_REASON_CODES:
+        return "过程日志原因码非法"
+    if (
+        event["error_category"] is not None
+        and event["error_category"] not in LOG_ERROR_CATEGORIES
+    ):
+        return "过程日志错误类别非法"
+    if type(event["duration_ms"]) is not int or event["duration_ms"] < 0:
+        return "过程日志耗时非法"
+    if event["command"] is not None and event["command"] not in LOG_COMMANDS:
+        return "过程日志命令非法"
+    if event["exit_code"] is not None and (
+        type(event["exit_code"]) is not int or event["exit_code"] not in (0, 2)
+    ):
+        return "过程日志退出码非法"
+    if event["mode"] is not None and event["mode"] not in LOG_MODES:
+        return "过程日志模式非法"
+    if (
+        event["config_source"] is not None
+        and event["config_source"] not in LOG_CONFIG_SOURCES
+    ):
+        return "过程日志配置来源非法"
+    if event["device_count"] is not None and (
+        type(event["device_count"]) is not int or event["device_count"] < 0
+    ):
+        return "过程日志设备数非法"
+    for value in event.values():
+        if isinstance(value, str) and ("/" in value or "\\" in value or ".." in value):
+            return "过程日志字段值含路径或越界标记"
+    return None
+
+
+def _log_check(root: Path, check: dict[str, Any], files: list[Path] | None) -> str | None:
+    """只检查单次 CLI 调用对应的日志：固定事件序列、成对次数与字段边界。"""
+    if not isinstance(check, dict):
+        return "日志检查不是对象"
+    expected_events = check.get("events")
+    if not isinstance(expected_events, list) or not expected_events:
+        return "日志检查缺少期望事件序列"
+    normalised: list[tuple[Any, Any, Any, Any]] = []
+    for item in expected_events:
+        if not isinstance(item, dict) or set(item) - {"stage", "operation", "result", "reason_code"}:
+            return "日志期望事件形状非法"
+        if not {"stage", "result"} <= set(item):
+            return "日志期望事件缺少 stage/result"
+        operation = item.get("operation")
+        reason_code = item.get("reason_code")
+        if item["stage"] not in LOG_STAGES or item["result"] not in LOG_RESULTS:
+            return "日志期望事件阶段/结果非法"
+        if operation is not None and operation not in LOG_OPERATIONS:
+            return "日志期望事件操作非法"
+        if reason_code is not None and reason_code not in LOG_REASON_CODES:
+            return "日志期望事件原因码非法"
+        normalised.append((item["stage"], operation, item["result"], reason_code))
+    if files is None:
+        return "过程日志路径安全校验失败"
+    if len(files) != 1:
+        return f"单次调用必须恰好一个日志文件，实际 {len(files)}"
+    try:
+        text = files[0].read_text(encoding="utf-8")
+    except OSError:
+        return "过程日志不可读"
     for needle in check.get("forbidden", []):
-        if needle and str(needle) in joined:
+        if needle and str(needle) in text:
             return "过程日志泄露了正文/原始标识/路径"
+    events: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            return "过程日志不是有效 JSON Lines"
+        if not isinstance(item, dict):
+            return "过程日志事件不是对象"
+        problem = _valid_log_event(item)
+        if problem:
+            return problem
+        events.append(item)
+    if not events:
+        return "过程日志为空"
+    if len({item["correlation_id"] for item in events}) != 1:
+        return "单次调用日志混入多个 correlation"
+    actual = [
+        (item["stage"], item["operation"], item["result"], item["reason_code"])
+        for item in events
+    ]
+    if actual != normalised:
+        first = next(
+            (
+                index
+                for index, (left, right) in enumerate(zip(actual, normalised))
+                if left != right
+            ),
+            min(len(actual), len(normalised)),
+        )
+        expected_item = normalised[first] if first < len(normalised) else None
+        actual_item = actual[first] if first < len(actual) else None
+        return (
+            f"日志事件序列不符，第{first + 1}条期望 {expected_item} 实际 {actual_item}"
+        )
+    active: dict[tuple[str, str], bool] = {}
+    for index, item in enumerate(events):
+        operation = item["operation"]
+        if operation is None:
+            continue
+        key = (item["stage"], operation)
+        if item["result"] == "started":
+            if active.get(key):
+                return f"第{index + 1}条 started 重复"
+            active[key] = True
+        else:
+            if not active.get(key):
+                return f"第{index + 1}条缺少对应 started"
+            active[key] = False
+    if any(active.values()):
+        return "存在未完成的 started"
+    for operation in check.get("forbid_operations", []):
+        if any(item["operation"] == str(operation) for item in events):
+            return f"日志出现禁止操作 {operation}"
     return None
 
 
@@ -730,14 +993,29 @@ def _execute_variant(
     db_relative = f"data/evals/scenario-runs/{run_id}/{scenario['id']}_{variant['id']}.sqlite3"
     substitutions = {"{db}": db_relative, "{run_dir}": f"data/evals/scenario-runs/{run_id}"}
     step_results: list[dict[str, Any]] = []
+    step_logs: list[list[Path] | None] = []
     errors: list[str] = []
     steps = acceptance.get("steps")
     if not isinstance(steps, list) or len(steps) != len(variant.get("steps", [])):
         return {"ref": ref, "result": "FAIL", "errors": ["独立预期步骤数与清单不一致"]}
     for variant_step, step_expectation in zip(variant["steps"], steps):
         if isinstance(variant_step, str):
+            try:
+                before = set(_safe_log_files(isolation))
+            except IsolationError as exc:
+                errors.append(f"第{len(step_results) + 1}步日志路径: {exc}")
+                before = None
             expanded = _substitute(variant_step, substitutions)
             result = _run_step(expanded, isolation, run_id)
+            try:
+                after = set(_safe_log_files(isolation))
+            except IsolationError as exc:
+                after = None
+                errors.append(f"第{len(step_results) + 1}步日志路径: {exc}")
+            if before is None or after is None:
+                step_logs.append(None)
+            else:
+                step_logs.append(sorted(after - before))
             differences = compare_invocation(result, step_expectation)
             result["differences"] = differences
             step_results.append(result)
@@ -769,6 +1047,7 @@ def _execute_variant(
         if expected_counts is not None and counts != expected_counts:
             errors.append(f"并发 outcome 计数不符: {counts} != {expected_counts}")
         step_results.append({"concurrent": child_results, "outcomes": counts})
+        step_logs.append(None)
     for check in acceptance.get("db_checks", []):
         resolved = dict(check)
         resolved["path"] = resolved["path"].replace("{db}", db_relative)
@@ -776,7 +1055,14 @@ def _execute_variant(
         if problem:
             errors.append(f"数据库: {problem}")
     for check in acceptance.get("log_checks", []):
-        problem = _log_check(isolation, check)
+        if not isinstance(check, dict) or type(check.get("step")) is not int:
+            errors.append("日志: 检查缺少整数 step")
+            continue
+        index = check["step"]
+        if index < 0 or index >= len(step_logs):
+            errors.append(f"日志: step {index} 不在本变体步骤范围")
+            continue
+        problem = _log_check(isolation, check, step_logs[index])
         if problem:
             errors.append(f"日志: {problem}")
     tripwire = isolation / "tripwire.log"

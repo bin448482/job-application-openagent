@@ -3329,10 +3329,85 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         "confidence",
     ]
     evidence_keys = ["field", "source", "confidence", "state", "reason_code"]
+    evidence_types = {
+        "field": "string",
+        "source": "string",
+        "confidence": "string",
+        "state": "string",
+        "reason_code": ["string", "null"],
+    }
+    row_keys = [
+        "identity_hash",
+        "conversation_key",
+        "state",
+        "count",
+        "source",
+        "confidence",
+        "reason_code",
+    ]
+    row_types = {
+        "identity_hash": "string",
+        "conversation_key": ["string", "null"],
+        "state": "string",
+        "count": ["integer", "null"],
+        "source": "string",
+        "confidence": "string",
+        "reason_code": ["string", "null"],
+    }
+    card_keys = [
+        "job_key",
+        "identity_hash",
+        "title_raw",
+        "title",
+        "company_raw",
+        "company",
+        "salary_raw",
+        "salary",
+    ]
+    card_types = {
+        "job_key": ["string", "null"],
+        "identity_hash": "string",
+        "title_raw": "string",
+        "title": "string",
+        "company_raw": "string",
+        "company": "string",
+        "salary_raw": "string",
+        "salary": "string",
+    }
+    message_keys = [
+        "kind",
+        "direction",
+        "text",
+        "content_hash",
+        "time_hint",
+        "stable_identity_hash",
+        "stable_identity_source",
+        "repeat_safe",
+        "truncated",
+        "direction_evidence",
+        "message_key",
+    ]
+    message_types = {
+        "kind": "string",
+        "direction": "string",
+        "text": ["string", "null"],
+        "content_hash": ["string", "null"],
+        "time_hint": ["string", "null"],
+        "stable_identity_hash": ["string", "null"],
+        "stable_identity_source": ["string", "null"],
+        "repeat_safe": "boolean",
+        "truncated": "boolean",
+        "direction_evidence": "array",
+        "message_key": ["string", "null"],
+    }
     value_shapes: dict[str, list[dict[str, Any]]] = {
         "page": [
             {"path": "result.value", "keys": ["app", "profile_id", "page", "signals", "field_evidence"]},
-            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+            {
+                "path": "result.value.field_evidence",
+                "element_keys": evidence_keys,
+                "element_types": evidence_types,
+            },
         ],
         "unread": [
             {
@@ -3340,35 +3415,28 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 "keys": ["app", "profile_id", "coverage", "rows", "unread_state", "field_evidence"],
             },
             {
-                "path": "result.value.rows.0",
-                "keys": [
-                    "identity_hash",
-                    "conversation_key",
-                    "state",
-                    "count",
-                    "source",
-                    "confidence",
-                    "reason_code",
-                ],
+                "path": "result.value.rows",
+                "element_keys": row_keys,
+                "element_types": row_types,
             },
-            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+            {
+                "path": "result.value.field_evidence",
+                "element_keys": evidence_keys,
+                "element_types": evidence_types,
+            },
         ],
         "job_list": [
             {"path": "result.value", "keys": ["app", "profile_id", "coverage", "cards", "field_evidence"]},
             {
-                "path": "result.value.cards.0",
-                "keys": [
-                    "job_key",
-                    "identity_hash",
-                    "title_raw",
-                    "title",
-                    "company_raw",
-                    "company",
-                    "salary_raw",
-                    "salary",
-                ],
+                "path": "result.value.cards",
+                "element_keys": card_keys,
+                "element_types": card_types,
             },
-            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+            {
+                "path": "result.value.field_evidence",
+                "element_keys": evidence_keys,
+                "element_types": evidence_types,
+            },
         ],
         "job_detail": [
             {
@@ -3396,7 +3464,11 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     "field_evidence",
                 ],
             },
-            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+            {
+                "path": "result.value.field_evidence",
+                "element_keys": evidence_keys,
+                "element_types": evidence_types,
+            },
         ],
         "conversation": [
             {
@@ -3418,22 +3490,15 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 ],
             },
             {
-                "path": "result.value.messages.0",
-                "keys": [
-                    "kind",
-                    "direction",
-                    "text",
-                    "content_hash",
-                    "time_hint",
-                    "stable_identity_hash",
-                    "stable_identity_source",
-                    "repeat_safe",
-                    "truncated",
-                    "direction_evidence",
-                    "message_key",
-                ],
+                "path": "result.value.messages",
+                "element_keys": message_keys,
+                "element_types": message_types,
             },
-            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+            {
+                "path": "result.value.field_evidence",
+                "element_keys": evidence_keys,
+                "element_types": evidence_types,
+            },
         ],
     }
     uuid_pattern = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
@@ -3465,7 +3530,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         return outer
 
     def read_ok(*paths: dict[str, Any], shape: str | None = None) -> dict[str, Any]:
-        """构造 read 成功预期，含四键外层、七键 result 与类型值键集合。"""
+        """构造 read 成功预期，固定 actionable=true、gate_reason=null 与完整形状。"""
         return {
             "exit_code": 0,
             "required_stdout_keys": ["schema_version", "result", "actionable", "gate_reason"],
@@ -3473,6 +3538,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 {"path": "schema_version", "equals": 1},
                 {"path": "result.status", "equals": "ok"},
                 {"path": "result.reason_code", "equals": None},
+                {"path": "actionable", "equals": True, "type": "boolean"},
+                {"path": "gate_reason", "equals": None},
                 *read_shape(shape, paths),
                 *paths,
             ],
@@ -3494,7 +3561,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         }
 
     def read_stop(status: str, reason: str, *paths: dict[str, Any]) -> dict[str, Any]:
-        """构造 read 失败/未决预期；value=null 不按键集合检查。"""
+        """构造 read 失败/未决预期；按合成夹具合同断言 snapshot 与观察时间。"""
         return {
             "exit_code": 2,
             "required_stdout_keys": ["schema_version", "result", "actionable", "gate_reason"],
@@ -3503,12 +3570,25 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 {"path": "result", "keys": result_keys},
                 {"path": "result.status", "equals": status},
                 {"path": "result.reason_code", "equals": reason},
+                {"path": "result.snapshot_id", "pattern": uuid_pattern},
+                {"path": "result.observed_at", "equals": "2026-11-24T00:00:00.000Z"},
                 {"path": "result.value", "equals": None},
                 {"path": "result.source", "equals": "fixture"},
                 {"path": "result.confidence", "equals": "low"},
-                {"path": "actionable", "equals": False},
+                {"path": "actionable", "equals": False, "type": "boolean"},
                 *paths,
             ],
+        }
+
+    def log_event(
+        stage: str, operation: str | None, result: str, reason_code: str | None = None
+    ) -> dict[str, Any]:
+        """构造一条按契约人工登记的固定阶段/操作/结果/原因日志事件。"""
+        return {
+            "stage": stage,
+            "operation": operation,
+            "result": result,
+            "reason_code": reason_code,
         }
 
     def probe_ok(*paths: dict[str, Any]) -> dict[str, Any]:
@@ -3524,9 +3604,13 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         stable = digest(["boss", "message", "stable-id", raw])
         return "boss:msg:" + digest([conversation, stable])
 
-    conversation_key = "boss:conv:" + digest(["合成联系人甲", "合成机构甲", "合成岗位甲"])
-    other_conversation = "boss:conv:" + digest(["合成联系人乙", "合成机构乙", "合成岗位乙"])
-    job_other = "boss:job:" + digest(["合成岗位乙", "合成机构乙", "10-20K"])
+    conversation_identity = digest(["合成联系人甲", "合成机构甲", "合成岗位甲"])
+    other_identity = digest(["合成联系人乙", "合成机构乙", "合成岗位乙"])
+    conversation_key = "boss:conv:" + conversation_identity
+    other_conversation = "boss:conv:" + other_identity
+    job_identity = digest(["合成岗位甲", "合成机构甲", "20-30K"])
+    other_job_identity = digest(["合成岗位乙", "合成机构乙", "10-20K"])
+    job_other = "boss:job:" + other_job_identity
     description = "合成职位正文，包含职责与要求。"
 
     add(
@@ -4062,6 +4146,15 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "result.value.latest_inbound_key", "equals": None},
                             {"path": "result.value.messages.0.stable_identity_hash", "equals": None},
                             {"path": "result.value.messages.0.message_key", "equals": None},
+                            {"path": "result.value.messages.1.text", "equals": "合成消息乙"},
+                            {"path": "result.value.messages.1.content_hash", "equals": digest("合成消息乙")},
+                            {"path": "result.value.messages.1.stable_identity_hash", "equals": None},
+                            {"path": "result.value.messages.1.message_key", "equals": None},
+                            {"path": "result.value.field_evidence.1.field", "equals": "conversation_inbound"},
+                            {"path": "result.value.field_evidence.1.source", "equals": "hierarchy"},
+                            {"path": "result.value.field_evidence.1.confidence", "equals": "low"},
+                            {"path": "result.value.field_evidence.1.state", "equals": "unknown"},
+                            {"path": "result.value.field_evidence.1.reason_code", "equals": "stable_identity_unverified"},
                             {"path": "actionable", "equals": False},
                             {"path": "gate_reason", "equals": "identity_ambiguous"},
                         ),
@@ -4084,6 +4177,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         read_stop("failed", "wrong_page", {"path": "gate_reason", "equals": "not_ok"}),
                         read_ok(
                             {"path": "result.value.unread_state", "equals": "present"},
+                            {"path": "result.value.rows.0.identity_hash", "equals": conversation_identity},
+                            {"path": "result.value.rows.1.identity_hash", "equals": conversation_identity},
+                            {"path": "result.value.rows.2.identity_hash", "equals": other_identity},
                             {"path": "result.value.rows.0.conversation_key", "equals": None},
                             {"path": "result.value.rows.1.conversation_key", "equals": None},
                             {"path": "result.value.rows.2.conversation_key", "equals": other_conversation},
@@ -4140,6 +4236,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "result.value.cards.0.job_key", "equals": None},
                             {"path": "result.value.cards.1.job_key", "equals": None},
                             {"path": "result.value.cards.2.job_key", "equals": job_other},
+                            {"path": "result.value.cards.0.identity_hash", "equals": job_identity},
+                            {"path": "result.value.cards.1.identity_hash", "equals": job_identity},
+                            {"path": "result.value.cards.2.identity_hash", "equals": other_job_identity},
                             {"path": "actionable", "equals": True},
                         ),
                         read_ok(
@@ -4327,15 +4426,61 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     ],
                     "log_checks": [
                         {
-                            "pairs": [
-                                ["unread", "started"],
-                                ["unread", "ok"],
-                                ["unread", "failed"],
-                                ["gate", "failed"],
+                            "step": 0,
+                            "events": [
+                                log_event("start", None, "started"),
+                                log_event("arguments", None, "ok"),
+                                log_event("config", None, "ok"),
+                                log_event("read", "load", "started"),
+                                log_event("read", "unread", "started"),
+                                log_event("read", "unread", "ok"),
+                                log_event("read", "load", "ok"),
+                                log_event("read", "gate", "started"),
+                                log_event("read", "gate", "ok"),
+                                log_event("decision", None, "ok"),
+                                log_event("output", None, "ok"),
+                                log_event("exit", None, "ok"),
                             ],
                             "forbid_operations": ["pixel"],
-                            "forbidden": ["合成联系人", "合成机构", "合成岗位", "screen.rgba", "calibration.json"],
-                        }
+                            "forbidden": [
+                                "合成联系人",
+                                "合成机构",
+                                "合成岗位",
+                                "合成消息",
+                                "screen.rgba",
+                                "calibration.json",
+                                "fixture.json",
+                                "page.xml",
+                            ],
+                        },
+                        {
+                            "step": 1,
+                            "events": [
+                                log_event("start", None, "started"),
+                                log_event("arguments", None, "ok"),
+                                log_event("config", None, "ok"),
+                                log_event("read", "load", "started"),
+                                log_event("read", "unread", "started"),
+                                log_event("read", "unread", "failed", "invalid_xml"),
+                                log_event("read", "load", "failed", "invalid_xml"),
+                                log_event("read", "gate", "started"),
+                                log_event("read", "gate", "failed", "not_ok"),
+                                log_event("decision", None, "failed", "invalid_xml"),
+                                log_event("output", None, "ok"),
+                                log_event("exit", None, "failed", "invalid_xml"),
+                            ],
+                            "forbid_operations": ["pixel"],
+                            "forbidden": [
+                                "合成联系人",
+                                "合成机构",
+                                "合成岗位",
+                                "合成消息",
+                                "screen.rgba",
+                                "calibration.json",
+                                "fixture.json",
+                                "page.xml",
+                            ],
+                        },
                     ],
                 },
             ),
@@ -4365,19 +4510,84 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     ],
                     "log_checks": [
                         {
-                            "pairs": [
-                                ["pixel", "started"],
-                                ["pixel", "failed"],
-                                ["conversation", "started"],
-                                ["merge", "started"],
-                                ["merge", "ok"],
-                                ["conversation", "ok"],
-                                ["job_detail", "started"],
-                                ["job_detail", "undetermined"],
-                                ["gate", "failed"],
+                            "step": 0,
+                            "events": [
+                                log_event("start", None, "started"),
+                                log_event("arguments", None, "ok"),
+                                log_event("config", None, "ok"),
+                                log_event("read", "load", "started"),
+                                log_event("read", "unread", "started"),
+                                log_event("read", "pixel", "started"),
+                                log_event("read", "pixel", "failed", "invalid_fixture"),
+                                log_event("read", "unread", "failed", "invalid_fixture"),
+                                log_event("read", "load", "failed", "invalid_fixture"),
+                                log_event("read", "gate", "started"),
+                                log_event("read", "gate", "failed", "not_ok"),
+                                log_event("decision", None, "failed", "invalid_fixture"),
+                                log_event("output", None, "ok"),
+                                log_event("exit", None, "failed", "invalid_fixture"),
                             ],
-                            "forbidden": ["同文消息", "合成消息", "dup-1", "screen.rgba", "calibration.json"],
-                        }
+                            "forbidden": [
+                                "同文消息",
+                                "合成消息",
+                                "dup-1",
+                                "screen.rgba",
+                                "calibration.json",
+                                "fixture.json",
+                            ],
+                        },
+                        {
+                            "step": 1,
+                            "events": [
+                                log_event("start", None, "started"),
+                                log_event("arguments", None, "ok"),
+                                log_event("config", None, "ok"),
+                                log_event("read", "load", "started"),
+                                log_event("read", "conversation", "started"),
+                                log_event("read", "merge", "started"),
+                                log_event("read", "merge", "ok"),
+                                log_event("read", "conversation", "ok"),
+                                log_event("read", "load", "ok"),
+                                log_event("read", "gate", "started"),
+                                log_event("read", "gate", "failed", "identity_ambiguous"),
+                                log_event("decision", None, "failed", "identity_ambiguous"),
+                                log_event("output", None, "ok"),
+                                log_event("exit", None, "failed", "identity_ambiguous"),
+                            ],
+                            "forbidden": [
+                                "同文消息",
+                                "合成消息",
+                                "dup-1",
+                                "screen.rgba",
+                                "calibration.json",
+                                "fixture.json",
+                            ],
+                        },
+                        {
+                            "step": 2,
+                            "events": [
+                                log_event("start", None, "started"),
+                                log_event("arguments", None, "ok"),
+                                log_event("config", None, "ok"),
+                                log_event("read", "load", "started"),
+                                log_event("read", "job_detail", "started"),
+                                log_event("read", "job_detail", "undetermined", "incomplete_snapshot"),
+                                log_event("read", "load", "undetermined", "incomplete_snapshot"),
+                                log_event("read", "gate", "started"),
+                                log_event("read", "gate", "failed", "not_ok"),
+                                log_event("decision", None, "failed", "incomplete_snapshot"),
+                                log_event("output", None, "ok"),
+                                log_event("exit", None, "failed", "incomplete_snapshot"),
+                            ],
+                            "forbidden": [
+                                "同文消息",
+                                "合成消息",
+                                "dup-1",
+                                "screen.rgba",
+                                "calibration.json",
+                                "fixture.json",
+                            ],
+                        },
                     ],
                 },
             ),

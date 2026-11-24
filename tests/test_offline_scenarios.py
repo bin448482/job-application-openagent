@@ -11,10 +11,12 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -1562,34 +1564,363 @@ class M1DriverBoundaryTests(unittest.TestCase):
             differences,
         )
 
-    def test_m3_log_check_rejects_missing_pair_and_leak(self) -> None:
-        """日志检查必须拒绝缺失配对和泄露合成正文。"""
+    @staticmethod
+    def _synthetic_log_event(
+        stage: str,
+        operation: str | None,
+        result: str,
+        *,
+        reason_code: str | None = None,
+        correlation: str = "00000000-0000-4000-8000-0000000000aa",
+        **extra,
+    ) -> dict:
+        """构造字段完整、值合法的合成日志事件，供日志判据反例使用。"""
+        event = {
+            "schema_version": 1,
+            "ts": "2026-11-24T00:00:00.000Z",
+            "correlation_id": correlation,
+            "stage": stage,
+            "operation": operation,
+            "result": result,
+            "reason_code": reason_code,
+            "error_category": None,
+            "duration_ms": 0,
+            "command": None,
+            "exit_code": None,
+            "mode": None,
+            "config_source": None,
+            "device_count": None,
+        }
+        event.update(extra)
+        return event
+
+    def _write_synthetic_log(self, root: Path, events: list[dict], name: str) -> Path:
+        """把合成事件写成单次调用的 JSON Lines 日志文件。"""
+        log_dir = root / "data" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        path = log_dir / name
+        path.write_text(
+            "\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def test_m3_log_check_rejects_order_reason_extra_key_and_path(self) -> None:
+        """日志判据必须拒绝倒序、阶段/原因篡改、缺 started、额外键与路径值。"""
+        events = [
+            self._synthetic_log_event("start", None, "started"),
+            self._synthetic_log_event("read", "load", "started"),
+            self._synthetic_log_event("read", "unread", "started"),
+            self._synthetic_log_event("read", "unread", "failed", reason_code="invalid_xml"),
+            self._synthetic_log_event("read", "load", "failed", reason_code="invalid_xml"),
+            self._synthetic_log_event("exit", None, "failed", reason_code="invalid_xml"),
+        ]
+        expected = {
+            "step": 0,
+            "events": [
+                {"stage": "start", "operation": None, "result": "started", "reason_code": None},
+                {"stage": "read", "operation": "load", "result": "started", "reason_code": None},
+                {"stage": "read", "operation": "unread", "result": "started", "reason_code": None},
+                {
+                    "stage": "read",
+                    "operation": "unread",
+                    "result": "failed",
+                    "reason_code": "invalid_xml",
+                },
+                {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "failed",
+                    "reason_code": "invalid_xml",
+                },
+                {
+                    "stage": "exit",
+                    "operation": None,
+                    "result": "failed",
+                    "reason_code": "invalid_xml",
+                },
+            ],
+        }
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            log_dir = root / "data" / "logs"
-            log_dir.mkdir(parents=True)
-            log = log_dir / "m0-process-synthetic.jsonl"
-            log.write_text(
-                json.dumps(
-                    {
-                        "stage": "read",
-                        "operation": "unread",
-                        "result": "ok",
-                        "payload": "合成消息甲",
-                    },
-                    ensure_ascii=False,
+            path = self._write_synthetic_log(root, events, "m0-process-synthetic.jsonl")
+            self.assertIsNone(runner._log_check(root, expected, [path]))
+            mutations = {
+                "reversed": list(reversed(events)),
+                "stage_rewritten": [
+                    {**event, "stage": "decision"} for event in events
+                ],
+                "missing_started": [
+                    event
+                    for event in events
+                    if not (
+                        event["stage"] == "read"
+                        and event["operation"] == "unread"
+                        and event["result"] == "started"
+                    )
+                ],
+                "extra_key": [{**event, "synthetic_path": "/synthetic/path"} for event in events],
+                "path_value": [{**event, "command": "C:/synthetic/path"} for event in events],
+            }
+            for name, mutated in mutations.items():
+                self._write_synthetic_log(root, mutated, "m0-process-synthetic.jsonl")
+                self.assertIsNotNone(
+                    runner._log_check(root, expected, [path]), name
                 )
-                + "\n",
-                encoding="utf-8",
+            self._write_synthetic_log(root, events, "m0-process-synthetic.jsonl")
+            other = self._write_synthetic_log(
+                root,
+                [
+                    self._synthetic_log_event(
+                        "read",
+                        "unread",
+                        "ok",
+                        correlation="00000000-0000-4000-8000-0000000000bb",
+                    )
+                ],
+                "m0-process-second.jsonl",
+            )
+            self.assertIn("一个日志文件", runner._log_check(root, expected, [path, other]) or "")
+            self._write_synthetic_log(
+                root,
+                [
+                    self._synthetic_log_event("start", None, "started"),
+                    self._synthetic_log_event(
+                        "read",
+                        "unread",
+                        "ok",
+                        correlation="00000000-0000-4000-8000-0000000000cc",
+                    ),
+                ],
+                "m0-process-synthetic.jsonl",
             )
             self.assertIn(
-                "缺少日志配对",
-                runner._log_check(root, {"pairs": [["unread", "started"]]}) or "",
+                "correlation",
+                runner._log_check(
+                    root,
+                    {
+                        "step": 0,
+                        "events": [
+                            {"stage": "start", "operation": None, "result": "started", "reason_code": None},
+                            {"stage": "read", "operation": "unread", "result": "ok", "reason_code": None},
+                        ],
+                    },
+                    [path],
+                )
+                or "",
             )
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write("合成消息甲\n")
             self.assertIn(
                 "泄露",
-                runner._log_check(root, {"forbidden": ["合成消息甲"]}) or "",
+                runner._log_check(root, {**expected, "forbidden": ["合成消息甲"]}, [path]) or "",
             )
+
+    def test_m3_log_check_rejects_real_scenario_mutations_without_borrowing(self) -> None:
+        """真实 SC-R13 日志的倒序/阶段/缺 started/额外路径必须被实际 oracle 拒绝。"""
+        assets = load_assets()
+        variant = variant_index(assets)["SC-R13/log_trace_no_pixel"]
+        checks = assets.oracles["variants"]["SC-R13/log_trace_no_pixel"]["acceptance"]["log_checks"]
+        target = TESTS_DIR.parent
+        run_id = f"unittest-log-{uuid.uuid4().hex[:8]}"
+        isolation = runner._prepare_isolation(
+            target, run_id, "SC-R13", "log_trace_no_pixel", variant
+        )
+        try:
+            step_logs: list[list[Path]] = []
+            previous = set(runner._safe_log_files(isolation))
+            for command in variant["steps"]:
+                runner._run_step(command, isolation, run_id)
+                current = set(runner._safe_log_files(isolation))
+                step_logs.append(sorted(current - previous))
+                previous = current
+            self.assertEqual([len(item) for item in step_logs], [1, 1])
+            self.assertIsNone(runner._log_check(isolation, checks[0], step_logs[0]))
+            self.assertIsNone(runner._log_check(isolation, checks[1], step_logs[1]))
+            self.assertIsNotNone(
+                runner._log_check(isolation, checks[0], step_logs[1]),
+                "不得跨调用借用另一调用的日志",
+            )
+            path = step_logs[1][0]
+            original = path.read_text(encoding="utf-8")
+            try:
+                lines = original.splitlines()
+                events = [json.loads(line) for line in lines]
+                mutations = {
+                    "reversed": list(reversed(lines)),
+                    "stage_and_reason": [
+                        json.dumps(
+                            {
+                                **event,
+                                "stage": "decision",
+                                "reason_code": "wrong_page" if event["reason_code"] else None,
+                            },
+                            ensure_ascii=False,
+                        )
+                        for event in events
+                    ],
+                    "missing_invalid_xml_started": [
+                        line
+                        for line, event in zip(lines, events)
+                        if not (
+                            event["stage"] == "read"
+                            and event["operation"] == "unread"
+                            and event["result"] == "started"
+                        )
+                    ],
+                    "extra_synthetic_path": [
+                        json.dumps(
+                            {
+                                **event,
+                                "synthetic_path": str(
+                                    (
+                                        target
+                                        / "tests/scenarios/fixtures/m3/read/invalid_xml_with_pixel/fixture.json"
+                                    ).resolve()
+                                ),
+                            },
+                            ensure_ascii=False,
+                        )
+                        for event in events
+                    ],
+                }
+                for name, mutated in mutations.items():
+                    path.write_text("\n".join(mutated) + "\n", encoding="utf-8")
+                    self.assertIsNotNone(
+                        runner._log_check(isolation, checks[1], step_logs[1]), name
+                    )
+            finally:
+                path.write_text(original, encoding="utf-8")
+            self.assertIsNone(runner._log_check(isolation, checks[1], step_logs[1]))
+            self.assertIsNone(runner._log_check(isolation, checks[0], step_logs[0]))
+        finally:
+            shutil.rmtree(target / runner.RUN_ROOT / run_id, ignore_errors=True)
+
+    def test_real_m3_log_check_rejects_junction_log_dir(self) -> None:
+        """日志观察器必须先拒绝日志目录 junction，不能跟随到隔离根外。"""
+        if os.name != "nt":
+            self.skipTest("仅 Windows 验证 junction")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root / "outside"
+            outside.mkdir()
+            log_dir = root / "data" / "logs"
+            log_dir.parent.mkdir(parents=True)
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(log_dir), str(outside)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if created.returncode != 0 or not runner._is_link_like(log_dir):
+                self.skipTest("当前平台/账户不能创建 junction")
+            with self.assertRaises(runner.IsolationError):
+                runner._safe_log_files(root)
+
+    def test_real_m3_non_first_rows_mutant_is_caught_by_r10_oracle(self) -> None:
+        """真实未读输出第二/三行新增键、缺键或身份篡改必须被实际 oracle 拒绝。"""
+        from app.adapters.boss.read import load_and_read_fixture
+        from app.usecases.read import build_read_payload
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-R10/incomplete_or_ambiguous"]["acceptance"]["steps"][9]
+        result = load_and_read_fixture(
+            SCENARIO_ROOT / "fixtures/m3/read/ambiguous_unread/fixture.json",
+            "00000000-0000-4000-8000-0000000005a1",
+        )
+        payload = build_read_payload(result)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": payload,
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        self.assertEqual(compare_invocation(invocation, oracle), [])
+        mutations = {
+            "second_extra_key": lambda rows: rows[1].__setitem__("unexpected_synthetic_key", "x"),
+            "second_missing_hash": lambda rows: rows[1].pop("identity_hash"),
+            "second_hash_tampered": lambda rows: rows[1].__setitem__("identity_hash", "0" * 64),
+            "third_hash_tampered": lambda rows: rows[2].__setitem__("identity_hash", "1" * 64),
+        }
+        for name, mutate in mutations.items():
+            broken = copy.deepcopy(payload)
+            mutate(broken["result"]["value"]["rows"])
+            differences = compare_invocation({**invocation, "stdout_json": broken}, oracle)
+            self.assertTrue(differences, name)
+
+    def test_real_m3_non_first_cards_mutant_is_caught_by_r10_oracle(self) -> None:
+        """真实职位列表非首卡新增键、缺键或身份篡改必须被实际 oracle 拒绝。"""
+        from app.adapters.boss.read import load_and_read_fixture
+        from app.usecases.read import build_read_payload
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-R10/page_job_paths"]["acceptance"]["steps"][3]
+        result = load_and_read_fixture(
+            SCENARIO_ROOT / "fixtures/m3/read/job_list_ambiguous/fixture.json",
+            "00000000-0000-4000-8000-0000000005a2",
+        )
+        payload = build_read_payload(result)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": payload,
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        self.assertEqual(compare_invocation(invocation, oracle), [])
+        mutations = {
+            "second_extra_key": lambda cards: cards[1].__setitem__("unexpected_synthetic_key", "x"),
+            "second_missing_hash": lambda cards: cards[1].pop("identity_hash"),
+            "second_hash_tampered": lambda cards: cards[1].__setitem__("identity_hash", "0" * 64),
+            "third_hash_tampered": lambda cards: cards[2].__setitem__("identity_hash", "1" * 64),
+        }
+        for name, mutate in mutations.items():
+            broken = copy.deepcopy(payload)
+            mutate(broken["result"]["value"]["cards"])
+            differences = compare_invocation({**invocation, "stdout_json": broken}, oracle)
+            self.assertTrue(differences, name)
+
+    def test_real_m3_non_first_message_and_evidence_mutants_are_caught(self) -> None:
+        """真实会话第二条消息与第二项证据的键/摘要/状态篡改必须被实际 oracle 拒绝。"""
+        from app.adapters.boss.read import load_and_read_fixture
+        from app.usecases.read import build_read_payload
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-R10/incomplete_or_ambiguous"]["acceptance"]["steps"][3]
+        result = load_and_read_fixture(
+            SCENARIO_ROOT / "fixtures/m3/read/conversation_ambiguous/fixture.json",
+            "00000000-0000-4000-8000-0000000005a3",
+        )
+        payload = build_read_payload(result)
+        invocation = {
+            "exit_code": 2,
+            "stdout_json": payload,
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        self.assertEqual(compare_invocation(invocation, oracle), [])
+        mutations = {
+            "second_message_extra_key": lambda value: value["messages"][1].__setitem__(
+                "unexpected_synthetic_key", "x"
+            ),
+            "second_message_missing_hash": lambda value: value["messages"][1].pop("content_hash"),
+            "second_message_hash_tampered": lambda value: value["messages"][1].__setitem__(
+                "content_hash", "0" * 64
+            ),
+            "second_evidence_state_tampered": lambda value: value["field_evidence"][1].__setitem__(
+                "state", "ok"
+            ),
+            "second_evidence_reason_tampered": lambda value: value["field_evidence"][1].__setitem__(
+                "reason_code", None
+            ),
+        }
+        for name, mutate in mutations.items():
+            broken = copy.deepcopy(payload)
+            mutate(broken["result"]["value"])
+            differences = compare_invocation({**invocation, "stdout_json": broken}, oracle)
+            self.assertTrue(differences, name)
 
     def test_real_m2_sut_mutant_coverage_is_caught(self) -> None:
         """真实 M2 解析器把 coverage 降为 viewport 时，SC-U04 oracle 必须失败。"""

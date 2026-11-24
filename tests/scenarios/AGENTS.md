@@ -30,6 +30,7 @@ M0 `51333d8`、M1 `a600d0a`、M2 `cc103f8`、M3 `584b814`（普通 merge `92a0b6
 - M3 已执行：15 PASS、0 FAIL；8 DEFERRED（R01 三项、R02、R03/R04/R06/R07 原变体）、1 MODULE_EVIDENCE（R01 无确认的零子进程证据）、17 设备门槛。新增 10 个明确父场景的 M3 子变体（定向核对 API/边界、全局正计数 API、读侧不关闭发现、稳定身份新增键、页面/职位完整路径）；它们不计作原 R03/R04/R06/R07 完整通过。
 - 其余 155 个 M4+ ASSET_ONLY 记 `BLOCKED_ENTRY_UNFROZEN`；DEFERRED/MODULE_EVIDENCE 均不得算 PASS。
 - DEVICE_GATE 是 T/O/W 纯实机门槛，保留未验收；F 通过不能替代。
+- 日志判据绑定单次调用产生的唯一日志文件与 correlation，校验完整有序 `stage/operation/result/reason_code` 序列、`started` 成对次数、固定字段白名单/类型和敏感标记；无像素分支不得出现 pixel。比较器对 rows/cards/messages/field_evidence 的每个元素校验固定键与必要类型，并对非首项身份/摘要/证据给出独立预期。
 
 ## 四、入口与验证命令
 
@@ -42,7 +43,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --target .
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-C01 --target .
 ```
 
-- unittest：资产完整性、严格比较、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝、M3 探针/真实阶梯 mutant 等 75 项检查；只证明判据能抓错误。
+- unittest：资产完整性、严格比较、逐元素键/类型、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝、M3 探针/真实阶梯 mutant、真实日志变异与非首项输出变异等 80 项检查；只证明判据能抓错误。
 - `--mode assets`：只读清单/预期/夹具并校验；退出 0 仅表示资产自洽，不表示产品通过。
 - `--mode acceptance`：先校验资产，失败即拒绝执行；只为已实现里程碑的 READY F 变体创建隔离根，运行真实 `python -m app`、M0 协议边界替身、M1 探针/受控两进程、M2 受限探针或 M3 探针。全量当前 136 PASS、0 FAIL，但 M4+/ASSET_ONLY/DEFERRED/MODULE/设备门槛使总体 BLOCKED、退出 3；M0 子集退出 0，M1 子集退出 3，M2 子集退出 0，M3 子集退出 3，均不声明产品 PASS。
 - 报告 JSON 写入被忽略的 `data/evals/scenario-runs/`；不提交生成报告，不修改 `.gitignore`。

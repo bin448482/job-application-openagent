@@ -8,13 +8,13 @@
 
 - `__init__.py`：包标识。
 - `model.py`：加载 catalogue/oracles，校验 73 场景、变体引用、设备门槛、夹具结构与路径边界；错误不带绝对路径。
-- `compare.py`：JSON 类型严格比较（bool≠整数）、路径/键集合/长度断言、普通业务 stdout 必须是单个 JSON 对象。
+- `compare.py`：JSON 类型严格比较（bool≠整数）、路径/键集合/长度断言、数组每个元素的固定键集合与必要字段类型（`element_keys`/`element_types`，支持可空联合类型）、普通业务 stdout 必须是单个 JSON 对象；不只检查数组首项。
 - `replay.py`：虚拟时钟与固定事件序列重放，校验起点/单调/非 bool 非负，保留 arrival/first_observed/handling_started 为独立字段。
 - `m3_probe.py`：M3 受限探针，调用真实 `targeted_verification_outcome`、`load_and_read_fixture`/`new_message_keys` 与 `resolve_field`；用于 CLI 无法表达的显式 now、跨快照新增键、阶梯/上下文冲突与证据输出，不复制业务判定；路径先查原始 leaf/祖先链接再 resolve。
 - `m2_probe.py`：M2 受限探针，调用真实 `load_and_parse_snapshot`/`persist_and_aggregate`；仅用于 now 注入、合成初态 seed、只读 baseline/inspect，SQL 不替代生产转换；inspect 返回发现/租约/基线/消息/设备只读事实，baseline 记录完整五表+事件签名、“基线/消息/设备”稳定签名与被保护任务签名（仅允许 source_names/updated_at 变化）；request/db/fixture 先查原始 leaf/祖先链接，再 resolve/containment。
 - `m1_probe.py`：M1 纯合成 JSON 脚本探针；只调用真实 `initialize_database`/`SqliteStore`，支持假时钟、固定 host/owner、停止检查器、显式 ProcessLog、受限 prepare/inspect 与 barrier/hold_lock；request/db/log/barrier 路径在读写开库前校验为隔离根内相对路径，拒绝绝对/..、自身或祖先链接；不接受任意 SQL/命令/路径。
 - `m0_protocol_probe.py`：在隔离根仅替换 `subprocess.run` 设备边界，调用已交付 `AdbDeviceProbe` 验证超时/非零/不重试；不启动真实 ADB。复制该入口前复用父路径 symlink/junction 与 target 边界校验，不只检查文件存在。
-- `runner.py`：`assets`/`acceptance` 分流，含 `IMPLEMENTED_MILESTONES` 门禁（当前 M0–M3）；acceptance 先校验资产，再在隔离根复制真实 app 与命令/manifest/read fixture 选定的合成输入（排除 expected/oracle），使用最小环境白名单和 tripwire 拒绝网络/子进程，缺 app 记 BLOCKED。
+- `runner.py`：`assets`/`acceptance` 分流，含 `IMPLEMENTED_MILESTONES` 门禁（当前 M0–M3）；acceptance 先校验资产，再在隔离根复制真实 app 与命令/manifest/read fixture 选定的合成输入（排除 expected/oracle），使用最小环境白名单和 tripwire 拒绝网络/子进程，缺 app 记 BLOCKED。过程日志按单次 CLI 调用快照新文件并与该步骤绑定，检查单一 correlation、固定字段白名单/类型、完整有序 stage+operation+result+reason_code 序列、started 成对次数、禁用操作与敏感标记；日志目录自身/祖先链接在读取前拒绝。
 - `AGENTS.md`：本文件。
 - `CLAUDE.md`：只包含 `@AGENTS.md`。
 

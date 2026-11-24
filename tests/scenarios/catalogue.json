@@ -10991,6 +10991,15 @@
                     "equals": null
                   },
                   {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": null
+                  },
+                  {
                     "path": "result",
                     "keys": [
                       "status",
@@ -11030,8 +11039,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.rows.0",
-                    "keys": [
+                    "path": "result.value.rows",
+                    "element_keys": [
                       "identity_hash",
                       "conversation_key",
                       "state",
@@ -11039,17 +11048,45 @@
                       "source",
                       "confidence",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "identity_hash": "string",
+                      "conversation_key": [
+                        "string",
+                        "null"
+                      ],
+                      "state": "string",
+                      "count": [
+                        "integer",
+                        "null"
+                      ],
+                      "source": "string",
+                      "confidence": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.unread_state",
@@ -11318,6 +11355,15 @@
                     "equals": null
                   },
                   {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": null
+                  },
+                  {
                     "path": "result",
                     "keys": [
                       "status",
@@ -11364,8 +11410,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -11377,17 +11423,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.read_complete",
@@ -11698,8 +11785,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -11711,17 +11798,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.inbound_state",
@@ -11775,6 +11903,15 @@
                     "equals": null
                   },
                   {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": null
+                  },
+                  {
                     "path": "result",
                     "keys": [
                       "status",
@@ -11821,8 +11958,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -11834,17 +11971,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.inbound_state",
@@ -11944,8 +12122,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -11957,17 +12135,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.messages",
@@ -12067,8 +12286,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -12080,17 +12299,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.messages",
@@ -12190,8 +12450,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -12203,17 +12463,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.messages",
@@ -12728,6 +13029,14 @@
                     "equals": "incomplete_snapshot"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -12741,7 +13050,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -12821,8 +13131,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -12834,17 +13144,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.inbound_state",
@@ -12865,6 +13216,42 @@
                   {
                     "path": "result.value.messages.0.message_key",
                     "equals": null
+                  },
+                  {
+                    "path": "result.value.messages.1.text",
+                    "equals": "合成消息乙"
+                  },
+                  {
+                    "path": "result.value.messages.1.content_hash",
+                    "equals": "21e96e93e55e02f7f2ba6189fe9cf3924a4e9a9a6c1af1e253a985f12c9e2a33"
+                  },
+                  {
+                    "path": "result.value.messages.1.stable_identity_hash",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.messages.1.message_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.field_evidence.1.field",
+                    "equals": "conversation_inbound"
+                  },
+                  {
+                    "path": "result.value.field_evidence.1.source",
+                    "equals": "hierarchy"
+                  },
+                  {
+                    "path": "result.value.field_evidence.1.confidence",
+                    "equals": "low"
+                  },
+                  {
+                    "path": "result.value.field_evidence.1.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.field_evidence.1.reason_code",
+                    "equals": "stable_identity_unverified"
                   },
                   {
                     "path": "actionable",
@@ -12948,8 +13335,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -12961,17 +13348,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.inbound_state",
@@ -13067,8 +13495,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -13080,17 +13508,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.inbound_state",
@@ -13148,6 +13617,14 @@
                     "equals": "incomplete_snapshot"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -13161,7 +13638,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -13203,6 +13681,14 @@
                     "equals": "identity_ambiguous"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -13216,7 +13702,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -13258,6 +13745,14 @@
                     "equals": "wrong_page"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -13271,7 +13766,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -13298,6 +13794,15 @@
                   },
                   {
                     "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
                     "equals": null
                   },
                   {
@@ -13340,8 +13845,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.rows.0",
-                    "keys": [
+                    "path": "result.value.rows",
+                    "element_keys": [
                       "identity_hash",
                       "conversation_key",
                       "state",
@@ -13349,21 +13854,61 @@
                       "source",
                       "confidence",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "identity_hash": "string",
+                      "conversation_key": [
+                        "string",
+                        "null"
+                      ],
+                      "state": "string",
+                      "count": [
+                        "integer",
+                        "null"
+                      ],
+                      "source": "string",
+                      "confidence": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.unread_state",
                     "equals": "present"
+                  },
+                  {
+                    "path": "result.value.rows.0.identity_hash",
+                    "equals": "3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.rows.1.identity_hash",
+                    "equals": "3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.rows.2.identity_hash",
+                    "equals": "e69f2d1c72729b42e83bb891a6828904e5386f7dbf3a153fe93a08f11277883b"
                   },
                   {
                     "path": "result.value.rows.0.conversation_key",
@@ -13479,6 +14024,15 @@
                     "equals": null
                   },
                   {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": null
+                  },
+                  {
                     "path": "result",
                     "keys": [
                       "status",
@@ -13517,14 +14071,24 @@
                     ]
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.page",
@@ -13555,6 +14119,15 @@
                   },
                   {
                     "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
                     "equals": null
                   },
                   {
@@ -13596,8 +14169,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.cards.0",
-                    "keys": [
+                    "path": "result.value.cards",
+                    "element_keys": [
                       "job_key",
                       "identity_hash",
                       "title_raw",
@@ -13606,17 +14179,40 @@
                       "company",
                       "salary_raw",
                       "salary"
-                    ]
+                    ],
+                    "element_types": {
+                      "job_key": [
+                        "string",
+                        "null"
+                      ],
+                      "identity_hash": "string",
+                      "title_raw": "string",
+                      "title": "string",
+                      "company_raw": "string",
+                      "company": "string",
+                      "salary_raw": "string",
+                      "salary": "string"
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.cards.0.job_key",
@@ -13651,6 +14247,15 @@
                   },
                   {
                     "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
                     "equals": null
                   },
                   {
@@ -13707,14 +14312,24 @@
                     ]
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.complete",
@@ -13760,6 +14375,15 @@
                     "equals": null
                   },
                   {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": null
+                  },
+                  {
                     "path": "result",
                     "keys": [
                       "status",
@@ -13798,8 +14422,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.cards.0",
-                    "keys": [
+                    "path": "result.value.cards",
+                    "element_keys": [
                       "job_key",
                       "identity_hash",
                       "title_raw",
@@ -13808,17 +14432,40 @@
                       "company",
                       "salary_raw",
                       "salary"
-                    ]
+                    ],
+                    "element_types": {
+                      "job_key": [
+                        "string",
+                        "null"
+                      ],
+                      "identity_hash": "string",
+                      "title_raw": "string",
+                      "title": "string",
+                      "company_raw": "string",
+                      "company": "string",
+                      "salary_raw": "string",
+                      "salary": "string"
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.cards.0.job_key",
@@ -13831,6 +14478,18 @@
                   {
                     "path": "result.value.cards.2.job_key",
                     "equals": "boss:job:b1869daadb096670088181b2b404c0b8bb0b426fea164e6789ebca136f2c9155"
+                  },
+                  {
+                    "path": "result.value.cards.0.identity_hash",
+                    "equals": "3a7d1d627ba4309a469a7b956fc0a8ed93557424fd3a0c0259a44d05e61beae1"
+                  },
+                  {
+                    "path": "result.value.cards.1.identity_hash",
+                    "equals": "3a7d1d627ba4309a469a7b956fc0a8ed93557424fd3a0c0259a44d05e61beae1"
+                  },
+                  {
+                    "path": "result.value.cards.2.identity_hash",
+                    "equals": "b1869daadb096670088181b2b404c0b8bb0b426fea164e6789ebca136f2c9155"
                   },
                   {
                     "path": "actionable",
@@ -13857,6 +14516,15 @@
                   },
                   {
                     "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
                     "equals": null
                   },
                   {
@@ -13898,14 +14566,24 @@
                     ]
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.page",
@@ -13981,14 +14659,24 @@
                     ]
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.page",
@@ -14187,6 +14875,14 @@
                     "equals": "uncalibrated_profile"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -14200,7 +14896,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -14327,6 +15024,15 @@
                     "equals": null
                   },
                   {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": null
+                  },
+                  {
                     "path": "result",
                     "keys": [
                       "status",
@@ -14366,8 +15072,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.rows.0",
-                    "keys": [
+                    "path": "result.value.rows",
+                    "element_keys": [
                       "identity_hash",
                       "conversation_key",
                       "state",
@@ -14375,17 +15081,45 @@
                       "source",
                       "confidence",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "identity_hash": "string",
+                      "conversation_key": [
+                        "string",
+                        "null"
+                      ],
+                      "state": "string",
+                      "count": [
+                        "integer",
+                        "null"
+                      ],
+                      "source": "string",
+                      "confidence": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.rows.0.state",
@@ -14474,8 +15208,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.rows.0",
-                    "keys": [
+                    "path": "result.value.rows",
+                    "element_keys": [
                       "identity_hash",
                       "conversation_key",
                       "state",
@@ -14483,17 +15217,45 @@
                       "source",
                       "confidence",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "identity_hash": "string",
+                      "conversation_key": [
+                        "string",
+                        "null"
+                      ],
+                      "state": "string",
+                      "count": [
+                        "integer",
+                        "null"
+                      ],
+                      "source": "string",
+                      "confidence": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.unread_state",
@@ -14582,8 +15344,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.rows.0",
-                    "keys": [
+                    "path": "result.value.rows",
+                    "element_keys": [
                       "identity_hash",
                       "conversation_key",
                       "state",
@@ -14591,17 +15353,45 @@
                       "source",
                       "confidence",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "identity_hash": "string",
+                      "conversation_key": [
+                        "string",
+                        "null"
+                      ],
+                      "state": "string",
+                      "count": [
+                        "integer",
+                        "null"
+                      ],
+                      "source": "string",
+                      "confidence": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.unread_state",
@@ -14655,6 +15445,14 @@
                     "equals": "invalid_fixture"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -14668,7 +15466,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -14695,6 +15494,15 @@
                   },
                   {
                     "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
                     "equals": null
                   },
                   {
@@ -14737,8 +15545,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.rows.0",
-                    "keys": [
+                    "path": "result.value.rows",
+                    "element_keys": [
                       "identity_hash",
                       "conversation_key",
                       "state",
@@ -14746,17 +15554,45 @@
                       "source",
                       "confidence",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "identity_hash": "string",
+                      "conversation_key": [
+                        "string",
+                        "null"
+                      ],
+                      "state": "string",
+                      "count": [
+                        "integer",
+                        "null"
+                      ],
+                      "source": "string",
+                      "confidence": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.rows.0.state",
@@ -14833,8 +15669,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.rows.0",
-                    "keys": [
+                    "path": "result.value.rows",
+                    "element_keys": [
                       "identity_hash",
                       "conversation_key",
                       "state",
@@ -14842,17 +15678,45 @@
                       "source",
                       "confidence",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "identity_hash": "string",
+                      "conversation_key": [
+                        "string",
+                        "null"
+                      ],
+                      "state": "string",
+                      "count": [
+                        "integer",
+                        "null"
+                      ],
+                      "source": "string",
+                      "confidence": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.rows.0.state",
@@ -14906,6 +15770,14 @@
                     "equals": "invalid_xml"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -14919,7 +15791,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -15192,6 +16065,15 @@
                     "equals": null
                   },
                   {
+                    "path": "actionable",
+                    "equals": true,
+                    "type": "boolean"
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": null
+                  },
+                  {
                     "path": "result",
                     "keys": [
                       "status",
@@ -15231,8 +16113,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.rows.0",
-                    "keys": [
+                    "path": "result.value.rows",
+                    "element_keys": [
                       "identity_hash",
                       "conversation_key",
                       "state",
@@ -15240,17 +16122,45 @@
                       "source",
                       "confidence",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "identity_hash": "string",
+                      "conversation_key": [
+                        "string",
+                        "null"
+                      ],
+                      "state": "string",
+                      "count": [
+                        "integer",
+                        "null"
+                      ],
+                      "source": "string",
+                      "confidence": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.unread_state",
@@ -15292,6 +16202,14 @@
                     "equals": "invalid_xml"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -15305,7 +16223,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -15316,23 +16235,80 @@
             ],
             "log_checks": [
               {
-                "pairs": [
-                  [
-                    "unread",
-                    "started"
-                  ],
-                  [
-                    "unread",
-                    "ok"
-                  ],
-                  [
-                    "unread",
-                    "failed"
-                  ],
-                  [
-                    "gate",
-                    "failed"
-                  ]
+                "step": 0,
+                "events": [
+                  {
+                    "stage": "start",
+                    "operation": null,
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "arguments",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "config",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "unread",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "unread",
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "decision",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "output",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "exit",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  }
                 ],
                 "forbid_operations": [
                   "pixel"
@@ -15341,8 +16317,101 @@
                   "合成联系人",
                   "合成机构",
                   "合成岗位",
+                  "合成消息",
                   "screen.rgba",
-                  "calibration.json"
+                  "calibration.json",
+                  "fixture.json",
+                  "page.xml"
+                ]
+              },
+              {
+                "step": 1,
+                "events": [
+                  {
+                    "stage": "start",
+                    "operation": null,
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "arguments",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "config",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "unread",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "unread",
+                    "result": "failed",
+                    "reason_code": "invalid_xml"
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "failed",
+                    "reason_code": "invalid_xml"
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "failed",
+                    "reason_code": "not_ok"
+                  },
+                  {
+                    "stage": "decision",
+                    "operation": null,
+                    "result": "failed",
+                    "reason_code": "invalid_xml"
+                  },
+                  {
+                    "stage": "output",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "exit",
+                    "operation": null,
+                    "result": "failed",
+                    "reason_code": "invalid_xml"
+                  }
+                ],
+                "forbid_operations": [
+                  "pixel"
+                ],
+                "forbidden": [
+                  "合成联系人",
+                  "合成机构",
+                  "合成岗位",
+                  "合成消息",
+                  "screen.rgba",
+                  "calibration.json",
+                  "fixture.json",
+                  "page.xml"
                 ]
               }
             ]
@@ -15414,6 +16483,14 @@
                     "equals": "invalid_fixture"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -15427,7 +16504,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -15507,8 +16585,8 @@
                     ]
                   },
                   {
-                    "path": "result.value.messages.0",
-                    "keys": [
+                    "path": "result.value.messages",
+                    "element_keys": [
                       "kind",
                       "direction",
                       "text",
@@ -15520,17 +16598,58 @@
                       "truncated",
                       "direction_evidence",
                       "message_key"
-                    ]
+                    ],
+                    "element_types": {
+                      "kind": "string",
+                      "direction": "string",
+                      "text": [
+                        "string",
+                        "null"
+                      ],
+                      "content_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "time_hint": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_hash": [
+                        "string",
+                        "null"
+                      ],
+                      "stable_identity_source": [
+                        "string",
+                        "null"
+                      ],
+                      "repeat_safe": "boolean",
+                      "truncated": "boolean",
+                      "direction_evidence": "array",
+                      "message_key": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
-                    "path": "result.value.field_evidence.0",
-                    "keys": [
+                    "path": "result.value.field_evidence",
+                    "element_keys": [
                       "field",
                       "source",
                       "confidence",
                       "state",
                       "reason_code"
-                    ]
+                    ],
+                    "element_types": {
+                      "field": "string",
+                      "source": "string",
+                      "confidence": "string",
+                      "state": "string",
+                      "reason_code": [
+                        "string",
+                        "null"
+                      ]
+                    }
                   },
                   {
                     "path": "result.value.inbound_state",
@@ -15576,6 +16695,14 @@
                     "equals": "incomplete_snapshot"
                   },
                   {
+                    "path": "result.snapshot_id",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                  },
+                  {
+                    "path": "result.observed_at",
+                    "equals": "2026-11-24T00:00:00.000Z"
+                  },
+                  {
                     "path": "result.value",
                     "equals": null
                   },
@@ -15589,7 +16716,8 @@
                   },
                   {
                     "path": "actionable",
-                    "equals": false
+                    "equals": false,
+                    "type": "boolean"
                   },
                   {
                     "path": "gate_reason",
@@ -15600,50 +16728,282 @@
             ],
             "log_checks": [
               {
-                "pairs": [
-                  [
-                    "pixel",
-                    "started"
-                  ],
-                  [
-                    "pixel",
-                    "failed"
-                  ],
-                  [
-                    "conversation",
-                    "started"
-                  ],
-                  [
-                    "merge",
-                    "started"
-                  ],
-                  [
-                    "merge",
-                    "ok"
-                  ],
-                  [
-                    "conversation",
-                    "ok"
-                  ],
-                  [
-                    "job_detail",
-                    "started"
-                  ],
-                  [
-                    "job_detail",
-                    "undetermined"
-                  ],
-                  [
-                    "gate",
-                    "failed"
-                  ]
+                "step": 0,
+                "events": [
+                  {
+                    "stage": "start",
+                    "operation": null,
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "arguments",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "config",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "unread",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "pixel",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "pixel",
+                    "result": "failed",
+                    "reason_code": "invalid_fixture"
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "unread",
+                    "result": "failed",
+                    "reason_code": "invalid_fixture"
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "failed",
+                    "reason_code": "invalid_fixture"
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "failed",
+                    "reason_code": "not_ok"
+                  },
+                  {
+                    "stage": "decision",
+                    "operation": null,
+                    "result": "failed",
+                    "reason_code": "invalid_fixture"
+                  },
+                  {
+                    "stage": "output",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "exit",
+                    "operation": null,
+                    "result": "failed",
+                    "reason_code": "invalid_fixture"
+                  }
                 ],
                 "forbidden": [
                   "同文消息",
                   "合成消息",
                   "dup-1",
                   "screen.rgba",
-                  "calibration.json"
+                  "calibration.json",
+                  "fixture.json"
+                ]
+              },
+              {
+                "step": 1,
+                "events": [
+                  {
+                    "stage": "start",
+                    "operation": null,
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "arguments",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "config",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "conversation",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "merge",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "merge",
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "conversation",
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "failed",
+                    "reason_code": "identity_ambiguous"
+                  },
+                  {
+                    "stage": "decision",
+                    "operation": null,
+                    "result": "failed",
+                    "reason_code": "identity_ambiguous"
+                  },
+                  {
+                    "stage": "output",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "exit",
+                    "operation": null,
+                    "result": "failed",
+                    "reason_code": "identity_ambiguous"
+                  }
+                ],
+                "forbidden": [
+                  "同文消息",
+                  "合成消息",
+                  "dup-1",
+                  "screen.rgba",
+                  "calibration.json",
+                  "fixture.json"
+                ]
+              },
+              {
+                "step": 2,
+                "events": [
+                  {
+                    "stage": "start",
+                    "operation": null,
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "arguments",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "config",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "job_detail",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "job_detail",
+                    "result": "undetermined",
+                    "reason_code": "incomplete_snapshot"
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "load",
+                    "result": "undetermined",
+                    "reason_code": "incomplete_snapshot"
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "started",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "read",
+                    "operation": "gate",
+                    "result": "failed",
+                    "reason_code": "not_ok"
+                  },
+                  {
+                    "stage": "decision",
+                    "operation": null,
+                    "result": "failed",
+                    "reason_code": "incomplete_snapshot"
+                  },
+                  {
+                    "stage": "output",
+                    "operation": null,
+                    "result": "ok",
+                    "reason_code": null
+                  },
+                  {
+                    "stage": "exit",
+                    "operation": null,
+                    "result": "failed",
+                    "reason_code": "incomplete_snapshot"
+                  }
+                ],
+                "forbidden": [
+                  "同文消息",
+                  "合成消息",
+                  "dup-1",
+                  "screen.rgba",
+                  "calibration.json",
+                  "fixture.json"
                 ]
               }
             ]
