@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "case_id": "policy-greeting",
+  "now": "2026-11-24T00:00:00.000Z",
+  "task_id": "preview-task-policy-greeting",
+  "nonce": "00000000-0000-4000-8000-000000000201",
+  "kind": "hr_message",
+  "subject": {
+    "conversation_key": "boss:conv:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "job_brief": null
+  },
+  "inbound": "您好，看到您在招聘后端开发，方便聊聊岗位职责吗？",
+  "context": [],
+  "allowed_facts": []
+}

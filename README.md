@@ -4,15 +4,16 @@
 
 ## 当前状态
 
-旧的业务源码、Skills 与业务离线测试已清理，项目正在分阶段实现。当前已实现 M0 只读探针、M1 本机状态库/租约、M2 合成未读四源传感器与 M3 离线读取阶梯/页面/职位/会话读取，并已建立独立的 promptfoo 合成黄金测试集：
+旧的业务源码、Skills 与业务离线测试已清理，项目正在分阶段实现。当前已实现 M0 只读探针、M1 本机状态库/租约、M2 合成未读四源传感器、M3 离线读取阶梯/页面/职位/会话读取、M4a 策略包离线编辑/校验/预览/快照/恢复与 M4b A/B 本机决策桥/分层 policy eval/留出冻结登记，并已建立独立的 promptfoo 合成黄金测试集：
 
 - `pyproject.toml`、`requirements.txt`：Python 业务元数据；暂不引入第三方 Python 依赖。
-- `app/`：M0–M3 分层程序，提供 `python -m app`、只读 `doctor`、`store init`、合成 `sense` 与合成 `read`，以及 `domain/` 纯模型/读取契约、`adapters/sqlite/` 本机仓储、`adapters/boss/` 解析与 `adapters/adb/` 采集适配器。
-- `tests/`：M0–M3 标准库 `unittest` 与纯合成夹具；M4+ 测试待实现。
-- `docs/operator.md`：M0–M2 探针、状态库与合成传感器及 M3 离线读取的运行、配置、schema、停因与错误码说明。
+- `app/`：M0–M4b 分层程序，提供 `python -m app`、只读 `doctor`、`store init`、合成 `sense`、合成 `read` 与 `policy`（含 `eval`/`holdout`），以及 `domain/` 纯模型/读取/策略/评测契约、`adapters/sqlite/` 本机仓储、`adapters/boss/` 解析、`adapters/adb/` 采集、`adapters/files/` 策略/评测文件与 `adapters/llm/` A/B 子进程桥。
+- `tests/`：M0–M4b 标准库 `unittest` 与纯合成夹具。
+- `docs/operator.md`：M0–M4b 探针、状态库、合成传感器、离线读取、策略包、桥/eval/留出、配置、schema、停因、错误码及回滚说明。
 - `docs/BOSS直聘_M3读取阶梯与最小数据契约_20261124.md`：M3 读取值类型、字段阶梯、像素标定、跨屏稳定消息身份与失败/门禁契约。
+- `prompts/`：公开 base、纯合成示例与 `policy init` 生成的本机策略包/history；`tests/fixtures/policy-preview/` 是 preview 的公开合成输入资源；`evals/policy-suite/` 是 eval 的公开套件与旧 24 映射。
 - `config.example.json`：可提交的示例配置，当前只描述未来 M4 的策略包引用，不是 M0 配置。
-- `data/`、`screenshots/`：本机运行产物目录，只提交目录说明；`data/runtime/` 中的 SQLite 库被忽略。
+- `data/`、`screenshots/`：本机运行产物目录，只提交目录说明；`data/runtime/` 中的 SQLite 库与 `data/evals/` 报告被忽略。
 - `.agents/AGENTS.md`、`.claude/AGENTS.md`：工作流入口占位，内容待设计。
 - `AGENTS.md`、`CLAUDE.md`：开发约束与目录索引。
 - `evals/`、`promptfooconfig.json`：24 个记忆与授权决策案例、评测提示词、断言和运行入口。
@@ -100,14 +101,47 @@ M3 的层级默认优先，仅字段未决时才用显式标定像素；视觉�
 
 真实采集适配器已按参数数组、`shell=false`、5 秒超时、不重试并有本机证据保存实现，但只在测试中 mock `subprocess.run` 验证。共享 OS 设备门禁（M4）未交付前不提供真实 `read --device`，不得用 profile 内 `primary` 任务锁替代。真机像素阈值/区域/字体/分辨率、真实消息稳定标识、真实 ADB 输出与单台真机只读一轮均未执行，M3 不代表真机标定或里程碑真机通过。
 
+## M4a 策略包离线编辑与回滚（已实现，未接模型/设备）
+
+在项目根目录执行：
+
+```powershell
+python -m unittest tests.test_policy_contract tests.test_policy_pack tests.test_policy_store
+python -m app policy init --dest prompts/local/demo
+python -m app policy validate --pack prompts/local/demo
+python -m app policy preview --pack prompts/local/demo --case policy-greeting
+python -m app policy list
+python -m app policy snapshot --pack prompts/local/demo
+python -m app policy restore --snapshot prompts/local/history/<snapshot-id> --dest prompts/local/demo-rollback
+```
+
+M4a 交付公开 `prompts/base/` 两份 base、`prompts/examples/default/` 全 C 空事实示例、固定 `tests/fixtures/policy-preview/` 独立合成 preview 输入，以及完整 DecisionEnvelope/Decision 严格契约、TOML+三 md schema、45 组合唯一覆盖与统一硬下限（2 个可 A、4 个至少 B、其余 39 个固定 C）、四类无自引用摘要、唯一 `{base,pack,data}` 内容对象、system/developer/user 固定投影和披露/事实复验。`validate` 输出有效限制、分档、硬下限、来源与摘要；`preview` 只做纯渲染，不读黄金答案、不调用桥、设备、网络或模型；`init` 只建 `prompts/local` 直接子目录且不覆盖；`snapshot` 复制前后重读活动源并保证清单与副本完成；`restore` 要求清单/快照/目标三值 pack_hash 相等、base 匹配并保留原 profile_id，暂存后同卷发布、不覆盖旧包。策略命令的成功/失败四键外层、配置错误四键、`load/validate/render/publish` 阶段日志与恢复受控拒绝见操作手册。
+
+策略命令成功/失败使用四键外层（失败带 `errors:[{file,field,line,code}]`），这是对既有 doctor/sense/read 三键外层之外的明确扩展。M4a 尚无 M4c 真实活动/未决检查，因此生产 CLI `restore` 固定受控拒绝为 `policy_changed`；只有测试可向同一生产用例注入明确合成停止证据验证文件事务，完整 CLI 安全接线留 M4c。M4b 桥/eval 已单独实现于下一节；真实设备执行、事实授权与真实 provider 能力仍不由 M4a/M4b 证明；preview/snapshot 通过不构成发送授权。完整命令、字段、错误码与回滚边界见 [docs/operator.md](docs/operator.md)。
+
+## M4b 决策桥与真实策略评测链路（已实现，未调用真实模型）
+
+```powershell
+python -m unittest tests.test_bridge tests.test_policy_eval
+python -m app policy eval --help
+python -m app policy holdout register --batch-id <批次ID> --version <版本> --sample-count <数量> --annotator <标注者> --maintainer <维护者> --candidate-release <候选>
+python -m app policy holdout retire --batch-id <批次ID>
+```
+
+M4b 交付架构 A 外部 agent 与 B 本机进程两个参数数组桥：固定 `system/developer/user` 三消息、独立协议回显、`tools=[]`、`history=[]`，`shell=False`、`stderr=DEVNULL`、20 秒总预算，stdin/stdout 用本机系统临时目录的 `TemporaryFile` 承载并在返回时删除，运行中每 20ms 监测输出增长、超 `64KiB` 立即 kill，结束后再查一次并只读 `64KiB+1` 哨兵；拒绝角色声明不符/坏 JSON/坏编码/超大输出。超时/超限 kill/回收直接子进程，不留读取线程；若桥自行派生短命后代并继承句柄，不推断所有后代已退出。只有传输层可证明进程未启动时重试一次；重试前重读时钟/租约/包，提交后超时/schema/坏回显/过期一律丢弃且不重发。决策用例桥前、重试前、桥后重读书籍化时钟、可信租约与当前 base/pack，复用唯一 `parse_decision`/`validate_decision`/`append_and_validate_reply`，不复制业务校验器。
+
+`policy eval` 实际加载 `--pack` 指定的当前包，经同一决策桥逐例运行公开/回归/留出套件；必须显式选择 `external-agent` 或 `local-process`，拒绝 echo/参考回放，并要求 `--confirm-external-send`。该确认只表示本轮模型评测外发与计费，不授予设备、事实写入或业务发送权限，也不替代留出无上传合同。逐例报告只写本机 `data/evals`，绑定 base/pack/profile/provider/model/model_config_hash/suite_hash 与 process correlation；失败、零样本、缺私有套件、非公开套件或 simulated transport 不生成有效验收凭证。公开套件与旧 24 案例 npm 回归独立，`evals/policy-suite/mapping.json` 只登记每例责任与未接入原因。留出按语义输入指纹占用历史样本，已看样本不得换批次/候选/套件或拆子集重冻结；访问意向在调用前锁内持久化，完成/失败/中断/重复如实区分；退役整批写 `data/evals/regression-admissions/` 副本并可被同一 regression 路径实际运行；登记写失败保留未确认准入本机残留，但 registry 过滤使其不可运行，不删除其它 owner 文件。public/holdout 不读取无关 regression 准入；重试前用唯一 render 校验器复核事实有效期；临时文件创建/输入写也计入总预算，输出监测/等待 OSError 受控。留出还要求 `data/evals/holdout-attestation.local.json` 绑定当前 model/config 并显式声明 no-upload/cache/share/telemetry/cloud-fallback 全部关闭；该声明是 operator/host 合同，不证明子进程真实无网络。
+
+真实 provider、私有回归/留出、M4c 真实活动/事实确认与 M5 授权/动作未运行；桥自报角色/工具/历史只是协议声明，不证明第三方实际能力。详见 [docs/operator.md](docs/operator.md) 与 [evals/policy-suite/AGENTS.md](evals/policy-suite/AGENTS.md)。
+
 ## 开发环境
 
 - Python 3.13 或更高版本。
 - 评测工具另需 Node.js >=22.22.0 与 npm；promptfoo 固定为 0.126.0。
-- 真机功能另需 Android SDK Platform-Tools 中的 `adb`、USB 调试和使用者确认；M0–M3 离线测试不连接设备。
+- 真机功能另需 Android SDK Platform-Tools 中的 `adb`、USB 调试和使用者确认；M0–M4b 离线测试不连接设备。
 - 仓库中的 `.venv/` 与 `config.json` 为被 Git 忽略的本机文件，可自行保留或删除。
 
-M4–M8 的决策、动作、调度与灰度仍待实现；M3 的读取阶梯只使用合成 XML、合成 RGBA、模拟 ADB 与独立门禁测试，不代表真实设备采集或真实版本标定。数据库、日志、截图、契约、凭据和个人事实只在本机保存。
+M4c 真实活动/未决检查与完整运行绑定、M5–M8 的动作、调度与灰度仍待实现；M3 的读取阶梯只使用合成 XML、合成 RGBA、模拟 ADB 与独立门禁测试，不代表真实设备采集或真实版本标定；M4a 只用合成 base/包/preview、临时项目根与注入停止证据，M4b 只用合成本机桥桩/模拟 transport，不代表真实 provider 能力、事实确认或发送安全。数据库、日志、截图、契约、凭据和个人事实只在本机保存。
 
 全新机器的引导、依赖边界与验收规划见[新环境自动化部署方案](docs/求职自动化_新环境自动化部署方案_20261123.md)：分别设计 eval、ADB 工具准备和经本轮确认后的手机环境检测（§8、§10.1）；工具安装不代表手机或业务就绪。安装器与手机检查器尚未实现，干净机器及手机验收均待执行；本轮仅文档，不运行 ADB 或连接手机。
 
