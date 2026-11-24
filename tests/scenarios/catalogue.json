@@ -10098,12 +10098,12 @@
           "id": "no_confirmation",
           "label": "无确认",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "MODULE_EVIDENCE",
+          "entry_state": "module",
           "steps": [],
           "fixture": null,
           "setup": "未提供本轮确认",
-          "required_api": "M3 调度/设备门禁入口",
+          "required_api": "M3/M4 共享设备门禁",
           "expected_ref": "SC-R01/no_confirmation",
           "device_gate": false,
           "assertions": [
@@ -10118,18 +10118,18 @@
           "expected_missing_inputs": [],
           "observations_ref": null,
           "deferred_to": null,
-          "module_evidence": null
+          "module_evidence": "read --device 在共享门禁前拒绝且不启动子进程；真实授权仍依赖 M4"
         },
         {
           "id": "list_only",
           "label": "仅列表授权",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": null,
           "setup": "授权只读列表",
-          "required_api": "M3 调度/设备门禁入口",
+          "required_api": "M4 导航/采集授权",
           "expected_ref": "SC-R01/list_only",
           "device_gate": false,
           "assertions": [
@@ -10143,19 +10143,19 @@
           ],
           "expected_missing_inputs": [],
           "observations_ref": null,
-          "deferred_to": null,
+          "deferred_to": "M4",
           "module_evidence": null
         },
         {
           "id": "enter_once",
           "label": "含一次进入",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": null,
           "setup": "另列唯一目标与次数",
-          "required_api": "M3 调度/设备门禁入口",
+          "required_api": "M4 共享门禁/导航",
           "expected_ref": "SC-R01/enter_once",
           "device_gate": false,
           "assertions": [
@@ -10169,19 +10169,19 @@
           ],
           "expected_missing_inputs": [],
           "observations_ref": null,
-          "deferred_to": null,
+          "deferred_to": "M4",
           "module_evidence": null
         },
         {
           "id": "ignore_path_check",
           "label": "忽略路径检查",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": null,
           "setup": "证据目录不在忽略范围",
-          "required_api": "M3 调度/设备门禁入口",
+          "required_api": "M4 证据路径门禁",
           "expected_ref": "SC-R01/ignore_path_check",
           "device_gate": false,
           "assertions": [
@@ -10195,7 +10195,7 @@
           ],
           "expected_missing_inputs": [],
           "observations_ref": null,
-          "deferred_to": null,
+          "deferred_to": "M4",
           "module_evidence": null
         },
         {
@@ -10275,12 +10275,12 @@
           "id": "safe_stop_evidence",
           "label": "到限安全停止",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": null,
           "setup": "固定三次空窗口事件",
-          "required_api": "M3 有界窗口驱动",
+          "required_api": "M4/M6 有界窗口调度",
           "expected_ref": "SC-R02/safe_stop_evidence",
           "device_gate": false,
           "assertions": [
@@ -10295,7 +10295,7 @@
           ],
           "expected_missing_inputs": [],
           "observations_ref": null,
-          "deferred_to": null,
+          "deferred_to": "M4/M6",
           "module_evidence": null
         }
       ]
@@ -10314,20 +10314,23 @@
         "依赖 M2 unknown 出口"
       ],
       "offline_subscenarios": [
-        "targeted_once"
+        "targeted_once",
+        "targeted_api_fresh",
+        "targeted_api_unknown",
+        "targeted_api_bounds"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "targeted_once",
           "label": "一次核对后仍未知",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": null,
           "setup": "合成 unknown 源与一次核对失败",
-          "required_api": "M3/M6 调度暂停",
+          "required_api": "M6 调度次数/整轮停止",
           "expected_ref": "SC-R03/targeted_once",
           "device_gate": false,
           "assertions": [
@@ -10336,6 +10339,234 @@
             "停止整轮"
           ],
           "acceptance": null,
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": "M6",
+          "module_evidence": null
+        },
+        {
+          "id": "targeted_api_fresh",
+          "label": "新快照定向核对 API 仍未知",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/targeted_fresh_request.json"
+          ],
+          "fixture": "fixtures/m3/probe/targeted_fresh_request.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-R03/targeted_api_fresh",
+          "device_gate": false,
+          "assertions": [
+            "真实 targeted_verification_outcome 返回 unread_unverified",
+            "只说明本次 API 结果；核对次数/整轮停止仍依赖 M6"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "unread_unverified"
+                  },
+                  {
+                    "path": "initial_status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "targeted_status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "targeted_candidate_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "targeted_unread_state",
+                    "equals": "present"
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
+        },
+        {
+          "id": "targeted_api_unknown",
+          "label": "未知源定向核对 API",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/targeted_unknown_request.json"
+          ],
+          "fixture": "fixtures/m3/probe/targeted_unknown_request.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-R03/targeted_api_unknown",
+          "device_gate": false,
+          "assertions": [
+            "真实 API 返回 unread_unverified",
+            "不把 unknown 当检出"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "unread_unverified"
+                  },
+                  {
+                    "path": "targeted_unread_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "targeted_candidate_count",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
+        },
+        {
+          "id": "targeted_api_bounds",
+          "label": "定向核对时间与上下文边界",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/targeted_same_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/targeted_exact_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/targeted_over_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/targeted_future_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/targeted_older_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/targeted_cross_profile_request.json"
+          ],
+          "fixture": "fixtures/m3/probe/targeted_same_request.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-R03/targeted_api_bounds",
+          "device_gate": false,
+          "assertions": [
+            "同 snapshot 重放为 unread_unverified",
+            "恰 5 秒可接受，5001ms/未来/更早为 stale_snapshot",
+            "跨 profile 为 identity_ambiguous",
+            "只证明 API 判定，不证明调度实际重采"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "unread_unverified"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "unread_unverified"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "stale_snapshot"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "stale_snapshot"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "stale_snapshot"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "identity_ambiguous"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -10387,20 +10618,21 @@
         "M2 needs_targeted_verification"
       ],
       "offline_subscenarios": [
-        "no_target_after_check"
+        "no_target_after_check",
+        "targeted_api_global_positive"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "no_target_after_check",
           "label": "核对后仍无目标",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": null,
           "setup": "复用合成全局正计数输入",
-          "required_api": "M3/M6 调度",
+          "required_api": "M6 调度暂停",
           "expected_ref": "SC-R04/no_target_after_check",
           "device_gate": false,
           "assertions": [
@@ -10409,6 +10641,58 @@
             "不把相等数量绑定任意行"
           ],
           "acceptance": null,
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": "M6",
+          "module_evidence": null
+        },
+        {
+          "id": "targeted_api_global_positive",
+          "label": "全局计数正但无候选 API",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/targeted_global_positive_request.json"
+          ],
+          "fixture": "fixtures/m3/probe/targeted_global_positive_request.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-R04/targeted_api_global_positive",
+          "device_gate": false,
+          "assertions": [
+            "真实 API 返回 unread_unverified 且候选数为 0",
+            "globally present 不绑定任意行；调度暂停仍依赖 M6"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "unread_unverified"
+                  },
+                  {
+                    "path": "targeted_unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "targeted_candidate_count",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -10462,26 +10746,194 @@
       "offline_subscenarios": [
         "list_only_identify"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "list_only_identify",
           "label": "仅列表识别明确目标",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "合成唯一正行 + 仅列表授权",
-          "required_api": "M3 授权/采集",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/positive/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/baseline.json --db {db}",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/unique_unread/fixture.json",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m3/read/unique_unread",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-R05/list_only_identify",
           "device_gate": false,
           "assertions": [
-            "即使其它源 unknown 也可登记明确目标",
-            "不宣告全局无未知",
-            "不打开会话"
+            "M2 明确目标入库且其它源仍 unknown",
+            "M3 读到同一精确会话键与层级来源",
+            "M3 前后五表签名、消息、设备、租约均不变；不打开会话"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  },
+                  {
+                    "path": "result.value.signals.row_badge.state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value.signals.new_greeting.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.signals.tab_badge.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.signals.preview_delta.state",
+                    "equals": "unknown"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value.rows.0.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.rows.0.state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value.rows.0.count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.value.rows.0.source",
+                    "equals": "hierarchy"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": null
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "queued"
+                  },
+                  {
+                    "path": "stable_unchanged_since_baseline",
+                    "equals": true
+                  },
+                  {
+                    "path": "protected_task_unchanged_since_baseline",
+                    "equals": true
+                  },
+                  {
+                    "path": "message_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "device_count",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -10533,20 +10985,21 @@
         "单独进入授权"
       ],
       "offline_subscenarios": [
-        "badge_disappears"
+        "badge_disappears",
+        "read_keeps_discovery"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "badge_disappears",
           "label": "打开后角标消失",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": "fixtures/m3/entry_consumption.json",
           "setup": "复用合成发现先落库事件",
-          "required_api": "M3 预保存发现/读全身份",
+          "required_api": "M5/M6 进入与发现处置",
           "expected_ref": "SC-R06/badge_disappears",
           "device_gate": false,
           "assertions": [
@@ -10555,6 +11008,164 @@
             "中断转人工核对"
           ],
           "acceptance": null,
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": "M5/M6",
+          "module_evidence": null
+        },
+        {
+          "id": "read_keeps_discovery",
+          "label": "M3 读取不关闭已存发现",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/positive/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/baseline.json --db {db}",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/conversation_overlap/fixture.json",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m3/read/conversation_known",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-R06/read_keeps_discovery",
+          "device_gate": false,
+          "assertions": [
+            "M3 会话读取不写库、不关闭发现、不推进基线",
+            "只证明读侧副作用边界，不证明真实进入/角标消失流程"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.read_complete",
+                    "equals": true
+                  },
+                  {
+                    "path": "result.value.contact",
+                    "equals": "合成联系人甲"
+                  },
+                  {
+                    "path": "result.value.conversation_key",
+                    "equals": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f"
+                  },
+                  {
+                    "path": "result.value.inbound_state",
+                    "equals": "known"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "queued"
+                  },
+                  {
+                    "path": "stable_unchanged_since_baseline",
+                    "equals": true
+                  },
+                  {
+                    "path": "protected_task_unchanged_since_baseline",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -10606,20 +11217,21 @@
         "F 用 S01–S03 补时序"
       ],
       "offline_subscenarios": [
-        "new_arrival_during_read"
+        "new_arrival_during_read",
+        "stable_identity_new_keys"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "new_arrival_during_read",
           "label": "读取中出现新入站",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
           "steps": [],
           "fixture": null,
           "setup": "固定事件脚本区分旧/新现场",
-          "required_api": "M3/M6 事件注入",
+          "required_api": "M6 事件注入/时序",
           "expected_ref": "SC-R07/new_arrival_during_read",
           "device_gate": false,
           "assertions": [
@@ -10628,6 +11240,201 @@
             "新增入站不覆盖在途负载"
           ],
           "acceptance": null,
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": "M6",
+          "module_evidence": null
+        },
+        {
+          "id": "stable_identity_new_keys",
+          "label": "稳定身份与新增键边界",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/new_keys_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/new_keys_no_stable_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/new_keys_cross_request.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/conversation_ambiguous/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/conversation_overlap/fixture.json"
+          ],
+          "fixture": "fixtures/m3/probe/new_keys_request.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-R07/stable_identity_new_keys",
+          "device_gate": false,
+          "assertions": [
+            "同正文同秒但独立稳定 ID 生成独立新增键",
+            "无稳定 ID/new_keys 空、会话 inbound unknown",
+            "跨会话 new_message_keys 拒绝",
+            "重复稳定 ID 使 inbound unknown；跨屏只裁剪稳定重叠",
+            "仅证明读/身份接口，不证明读取期间到达时序"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "error",
+                    "equals": null
+                  },
+                  {
+                    "path": "new_keys",
+                    "length_equals": 2
+                  },
+                  {
+                    "path": "new_keys.0",
+                    "equals": "boss:msg:1723cd400570bba059336a1b53858d6113d6de26704318cbe988acb2c85da8ce"
+                  },
+                  {
+                    "path": "new_keys.1",
+                    "equals": "boss:msg:236fb611dfb8a700f379e9f0de74dd38101cd4cd59c6897395ea37c53448da47"
+                  },
+                  {
+                    "path": "current_latest_inbound_key",
+                    "equals": "boss:msg:236fb611dfb8a700f379e9f0de74dd38101cd4cd59c6897395ea37c53448da47"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "error",
+                    "equals": null
+                  },
+                  {
+                    "path": "new_keys",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "current_inbound_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "current_latest_inbound_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "current_message_identity_verified",
+                    "equals": false
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "error",
+                    "equals": "identity_mismatch"
+                  },
+                  {
+                    "path": "new_keys",
+                    "length_equals": 0
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "result.value.inbound_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.message_identity_verified",
+                    "equals": false
+                  },
+                  {
+                    "path": "result.value.latest_inbound_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.messages.0.stable_identity_hash",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.messages.0.message_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "identity_ambiguous"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.inbound_state",
+                    "equals": "known"
+                  },
+                  {
+                    "path": "result.value.latest_inbound_key",
+                    "equals": "boss:msg:236fb611dfb8a700f379e9f0de74dd38101cd4cd59c6897395ea37c53448da47"
+                  },
+                  {
+                    "path": "result.value.messages",
+                    "length_equals": 4
+                  },
+                  {
+                    "path": "result.value.messages.2.message_key",
+                    "equals": "boss:msg:1723cd400570bba059336a1b53858d6113d6de26704318cbe988acb2c85da8ce"
+                  },
+                  {
+                    "path": "result.value.messages.3.message_key",
+                    "equals": "boss:msg:236fb611dfb8a700f379e9f0de74dd38101cd4cd59c6897395ea37c53448da47"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -10750,7 +11557,7 @@
       "offline_subscenarios": [
         "offline_semantics"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "new_greeting_positive",
@@ -10806,21 +11613,142 @@
         },
         {
           "id": "offline_semantics",
-          "label": "离线语义未验证",
+          "label": "新招呼离线语义",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "复用 M2 新招呼夹具",
-          "required_api": "M2 sense",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/new_greeting_positive_unverified/manifest.json --db {db}.positive",
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/new_greeting_zero_unverified/manifest.json --db {db}.zero"
+          ],
+          "fixture": "fixtures/m2/sensor/new_greeting_positive_unverified",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-R09/offline_semantics",
           "device_gate": false,
           "assertions": [
             "正值保守 present",
-            "0 为 unknown"
+            "0 为 unknown",
+            "新招呼不等价于旧会话未读"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "needs_targeted_verification"
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 0
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": "unread_unverified"
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -10846,28 +11774,494 @@
         "不写入"
       ],
       "offline_subscenarios": [
-        "incomplete_or_ambiguous"
+        "incomplete_or_ambiguous",
+        "page_job_paths"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "incomplete_or_ambiguous",
           "label": "读取不全/身份不唯一",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "复用 M2 歧义或不完整夹具",
-          "required_api": "M3 读取阶梯",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app sense --fixture tests/scenarios/fixtures/m2/sensor/ambiguous_identity_plus_target/manifest.json --db {db}",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/baseline.json --db {db}",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/job_truncated/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/conversation_ambiguous/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/conversation_truncated/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/conversation_direction_conflict/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/conversation_incomplete/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/ambiguous_unread/fixture.json",
+            "python tests/scenarios/framework/m2_probe.py --request tests/scenarios/fixtures/m2/probe/inspect.json --db {db}"
+          ],
+          "fixture": "fixtures/m3/read/ambiguous_unread",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-R10/incomplete_or_ambiguous",
           "device_gate": false,
           "assertions": [
-            "不把截断文本交模型补全",
-            "身份不唯一不点",
-            "不丢其它正目标"
+            "截断/未知方向/重复或缺失身份不生成可发送键",
+            "不把截断正文交模型补全，不点身份不唯一目标",
+            "同批明确正目标仍保留，M2 已存发现与五表不变"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "",
+                    "keys": [
+                      "schema_version",
+                      "result",
+                      "stop_reason"
+                    ]
+                  },
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result",
+                    "keys": [
+                      "status",
+                      "value",
+                      "reason_code",
+                      "snapshot_id",
+                      "observed_at",
+                      "source",
+                      "confidence"
+                    ]
+                  },
+                  {
+                    "path": "stop_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value",
+                    "keys": [
+                      "app",
+                      "profile_id",
+                      "coverage",
+                      "signals",
+                      "rows",
+                      "candidates",
+                      "unread_state"
+                    ]
+                  },
+                  {
+                    "path": "result.value.candidates",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "result.value.candidates.0.kind",
+                    "equals": "unread"
+                  },
+                  {
+                    "path": "result.value.candidates.0.conversation_key",
+                    "equals": "boss:conv:e69f2d1c72729b42e83bb891a6828904e5386f7dbf3a153fe93a08f11277883b"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "undetermined"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": "incomplete_snapshot"
+                  },
+                  {
+                    "path": "result.value",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "not_ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "result.value.inbound_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.message_identity_verified",
+                    "equals": false
+                  },
+                  {
+                    "path": "result.value.latest_inbound_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.messages.0.stable_identity_hash",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.messages.0.message_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "identity_ambiguous"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "result.value.inbound_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.latest_inbound_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.messages.0.truncated",
+                    "equals": true
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "identity_ambiguous"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "result.value.inbound_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.latest_inbound_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.messages.0.direction",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "identity_ambiguous"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "undetermined"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": "incomplete_snapshot"
+                  },
+                  {
+                    "path": "result.value",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "not_ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value.rows.0.conversation_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.rows.1.conversation_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.rows.2.conversation_key",
+                    "equals": "boss:conv:e69f2d1c72729b42e83bb891a6828904e5386f7dbf3a153fe93a08f11277883b"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "task_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "states.0",
+                    "equals": "queued"
+                  },
+                  {
+                    "path": "stable_unchanged_since_baseline",
+                    "equals": true
+                  },
+                  {
+                    "path": "protected_task_unchanged_since_baseline",
+                    "equals": true
+                  },
+                  {
+                    "path": "message_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "device_count",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null
+        },
+        {
+          "id": "page_job_paths",
+          "label": "页面与职位完整路径",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/page_main/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/job_list_unique/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/job_detail_complete/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/job_list_ambiguous/fixture.json"
+          ],
+          "fixture": "fixtures/m3/read/page_main",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-R10/page_job_paths",
+          "device_gate": false,
+          "assertions": [
+            "页面优先级/主界面可识别",
+            "职位卡/详情按原始值重算键并可决策",
+            "重复职位身份保留摘要但不可定位，同批唯一项仍保留"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.page",
+                    "equals": "main"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.cards.0.job_key",
+                    "equals": "boss:job:3a7d1d627ba4309a469a7b956fc0a8ed93557424fd3a0c0259a44d05e61beae1"
+                  },
+                  {
+                    "path": "result.value.coverage",
+                    "equals": "viewport"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.complete",
+                    "equals": true
+                  },
+                  {
+                    "path": "result.value.description",
+                    "equals": "合成职位正文，包含职责与要求。"
+                  },
+                  {
+                    "path": "result.value.description_hash",
+                    "equals": "810ee4ab431708a0341abcf4b4b3902c06ae14f8cce9100fdcab41a7048cfadc"
+                  },
+                  {
+                    "path": "result.value.description_length",
+                    "equals": 15
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.cards.0.job_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.cards.1.job_key",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.cards.2.job_key",
+                    "equals": "boss:job:b1869daadb096670088181b2b404c0b8bb0b426fea164e6789ebca136f2c9155"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -10992,25 +12386,56 @@
       "offline_subscenarios": [
         "version_drift"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "version_drift",
           "label": "应用/版式版本不符",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m3/version_drift.json",
-          "setup": "合成 profile 与观测版本不一致",
-          "required_api": "M3 profile 校验",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/version_drift/fixture.json"
+          ],
+          "fixture": "fixtures/m3/read/version_drift",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-R12/version_drift",
           "device_gate": false,
           "assertions": [
             "uncalibrated_profile",
+            "value=null 且不可决策",
             "禁止沿用旧坐标/阈值/发送控件"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "undetermined"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": "uncalibrated_profile"
+                  },
+                  {
+                    "path": "result.value",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "not_ok"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -11064,26 +12489,283 @@
       "offline_subscenarios": [
         "cross_level_conflict"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "cross_level_conflict",
           "label": "层级/像素/视觉冲突",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m3/cross_level_conflict.json",
-          "setup": "合成冲突字段",
-          "required_api": "M3 读取阶梯",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/pixel_present/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/pixel_absent_unverified/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/pixel_resolution_mismatch/fixture.json",
+            "python -m app read --fixture tests/scenarios/fixtures/m3/read/pixel_corrupt/fixture.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/ladder_conflict_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/ladder_failed_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/ladder_context_request.json",
+            "python tests/scenarios/framework/m3_probe.py --request tests/scenarios/fixtures/m3/probe/ladder_visual_request.json"
+          ],
+          "fixture": "fixtures/m3/read/pixel_present",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-R13/cross_level_conflict",
           "device_gate": false,
           "assertions": [
-            "跨级冲突 undetermined",
-            "转人工",
-            "视觉不能证据发送/删除"
+            "真实 CLI 像素后备只证明 present 且不生成精确计数",
+            "低阈值未标定空态/分辨率不符为 unknown，损坏为 failed",
+            "真实领域接口：跨级冲突/上下文不一致/视觉单独启用均 undetermined 转人工",
+            "前级 failed 保留 invalid_xml，不被后续像素成功覆盖"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.rows.0.state",
+                    "equals": "present"
+                  },
+                  {
+                    "path": "result.value.rows.0.count",
+                    "equals": null
+                  },
+                  {
+                    "path": "result.value.rows.0.source",
+                    "equals": "pixel"
+                  },
+                  {
+                    "path": "result.value.field_evidence.0.source",
+                    "equals": "pixel"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.rows.0.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.rows.0.reason_code",
+                    "equals": "uncalibrated_region"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "field_unknown"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "result.value.unread_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "result.value.rows.0.reason_code",
+                    "equals": "calibration_mismatch"
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "field_unknown"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "stdout_paths": [
+                  {
+                    "path": "result.status",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "result.reason_code",
+                    "equals": "invalid_fixture"
+                  },
+                  {
+                    "path": "result.value",
+                    "equals": null
+                  },
+                  {
+                    "path": "actionable",
+                    "equals": false
+                  },
+                  {
+                    "path": "gate_reason",
+                    "equals": "not_ok"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "state",
+                    "equals": "undetermined"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "ambiguous_signal"
+                  },
+                  {
+                    "path": "requires_human",
+                    "equals": true
+                  },
+                  {
+                    "path": "evidence_sources.0",
+                    "equals": "hierarchy"
+                  },
+                  {
+                    "path": "evidence_sources.1",
+                    "equals": "pixel"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "state",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_xml"
+                  },
+                  {
+                    "path": "source",
+                    "equals": "hierarchy"
+                  },
+                  {
+                    "path": "requires_human",
+                    "equals": false
+                  },
+                  {
+                    "path": "evidence_states.0",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "evidence_states.1",
+                    "equals": "present"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "state",
+                    "equals": "undetermined"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "ambiguous_signal"
+                  },
+                  {
+                    "path": "requires_human",
+                    "equals": true
+                  },
+                  {
+                    "path": "evidence_sources",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "evidence_sources.0",
+                    "equals": "hierarchy"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "state",
+                    "equals": "undetermined"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "ambiguous_signal"
+                  },
+                  {
+                    "path": "requires_human",
+                    "equals": true
+                  },
+                  {
+                    "path": "evidence_sources.2",
+                    "equals": "vision"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"

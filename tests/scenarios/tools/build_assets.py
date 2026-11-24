@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import struct
 import sys
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,14 @@ def write_text(relative: str, text: str) -> str:
     path = ROOT / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text.rstrip("\n") + "\n", encoding="utf-8", newline="\n")
+    return relative
+
+
+def write_bytes(relative: str, value: bytes) -> str:
+    """把合成二进制夹具写入目录，供像素/RGBA 输入使用。"""
+    path = ROOT / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(value)
     return relative
 
 
@@ -1567,7 +1576,7 @@ def sensor_ready(
     )
 
 
-def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     """按 M0–M8 顺序构造 73 个场景及其全部变体。"""
     scenarios: list[dict[str, Any]] = []
 
@@ -3299,28 +3308,117 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
     # ---- M3 ----
+    def m3_cmd(name: str) -> str:
+        """构造 M3 受限探针命令。"""
+        return (
+            "python tests/scenarios/framework/m3_probe.py "
+            f"--request tests/scenarios/fixtures/m3/probe/{name}.json"
+        )
+
+    def read_cmd(name: str) -> str:
+        """构造真实 M3 read CLI 命令。"""
+        return f"python -m app read --fixture tests/scenarios/{m3[name]['manifest']}"
+
+    def read_ok(*paths: dict[str, Any]) -> dict[str, Any]:
+        """构造 read 成功预期。"""
+        return {
+            "exit_code": 0,
+            "stdout_paths": [
+                {"path": "result.status", "equals": "ok"},
+                {"path": "result.reason_code", "equals": None},
+                *paths,
+            ],
+        }
+
+    def read_unactionable(*paths: dict[str, Any]) -> dict[str, Any]:
+        """构造结构 ok 但门禁拒绝的 read 预期。"""
+        return {
+            "exit_code": 2,
+            "stdout_paths": [
+                {"path": "result.status", "equals": "ok"},
+                {"path": "result.reason_code", "equals": None},
+                {"path": "actionable", "equals": False},
+                *paths,
+            ],
+        }
+
+    def read_stop(status: str, reason: str, *paths: dict[str, Any]) -> dict[str, Any]:
+        """构造 read 失败/未决预期。"""
+        return {
+            "exit_code": 2,
+            "stdout_paths": [
+                {"path": "result.status", "equals": status},
+                {"path": "result.reason_code", "equals": reason},
+                {"path": "result.value", "equals": None},
+                {"path": "actionable", "equals": False},
+                *paths,
+            ],
+        }
+
+    def probe_ok(*paths: dict[str, Any]) -> dict[str, Any]:
+        """构造 M3 探针成功预期。"""
+        return {
+            "exit_code": 0,
+            "stdout_paths": [{"path": "status", "equals": "ok"}, *paths],
+        }
+
+    def message_key(raw: str) -> str:
+        """按冻结算法独立计算合成消息键。"""
+        conversation = "boss:conv:" + digest(["合成联系人甲", "合成机构甲", "合成岗位甲"])
+        stable = digest(["boss", "message", "stable-id", raw])
+        return "boss:msg:" + digest([conversation, stable])
+
+    conversation_key = "boss:conv:" + digest(["合成联系人甲", "合成机构甲", "合成岗位甲"])
+    other_conversation = "boss:conv:" + digest(["合成联系人乙", "合成机构乙", "合成岗位乙"])
+    job_other = "boss:job:" + digest(["合成岗位乙", "合成机构乙", "10-20K"])
+    description = "合成职位正文，包含职责与要求。"
+
     add(
         "SC-R01",
         "M3",
         "授权、独占与忽略路径核对",
         ["M3 读取阶梯", "真实执行需本轮确认"],
         [
-            *[
-                variant(
-                    name,
-                    "F",
-                    label=label,
-                    setup=setup,
-                    required_api="M3 调度/设备门禁入口",
-                    assertions=assertions,
-                )
-                for name, label, setup, assertions in (
-                    ("no_confirmation", "无确认", "未提供本轮确认", ["实际设备调用 0", "结果 BLOCKED，不得记 PASS"]),
-                    ("list_only", "仅列表授权", "授权只读列表", ["不打开会话", "不消耗未读"]),
-                    ("enter_once", "含一次进入", "另列唯一目标与次数", ["仅打开约定目标一次", "超范围重新申请"]),
-                    ("ignore_path_check", "忽略路径检查", "证据目录不在忽略范围", ["运行前停止", "不写未忽略证据"]),
-                )
-            ],
+            variant(
+                "no_confirmation",
+                "F",
+                label="无确认",
+                setup="未提供本轮确认",
+                required_api="M3/M4 共享设备门禁",
+                asset_status="MODULE_EVIDENCE",
+                module_evidence="read --device 在共享门禁前拒绝且不启动子进程；真实授权仍依赖 M4",
+                assertions=["实际设备调用 0", "结果 BLOCKED，不得记 PASS"],
+            ),
+            variant(
+                "list_only",
+                "F",
+                label="仅列表授权",
+                setup="授权只读列表",
+                required_api="M4 导航/采集授权",
+                asset_status="DEFERRED",
+                deferred_to="M4",
+                assertions=["不打开会话", "不消耗未读"],
+            ),
+            variant(
+                "enter_once",
+                "F",
+                label="含一次进入",
+                setup="另列唯一目标与次数",
+                required_api="M4 共享门禁/导航",
+                asset_status="DEFERRED",
+                deferred_to="M4",
+                assertions=["仅打开约定目标一次", "超范围重新申请"],
+            ),
+            variant(
+                "ignore_path_check",
+                "F",
+                label="忽略路径检查",
+                setup="证据目录不在忽略范围",
+                required_api="M4 证据路径门禁",
+                asset_status="DEFERRED",
+                deferred_to="M4",
+                assertions=["运行前停止", "不写未忽略证据"],
+            ),
             variant("real_authorization", "T", label="真实授权执行", assertions=["按本轮确认逐项核对", "无确认不连接设备"]),
         ],
     )
@@ -3331,7 +3429,16 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         ["M3 真机只读", "最多 3 份列表快照"],
         [
             variant("no_positive_window", "O", label="窗口内无阳性", assertions=["只记录窗口未观察到阳性", "阳性识别 NOT_COVERED", "不声称零漏检"]),
-            variant("safe_stop_evidence", "F", label="到限安全停止", setup="固定三次空窗口事件", required_api="M3 有界窗口驱动", assertions=["到限保存证据并结束", "不无限等待", "安全停止可 PASS 但阳性识别不 PASS"]),
+            variant(
+                "safe_stop_evidence",
+                "F",
+                label="到限安全停止",
+                setup="固定三次空窗口事件",
+                required_api="M4/M6 有界窗口调度",
+                asset_status="DEFERRED",
+                deferred_to="M4/M6",
+                assertions=["到限保存证据并结束", "不无限等待", "安全停止可 PASS 但阳性识别不 PASS"],
+            ),
         ],
     )
     add(
@@ -3340,7 +3447,82 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "来源/区域/基线未知时一次定向核对",
         ["M3 定向核对", "依赖 M2 unknown 出口"],
         [
-            variant("targeted_once", "F", label="一次核对后仍未知", setup="合成 unknown 源与一次核对失败", required_api="M3/M6 调度暂停", assertions=["一次且只一次核对", "unread_unverified", "停止整轮"]),
+            variant(
+                "targeted_once",
+                "F",
+                label="一次核对后仍未知",
+                setup="合成 unknown 源与一次核对失败",
+                required_api="M6 调度次数/整轮停止",
+                asset_status="DEFERRED",
+                deferred_to="M6",
+                assertions=["一次且只一次核对", "unread_unverified", "停止整轮"],
+            ),
+            ready_variant(
+                "targeted_api_fresh",
+                label="新快照定向核对 API 仍未知",
+                steps=[m3_cmd("targeted_fresh_request")],
+                fixture=f"fixtures/m3/probe/targeted_fresh_request.json",
+                assertions=[
+                    "真实 targeted_verification_outcome 返回 unread_unverified",
+                    "只说明本次 API 结果；核对次数/整轮停止仍依赖 M6",
+                ],
+                acceptance={
+                    "steps": [
+                        probe_ok(
+                            {"path": "outcome", "equals": "unread_unverified"},
+                            {"path": "initial_status", "equals": "ok"},
+                            {"path": "targeted_status", "equals": "ok"},
+                            {"path": "targeted_candidate_count", "equals": 1},
+                            {"path": "targeted_unread_state", "equals": "present"},
+                        )
+                    ]
+                },
+            ),
+            ready_variant(
+                "targeted_api_unknown",
+                label="未知源定向核对 API",
+                steps=[m3_cmd("targeted_unknown_request")],
+                fixture="fixtures/m3/probe/targeted_unknown_request.json",
+                assertions=["真实 API 返回 unread_unverified", "不把 unknown 当检出"],
+                acceptance={
+                    "steps": [
+                        probe_ok(
+                            {"path": "outcome", "equals": "unread_unverified"},
+                            {"path": "targeted_unread_state", "equals": "unknown"},
+                            {"path": "targeted_candidate_count", "equals": 0},
+                        )
+                    ]
+                },
+            ),
+            ready_variant(
+                "targeted_api_bounds",
+                label="定向核对时间与上下文边界",
+                steps=[
+                    m3_cmd("targeted_same_request"),
+                    m3_cmd("targeted_exact_request"),
+                    m3_cmd("targeted_over_request"),
+                    m3_cmd("targeted_future_request"),
+                    m3_cmd("targeted_older_request"),
+                    m3_cmd("targeted_cross_profile_request"),
+                ],
+                fixture="fixtures/m3/probe/targeted_same_request.json",
+                assertions=[
+                    "同 snapshot 重放为 unread_unverified",
+                    "恰 5 秒可接受，5001ms/未来/更早为 stale_snapshot",
+                    "跨 profile 为 identity_ambiguous",
+                    "只证明 API 判定，不证明调度实际重采",
+                ],
+                acceptance={
+                    "steps": [
+                        probe_ok({"path": "outcome", "equals": "unread_unverified"}),
+                        probe_ok({"path": "outcome", "equals": "unread_unverified"}),
+                        probe_ok({"path": "outcome", "equals": "stale_snapshot"}),
+                        probe_ok({"path": "outcome", "equals": "stale_snapshot"}),
+                        probe_ok({"path": "outcome", "equals": "stale_snapshot"}),
+                        probe_ok({"path": "outcome", "equals": "identity_ambiguous"}),
+                    ]
+                },
+            ),
             variant("unknown_not_detected", "O", label="真实未知不冒充检出", assertions=["unknown 不算检出", "缺导航授权记 BLOCKED"]),
         ],
     )
@@ -3350,7 +3532,35 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "计数正但无可定位行",
         ["M3 定向核对", "M2 needs_targeted_verification"],
         [
-            variant("no_target_after_check", "F", label="核对后仍无目标", setup="复用合成全局正计数输入", required_api="M3/M6 调度", assertions=["不造目标", "暂停 unread_unverified", "不把相等数量绑定任意行"]),
+            variant(
+                "no_target_after_check",
+                "F",
+                label="核对后仍无目标",
+                setup="复用合成全局正计数输入",
+                required_api="M6 调度暂停",
+                asset_status="DEFERRED",
+                deferred_to="M6",
+                assertions=["不造目标", "暂停 unread_unverified", "不把相等数量绑定任意行"],
+            ),
+            ready_variant(
+                "targeted_api_global_positive",
+                label="全局计数正但无候选 API",
+                steps=[m3_cmd("targeted_global_positive_request")],
+                fixture="fixtures/m3/probe/targeted_global_positive_request.json",
+                assertions=[
+                    "真实 API 返回 unread_unverified 且候选数为 0",
+                    "globally present 不绑定任意行；调度暂停仍依赖 M6",
+                ],
+                acceptance={
+                    "steps": [
+                        probe_ok(
+                            {"path": "outcome", "equals": "unread_unverified"},
+                            {"path": "targeted_unread_state", "equals": "present"},
+                            {"path": "targeted_candidate_count", "equals": 0},
+                        )
+                    ]
+                },
+            ),
             variant("real_no_target", "O", label="真机计数无目标", assertions=["只读观察", "入补测队列"]),
         ],
     )
@@ -3360,7 +3570,54 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "唯一行正目标的列表识别",
         ["M3 列表读取", "进入需另行授权"],
         [
-            variant("list_only_identify", "F", label="仅列表识别明确目标", setup="合成唯一正行 + 仅列表授权", required_api="M3 授权/采集", assertions=["即使其它源 unknown 也可登记明确目标", "不宣告全局无未知", "不打开会话"]),
+            ready_variant(
+                "list_only_identify",
+                label="仅列表识别明确目标",
+                steps=[
+                    f"python -m app sense --fixture tests/scenarios/{sensor['positive']['manifest']} --db {{db}}",
+                    m2_cmd("baseline"),
+                    read_cmd("unique_unread"),
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m3/read/unique_unread",
+                assertions=[
+                    "M2 明确目标入库且其它源仍 unknown",
+                    "M3 读到同一精确会话键与层级来源",
+                    "M3 前后五表签名、消息、设备、租约均不变；不打开会话",
+                ],
+                acceptance={
+                    "steps": [
+                        {
+                            **sensor_acceptance(sensor["positive"])["steps"][0],
+                            "stdout_paths": [
+                                *sensor_acceptance(sensor["positive"])["steps"][0]["stdout_paths"],
+                                {"path": "result.value.signals.row_badge.state", "equals": "present"},
+                                {"path": "result.value.signals.new_greeting.state", "equals": "unknown"},
+                                {"path": "result.value.signals.tab_badge.state", "equals": "unknown"},
+                                {"path": "result.value.signals.preview_delta.state", "equals": "unknown"},
+                            ],
+                        },
+                        probe_ok(),
+                        read_ok(
+                            {"path": "result.value.unread_state", "equals": "present"},
+                            {"path": "result.value.rows.0.conversation_key", "equals": conversation_key},
+                            {"path": "result.value.rows.0.state", "equals": "present"},
+                            {"path": "result.value.rows.0.count", "equals": 1},
+                            {"path": "result.value.rows.0.source", "equals": "hierarchy"},
+                            {"path": "actionable", "equals": True},
+                            {"path": "gate_reason", "equals": None},
+                        ),
+                        probe_ok(
+                            {"path": "task_count", "equals": 1},
+                            {"path": "states.0", "equals": "queued"},
+                            {"path": "stable_unchanged_since_baseline", "equals": True},
+                            {"path": "protected_task_unchanged_since_baseline", "equals": True},
+                            {"path": "message_count", "equals": 0},
+                            {"path": "device_count", "equals": 0},
+                        ),
+                    ]
+                },
+            ),
             variant("real_unique_positive", "O", label="真机唯一正目标", assertions=["人工先标注再比对", "无进入授权则进入分支 BLOCKED"]),
         ],
     )
@@ -3376,8 +3633,43 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 label="打开后角标消失",
                 fixture="fixtures/m3/entry_consumption.json",
                 setup="复用合成发现先落库事件",
-                required_api="M3 预保存发现/读全身份",
+                required_api="M5/M6 进入与发现处置",
+                asset_status="DEFERRED",
+                deferred_to="M5/M6",
                 assertions=["发现保留", "不能因消失记 done/absent", "中断转人工核对"],
+            ),
+            ready_variant(
+                "read_keeps_discovery",
+                label="M3 读取不关闭已存发现",
+                steps=[
+                    f"python -m app sense --fixture tests/scenarios/{sensor['positive']['manifest']} --db {{db}}",
+                    m2_cmd("baseline"),
+                    read_cmd("conversation_overlap"),
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m3/read/conversation_known",
+                assertions=[
+                    "M3 会话读取不写库、不关闭发现、不推进基线",
+                    "只证明读侧副作用边界，不证明真实进入/角标消失流程",
+                ],
+                acceptance={
+                    "steps": [
+                        sensor_acceptance(sensor["positive"])["steps"][0],
+                        probe_ok(),
+                        read_ok(
+                            {"path": "result.value.read_complete", "equals": True},
+                            {"path": "result.value.contact", "equals": "合成联系人甲"},
+                            {"path": "result.value.conversation_key", "equals": conversation_key},
+                            {"path": "result.value.inbound_state", "equals": "known"},
+                        ),
+                        probe_ok(
+                            {"path": "task_count", "equals": 1},
+                            {"path": "states.0", "equals": "queued"},
+                            {"path": "stable_unchanged_since_baseline", "equals": True},
+                            {"path": "protected_task_unchanged_since_baseline", "equals": True},
+                        ),
+                    ]
+                },
             ),
             variant("real_enter_once", "O", label="真机进入一次", assertions=["角标消失不代表任务完成", "不反复进出"]),
         ],
@@ -3388,7 +3680,74 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "读取期间新消息到达",
         ["M3 实时采集", "F 用 S01–S03 补时序"],
         [
-            variant("new_arrival_during_read", "F", label="读取中出现新入站", setup="固定事件脚本区分旧/新现场", required_api="M3/M6 事件注入", assertions=["不合成一条事件", "旧快照失效则重采", "新增入站不覆盖在途负载"]),
+            variant(
+                "new_arrival_during_read",
+                "F",
+                label="读取中出现新入站",
+                setup="固定事件脚本区分旧/新现场",
+                required_api="M6 事件注入/时序",
+                asset_status="DEFERRED",
+                deferred_to="M6",
+                assertions=["不合成一条事件", "旧快照失效则重采", "新增入站不覆盖在途负载"],
+            ),
+            ready_variant(
+                "stable_identity_new_keys",
+                label="稳定身份与新增键边界",
+                steps=[
+                    m3_cmd("new_keys_request"),
+                    m3_cmd("new_keys_no_stable_request"),
+                    m3_cmd("new_keys_cross_request"),
+                    read_cmd("conversation_ambiguous"),
+                    read_cmd("conversation_overlap"),
+                ],
+                fixture="fixtures/m3/probe/new_keys_request.json",
+                assertions=[
+                    "同正文同秒但独立稳定 ID 生成独立新增键",
+                    "无稳定 ID/new_keys 空、会话 inbound unknown",
+                    "跨会话 new_message_keys 拒绝",
+                    "重复稳定 ID 使 inbound unknown；跨屏只裁剪稳定重叠",
+                    "仅证明读/身份接口，不证明读取期间到达时序",
+                ],
+                acceptance={
+                    "steps": [
+                        probe_ok(
+                            {"path": "error", "equals": None},
+                            {"path": "new_keys", "length_equals": 2},
+                            {"path": "new_keys.0", "equals": message_key("m3")},
+                            {"path": "new_keys.1", "equals": message_key("m4")},
+                            {"path": "current_latest_inbound_key", "equals": message_key("m4")},
+                        ),
+                        probe_ok(
+                            {"path": "error", "equals": None},
+                            {"path": "new_keys", "length_equals": 0},
+                            {"path": "current_inbound_state", "equals": "unknown"},
+                            {"path": "current_latest_inbound_key", "equals": None},
+                            {"path": "current_message_identity_verified", "equals": False},
+                        ),
+                        probe_ok(
+                            {"path": "error", "equals": "identity_mismatch"},
+                            {"path": "new_keys", "length_equals": 0},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.inbound_state", "equals": "unknown"},
+                            {"path": "result.value.message_identity_verified", "equals": False},
+                            {"path": "result.value.latest_inbound_key", "equals": None},
+                            {"path": "result.value.messages.0.stable_identity_hash", "equals": None},
+                            {"path": "result.value.messages.0.message_key", "equals": None},
+                            {"path": "actionable", "equals": False},
+                            {"path": "gate_reason", "equals": "identity_ambiguous"},
+                        ),
+                        read_ok(
+                            {"path": "result.value.inbound_state", "equals": "known"},
+                            {"path": "result.value.latest_inbound_key", "equals": message_key("m4")},
+                            {"path": "result.value.messages", "length_equals": 4},
+                            {"path": "result.value.messages.2.message_key", "equals": message_key("m3")},
+                            {"path": "result.value.messages.3.message_key", "equals": message_key("m4")},
+                            {"path": "actionable", "equals": True},
+                        ),
+                    ]
+                },
+            ),
             variant("real_arrival", "O", label="真实读取中到达", assertions=["无法区分旧/新时 INCONCLUSIVE", "不拼接前后现场"]),
         ],
     )
@@ -3410,7 +3769,22 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         [
             variant("new_greeting_positive", "O", label="新招呼正值", assertions=["仅保守触发核对", "不视为等价于未读"]),
             variant("new_greeting_zero", "O", label="新招呼零", assertions=["不独立证明无未读", "另一类型未触发记未覆盖"]),
-            variant("offline_semantics", "F", label="离线语义未验证", setup="复用 M2 新招呼夹具", required_api="M2 sense", assertions=["正值保守 present", "0 为 unknown"]),
+            ready_variant(
+                "offline_semantics",
+                label="新招呼离线语义",
+                steps=[
+                    f"python -m app sense --fixture tests/scenarios/{sensor['new_greeting_positive_unverified']['manifest']} --db {{db}}.positive",
+                    f"python -m app sense --fixture tests/scenarios/{sensor['new_greeting_zero_unverified']['manifest']} --db {{db}}.zero",
+                ],
+                fixture="fixtures/m2/sensor/new_greeting_positive_unverified",
+                assertions=["正值保守 present", "0 为 unknown", "新招呼不等价于旧会话未读"],
+                acceptance={
+                    "steps": [
+                        sensor_acceptance(sensor["new_greeting_positive_unverified"])["steps"][0],
+                        sensor_acceptance(sensor["new_greeting_zero_unverified"])["steps"][0],
+                    ]
+                },
+            ),
         ],
     )
     add(
@@ -3419,7 +3793,121 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "只读完整性、方向与身份",
         ["M3 完整读取", "不写入"],
         [
-            variant("incomplete_or_ambiguous", "F", label="读取不全/身份不唯一", setup="复用 M2 歧义或不完整夹具", required_api="M3 读取阶梯", assertions=["不把截断文本交模型补全", "身份不唯一不点", "不丢其它正目标"]),
+            ready_variant(
+                "incomplete_or_ambiguous",
+                label="读取不全/身份不唯一",
+                steps=[
+                    f"python -m app sense --fixture tests/scenarios/{sensor['ambiguous_identity_plus_target']['manifest']} --db {{db}}",
+                    m2_cmd("baseline"),
+                    read_cmd("job_truncated"),
+                    read_cmd("conversation_ambiguous"),
+                    read_cmd("conversation_truncated"),
+                    read_cmd("conversation_direction_conflict"),
+                    read_cmd("conversation_incomplete"),
+                    read_cmd("ambiguous_unread"),
+                    m2_cmd("inspect"),
+                ],
+                fixture="fixtures/m3/read/ambiguous_unread",
+                assertions=[
+                    "截断/未知方向/重复或缺失身份不生成可发送键",
+                    "不把截断正文交模型补全，不点身份不唯一目标",
+                    "同批明确正目标仍保留，M2 已存发现与五表不变",
+                ],
+                acceptance={
+                    "steps": [
+                        {
+                            **sensor_acceptance(sensor["ambiguous_identity_plus_target"])["steps"][0],
+                            "stdout_paths": [
+                                *sensor_acceptance(sensor["ambiguous_identity_plus_target"])["steps"][0]["stdout_paths"],
+                                {"path": "result.value.candidates.0.conversation_key", "equals": other_conversation},
+                            ],
+                        },
+                        probe_ok(),
+                        read_stop("undetermined", "incomplete_snapshot", {"path": "gate_reason", "equals": "not_ok"}),
+                        read_unactionable(
+                            {"path": "result.value.inbound_state", "equals": "unknown"},
+                            {"path": "result.value.message_identity_verified", "equals": False},
+                            {"path": "result.value.latest_inbound_key", "equals": None},
+                            {"path": "result.value.messages.0.stable_identity_hash", "equals": None},
+                            {"path": "result.value.messages.0.message_key", "equals": None},
+                            {"path": "actionable", "equals": False},
+                            {"path": "gate_reason", "equals": "identity_ambiguous"},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.inbound_state", "equals": "unknown"},
+                            {"path": "result.value.latest_inbound_key", "equals": None},
+                            {"path": "result.value.messages.0.truncated", "equals": True},
+                            {"path": "actionable", "equals": False},
+                            {"path": "gate_reason", "equals": "identity_ambiguous"},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.inbound_state", "equals": "unknown"},
+                            {"path": "result.value.latest_inbound_key", "equals": None},
+                            {"path": "result.value.messages.0.direction", "equals": "unknown"},
+                            {"path": "actionable", "equals": False},
+                            {"path": "gate_reason", "equals": "identity_ambiguous"},
+                        ),
+                        read_stop("undetermined", "incomplete_snapshot", {"path": "gate_reason", "equals": "not_ok"}),
+                        read_ok(
+                            {"path": "result.value.unread_state", "equals": "present"},
+                            {"path": "result.value.rows.0.conversation_key", "equals": None},
+                            {"path": "result.value.rows.1.conversation_key", "equals": None},
+                            {"path": "result.value.rows.2.conversation_key", "equals": other_conversation},
+                            {"path": "actionable", "equals": True},
+                        ),
+                        probe_ok(
+                            {"path": "task_count", "equals": 1},
+                            {"path": "states.0", "equals": "queued"},
+                            {"path": "stable_unchanged_since_baseline", "equals": True},
+                            {"path": "protected_task_unchanged_since_baseline", "equals": True},
+                            {"path": "message_count", "equals": 0},
+                            {"path": "device_count", "equals": 0},
+                        ),
+                    ]
+                },
+            ),
+            ready_variant(
+                "page_job_paths",
+                label="页面与职位完整路径",
+                steps=[
+                    read_cmd("page_main"),
+                    read_cmd("job_list_unique"),
+                    read_cmd("job_detail_complete"),
+                    read_cmd("job_list_ambiguous"),
+                ],
+                fixture="fixtures/m3/read/page_main",
+                assertions=[
+                    "页面优先级/主界面可识别",
+                    "职位卡/详情按原始值重算键并可决策",
+                    "重复职位身份保留摘要但不可定位，同批唯一项仍保留",
+                ],
+                acceptance={
+                    "steps": [
+                        read_ok(
+                            {"path": "result.value.page", "equals": "main"},
+                            {"path": "actionable", "equals": True},
+                        ),
+                        read_ok(
+                            {"path": "result.value.cards.0.job_key", "equals": "boss:job:" + digest(["合成岗位甲", "合成机构甲", "20-30K"])},
+                            {"path": "result.value.coverage", "equals": "viewport"},
+                            {"path": "actionable", "equals": True},
+                        ),
+                        read_ok(
+                            {"path": "result.value.complete", "equals": True},
+                            {"path": "result.value.description", "equals": description},
+                            {"path": "result.value.description_hash", "equals": digest(description)},
+                            {"path": "result.value.description_length", "equals": len(description)},
+                            {"path": "actionable", "equals": True},
+                        ),
+                        read_ok(
+                            {"path": "result.value.cards.0.job_key", "equals": None},
+                            {"path": "result.value.cards.1.job_key", "equals": None},
+                            {"path": "result.value.cards.2.job_key", "equals": job_other},
+                            {"path": "actionable", "equals": True},
+                        ),
+                    ]
+                },
+            ),
             variant("real_incomplete", "O", label="真机读取不全", assertions=["停止受影响流程", "补完整读取证据"]),
         ],
     )
@@ -3439,7 +3927,18 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "版本漂移与控件多候选",
         ["M3 profile 标定", "版本门禁"],
         [
-            variant("version_drift", "F", label="应用/版式版本不符", fixture="fixtures/m3/version_drift.json", setup="合成 profile 与观测版本不一致", required_api="M3 profile 校验", assertions=["uncalibrated_profile", "禁止沿用旧坐标/阈值/发送控件"]),
+            ready_variant(
+                "version_drift",
+                label="应用/版式版本不符",
+                steps=[read_cmd("version_drift")],
+                fixture="fixtures/m3/read/version_drift",
+                assertions=["uncalibrated_profile", "value=null 且不可决策", "禁止沿用旧坐标/阈值/发送控件"],
+                acceptance={
+                    "steps": [
+                        read_stop("undetermined", "uncalibrated_profile", {"path": "gate_reason", "equals": "not_ok"})
+                    ]
+                },
+            ),
             variant("real_drift", "T", label="真机版本漂移", assertions=["隔离该 profile 的设备门禁", "重新标定后另轮"]),
         ],
     )
@@ -3449,7 +3948,80 @@ def build_scenarios(sensor: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         "跨级冲突与视觉兜底边界",
         ["M3 读取阶梯", "视觉默认关闭"],
         [
-            variant("cross_level_conflict", "F", label="层级/像素/视觉冲突", fixture="fixtures/m3/cross_level_conflict.json", setup="合成冲突字段", required_api="M3 读取阶梯", assertions=["跨级冲突 undetermined", "转人工", "视觉不能证据发送/删除"]),
+            ready_variant(
+                "cross_level_conflict",
+                label="层级/像素/视觉冲突",
+                steps=[
+                    read_cmd("pixel_present"),
+                    read_cmd("pixel_absent_unverified"),
+                    read_cmd("pixel_resolution_mismatch"),
+                    read_cmd("pixel_corrupt"),
+                    m3_cmd("ladder_conflict_request"),
+                    m3_cmd("ladder_failed_request"),
+                    m3_cmd("ladder_context_request"),
+                    m3_cmd("ladder_visual_request"),
+                ],
+                fixture="fixtures/m3/read/pixel_present",
+                assertions=[
+                    "真实 CLI 像素后备只证明 present 且不生成精确计数",
+                    "低阈值未标定空态/分辨率不符为 unknown，损坏为 failed",
+                    "真实领域接口：跨级冲突/上下文不一致/视觉单独启用均 undetermined 转人工",
+                    "前级 failed 保留 invalid_xml，不被后续像素成功覆盖",
+                ],
+                acceptance={
+                    "steps": [
+                        read_ok(
+                            {"path": "result.value.rows.0.state", "equals": "present"},
+                            {"path": "result.value.rows.0.count", "equals": None},
+                            {"path": "result.value.rows.0.source", "equals": "pixel"},
+                            {"path": "result.value.field_evidence.0.source", "equals": "pixel"},
+                            {"path": "actionable", "equals": True},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.unread_state", "equals": "unknown"},
+                            {"path": "result.value.rows.0.state", "equals": "unknown"},
+                            {"path": "result.value.rows.0.reason_code", "equals": "uncalibrated_region"},
+                            {"path": "actionable", "equals": False},
+                            {"path": "gate_reason", "equals": "field_unknown"},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.unread_state", "equals": "unknown"},
+                            {"path": "result.value.rows.0.reason_code", "equals": "calibration_mismatch"},
+                            {"path": "actionable", "equals": False},
+                            {"path": "gate_reason", "equals": "field_unknown"},
+                        ),
+                        read_stop("failed", "invalid_fixture", {"path": "gate_reason", "equals": "not_ok"}),
+                        probe_ok(
+                            {"path": "state", "equals": "undetermined"},
+                            {"path": "reason_code", "equals": "ambiguous_signal"},
+                            {"path": "requires_human", "equals": True},
+                            {"path": "evidence_sources.0", "equals": "hierarchy"},
+                            {"path": "evidence_sources.1", "equals": "pixel"},
+                        ),
+                        probe_ok(
+                            {"path": "state", "equals": "failed"},
+                            {"path": "reason_code", "equals": "invalid_xml"},
+                            {"path": "source", "equals": "hierarchy"},
+                            {"path": "requires_human", "equals": False},
+                            {"path": "evidence_states.0", "equals": "failed"},
+                            {"path": "evidence_states.1", "equals": "present"},
+                        ),
+                        probe_ok(
+                            {"path": "state", "equals": "undetermined"},
+                            {"path": "reason_code", "equals": "ambiguous_signal"},
+                            {"path": "requires_human", "equals": True},
+                            {"path": "evidence_sources", "length_equals": 1},
+                            {"path": "evidence_sources.0", "equals": "hierarchy"},
+                        ),
+                        probe_ok(
+                            {"path": "state", "equals": "undetermined"},
+                            {"path": "reason_code", "equals": "ambiguous_signal"},
+                            {"path": "requires_human", "equals": True},
+                            {"path": "evidence_sources.2", "equals": "vision"},
+                        ),
+                    ]
+                },
+            ),
             variant("real_conflict", "O", label="真机字段未决", assertions=["不因高置信覆盖结构证据", "未获准不新采集"]),
         ],
     )
@@ -4047,6 +4619,689 @@ def _write_fixture_guides() -> None:
         (FIXTURES / "CLAUDE.md").write_text(top_claude, encoding="utf-8", newline="\n")
 
 
+def build_m3_fixtures() -> dict[str, dict[str, Any]]:
+    """生成 M3 合成 read/targeted 夹具，供真实 CLI 与受限探针使用。"""
+    selectors = {
+        "bottom_labels": ["职位", "消息", "发现", "我的"],
+        "popup_markers": ["温馨提示"],
+        "login_markers": ["手机号登录"],
+        "recommend_markers": ["综合推荐"],
+        "chat_list_suffix": "recyclerView",
+        "chat_detail_suffixes": ["mRecycleView", "et_msg"],
+        "job_description_suffix": "tv_description",
+        "job_chat_suffixes": ["btn_chat", "btn_continue_chat"],
+        "job_title_suffix": "tv_position_name",
+        "job_salary_suffix": "tv_salary_statue",
+        "job_company_suffix": "tv_company_name",
+        "job_recruiter_suffix": "tv_recruiter",
+        "job_location_suffix": "tv_location",
+        "conversation_list_suffix": "mRecycleView",
+        "conversation_title_suffix": "tv_title",
+        "conversation_subtitle_suffix": "tv_sub_title",
+        "conversation_row_suffix": "chat_message_row",
+        "conversation_text_suffix": "tv_content_text",
+        "conversation_time_suffix": "tv_time",
+        "conversation_system_suffix": "tv_system_tip",
+        "conversation_card_suffix": "job_card_container",
+        "conversation_avatar_suffix": "iv_avatar",
+        "conversation_bubble_suffix": "bubble",
+        "conversation_status_suffix": "tv_sent_status",
+        "conversation_stable_id_suffix": "msg_uid",
+        "conversation_stable_id_verified": True,
+        "unread_list_suffix": "recyclerView",
+        "unread_row_suffix": "message_row",
+        "unread_name_suffix": "tv_name",
+        "unread_company_suffix": "tv_company",
+        "unread_position_suffix": "tv_position",
+        "unread_badge_region": [0.0, 0.0, 0.2, 1.0],
+        "unread_badge_class": "android.widget.TextView",
+    }
+    profile = {
+        "profile_id": "synthetic-scenario-m3",
+        "app": "boss",
+        "version": "scenario-1",
+        "calibrated": True,
+        "selectors": selectors,
+    }
+    no_stable_selectors = dict(selectors)
+    no_stable_selectors["conversation_stable_id_verified"] = False
+    no_stable_profile = {
+        "profile_id": "synthetic-scenario-m3",
+        "app": "boss",
+        "version": "scenario-1",
+        "calibrated": True,
+        "selectors": no_stable_selectors,
+    }
+    base_context = {
+        "contact": "合成联系人甲",
+        "company": "合成机构甲",
+        "position": "合成岗位甲",
+        "source_snapshot_id": "00000000-0000-4000-8000-000000000301",
+    }
+
+    def write_profile(directory: str, active: dict[str, Any]) -> None:
+        """写入同一合成 profile。"""
+        write_json(f"{directory}/profile.json", active)
+
+    def read_case(
+        name: str,
+        kind: str,
+        pages: list[str],
+        *,
+        coverage: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+        pixel: tuple[dict[str, Any], bytes] | None = None,
+        active_profile: dict[str, Any] | None = None,
+        app_version: str | None = None,
+        page_names: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """写一个 M3 read 夹具目录并返回 manifest 引用。"""
+        directory = f"fixtures/m3/read/{name}"
+        write_profile(directory, active_profile or profile)
+        names = page_names or (
+            [f"page-{index}.xml" for index in range(1, len(pages) + 1)]
+            if len(pages) > 1
+            else ["page.xml"]
+        )
+        for file_name, text in zip(names, pages):
+            write_text(f"{directory}/{file_name}", text)
+        pixel_ref = None
+        if pixel is not None:
+            calibration, raw = pixel
+            write_json(f"{directory}/calibration.json", calibration)
+            write_bytes(f"{directory}/screen.rgba", raw)
+            pixel_ref = {"calibration_path": "calibration.json", "raw_path": "screen.rgba"}
+        manifest = {
+            "profile_path": "profile.json",
+            "app_version": app_version or str((active_profile or profile)["version"]),
+            "observed_at": "2026-11-24T00:00:00.000Z",
+            "kind": kind,
+            "hierarchy_paths": names,
+            "coverage_proof": coverage
+            or {"kind": "viewport", "top_proven": False, "bottom_proven": False},
+            "conversation_context": context,
+            "pixel": pixel_ref,
+        }
+        write_json(f"{directory}/fixture.json", manifest)
+        return {"fixture": directory, "manifest": f"{directory}/fixture.json"}
+
+    def unread_xml(rows: list[dict[str, Any]], *, row_bounds: tuple[int, int, int, int] | None = None) -> str:
+        """构造未读列表 XML；角标为 None 时省略数字节点。"""
+        parts = [
+            '<hierarchy rotation="0"><node class="android.widget.FrameLayout" '
+            'package="com.hpbr.bosszhipin" bounds="[0,0][1080,2400]">'
+            '<node resource-id="com.hpbr.bosszhipin:id/recyclerView" '
+            'class="androidx.recyclerview.widget.RecyclerView" scrollable="true" '
+            'bounds="[0,0][1080,2000]">'
+        ]
+        for index, row in enumerate(rows):
+            if row_bounds is None:
+                left, top, right, bottom = 0, index * 200, 1000, index * 200 + 200
+            else:
+                left, top, right, bottom = row_bounds
+            parts.append(
+                f'<node resource-id="com.hpbr.bosszhipin:id/message_row" '
+                f'class="android.widget.LinearLayout" bounds="[{left},{top}][{right},{bottom}]">'
+            )
+            fields = (
+                ("tv_name", "name", 10),
+                ("tv_company", "company", 60),
+                ("tv_position", "position", 110),
+            )
+            for suffix, key, offset in fields:
+                parts.append(
+                    f'<node text="{xml_escape(str(row[key]))}" '
+                    f'resource-id="com.hpbr.bosszhipin:id/{suffix}" class="android.widget.TextView" '
+                    f'bounds="[{left + 20},{top + offset}][{left + 500},{top + offset + 40}]"/>'
+                )
+            if row.get("badge") is not None:
+                parts.append(
+                    f'<node text="{xml_escape(str(row["badge"]))}" class="android.widget.TextView" '
+                    f'bounds="[{left + 20},{top + 10}][{left + 80},{top + 60}]"/>'
+                )
+            parts.append("</node>")
+        parts.append("</node></node></hierarchy>")
+        return "".join(parts)
+
+    def card_node(card: dict[str, Any], top: int) -> str:
+        """构造职位卡节点。"""
+        return (
+            f'<node class="android.widget.LinearLayout" clickable="true" bounds="[0,{top}][1080,{top + 300}]">'
+            f'<node text="{xml_escape(card["title"])}" resource-id="com.hpbr.bosszhipin:id/tv_position_name" '
+            f'class="android.widget.TextView" bounds="[40,{top + 10}][700,{top + 60}]"/>'
+            f'<node text="{xml_escape(card["salary"])}" resource-id="com.hpbr.bosszhipin:id/tv_salary_statue" '
+            f'class="android.widget.TextView" bounds="[720,{top + 10}][1000,{top + 60}]"/>'
+            f'<node text="{xml_escape(card["company"])}" resource-id="com.hpbr.bosszhipin:id/tv_company_name" '
+            f'class="android.widget.TextView" bounds="[40,{top + 70}][700,{top + 120}]"/></node>'
+        )
+
+    def job_list_xml(cards: list[dict[str, Any]]) -> str:
+        """构造职位列表 XML。"""
+        nodes = "".join(card_node(card, 200 + index * 320) for index, card in enumerate(cards))
+        return (
+            '<hierarchy rotation="0"><node class="android.widget.FrameLayout" '
+            'package="com.hpbr.bosszhipin" bounds="[0,0][1080,2400]">'
+            '<node resource-id="com.hpbr.bosszhipin:id/recyclerView" '
+            'class="androidx.recyclerview.widget.RecyclerView" scrollable="true" '
+            f'bounds="[0,200][1080,2200]">{nodes}</node></node></hierarchy>'
+        )
+
+    def job_detail_xml(
+        description: str, *, recruiter: str = "合成招聘者", location: str = "合成城市"
+    ) -> str:
+        """构造职位详情 XML，正文与沟通按钮为必需节点。"""
+        return (
+            '<hierarchy rotation="0"><node class="android.widget.FrameLayout" '
+            'package="com.hpbr.bosszhipin" bounds="[0,0][1080,2400]">'
+            '<node text="合成岗位甲" resource-id="com.hpbr.bosszhipin:id/tv_position_name" '
+            'class="android.widget.TextView" bounds="[40,100][600,160]"/>'
+            '<node text="20-30K" resource-id="com.hpbr.bosszhipin:id/tv_salary_statue" '
+            'class="android.widget.TextView" bounds="[620,100][900,160]"/>'
+            '<node text="合成机构甲" resource-id="com.hpbr.bosszhipin:id/tv_company_name" '
+            'class="android.widget.TextView" bounds="[40,170][600,220]"/>'
+            f'<node text="{xml_escape(recruiter)}" resource-id="com.hpbr.bosszhipin:id/tv_recruiter" '
+            'class="android.widget.TextView" bounds="[40,230][600,280]"/>'
+            f'<node text="{xml_escape(location)}" resource-id="com.hpbr.bosszhipin:id/tv_location" '
+            'class="android.widget.TextView" bounds="[40,290][600,340]"/>'
+            f'<node text="{xml_escape(description)}" resource-id="com.hpbr.bosszhipin:id/tv_description" '
+            'class="android.widget.TextView" bounds="[40,360][1040,1600]"/>'
+            '<node text="立即沟通" resource-id="com.hpbr.bosszhipin:id/btn_chat" '
+            'class="android.widget.Button" clickable="true" bounds="[700,2100][1040,2300]"/></node></hierarchy>'
+        )
+
+    def page_xml(labels: list[str]) -> str:
+        """构造带底部标签的主页面。"""
+        nodes = "".join(
+            f'<node text="{xml_escape(label)}" class="android.widget.TextView" '
+            f'bounds="[{index * 200},2200][{index * 200 + 180},2260]"/>'
+            for index, label in enumerate(labels)
+        )
+        return (
+            '<hierarchy rotation="0"><node class="android.widget.FrameLayout" '
+            'package="com.hpbr.bosszhipin" bounds="[0,0][1080,2400]">'
+            f'{nodes}</node></hierarchy>'
+        )
+
+    def conversation_xml(
+        contact: str,
+        messages: list[dict[str, Any]],
+        *,
+        scrollable: bool = False,
+    ) -> str:
+        """构造会话页 XML；消息方向由头像/气泡/发送状态节点表达。"""
+        rows = []
+        for index, message in enumerate(messages):
+            top = 100 + index * 250
+            direction = message.get("direction", "incoming")
+            avatar_bounds = (
+                f"[20,{top + 20}][120,{top + 100}]"
+                if direction != "outgoing"
+                else f"[880,{top + 20}][980,{top + 100}]"
+            )
+            bubble_bounds = (
+                f"[140,{top + 20}][700,{top + 100}]"
+                if direction != "outgoing"
+                else f"[300,{top + 20}][860,{top + 100}]"
+            )
+            parts = [
+                f'<node resource-id="com.hpbr.bosszhipin:id/chat_message_row" '
+                f'class="android.widget.LinearLayout" bounds="[0,{top}][1000,{top + 200}]">',
+                f'<node resource-id="com.hpbr.bosszhipin:id/iv_avatar" class="android.widget.ImageView" '
+                f'bounds="{avatar_bounds}"/>',
+                f'<node resource-id="com.hpbr.bosszhipin:id/bubble" class="android.widget.LinearLayout" '
+                f'bounds="{bubble_bounds}"/>',
+            ]
+            truncated = ' truncated="true"' if message.get("truncated") else ""
+            parts.append(
+                f'<node text="{xml_escape(str(message["text"]))}"{truncated} '
+                f'resource-id="com.hpbr.bosszhipin:id/tv_content_text" class="android.widget.TextView" '
+                f'bounds="[160,{top + 30}][680,{top + 90}]"/>'
+            )
+            parts.append(
+                f'<node text="{xml_escape(str(message["time"]))}" '
+                f'resource-id="com.hpbr.bosszhipin:id/tv_time" class="android.widget.TextView" '
+                f'bounds="[720,{top + 60}][820,{top + 100}]"/>'
+            )
+            if message.get("status"):
+                parts.append(
+                    f'<node text="{xml_escape(str(message["status"]))}" '
+                    f'resource-id="com.hpbr.bosszhipin:id/tv_sent_status" class="android.widget.TextView" '
+                    f'bounds="[860,{top + 60}][980,{top + 100}]"/>'
+                )
+            if message.get("stable") is not None:
+                parts.append(
+                    f'<node content-desc="{xml_escape(str(message["stable"]))}" '
+                    f'resource-id="com.hpbr.bosszhipin:id/msg_uid" class="android.widget.TextView" '
+                    f'bounds="[0,0][1,1]"/>'
+                )
+            parts.append("</node>")
+            rows.append("".join(parts))
+        return (
+            '<hierarchy rotation="0"><node class="android.widget.FrameLayout" '
+            'package="com.hpbr.bosszhipin" bounds="[0,0][1080,2400]">'
+            f'<node text="{xml_escape(contact)}" resource-id="com.hpbr.bosszhipin:id/tv_title" '
+            'class="android.widget.TextView" bounds="[300,40][800,100]"/>'
+            '<node text="招聘者" resource-id="com.hpbr.bosszhipin:id/tv_sub_title" '
+            'class="android.widget.TextView" bounds="[300,100][800,150]"/>'
+            f'<node resource-id="com.hpbr.bosszhipin:id/mRecycleView" '
+            f'class="androidx.recyclerview.widget.RecyclerView" scrollable="{"true" if scrollable else "false"}" '
+            f'bounds="[0,150][1080,2200]">{"".join(rows)}</node></node></hierarchy>'
+        )
+
+    def calibration(
+        *,
+        resolution: list[int] | None = None,
+        absent_verified: bool = True,
+        threshold: int = 10,
+    ) -> dict[str, Any]:
+        """构造合成像素标定；只使用 synthetic 来源。"""
+        return {
+            "calibration_id": "synthetic-scenario-calibration",
+            "app": "boss",
+            "profile_id": profile["profile_id"],
+            "version": profile["version"],
+            "calibrated": True,
+            "absent_state_verified": absent_verified,
+            "resolution": resolution or [100, 100],
+            "badge_region": [0.0, 0.0, 1.0, 1.0],
+            "target_color": [255, 0, 0],
+            "tolerance": 0,
+            "threshold_pixels": threshold,
+            "source": "synthetic",
+            "calibrated_on": "2026-11-24",
+        }
+
+    def raw_rgba(width: int, height: int, *, red: bool) -> bytes:
+        """构造 16 字节头 + RGBA 像素。"""
+        pixels = bytearray(width * height * 4)
+        if red:
+            for offset in range(0, len(pixels), 4):
+                pixels[offset] = 255
+                pixels[offset + 3] = 255
+        return struct.pack("<IIII", width, height, 1, 0) + bytes(pixels)
+
+    cases: dict[str, dict[str, Any]] = {}
+    cases["unique_unread"] = read_case(
+        "unique_unread",
+        "unread",
+        [unread_xml([{"name": "合成联系人甲", "company": "合成机构甲", "position": "合成岗位甲", "badge": "1"}])],
+    )
+    cases["ambiguous_unread"] = read_case(
+        "ambiguous_unread",
+        "unread",
+        [
+            unread_xml(
+                [
+                    {"name": "合成联系人甲", "company": "合成机构甲", "position": "合成岗位甲", "badge": "1"},
+                    {"name": "合成联系人甲", "company": "合成机构甲", "position": "合成岗位甲", "badge": "1"},
+                    {"name": "合成联系人乙", "company": "合成机构乙", "position": "合成岗位乙", "badge": "1"},
+                ]
+            )
+        ],
+    )
+    cases["job_truncated"] = read_case(
+        "job_truncated", "job_detail", [job_detail_xml("合成职位正文，包含职责与要求…")]
+    )
+    cases["job_detail_complete"] = read_case(
+        "job_detail_complete", "job_detail", [job_detail_xml("合成职位正文，包含职责与要求。")]
+    )
+    cases["job_list_unique"] = read_case(
+        "job_list_unique",
+        "job_list",
+        [job_list_xml([{"title": "合成岗位甲", "salary": "20-30K", "company": "合成机构甲"}])],
+    )
+    cases["job_list_ambiguous"] = read_case(
+        "job_list_ambiguous",
+        "job_list",
+        [
+            job_list_xml(
+                [
+                    {"title": "合成岗位甲", "salary": "20-30K", "company": "合成机构甲"},
+                    {"title": "合成岗位甲", "salary": "20-30K", "company": "合成机构甲"},
+                    {"title": "合成岗位乙", "salary": "10-20K", "company": "合成机构乙"},
+                ]
+            )
+        ],
+    )
+    cases["page_main"] = read_case("page_main", "page", [page_xml(["职位", "消息"])])
+    known_messages = [
+        {"text": "合成消息甲", "time": "10:00", "direction": "incoming", "stable": "m1"},
+        {"text": "合成消息乙", "time": "10:01", "direction": "outgoing", "stable": "m2", "status": "已读"},
+    ]
+    cases["conversation_known"] = read_case(
+        "conversation_known",
+        "conversation",
+        [conversation_xml("合成联系人甲", known_messages)],
+        context=base_context,
+    )
+    cases["conversation_ambiguous"] = read_case(
+        "conversation_ambiguous",
+        "conversation",
+        [
+            conversation_xml(
+                "合成联系人甲",
+                [
+                    {"text": "合成消息甲", "time": "10:00", "direction": "incoming", "stable": "dup-1"},
+                    {"text": "合成消息乙", "time": "10:01", "direction": "outgoing", "stable": "dup-1", "status": "已读"},
+                ],
+            )
+        ],
+        context=base_context,
+    )
+    cases["conversation_truncated"] = read_case(
+        "conversation_truncated",
+        "conversation",
+        [
+            conversation_xml(
+                "合成联系人甲",
+                [{"text": "合成消息甲", "time": "10:00", "direction": "incoming", "stable": "m1", "truncated": True}],
+            )
+        ],
+        context=base_context,
+    )
+    cases["conversation_direction_conflict"] = read_case(
+        "conversation_direction_conflict",
+        "conversation",
+        [
+            conversation_xml(
+                "合成联系人甲",
+                [{"text": "合成消息甲", "time": "10:00", "direction": "incoming", "stable": "m1", "status": "已读"}],
+            )
+        ],
+        context=base_context,
+    )
+    cases["conversation_incomplete"] = read_case(
+        "conversation_incomplete",
+        "conversation",
+        [
+            conversation_xml("合成联系人甲", known_messages, scrollable=True),
+            conversation_xml("合成联系人甲", known_messages[1:], scrollable=True),
+        ],
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": False},
+        context=base_context,
+    )
+    older_messages = [
+        {"text": "合成消息甲", "time": "10:00", "direction": "incoming", "stable": "m1"},
+        {"text": "合成消息乙", "time": "10:01", "direction": "outgoing", "stable": "m2", "status": "已读"},
+    ]
+    newer_messages = [
+        {"text": "合成消息乙", "time": "10:01", "direction": "outgoing", "stable": "m2", "status": "已读"},
+        {"text": "同文消息", "time": "10:05", "direction": "incoming", "stable": "m3"},
+        {"text": "同文消息", "time": "10:05", "direction": "incoming", "stable": "m4"},
+    ]
+    cases["conversation_older"] = read_case(
+        "conversation_older",
+        "conversation",
+        [conversation_xml("合成联系人甲", older_messages)],
+        context=base_context,
+    )
+    cases["conversation_newer"] = read_case(
+        "conversation_newer",
+        "conversation",
+        [conversation_xml("合成联系人甲", newer_messages)],
+        context=base_context,
+    )
+    cases["conversation_overlap"] = read_case(
+        "conversation_overlap",
+        "conversation",
+        [
+            conversation_xml("合成联系人甲", older_messages, scrollable=True),
+            conversation_xml("合成联系人甲", newer_messages, scrollable=True),
+        ],
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        context=base_context,
+    )
+    cases["conversation_no_stable"] = read_case(
+        "conversation_no_stable",
+        "conversation",
+        [conversation_xml("合成联系人甲", newer_messages)],
+        context=base_context,
+        active_profile=no_stable_profile,
+    )
+    cases["version_drift"] = read_case(
+        "version_drift",
+        "unread",
+        [unread_xml([{"name": "合成联系人甲", "company": "合成机构甲", "position": "合成岗位甲", "badge": "1"}])],
+        app_version="drifted-version",
+    )
+    pixel_row = [{"name": "合成联系人甲", "company": "合成机构甲", "position": "合成岗位甲", "badge": None}]
+    cases["pixel_present"] = read_case(
+        "pixel_present",
+        "unread",
+        [unread_xml(pixel_row, row_bounds=(0, 0, 100, 100))],
+        pixel=(calibration(threshold=10), raw_rgba(100, 100, red=True)),
+    )
+    cases["pixel_absent_unverified"] = read_case(
+        "pixel_absent_unverified",
+        "unread",
+        [unread_xml(pixel_row, row_bounds=(0, 0, 100, 100))],
+        pixel=(calibration(absent_verified=False, threshold=10), raw_rgba(100, 100, red=False)),
+    )
+    cases["pixel_resolution_mismatch"] = read_case(
+        "pixel_resolution_mismatch",
+        "unread",
+        [unread_xml(pixel_row, row_bounds=(0, 0, 100, 100))],
+        pixel=(calibration(resolution=[50, 50], threshold=10), raw_rgba(100, 100, red=True)),
+    )
+    cases["pixel_corrupt"] = read_case(
+        "pixel_corrupt",
+        "unread",
+        [unread_xml(pixel_row, row_bounds=(0, 0, 100, 100))],
+        pixel=(calibration(threshold=10), b"broken"),
+    )
+
+    positive_dir = FIXTURES / "m2" / "sensor" / "positive"
+    positive_profile = (positive_dir / "profile.json").read_text(encoding="utf-8")
+    positive_xml = (positive_dir / "list.xml").read_text(encoding="utf-8")
+
+    def targeted_fixture(name: str, *, observed_at: str, profile_id: str | None = None) -> dict[str, Any]:
+        """复制 M2 正例到 M3 目标夹具，仅改变观察时间或 profile_id。"""
+        directory = f"fixtures/m3/targeted/{name}"
+        active = json.loads(positive_profile)
+        if profile_id is not None:
+            active["profile_id"] = profile_id
+        write_json(f"{directory}/profile.json", active)
+        write_text(f"{directory}/list.xml", positive_xml)
+        manifest = {
+            "profile_path": "profile.json",
+            "xml_paths": ["list.xml"],
+            "app_version": active["version"],
+            "observed_at": observed_at,
+            "baseline_rows": [],
+            "coverage_proof": {"kind": "viewport", "top_proven": False, "bottom_proven": False},
+        }
+        write_json(f"{directory}/manifest.json", manifest)
+        return {"fixture": directory, "manifest": f"tests/scenarios/{directory}/manifest.json"}
+
+    cases["targeted_initial"] = targeted_fixture("initial", observed_at="2026-11-24T00:00:00.000Z")
+    cases["targeted_fresh"] = targeted_fixture("fresh", observed_at="2026-11-24T00:00:00.000Z")
+    cases["targeted_older"] = targeted_fixture(
+        "older", observed_at="2026-11-23T23:59:59.000Z"
+    )
+    cases["targeted_cross_profile"] = targeted_fixture(
+        "cross_profile",
+        observed_at="2026-11-24T00:00:00.000Z",
+        profile_id="synthetic-m2-other",
+    )
+    cases["conversation_other"] = read_case(
+        "conversation_other",
+        "conversation",
+        [conversation_xml("合成联系人乙", older_messages)],
+        context={
+            "contact": "合成联系人乙",
+            "company": "合成机构乙",
+            "position": "合成岗位乙",
+            "source_snapshot_id": "00000000-0000-4000-8000-000000000302",
+        },
+    )
+
+    probe_dir = "fixtures/m3/probe"
+
+    def add_probe(name: str, value: dict[str, Any]) -> None:
+        """写一个受限探针请求夹具。"""
+        write_json(f"{probe_dir}/{name}.json", value)
+        cases[f"probe_{name}"] = {"fixture": f"{probe_dir}/{name}.json"}
+
+    def targeted_request(
+        initial: str,
+        targeted: str,
+        *,
+        now: str,
+        initial_id: str,
+        targeted_id: str,
+    ) -> dict[str, Any]:
+        """构造定向核对请求。"""
+        return {
+            "mode": "targeted",
+            "initial_fixture": initial,
+            "targeted_fixture": targeted,
+            "initial_snapshot_id": initial_id,
+            "targeted_snapshot_id": targeted_id,
+            "queued_keys": [],
+            "now": now,
+        }
+
+    initial = cases["targeted_initial"]["manifest"]
+    fresh = cases["targeted_fresh"]["manifest"]
+    add_probe("targeted_fresh_request", targeted_request(
+        initial, fresh, now="2026-11-24T00:00:01.000Z",
+        initial_id="00000000-0000-4000-8000-000000000401",
+        targeted_id="00000000-0000-4000-8000-000000000402",
+    ))
+    add_probe("targeted_same_request", targeted_request(
+        initial, fresh, now="2026-11-24T00:00:01.000Z",
+        initial_id="00000000-0000-4000-8000-000000000403",
+        targeted_id="00000000-0000-4000-8000-000000000403",
+    ))
+    add_probe("targeted_exact_request", targeted_request(
+        initial, fresh, now="2026-11-24T00:00:05.000Z",
+        initial_id="00000000-0000-4000-8000-000000000404",
+        targeted_id="00000000-0000-4000-8000-000000000405",
+    ))
+    add_probe("targeted_over_request", targeted_request(
+        initial, fresh, now="2026-11-24T00:00:05.001Z",
+        initial_id="00000000-0000-4000-8000-000000000406",
+        targeted_id="00000000-0000-4000-8000-000000000407",
+    ))
+    add_probe("targeted_future_request", targeted_request(
+        initial, "tests/scenarios/fixtures/m2/sensor/future_snapshot/manifest.json",
+        now="2026-11-24T00:00:01.000Z",
+        initial_id="00000000-0000-4000-8000-000000000408",
+        targeted_id="00000000-0000-4000-8000-000000000409",
+    ))
+    add_probe("targeted_older_request", targeted_request(
+        initial, cases["targeted_older"]["manifest"],
+        now="2026-11-24T00:00:02.000Z",
+        initial_id="00000000-0000-4000-8000-000000000410",
+        targeted_id="00000000-0000-4000-8000-000000000411",
+    ))
+    add_probe("targeted_cross_profile_request", targeted_request(
+        initial, cases["targeted_cross_profile"]["manifest"],
+        now="2026-11-24T00:00:01.000Z",
+        initial_id="00000000-0000-4000-8000-000000000412",
+        targeted_id="00000000-0000-4000-8000-000000000413",
+    ))
+    add_probe("targeted_unknown_request", targeted_request(
+        "tests/scenarios/fixtures/m2/sensor/viewport_all_zero/manifest.json",
+        "tests/scenarios/fixtures/m2/sensor/viewport_all_zero/manifest.json",
+        now="2026-11-24T00:00:01.000Z",
+        initial_id="00000000-0000-4000-8000-000000000414",
+        targeted_id="00000000-0000-4000-8000-000000000415",
+    ))
+    add_probe("targeted_global_positive_request", targeted_request(
+        "tests/scenarios/fixtures/m2/sensor/global_count_no_target/manifest.json",
+        "tests/scenarios/fixtures/m2/sensor/global_count_no_target/manifest.json",
+        now="2026-11-24T00:00:01.000Z",
+        initial_id="00000000-0000-4000-8000-000000000416",
+        targeted_id="00000000-0000-4000-8000-000000000417",
+    ))
+
+    def new_keys_request(previous: str, current: str) -> dict[str, Any]:
+        """构造同会话新增消息键请求。"""
+        def project(value: str) -> str:
+            """把场景内夹具路径转换为项目相对路径。"""
+            return value if value.startswith("tests/") else f"tests/scenarios/{value}"
+
+        return {
+            "mode": "new_keys",
+            "previous_fixture": project(previous),
+            "current_fixture": project(current),
+            "previous_snapshot_id": "00000000-0000-4000-8000-000000000421",
+            "current_snapshot_id": "00000000-0000-4000-8000-000000000422",
+        }
+
+    add_probe("new_keys_request", new_keys_request(
+        cases["conversation_older"]["manifest"], cases["conversation_newer"]["manifest"]
+    ))
+    add_probe("new_keys_no_stable_request", new_keys_request(
+        cases["conversation_no_stable"]["manifest"], cases["conversation_no_stable"]["manifest"]
+    ))
+    add_probe("new_keys_cross_request", new_keys_request(
+        cases["conversation_older"]["manifest"], cases["conversation_other"]["manifest"]
+    ))
+
+    layout = digest(["synthetic", "layout"])
+    other_layout = digest(["synthetic", "layout", "other"])
+
+    def reading(
+        source: str,
+        state: str,
+        *,
+        count: int | None,
+        reason: str | None,
+        confidence: str,
+        layout_context: str = layout,
+    ) -> dict[str, Any]:
+        """构造固定键 FieldReading 请求对象。"""
+        return {
+            "field": "unread_badges",
+            "app": "boss",
+            "profile_id": "synthetic-scenario-m3",
+            "profile_version": "scenario-1",
+            "snapshot_id": "00000000-0000-4000-8000-000000000431",
+            "observed_at": "2026-11-24T00:00:00.000Z",
+            "layout_context": layout_context,
+            "source": source,
+            "confidence": confidence,
+            "state": state,
+            "count": count,
+            "reason_code": reason,
+        }
+
+    def ladder_request(**values: Any) -> dict[str, Any]:
+        """构造阶梯请求。"""
+        return {"mode": "ladder", **values}
+
+    add_probe("ladder_conflict_request", ladder_request(
+        hierarchy=reading("hierarchy", "present", count=1, reason=None, confidence="high"),
+        pixel=reading("pixel", "absent", count=0, reason=None, confidence="medium"),
+        vision=None,
+        human=None,
+    ))
+    add_probe("ladder_failed_request", ladder_request(
+        hierarchy=reading("hierarchy", "failed", count=None, reason="invalid_xml", confidence="low"),
+        pixel=reading("pixel", "present", count=None, reason=None, confidence="medium"),
+        vision=None,
+        human=None,
+    ))
+    add_probe("ladder_context_request", ladder_request(
+        hierarchy=reading("hierarchy", "present", count=1, reason=None, confidence="high"),
+        pixel=reading(
+            "pixel", "absent", count=0, reason=None, confidence="medium", layout_context=other_layout
+        ),
+        vision=None,
+        human=None,
+    ))
+    add_probe("ladder_visual_request", ladder_request(
+        hierarchy=reading("hierarchy", "unknown", count=None, reason="missing_signal", confidence="low"),
+        pixel=reading("pixel", "unknown", count=None, reason="missing_signal", confidence="low"),
+        vision=reading("vision", "present", count=None, reason=None, confidence="high"),
+        human=None,
+        vision_enabled=True,
+    ))
+    return cases
+
+
 def build_catalogue() -> dict[str, Any]:
     """生成场景清单与独立预期的完整内容，供落盘或自检复用。"""
     import shutil
@@ -4061,12 +5316,13 @@ def build_catalogue() -> dict[str, Any]:
     build_m0_fixtures()
     sensor = build_sensor_cases()
     build_support_fixtures()
+    m3 = build_m3_fixtures()
     build_m1_fixtures()
     build_m2_requests()
     for name, text in preserved.items():
         (FIXTURES / name).write_text(text, encoding="utf-8", newline="\n")
     _write_fixture_guides()
-    scenarios = build_scenarios(sensor)
+    scenarios = build_scenarios(sensor, m3)
     catalogue = {
         "schema_version": 1,
         "generated_from": "tools/build_assets.py",

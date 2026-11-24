@@ -15,12 +15,13 @@
 
 ## 2. 当前事实
 
-- 场景 73、变体 317：F 295、T 9、O 12、W 1。
-- READY_FOR_APP 121、ASSET_ONLY 169、DEFERRED 2、MODULE_EVIDENCE 3、DEVICE_GATE 22。
-- M0 `51333d8`、M1 `a600d0a`、M2 `cc103f8` 已普通 merge 并接入。
+- 场景 73、变体 324：F 302、T 9、O 12、W 1。
+- READY_FOR_APP 133、ASSET_ONLY 155、DEFERRED 10、MODULE_EVIDENCE 4、DEVICE_GATE 22。
+- M0 `51333d8`、M1 `a600d0a`、M2 `cc103f8`、M3 `584b814`（merge `92a0b68`）已普通 merge 并接入。
   - M0 实际执行：C01 9 PASS + 1 T 门槛、C02 12 PASS、C03 8 PASS，共 29 PASS、0 FAIL。
   - M1 实际执行：38 PASS、0 FAIL；DEFERRED 2（abandon→M5、leased_no_start→M6）、MODULE_EVIDENCE 3（纯约束用例，不重做模块单测）。M1 子集总体 BLOCKED、退出 3，不冒充完整 M1 通过。
-  - 全量验收：M0–M2 共 121 PASS、0 FAIL；169 个 M3+ ASSET_ONLY 入口未冻结、22 个设备门槛未验收、2 DEFERRED、3 MODULE_EVIDENCE；总体 BLOCKED、退出 3。
+  - M3 实际执行：12 PASS、0 FAIL；8 DEFERRED、1 MODULE_EVIDENCE、17 设备门槛，子集退出 3。新增 7 个 M3 子变体只证明定向核对 API、读侧副作用边界、稳定身份新增键与页面/职位路径，不冒充 R03/R04/R06/R07 完整流程。
+  - 全量验收：M0–M3 共 133 PASS、0 FAIL；155 个 M4+ ASSET_ONLY 入口未冻结、22 个设备门槛未验收、10 DEFERRED、4 MODULE_EVIDENCE；总体 BLOCKED、退出 3。
   - `--only SC-C` 的 M0 子集退出 0；`--only SC-L` 的 M1 子集因 2 DEFERRED/3 MODULE_EVIDENCE 退出 3；两者 `product_acceptance` 都不是 PASS。
   - 未运行真实 ADB、设备、模型或网络。
 
@@ -34,9 +35,10 @@ python -m tests.scenarios.framework.runner --mode assets
 python -m tests.scenarios.framework.runner --mode acceptance --target .
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-C --target .
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-L --target .
+python -m tests.scenarios.framework.runner --mode acceptance --only SC-R --target .
 ```
 
-- unittest：66 项，验证资产完整性、严格比较反例、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝与 CLI 安全失败。
+- unittest：69 项，验证资产完整性、严格比较反例、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径与真实阶梯 mutant。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；
@@ -69,7 +71,7 @@ acceptance 对每个可执行变体：
 - M0 doctor 合成设备/配置/参数负例与真实探针协议；
 - M1 初始化、租约竞争、续租/旧 nonce、恢复隔离、finish 三态与跨表回滚、仓储输入；
 - M2 四源冲突、区域/bounds、9+/0+、新招呼语义、全覆盖否定、预览/时间、多页、时间窗、profile/路径、身份歧义、终态与时间倒退；
-- M3 进入消耗角标、授权矩阵、版本漂移、跨级冲突、读取中断；
+- M3 页面/职位/未读/会话完整路径、字段阶梯/像素/上下文冲突、稳定消息身份/跨屏重叠/new_message_keys、定向核对 API 与边界、版本漂移、读侧不关闭发现；真实进入/返回/到达时序仍依赖 M4–M6 或设备；
 - M4 Decision 校验、超时、事实/注入、策略包 45 键、摘要、共享门禁、快照恢复、留出分桶；
 - M5 六个动作 × F-A 至 F-E、人工收敛、非法证据；
 - M6 安全点、第 6 次抢占、预算边界、双钟/续租、三个观察钩子；
@@ -78,7 +80,7 @@ acceptance 对每个可执行变体：
 
 ## 7. 未完成与下一步
 
-- P2 已接入 M0/M1/M2；M3+ 需等业务方稳定提交后，逐一绑定真实 CLI/StorePort/设备门禁/动作执行接口；不得合并未验收业务分支。
-- 169 个 ASSET_ONLY 变体仍缺接口；2 个 DEFERRED 与 3 个 MODULE_EVIDENCE 保持未计 PASS。
+- P2 已接入 M0/M1/M2/M3；M4+ 需等业务方稳定提交后，逐一绑定真实 CLI/StorePort/设备门禁/动作执行接口；不得合并未验收业务分支。
+- 155 个 ASSET_ONLY 变体仍缺接口；10 个 DEFERRED 与 4 个 MODULE_EVIDENCE 保持未计 PASS。原 R03/R04/R06/R07 完整变体仍分别依赖 M6 调度/M5–M6 进入与事件时序。
 - 纯实机门槛、真实模型/provider、真实写入与设备证据全部未执行。
 - 根 `tests/AGENTS.md`、根 `AGENTS.md` 索引与 README 由业务方串行更新；本目录只提供待同步条目。

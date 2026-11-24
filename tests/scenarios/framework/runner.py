@@ -37,7 +37,7 @@ EXIT_FAIL = 1
 EXIT_BLOCKED = 3
 RUN_ROOT = Path("data") / "evals" / "scenario-runs"
 # 只有已独立验收并进入稳定 main 的里程碑才允许执行；扩展前先更新指南。
-IMPLEMENTED_MILESTONES = {"M0", "M1", "M2"}
+IMPLEMENTED_MILESTONES = {"M0", "M1", "M2", "M3"}
 
 
 def _utc_stamp() -> str:
@@ -183,6 +183,7 @@ FIXTURE_TOKEN = re.compile(r"tests/scenarios/fixtures/[A-Za-z0-9_./-]+")
 M0_PROBE_PATH = "tests/scenarios/framework/m0_protocol_probe.py"
 M1_PROBE_PATH = "tests/scenarios/framework/m1_probe.py"
 M2_PROBE_PATH = "tests/scenarios/framework/m2_probe.py"
+M3_PROBE_PATH = "tests/scenarios/framework/m3_probe.py"
 EXPECTED_FILE_NAMES = {"expected.json", "oracles.json"}
 
 
@@ -254,7 +255,10 @@ def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path
                 queue.append(target / probe_request["fixture"])
             if isinstance(probe_request, dict) and isinstance(probe_request.get("extra_fixture"), str):
                 queue.append(target / probe_request["extra_fixture"])
-        if resolved.name == "manifest.json":
+            for key in ("initial_fixture", "targeted_fixture", "previous_fixture", "current_fixture"):
+                if isinstance(probe_request, dict) and isinstance(probe_request.get(key), str):
+                    queue.append(target / probe_request[key])
+        if resolved.name in ("manifest.json", "read.json", "fixture.json"):
             try:
                 manifest = json.loads(resolved.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
@@ -267,6 +271,15 @@ def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path
                 for relative in manifest.get("xml_paths") or []:
                     if isinstance(relative, str):
                         queue.append(resolved.parent / relative)
+                for relative in manifest.get("hierarchy_paths") or []:
+                    if isinstance(relative, str):
+                        queue.append(resolved.parent / relative)
+                pixel = manifest.get("pixel")
+                if isinstance(pixel, dict):
+                    for key in ("calibration_path", "raw_path"):
+                        relative = pixel.get(key)
+                        if isinstance(relative, str):
+                            queue.append(resolved.parent / relative)
     return selected
 
 
@@ -310,6 +323,17 @@ def _prepare_isolation(
         destination_m2 = root / M2_PROBE_PATH
         destination_m2.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(resolved_m2, destination_m2)
+    if any(M3_PROBE_PATH in command for command in _iter_command_strings(variant)):
+        source_m3 = target / M3_PROBE_PATH
+        _reject_link_ancestors(source_m3, target, "m3_probe")
+        if source_m3.is_symlink():
+            raise IsolationError("M3 探针不得是符号链接")
+        resolved_m3 = source_m3.resolve()
+        if not _within(resolved_m3, target.resolve()) or not resolved_m3.is_file():
+            raise IsolationError("M3 探针路径越界或不存在")
+        destination_m3 = root / M3_PROBE_PATH
+        destination_m3.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(resolved_m3, destination_m3)
     if any(M0_PROBE_PATH in command for command in _iter_command_strings(variant)):
         source_probe = target / M0_PROBE_PATH
         _reject_link_ancestors(source_probe, target, "m0_protocol_probe")
@@ -500,6 +524,7 @@ def _run_concurrent(
             or command.startswith(f"python {M0_PROBE_PATH} ")
             or command.startswith(f"python {M1_PROBE_PATH} ")
             or command.startswith(f"python {M2_PROBE_PATH} ")
+            or command.startswith(f"python {M3_PROBE_PATH} ")
         ):
             raise IsolationError("并发子进程命令不在白名单")
     barrier = root / "barrier"
@@ -639,6 +664,7 @@ def _variant_status(scenario: dict[str, Any], variant: dict[str, Any], target: P
             or command.startswith(f"python {M0_PROBE_PATH} ")
             or command.startswith(f"python {M1_PROBE_PATH} ")
             or command.startswith(f"python {M2_PROBE_PATH} ")
+            or command.startswith(f"python {M3_PROBE_PATH} ")
         ):
             return "BLOCKED_ENTRY_UNFROZEN"
     return "READY"

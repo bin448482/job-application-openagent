@@ -1,0 +1,7 @@
+{
+  "mode": "new_keys",
+  "previous_fixture": "tests/scenarios/fixtures/m3/read/conversation_older/fixture.json",
+  "current_fixture": "tests/scenarios/fixtures/m3/read/conversation_newer/fixture.json",
+  "previous_snapshot_id": "00000000-0000-4000-8000-000000000421",
+  "current_snapshot_id": "00000000-0000-4000-8000-000000000422"
+}

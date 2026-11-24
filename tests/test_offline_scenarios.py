@@ -23,7 +23,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, model, replay, runner  # noqa: E402
+from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, model, replay, runner  # noqa: E402
 from scenarios.framework.compare import compare_invocation, compare_step, strict_equal  # noqa: E402
 
 SCENARIO_ROOT = TESTS_DIR / "scenarios"
@@ -744,11 +744,11 @@ class IsolationTripwireTests(unittest.TestCase):
 class P2M0BindingTests(unittest.TestCase):
     """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
 
-    def test_milestone_gate_blocks_unimplemented_m3(self) -> None:
-        """M3 虽 READY，但未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
-        assets = load_assets()
-        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2"})
-        scenario = {"id": "SC-R99", "milestone": "M3"}
+    def test_milestone_gate_blocks_unimplemented_m4(self) -> None:
+        """M4 未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
+        load_assets()
+        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3"})
+        scenario = {"id": "SC-R99", "milestone": "M4"}
         variant = {
             "id": "synthetic",
             "layer": "F",
@@ -1009,9 +1009,10 @@ class M1DriverBoundaryTests(unittest.TestCase):
         oracle = assets.oracles["variants"]["SC-U01/unique_row_badge"]["acceptance"]["steps"][0]
         manifest = SCENARIO_ROOT / "fixtures/m2/sensor/positive/manifest.json"
 
-        def bad_snapshot(snapshot):
-            """保持结构但篡改候选键、会话键与指纹，模拟 serializer 缺陷。"""
-            payload = {
+        def bad_result_payload(result):
+            """保持外层结构但篡改候选键、会话键与指纹，模拟 serializer 缺陷。"""
+            snapshot = result.value
+            value = {
                 "app": snapshot.app,
                 "profile_id": snapshot.profile_id,
                 "coverage": snapshot.coverage,
@@ -1045,14 +1046,22 @@ class M1DriverBoundaryTests(unittest.TestCase):
                 ],
                 "unread_state": snapshot.unread_state,
             }
-            return payload
+            return {
+                "status": result.status,
+                "value": value,
+                "reason_code": result.reason_code,
+                "snapshot_id": result.snapshot_id,
+                "observed_at": result.observed_at,
+                "source": result.source,
+                "confidence": result.confidence,
+            }
 
         result = load_and_parse_snapshot(
             manifest,
             "00000000-0000-4000-8000-0000000000c1",
             "2026-11-24T00:00:00.000Z",
         )
-        with mock.patch.object(sense, "_snapshot_payload", side_effect=bad_snapshot):
+        with mock.patch.object(sense, "result_payload", side_effect=bad_result_payload):
             payload = sense.build_sense_payload(result, None)
         invocation = {
             "exit_code": 0,
@@ -1264,6 +1273,90 @@ class M1DriverBoundaryTests(unittest.TestCase):
         }
         differences = compare_invocation(invocation, oracle)
         self.assertTrue(any("unchanged_since_seed" in item for item in differences), differences)
+
+    def test_m3_read_device_is_rejected_before_subprocess(self) -> None:
+        """真实 read --device 必须在任何子进程前以 invalid_input 拒绝。"""
+        from app.cli.main import main as cli_main
+        from app.process_log import ProcessLog
+
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            log = ProcessLog(path=folder / "read-device.jsonl")
+            output = io.StringIO()
+            with mock.patch("subprocess.run") as run, redirect_stdout(output):
+                code = cli_main(
+                    ["read", "--device", "--serial", "synthetic"],
+                    process_log=log,
+                )
+        self.assertEqual(code, 2)
+        self.assertEqual(json.loads(output.getvalue())["reason_code"], "invalid_input")
+        run.assert_not_called()
+
+    def test_m3_probe_real_junction_is_rejected(self) -> None:
+        """M3 原始路径祖先为真实 junction 时必须拒绝，不先 resolve。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            real = root / "real"
+            real.mkdir()
+            linked = root / "linked"
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(linked), str(real)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if created.returncode != 0 or not runner._is_link_like(linked):
+                self.skipTest("当前平台/账户不能创建 junction")
+            with mock.patch.object(m3_probe, "ROOT", root):
+                with self.assertRaises(Exception):
+                    m3_probe._relative("linked/request.json", "request", must_exist=False)
+
+    def test_real_m3_ladder_conflict_mutant_is_caught_by_r13_oracle(self) -> None:
+        """真实 resolve_field 把冲突误判 present 时，SC-R13 实际 oracle 必须拒绝。"""
+        from dataclasses import replace
+
+        from app.domain import ladder
+
+        assets = load_assets()
+        request = json.loads(
+            (
+                SCENARIO_ROOT / "fixtures/m3/probe/ladder_conflict_request.json"
+            ).read_text(encoding="utf-8")
+        )
+        oracle = assets.oracles["variants"]["SC-R13/cross_level_conflict"]["acceptance"]["steps"][4]
+        original = ladder._resolution
+
+        def wrong_conflict(*args, **kwargs):
+            """把 undetermined/ambiguous_signal 篡改为可决策 present。"""
+            resolution = original(*args, **kwargs)
+            if resolution.state == "undetermined" and resolution.reason_code == "ambiguous_signal":
+                return replace(
+                    resolution,
+                    state="present",
+                    count=1,
+                    reason_code=None,
+                    requires_human=False,
+                    source="hierarchy",
+                    confidence="high",
+                )
+            return resolution
+
+        with mock.patch.object(ladder, "_resolution", wrong_conflict), mock.patch.object(
+            m3_probe, "ROOT", SCENARIO_ROOT.parent.parent
+        ):
+            actual = m3_probe._ladder(request)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": "ok", **actual},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(
+            any("state" in item or "requires_human" in item for item in differences),
+            differences,
+        )
 
     def test_real_m2_sut_mutant_coverage_is_caught(self) -> None:
         """真实 M2 解析器把 coverage 降为 viewport 时，SC-U04 oracle 必须失败。"""

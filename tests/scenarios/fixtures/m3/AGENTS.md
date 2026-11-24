@@ -10,6 +10,9 @@
 - `cross_level_conflict.json`：合成输入文件。
 - `entry_consumption.json`：合成输入文件。
 - `version_drift.json`：合成输入文件。
+- `probe/`：子目录，见其自身指南。
+- `read/`：子目录，见其自身指南。
+- `targeted/`：子目录，见其自身指南。
 
 ## 三、维护要求
 

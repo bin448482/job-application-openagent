@@ -1,0 +1,21 @@
+{
+  "profile_path": "profile.json",
+  "app_version": "scenario-1",
+  "observed_at": "2026-11-24T00:00:00.000Z",
+  "kind": "conversation",
+  "hierarchy_paths": [
+    "page.xml"
+  ],
+  "coverage_proof": {
+    "kind": "viewport",
+    "top_proven": false,
+    "bottom_proven": false
+  },
+  "conversation_context": {
+    "contact": "合成联系人乙",
+    "company": "合成机构乙",
+    "position": "合成岗位乙",
+    "source_snapshot_id": "00000000-0000-4000-8000-000000000302"
+  },
+  "pixel": null
+}
