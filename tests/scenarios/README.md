@@ -15,13 +15,13 @@
 
 ## 2. 当前事实
 
-- 场景 73、变体 324：F 302、T 9、O 12、W 1。
-- READY_FOR_APP 133、ASSET_ONLY 155、DEFERRED 10、MODULE_EVIDENCE 4、DEVICE_GATE 22。
+- 场景 73、变体 327：F 305、T 9、O 12、W 1。
+- READY_FOR_APP 136、ASSET_ONLY 155、DEFERRED 10、MODULE_EVIDENCE 4、DEVICE_GATE 22。
 - M0 `51333d8`、M1 `a600d0a`、M2 `cc103f8`、M3 `584b814`（merge `92a0b68`）已普通 merge 并接入。
   - M0 实际执行：C01 9 PASS + 1 T 门槛、C02 12 PASS、C03 8 PASS，共 29 PASS、0 FAIL。
   - M1 实际执行：38 PASS、0 FAIL；DEFERRED 2（abandon→M5、leased_no_start→M6）、MODULE_EVIDENCE 3（纯约束用例，不重做模块单测）。M1 子集总体 BLOCKED、退出 3，不冒充完整 M1 通过。
-  - M3 实际执行：12 PASS、0 FAIL；8 DEFERRED、1 MODULE_EVIDENCE、17 设备门槛，子集退出 3。新增 7 个 M3 子变体只证明定向核对 API、读侧副作用边界、稳定身份新增键与页面/职位路径，不冒充 R03/R04/R06/R07 完整流程。
-  - 全量验收：M0–M3 共 133 PASS、0 FAIL；155 个 M4+ ASSET_ONLY 入口未冻结、22 个设备门槛未验收、10 DEFERRED、4 MODULE_EVIDENCE；总体 BLOCKED、退出 3。
+  - M3 实际执行：15 PASS、0 FAIL；8 DEFERRED、1 MODULE_EVIDENCE、17 设备门槛，子集退出 3。新增 10 个 M3 子变体只证明定向核对 API、读侧副作用边界、稳定身份新增键与页面/职位路径，不冒充 R03/R04/R06/R07 完整流程。
+  - 全量验收：M0–M3 共 136 PASS、0 FAIL；155 个 M4+ ASSET_ONLY 入口未冻结、22 个设备门槛未验收、10 DEFERRED、4 MODULE_EVIDENCE；总体 BLOCKED、退出 3。
   - `--only SC-C` 的 M0 子集退出 0；`--only SC-L` 的 M1 子集因 2 DEFERRED/3 MODULE_EVIDENCE 退出 3；两者 `product_acceptance` 都不是 PASS。
   - 未运行真实 ADB、设备、模型或网络。
 
@@ -38,7 +38,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --only SC-L --targe
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-R --target .
 ```
 
-- unittest：69 项，验证资产完整性、严格比较反例、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径与真实阶梯 mutant。
+- unittest：75 项，验证资产完整性、严格比较反例、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径与真实阶梯 mutant。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；

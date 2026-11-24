@@ -20,7 +20,7 @@ from app.adapters.boss.list import load_and_parse_snapshot
 from app.adapters.boss.read import load_and_read_fixture
 from app.domain.ladder import FieldReading, resolve_field
 from app.domain.reading import Conversation, new_message_keys
-from app.usecases.read import targeted_verification_outcome
+from app.usecases import read as read_usecase
 
 
 class ProbeError(RuntimeError):
@@ -93,9 +93,9 @@ def _targeted(request: dict) -> dict:
     queued_keys = request.get("queued_keys", [])
     if not isinstance(queued_keys, list):
         raise ProbeError("queued_keys 必须是数组")
-    initial = load_and_parse_snapshot(initial_path, initial_id, now)
-    targeted = load_and_parse_snapshot(targeted_path, targeted_id, now)
-    outcome = targeted_verification_outcome(initial, targeted, queued_keys, now=now)
+    initial = load_and_parse_snapshot(initial_path, initial_id)
+    targeted = load_and_parse_snapshot(targeted_path, targeted_id)
+    outcome = read_usecase.targeted_verification_outcome(initial, targeted, queued_keys, now=now)
     target_value = targeted.value
     return {
         "outcome": outcome,

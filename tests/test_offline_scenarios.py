@@ -1358,6 +1358,239 @@ class M1DriverBoundaryTests(unittest.TestCase):
             differences,
         )
 
+    def test_real_m3_events_pollution_is_caught_by_r05_full_signature(self) -> None:
+        """真实 R05 末步必须用五表+事件完整签名拒绝合法事件污染。"""
+        import sqlite3
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-R05/list_only_identify"]["acceptance"]["steps"][3]
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m2/probe/seed_queued.json").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            db = Path(temporary) / "runtime.sqlite3"
+            with mock.patch.object(m2_probe, "ROOT", SCENARIO_ROOT.parent.parent):
+                m2_probe._seed(request, db)
+            self.assertTrue(m2_probe._inspect(db)["unchanged_since_seed"])
+            connection = sqlite3.connect(db)
+            try:
+                connection.execute(
+                    "UPDATE events SET payload_json = ? WHERE event_id = "
+                    "(SELECT MIN(event_id) FROM events)",
+                    ('{"synthetic":"polluted"}',),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            actual = m2_probe._inspect(db)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": "ok", **actual},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("unchanged_since_seed" in item for item in differences), differences)
+
+    def test_real_m3_same_snapshot_mutant_is_caught_by_r03_resolved_control(self) -> None:
+        """真实定向核对忽略同 snapshot 条件时，R03 可解除对照必须拒绝。"""
+        from app.usecases import read as read_usecase
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-R03/targeted_api_resolved"]["acceptance"]["steps"][1]
+        request = json.loads(
+            (
+                SCENARIO_ROOT / "fixtures/m3/probe/targeted_resolved_same_request.json"
+            ).read_text(encoding="utf-8")
+        )
+        original = read_usecase.targeted_verification_outcome
+
+        def ignore_same_snapshot(initial, targeted, queued_keys, *, now):
+            """模拟误删同 snapshot 拒绝条件。"""
+            result = original(initial, targeted, queued_keys, now=now)
+            if targeted.snapshot_id == initial.snapshot_id:
+                return None
+            return result
+
+        with mock.patch.object(
+            read_usecase, "targeted_verification_outcome", ignore_same_snapshot
+        ), mock.patch.object(m3_probe, "ROOT", SCENARIO_ROOT.parent.parent):
+            actual = m3_probe._targeted(request)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": "ok", **actual},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("outcome" in item for item in differences), differences)
+
+    def test_real_m3_serializer_mutant_is_caught_by_r05_shape_oracle(self) -> None:
+        """真实 build_read_payload 缺 result.confidence/新增额外键时 R05 oracle 拒绝。"""
+        from app.adapters.boss.read import load_and_read_fixture
+        from app.usecases import read as read_usecase
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-R05/list_only_identify"]["acceptance"]["steps"][2]
+        result = load_and_read_fixture(
+            SCENARIO_ROOT / "fixtures/m3/read/unique_unread/fixture.json",
+            "00000000-0000-4000-8000-000000000501",
+        )
+        original = read_usecase.result_payload
+
+        def bad_payload(item):
+            """删除固定七键之一并加入额外合成键。"""
+            payload = original(item)
+            payload.pop("confidence")
+            payload["extra"] = "synthetic"
+            if isinstance(payload.get("value"), dict):
+                payload["value"]["extra"] = "synthetic"
+            return payload
+
+        with mock.patch.object(read_usecase, "result_payload", side_effect=bad_payload):
+            payload = read_usecase.build_read_payload(result)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": payload,
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(
+            any("键集合" in item or "confidence" in item for item in differences), differences
+        )
+
+    def test_real_m3_boundary_identity_mutant_is_caught_by_r07_oracle(self) -> None:
+        """真实跨屏比较忽略稳定 ID 时，相邻同文不同 ID 会被错误裁剪并被 R07 拒绝。"""
+        from app.adapters.boss import read as boss_read
+        from app.usecases import read as read_usecase
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-R07/stable_identity_new_keys"]["acceptance"]["steps"][5]
+        original = boss_read._messages_match
+
+        def ignore_identity(left, right):
+            """只比较内容/方向/时间，模拟误删稳定 ID 条件。"""
+            return (
+                left.kind == right.kind
+                and left.direction == right.direction
+                and left.content_hash == right.content_hash
+                and left.time_hint == right.time_hint
+                and left.truncated == right.truncated
+            )
+
+        with mock.patch.object(boss_read, "_messages_match", ignore_identity):
+            result = boss_read.load_and_read_fixture(
+                SCENARIO_ROOT / "fixtures/m3/read/conversation_boundary_diff_id/fixture.json",
+                "00000000-0000-4000-8000-000000000502",
+            )
+        payload = read_usecase.build_read_payload(result)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": payload,
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("messages" in item or "长度" in item for item in differences), differences)
+
+    def test_real_m3_page_identity_mutant_is_caught_by_r07_oracle(self) -> None:
+        """真实 merge 仅用首屏身份时，后页重复 ID 的未知必须被 R07 拒绝。"""
+        from dataclasses import replace
+
+        from app.adapters.boss import read as boss_read
+        from app.domain.reading import (
+            Conversation,
+            FieldEvidence,
+            conversation_inbound_state,
+        )
+        from app.usecases import read as read_usecase
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-R07/stable_identity_new_keys"]["acceptance"]["steps"][7]
+        original = boss_read.merge_conversations
+
+        def first_page_identity(pages, profile, proof, now, *, app_version=None):
+            """模拟只采用首屏 message_identity_verified 并重算派生状态的回归。"""
+            result = original(pages, profile, proof, now, app_version=app_version)
+            if result.status == "ok" and isinstance(result.value, Conversation) and pages:
+                first = pages[0].value
+                if isinstance(first, Conversation):
+                    value = replace(result.value, message_identity_verified=first.message_identity_verified)
+                    state, key, reason = conversation_inbound_state(
+                        value.messages,
+                        value.read_complete,
+                        value.contact_verified,
+                        value.message_identity_verified,
+                    )
+                    inbound = FieldEvidence(
+                        field="conversation_inbound",
+                        source="hierarchy",
+                        confidence="high" if state != "unknown" else "low",
+                        state="ok" if state != "unknown" else "unknown",
+                        reason_code=None if state != "unknown" else reason,
+                    )
+                    value = replace(
+                        value,
+                        inbound_state=state,
+                        latest_inbound_key=key,
+                        field_evidence=(value.field_evidence[0], inbound),
+                    )
+                    return replace(result, value=value)
+            return result
+
+        with mock.patch.object(boss_read, "merge_conversations", first_page_identity):
+            result = boss_read.load_and_read_fixture(
+                SCENARIO_ROOT / "fixtures/m3/read/conversation_late_duplicate/fixture.json",
+                "00000000-0000-4000-8000-000000000503",
+            )
+        payload = read_usecase.build_read_payload(result)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": payload,
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(
+            any("message_identity_verified" in item or "inbound_state" in item for item in differences),
+            differences,
+        )
+
+    def test_m3_log_check_rejects_missing_pair_and_leak(self) -> None:
+        """日志检查必须拒绝缺失配对和泄露合成正文。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            log_dir = root / "data" / "logs"
+            log_dir.mkdir(parents=True)
+            log = log_dir / "m0-process-synthetic.jsonl"
+            log.write_text(
+                json.dumps(
+                    {
+                        "stage": "read",
+                        "operation": "unread",
+                        "result": "ok",
+                        "payload": "合成消息甲",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self.assertIn(
+                "缺少日志配对",
+                runner._log_check(root, {"pairs": [["unread", "started"]]}) or "",
+            )
+            self.assertIn(
+                "泄露",
+                runner._log_check(root, {"forbidden": ["合成消息甲"]}) or "",
+            )
+
     def test_real_m2_sut_mutant_coverage_is_caught(self) -> None:
         """真实 M2 解析器把 coverage 降为 viewport 时，SC-U04 oracle 必须失败。"""
         from app.adapters.boss.list import load_and_parse_snapshot

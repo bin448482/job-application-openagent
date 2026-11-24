@@ -9,6 +9,9 @@
 - `ladder_conflict_request.json`：合成输入文件。
 - `ladder_context_request.json`：合成输入文件。
 - `ladder_failed_request.json`：合成输入文件。
+- `ladder_human_present_request.json`：合成输入文件。
+- `ladder_no_human_request.json`：合成输入文件。
+- `ladder_visual_disabled_request.json`：合成输入文件。
 - `ladder_visual_request.json`：合成输入文件。
 - `new_keys_cross_request.json`：合成输入文件。
 - `new_keys_no_stable_request.json`：合成输入文件。
@@ -20,6 +23,8 @@
 - `targeted_global_positive_request.json`：合成输入文件。
 - `targeted_older_request.json`：合成输入文件。
 - `targeted_over_request.json`：合成输入文件。
+- `targeted_resolved_fresh_request.json`：合成输入文件。
+- `targeted_resolved_same_request.json`：合成输入文件。
 - `targeted_same_request.json`：合成输入文件。
 - `targeted_unknown_request.json`：合成输入文件。
 

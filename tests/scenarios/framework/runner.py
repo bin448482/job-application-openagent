@@ -454,6 +454,46 @@ def _run_step(
     }
 
 
+def _log_check(root: Path, check: dict[str, Any]) -> str | None:
+    """只读隔离根内过程日志，检查固定阶段配对、禁用操作与不泄露原文。"""
+    logs = sorted((root / "data" / "logs").glob("m0-process-*.jsonl"))
+    if not logs:
+        return "缺少 M3 过程日志"
+    events: list[dict[str, Any]] = []
+    raw_lines: list[str] = []
+    for path in logs:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return "过程日志不可读"
+        raw_lines.append(text)
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                return "过程日志不是有效 JSON Lines"
+            if not isinstance(item, dict):
+                return "过程日志事件不是对象"
+            events.append(item)
+    sequence = [(str(item.get("operation")), str(item.get("result"))) for item in events]
+    for pair in check.get("pairs", []):
+        if not isinstance(pair, list) or len(pair) != 2:
+            return "日志配对必须是 [operation,result]"
+        target = (str(pair[0]), str(pair[1]))
+        if target not in sequence:
+            return f"缺少日志配对 {target[0]}/{target[1]}"
+    for operation in check.get("forbid_operations", []):
+        if any(name == str(operation) for name, _ in sequence):
+            return f"日志出现禁止操作 {operation}"
+    joined = "\n".join(raw_lines)
+    for needle in check.get("forbidden", []):
+        if needle and str(needle) in joined:
+            return "过程日志泄露了正文/原始标识/路径"
+    return None
+
+
 def _db_check(root: Path, check: dict[str, Any]) -> str | None:
     """在隔离的临时合成库上做只读断言；越界在 exists/open 前拒绝。"""
     root_resolved = root.resolve()
@@ -735,6 +775,10 @@ def _execute_variant(
         problem = _db_check(isolation, resolved)
         if problem:
             errors.append(f"数据库: {problem}")
+    for check in acceptance.get("log_checks", []):
+        problem = _log_check(isolation, check)
+        if problem:
+            errors.append(f"日志: {problem}")
     tripwire = isolation / "tripwire.log"
     if tripwire.is_file() and tripwire.read_text(encoding="utf-8").strip():
         kinds = sorted({line.strip() for line in tripwire.read_text(encoding="utf-8").splitlines() if line.strip()})

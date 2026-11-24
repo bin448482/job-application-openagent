@@ -96,6 +96,14 @@ def compare_step(stdout: Any, step: dict[str, Any]) -> list[str]:
                 errors.append(f"{path or '<root>'} 声明了未知类型 {expected_type!r}")
             elif not _type_ok(actual, expected_type):
                 errors.append(f"{path or '<root>'} 类型应为 {expected_type}")
+        if "pattern" in assertion:
+            import re
+
+            pattern = assertion["pattern"]
+            if not isinstance(pattern, str):
+                errors.append(f"{path or '<root>'} 声明了非字符串 pattern")
+            elif not isinstance(actual, str) or re.fullmatch(pattern, actual) is None:
+                errors.append(f"{path or '<root>'} 不符合固定模式")
         if "length_equals" in assertion:
             if not isinstance(actual, list) or len(actual) != assertion["length_equals"]:
                 errors.append(f"{path or '<root>'} 长度应为 {assertion['length_equals']}")

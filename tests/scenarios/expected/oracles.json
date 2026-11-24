@@ -7899,6 +7899,10 @@
               {
                 "equals": "unread_unverified",
                 "path": "outcome"
+              },
+              {
+                "equals": "ok",
+                "path": "targeted_status"
               }
             ]
           },
@@ -7912,6 +7916,10 @@
               {
                 "equals": "unread_unverified",
                 "path": "outcome"
+              },
+              {
+                "equals": "ok",
+                "path": "targeted_status"
               }
             ]
           },
@@ -7925,6 +7933,18 @@
               {
                 "equals": "stale_snapshot",
                 "path": "outcome"
+              },
+              {
+                "equals": "ok",
+                "path": "initial_status"
+              },
+              {
+                "equals": "ok",
+                "path": "targeted_status"
+              },
+              {
+                "equals": "present",
+                "path": "targeted_unread_state"
               }
             ]
           },
@@ -7938,6 +7958,14 @@
               {
                 "equals": "stale_snapshot",
                 "path": "outcome"
+              },
+              {
+                "equals": "ok",
+                "path": "targeted_status"
+              },
+              {
+                "equals": "present",
+                "path": "targeted_unread_state"
               }
             ]
           },
@@ -7951,6 +7979,14 @@
               {
                 "equals": "stale_snapshot",
                 "path": "outcome"
+              },
+              {
+                "equals": "ok",
+                "path": "targeted_status"
+              },
+              {
+                "equals": "present",
+                "path": "targeted_unread_state"
               }
             ]
           },
@@ -8056,6 +8092,76 @@
         "场景方案 §5"
       ],
       "variant_id": "targeted_api_fresh"
+    },
+    "SC-R03/targeted_api_resolved": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "outcome"
+              },
+              {
+                "equals": "ok",
+                "path": "initial_status"
+              },
+              {
+                "equals": "ok",
+                "path": "targeted_status"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "unread_unverified",
+                "path": "outcome"
+              },
+              {
+                "equals": "00000000-0000-4000-8000-000000000420",
+                "path": "targeted_snapshot_id"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "合法新快照且目标已在 queued 时 outcome=null",
+        "仅把 snapshot_id 改为同值后 outcome=unread_unverified",
+        "前后预期不同，证明同快照拒绝不是被全局 unknown 遮蔽"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "合法新快照且目标已在 queued 时 outcome=null",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M3 定向核对",
+        "依赖 M2 unknown 出口"
+      ],
+      "scenario_id": "SC-R03",
+      "source": [
+        "P M3",
+        "A §5.4、§7",
+        "场景方案 §5"
+      ],
+      "variant_id": "targeted_api_resolved"
     },
     "SC-R03/targeted_api_unknown": {
       "acceptance": {
@@ -8366,7 +8472,17 @@
           },
           {
             "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -8374,6 +8490,67 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "rows",
+                  "unread_state",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "identity_hash",
+                  "conversation_key",
+                  "state",
+                  "count",
+                  "source",
+                  "confidence",
+                  "reason_code"
+                ],
+                "path": "result.value.rows.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "present",
@@ -8422,6 +8599,10 @@
               },
               {
                 "equals": true,
+                "path": "unchanged_since_seed"
+              },
+              {
+                "equals": true,
                 "path": "stable_unchanged_since_baseline"
               },
               {
@@ -8441,13 +8622,16 @@
         ]
       },
       "assertions": [
+        "即使其它源 unknown 也可登记明确目标",
+        "不宣告全局无未知",
+        "不打开会话",
         "M2 明确目标入库且其它源仍 unknown",
         "M3 读到同一精确会话键与层级来源",
-        "M3 前后五表签名、消息、设备、租约均不变；不打开会话"
+        "M3 前后完整五表+事件签名、消息、设备、租约均不变"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "M2 明确目标入库且其它源仍 unknown",
+      "expected_summary": "即使其它源 unknown 也可登记明确目标",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -8599,7 +8783,17 @@
           },
           {
             "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -8607,6 +8801,78 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": true,
@@ -8640,6 +8906,10 @@
               {
                 "equals": "queued",
                 "path": "states.0"
+              },
+              {
+                "equals": true,
+                "path": "unchanged_since_seed"
               },
               {
                 "equals": true,
@@ -8844,7 +9114,17 @@
           },
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -8856,6 +9136,78 @@
               {
                 "equals": false,
                 "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "unknown",
@@ -8889,7 +9241,17 @@
           },
           {
             "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -8897,6 +9259,78 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "known",
@@ -8921,6 +9355,375 @@
               {
                 "equals": true,
                 "path": "actionable"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "result.status"
+              },
+              {
+                "equals": null,
+                "path": "result.reason_code"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
+              },
+              {
+                "length_equals": 5,
+                "path": "result.value.messages"
+              },
+              {
+                "equals": "boss:msg:1723cd400570bba059336a1b53858d6113d6de26704318cbe988acb2c85da8ce",
+                "path": "result.value.messages.2.message_key"
+              },
+              {
+                "equals": "boss:msg:236fb611dfb8a700f379e9f0de74dd38101cd4cd59c6897395ea37c53448da47",
+                "path": "result.value.messages.3.message_key"
+              },
+              {
+                "equals": "none",
+                "path": "result.value.inbound_state"
+              },
+              {
+                "equals": null,
+                "path": "result.value.latest_inbound_key"
+              },
+              {
+                "equals": "no_target",
+                "path": "gate_reason"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "result.status"
+              },
+              {
+                "equals": null,
+                "path": "result.reason_code"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
+              },
+              {
+                "length_equals": 2,
+                "path": "result.value.messages"
+              },
+              {
+                "equals": null,
+                "path": "result.value.messages.0.stable_identity_hash"
+              },
+              {
+                "equals": null,
+                "path": "result.value.messages.1.stable_identity_hash"
+              },
+              {
+                "equals": null,
+                "path": "result.value.messages.0.message_key"
+              },
+              {
+                "equals": "unknown",
+                "path": "result.value.inbound_state"
+              },
+              {
+                "equals": null,
+                "path": "result.value.latest_inbound_key"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "result.status"
+              },
+              {
+                "equals": null,
+                "path": "result.reason_code"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
+              },
+              {
+                "length_equals": 5,
+                "path": "result.value.messages"
+              },
+              {
+                "equals": false,
+                "path": "result.value.message_identity_verified"
+              },
+              {
+                "equals": null,
+                "path": "result.value.messages.2.stable_identity_hash"
+              },
+              {
+                "equals": null,
+                "path": "result.value.messages.3.stable_identity_hash"
+              },
+              {
+                "equals": "unknown",
+                "path": "result.value.inbound_state"
+              },
+              {
+                "equals": null,
+                "path": "result.value.latest_inbound_key"
               }
             ]
           }
@@ -9290,7 +10093,29 @@
           },
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
               {
                 "equals": "undetermined",
                 "path": "result.status"
@@ -9304,6 +10129,14 @@
                 "path": "result.value"
               },
               {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
+              },
+              {
                 "equals": false,
                 "path": "actionable"
               },
@@ -9315,7 +10148,17 @@
           },
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9327,6 +10170,78 @@
               {
                 "equals": false,
                 "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "unknown",
@@ -9360,7 +10275,17 @@
           },
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9372,6 +10297,78 @@
               {
                 "equals": false,
                 "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "unknown",
@@ -9397,7 +10394,17 @@
           },
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9409,6 +10416,78 @@
               {
                 "equals": false,
                 "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "unknown",
@@ -9434,7 +10513,29 @@
           },
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
               {
                 "equals": "undetermined",
                 "path": "result.status"
@@ -9448,6 +10549,124 @@
                 "path": "result.value"
               },
               {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "equals": "not_ok",
+                "path": "gate_reason"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "equals": "undetermined",
+                "path": "result.status"
+              },
+              {
+                "equals": "identity_ambiguous",
+                "path": "result.reason_code"
+              },
+              {
+                "equals": null,
+                "path": "result.value"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "equals": "not_ok",
+                "path": "gate_reason"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "equals": "failed",
+                "path": "result.status"
+              },
+              {
+                "equals": "wrong_page",
+                "path": "result.reason_code"
+              },
+              {
+                "equals": null,
+                "path": "result.value"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
+              },
+              {
                 "equals": false,
                 "path": "actionable"
               },
@@ -9459,7 +10678,17 @@
           },
           {
             "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9467,6 +10696,67 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "rows",
+                  "unread_state",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "identity_hash",
+                  "conversation_key",
+                  "state",
+                  "count",
+                  "source",
+                  "confidence",
+                  "reason_code"
+                ],
+                "path": "result.value.rows.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "present",
@@ -9507,6 +10797,10 @@
               },
               {
                 "equals": true,
+                "path": "unchanged_since_seed"
+              },
+              {
+                "equals": true,
                 "path": "stable_unchanged_since_baseline"
               },
               {
@@ -9526,13 +10820,15 @@
         ]
       },
       "assertions": [
+        "不把截断文本交模型补全",
+        "身份不唯一不点",
+        "不丢其它正目标",
         "截断/未知方向/重复或缺失身份不生成可发送键",
-        "不把截断正文交模型补全，不点身份不唯一目标",
-        "同批明确正目标仍保留，M2 已存发现与五表不变"
+        "同批明确正目标仍保留，M2 已存发现与完整五表+事件不变"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "截断/未知方向/重复或缺失身份不生成可发送键",
+      "expected_summary": "不把截断文本交模型补全",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -9557,7 +10853,17 @@
         "steps": [
           {
             "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9565,6 +10871,54 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "page",
+                  "signals",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "main",
@@ -9578,7 +10932,17 @@
           },
           {
             "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9586,6 +10950,67 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "cards",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "job_key",
+                  "identity_hash",
+                  "title_raw",
+                  "title",
+                  "company_raw",
+                  "company",
+                  "salary_raw",
+                  "salary"
+                ],
+                "path": "result.value.cards.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "boss:job:3a7d1d627ba4309a469a7b956fc0a8ed93557424fd3a0c0259a44d05e61beae1",
@@ -9603,7 +11028,17 @@
           },
           {
             "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9611,6 +11046,69 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "job_key",
+                  "identity_hash",
+                  "title_raw",
+                  "title",
+                  "company_raw",
+                  "company",
+                  "salary_raw",
+                  "salary",
+                  "recruiter_raw",
+                  "recruiter",
+                  "location_raw",
+                  "location",
+                  "description",
+                  "description_hash",
+                  "description_length",
+                  "complete",
+                  "missing_fields",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": true,
@@ -9636,7 +11134,17 @@
           },
           {
             "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9644,6 +11152,67 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "cards",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "job_key",
+                  "identity_hash",
+                  "title_raw",
+                  "title",
+                  "company_raw",
+                  "company",
+                  "salary_raw",
+                  "salary"
+                ],
+                "path": "result.value.cards.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": null,
@@ -9660,6 +11229,172 @@
               {
                 "equals": true,
                 "path": "actionable"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "result.status"
+              },
+              {
+                "equals": null,
+                "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "page",
+                  "signals",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
+              },
+              {
+                "equals": "popup",
+                "path": "result.value.page"
+              },
+              {
+                "equals": "popup",
+                "path": "result.value.signals.0"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "result.status"
+              },
+              {
+                "equals": null,
+                "path": "result.reason_code"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "page",
+                  "signals",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
+              },
+              {
+                "equals": "unknown",
+                "path": "result.value.page"
+              },
+              {
+                "equals": "unknown",
+                "path": "result.value.field_evidence.0.state"
+              },
+              {
+                "equals": "field_unknown",
+                "path": "gate_reason"
               }
             ]
           }
@@ -9810,7 +11545,29 @@
         "steps": [
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
               {
                 "equals": "undetermined",
                 "path": "result.status"
@@ -9822,6 +11579,14 @@
               {
                 "equals": null,
                 "path": "result.value"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
               },
               {
                 "equals": false,
@@ -9837,8 +11602,8 @@
       },
       "assertions": [
         "uncalibrated_profile",
-        "value=null 且不可决策",
-        "禁止沿用旧坐标/阈值/发送控件"
+        "禁止沿用旧坐标/阈值/发送控件",
+        "value=null 且不可决策"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -9867,7 +11632,17 @@
         "steps": [
           {
             "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9875,6 +11650,67 @@
               {
                 "equals": null,
                 "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "rows",
+                  "unread_state",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "identity_hash",
+                  "conversation_key",
+                  "state",
+                  "count",
+                  "source",
+                  "confidence",
+                  "reason_code"
+                ],
+                "path": "result.value.rows.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "present",
@@ -9900,7 +11736,17 @@
           },
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9912,6 +11758,67 @@
               {
                 "equals": false,
                 "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "rows",
+                  "unread_state",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "identity_hash",
+                  "conversation_key",
+                  "state",
+                  "count",
+                  "source",
+                  "confidence",
+                  "reason_code"
+                ],
+                "path": "result.value.rows.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "unknown",
@@ -9937,7 +11844,17 @@
           },
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
               {
                 "equals": "ok",
                 "path": "result.status"
@@ -9949,6 +11866,67 @@
               {
                 "equals": false,
                 "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "rows",
+                  "unread_state",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "identity_hash",
+                  "conversation_key",
+                  "state",
+                  "count",
+                  "source",
+                  "confidence",
+                  "reason_code"
+                ],
+                "path": "result.value.rows.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
               },
               {
                 "equals": "unknown",
@@ -9970,7 +11948,29 @@
           },
           {
             "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
             "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
               {
                 "equals": "failed",
                 "path": "result.status"
@@ -9982,6 +11982,265 @@
               {
                 "equals": null,
                 "path": "result.value"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "equals": "not_ok",
+                "path": "gate_reason"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "result.status"
+              },
+              {
+                "equals": null,
+                "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "rows",
+                  "unread_state",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "identity_hash",
+                  "conversation_key",
+                  "state",
+                  "count",
+                  "source",
+                  "confidence",
+                  "reason_code"
+                ],
+                "path": "result.value.rows.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
+              },
+              {
+                "equals": "present",
+                "path": "result.value.rows.0.state"
+              },
+              {
+                "equals": null,
+                "path": "result.value.rows.0.count"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "result.status"
+              },
+              {
+                "equals": null,
+                "path": "result.reason_code"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "rows",
+                  "unread_state",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "identity_hash",
+                  "conversation_key",
+                  "state",
+                  "count",
+                  "source",
+                  "confidence",
+                  "reason_code"
+                ],
+                "path": "result.value.rows.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
+              },
+              {
+                "equals": "absent",
+                "path": "result.value.rows.0.state"
+              },
+              {
+                "equals": 0,
+                "path": "result.value.rows.0.count"
+              },
+              {
+                "equals": "pixel",
+                "path": "result.value.rows.0.source"
+              },
+              {
+                "equals": "field_unknown",
+                "path": "gate_reason"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "equals": "failed",
+                "path": "result.status"
+              },
+              {
+                "equals": "invalid_xml",
+                "path": "result.reason_code"
+              },
+              {
+                "equals": null,
+                "path": "result.value"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
               },
               {
                 "equals": false,
@@ -10108,18 +12367,88 @@
                 "path": "evidence_sources.2"
               }
             ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "undetermined",
+                "path": "state"
+              },
+              {
+                "equals": true,
+                "path": "requires_human"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "present",
+                "path": "state"
+              },
+              {
+                "equals": 2,
+                "path": "count"
+              },
+              {
+                "equals": "human",
+                "path": "source"
+              },
+              {
+                "equals": "high",
+                "path": "confidence"
+              },
+              {
+                "equals": false,
+                "path": "requires_human"
+              },
+              {
+                "equals": "human",
+                "path": "evidence_sources.2"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "undetermined",
+                "path": "state"
+              },
+              {
+                "equals": true,
+                "path": "requires_human"
+              }
+            ]
           }
         ]
       },
       "assertions": [
+        "跨级冲突 undetermined",
+        "转人工",
+        "视觉不能证据发送/删除",
         "真实 CLI 像素后备只证明 present 且不生成精确计数",
-        "低阈值未标定空态/分辨率不符为 unknown，损坏为 failed",
-        "真实领域接口：跨级冲突/上下文不一致/视觉单独启用均 undetermined 转人工",
+        "恰阈值/阈值少 1/未标定空态/分辨率不符/损坏分别验证",
+        "真实领域接口：冲突/失败/上下文/视觉默认关与启用/人工确认分别验证",
         "前级 failed 保留 invalid_xml，不被后续像素成功覆盖"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "真实 CLI 像素后备只证明 present 且不生成精确计数",
+      "expected_summary": "跨级冲突 undetermined",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -10138,6 +12467,513 @@
         "场景方案 §5"
       ],
       "variant_id": "cross_level_conflict"
+    },
+    "SC-R13/log_trace_no_pixel": {
+      "acceptance": {
+        "log_checks": [
+          {
+            "forbid_operations": [
+              "pixel"
+            ],
+            "forbidden": [
+              "合成联系人",
+              "合成机构",
+              "合成岗位",
+              "screen.rgba",
+              "calibration.json"
+            ],
+            "pairs": [
+              [
+                "unread",
+                "started"
+              ],
+              [
+                "unread",
+                "ok"
+              ],
+              [
+                "unread",
+                "failed"
+              ],
+              [
+                "gate",
+                "failed"
+              ]
+            ]
+          }
+        ],
+        "steps": [
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "result.status"
+              },
+              {
+                "equals": null,
+                "path": "result.reason_code"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "coverage",
+                  "rows",
+                  "unread_state",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "identity_hash",
+                  "conversation_key",
+                  "state",
+                  "count",
+                  "source",
+                  "confidence",
+                  "reason_code"
+                ],
+                "path": "result.value.rows.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
+              },
+              {
+                "equals": "present",
+                "path": "result.value.unread_state"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "equals": "failed",
+                "path": "result.status"
+              },
+              {
+                "equals": "invalid_xml",
+                "path": "result.reason_code"
+              },
+              {
+                "equals": null,
+                "path": "result.value"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "equals": "not_ok",
+                "path": "gate_reason"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "正常未读只记 read/unread started→ok",
+        "坏 XML 记 unread started→failed/invalid_xml",
+        "未进入像素分支时不得伪造 pixel started",
+        "日志不写合成正文、字段原文或夹具路径"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "正常未读只记 read/unread started→ok",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M3 读取阶梯",
+        "视觉默认关闭"
+      ],
+      "scenario_id": "SC-R13",
+      "source": [
+        "P M3",
+        "A §5.4、§7",
+        "场景方案 §5"
+      ],
+      "variant_id": "log_trace_no_pixel"
+    },
+    "SC-R13/log_trace_pixel_merge": {
+      "acceptance": {
+        "log_checks": [
+          {
+            "forbidden": [
+              "同文消息",
+              "合成消息",
+              "dup-1",
+              "screen.rgba",
+              "calibration.json"
+            ],
+            "pairs": [
+              [
+                "pixel",
+                "started"
+              ],
+              [
+                "pixel",
+                "failed"
+              ],
+              [
+                "conversation",
+                "started"
+              ],
+              [
+                "merge",
+                "started"
+              ],
+              [
+                "merge",
+                "ok"
+              ],
+              [
+                "conversation",
+                "ok"
+              ],
+              [
+                "job_detail",
+                "started"
+              ],
+              [
+                "job_detail",
+                "undetermined"
+              ],
+              [
+                "gate",
+                "failed"
+              ]
+            ]
+          }
+        ],
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "equals": "failed",
+                "path": "result.status"
+              },
+              {
+                "equals": "invalid_fixture",
+                "path": "result.reason_code"
+              },
+              {
+                "equals": null,
+                "path": "result.value"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "equals": "not_ok",
+                "path": "gate_reason"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "result.status"
+              },
+              {
+                "equals": null,
+                "path": "result.reason_code"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "path": "result.snapshot_id",
+                "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              },
+              {
+                "path": "result.observed_at",
+                "pattern": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "high",
+                "path": "result.confidence"
+              },
+              {
+                "keys": [
+                  "app",
+                  "profile_id",
+                  "conversation_key",
+                  "identity_hash",
+                  "contact",
+                  "contact_verified",
+                  "role",
+                  "message_identity_verified",
+                  "read_complete",
+                  "messages",
+                  "inbound_state",
+                  "latest_inbound_key",
+                  "field_evidence"
+                ],
+                "path": "result.value"
+              },
+              {
+                "keys": [
+                  "kind",
+                  "direction",
+                  "text",
+                  "content_hash",
+                  "time_hint",
+                  "stable_identity_hash",
+                  "stable_identity_source",
+                  "repeat_safe",
+                  "truncated",
+                  "direction_evidence",
+                  "message_key"
+                ],
+                "path": "result.value.messages.0"
+              },
+              {
+                "keys": [
+                  "field",
+                  "source",
+                  "confidence",
+                  "state",
+                  "reason_code"
+                ],
+                "path": "result.value.field_evidence.0"
+              },
+              {
+                "equals": "unknown",
+                "path": "result.value.inbound_state"
+              },
+              {
+                "equals": "identity_ambiguous",
+                "path": "gate_reason"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "result",
+              "actionable",
+              "gate_reason"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "keys": [
+                  "status",
+                  "value",
+                  "reason_code",
+                  "snapshot_id",
+                  "observed_at",
+                  "source",
+                  "confidence"
+                ],
+                "path": "result"
+              },
+              {
+                "equals": "undetermined",
+                "path": "result.status"
+              },
+              {
+                "equals": "incomplete_snapshot",
+                "path": "result.reason_code"
+              },
+              {
+                "equals": null,
+                "path": "result.value"
+              },
+              {
+                "equals": "fixture",
+                "path": "result.source"
+              },
+              {
+                "equals": "low",
+                "path": "result.confidence"
+              },
+              {
+                "equals": false,
+                "path": "actionable"
+              },
+              {
+                "equals": "not_ok",
+                "path": "gate_reason"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "坏像素实际记 pixel started→failed/invalid_fixture",
+        "会话记 conversation/merge started→完成，gate 固定原因",
+        "截断职位记 job_detail started→undetermined",
+        "日志不写正文、原始 stable id 或像素路径"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "坏像素实际记 pixel started→failed/invalid_fixture",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M3 读取阶梯",
+        "视觉默认关闭"
+      ],
+      "scenario_id": "SC-R13",
+      "source": [
+        "P M3",
+        "A §5.4、§7",
+        "场景方案 §5"
+      ],
+      "variant_id": "log_trace_pixel_merge"
     },
     "SC-R13/real_conflict": {
       "acceptance": null,

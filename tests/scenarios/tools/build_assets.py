@@ -3319,37 +3319,193 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         """构造真实 M3 read CLI 命令。"""
         return f"python -m app read --fixture tests/scenarios/{m3[name]['manifest']}"
 
-    def read_ok(*paths: dict[str, Any]) -> dict[str, Any]:
-        """构造 read 成功预期。"""
+    result_keys = [
+        "status",
+        "value",
+        "reason_code",
+        "snapshot_id",
+        "observed_at",
+        "source",
+        "confidence",
+    ]
+    evidence_keys = ["field", "source", "confidence", "state", "reason_code"]
+    value_shapes: dict[str, list[dict[str, Any]]] = {
+        "page": [
+            {"path": "result.value", "keys": ["app", "profile_id", "page", "signals", "field_evidence"]},
+            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+        ],
+        "unread": [
+            {
+                "path": "result.value",
+                "keys": ["app", "profile_id", "coverage", "rows", "unread_state", "field_evidence"],
+            },
+            {
+                "path": "result.value.rows.0",
+                "keys": [
+                    "identity_hash",
+                    "conversation_key",
+                    "state",
+                    "count",
+                    "source",
+                    "confidence",
+                    "reason_code",
+                ],
+            },
+            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+        ],
+        "job_list": [
+            {"path": "result.value", "keys": ["app", "profile_id", "coverage", "cards", "field_evidence"]},
+            {
+                "path": "result.value.cards.0",
+                "keys": [
+                    "job_key",
+                    "identity_hash",
+                    "title_raw",
+                    "title",
+                    "company_raw",
+                    "company",
+                    "salary_raw",
+                    "salary",
+                ],
+            },
+            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+        ],
+        "job_detail": [
+            {
+                "path": "result.value",
+                "keys": [
+                    "app",
+                    "profile_id",
+                    "job_key",
+                    "identity_hash",
+                    "title_raw",
+                    "title",
+                    "company_raw",
+                    "company",
+                    "salary_raw",
+                    "salary",
+                    "recruiter_raw",
+                    "recruiter",
+                    "location_raw",
+                    "location",
+                    "description",
+                    "description_hash",
+                    "description_length",
+                    "complete",
+                    "missing_fields",
+                    "field_evidence",
+                ],
+            },
+            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+        ],
+        "conversation": [
+            {
+                "path": "result.value",
+                "keys": [
+                    "app",
+                    "profile_id",
+                    "conversation_key",
+                    "identity_hash",
+                    "contact",
+                    "contact_verified",
+                    "role",
+                    "message_identity_verified",
+                    "read_complete",
+                    "messages",
+                    "inbound_state",
+                    "latest_inbound_key",
+                    "field_evidence",
+                ],
+            },
+            {
+                "path": "result.value.messages.0",
+                "keys": [
+                    "kind",
+                    "direction",
+                    "text",
+                    "content_hash",
+                    "time_hint",
+                    "stable_identity_hash",
+                    "stable_identity_source",
+                    "repeat_safe",
+                    "truncated",
+                    "direction_evidence",
+                    "message_key",
+                ],
+            },
+            {"path": "result.value.field_evidence.0", "keys": evidence_keys},
+        ],
+    }
+    uuid_pattern = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    utc_pattern = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z"
+
+    def read_shape(shape: str | None, paths: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """构造固定外层/七键/类型值键集合断言。"""
+        if shape is None:
+            joined = " ".join(str(item.get("path", "")) for item in paths)
+            if "unread_state" in joined or ".rows." in joined:
+                shape = "unread"
+            elif ".cards." in joined:
+                shape = "job_list"
+            elif "inbound_state" in joined or "read_complete" in joined:
+                shape = "conversation"
+            elif ".complete" in joined or "description" in joined:
+                shape = "job_detail"
+            elif "result.value.page" in joined:
+                shape = "page"
+        outer = [
+            {"path": "result", "keys": result_keys},
+            {"path": "result.snapshot_id", "pattern": uuid_pattern},
+            {"path": "result.observed_at", "pattern": utc_pattern},
+            {"path": "result.source", "equals": "fixture"},
+            {"path": "result.confidence", "equals": "high"},
+        ]
+        if shape is not None:
+            outer.extend(value_shapes[shape])
+        return outer
+
+    def read_ok(*paths: dict[str, Any], shape: str | None = None) -> dict[str, Any]:
+        """构造 read 成功预期，含四键外层、七键 result 与类型值键集合。"""
         return {
             "exit_code": 0,
+            "required_stdout_keys": ["schema_version", "result", "actionable", "gate_reason"],
             "stdout_paths": [
+                {"path": "schema_version", "equals": 1},
                 {"path": "result.status", "equals": "ok"},
                 {"path": "result.reason_code", "equals": None},
+                *read_shape(shape, paths),
                 *paths,
             ],
         }
 
-    def read_unactionable(*paths: dict[str, Any]) -> dict[str, Any]:
-        """构造结构 ok 但门禁拒绝的 read 预期。"""
+    def read_unactionable(*paths: dict[str, Any], shape: str | None = None) -> dict[str, Any]:
+        """构造结构 ok 但门禁拒绝的 read 预期，同样校验固定形状。"""
         return {
             "exit_code": 2,
+            "required_stdout_keys": ["schema_version", "result", "actionable", "gate_reason"],
             "stdout_paths": [
+                {"path": "schema_version", "equals": 1},
                 {"path": "result.status", "equals": "ok"},
                 {"path": "result.reason_code", "equals": None},
                 {"path": "actionable", "equals": False},
+                *read_shape(shape, paths),
                 *paths,
             ],
         }
 
     def read_stop(status: str, reason: str, *paths: dict[str, Any]) -> dict[str, Any]:
-        """构造 read 失败/未决预期。"""
+        """构造 read 失败/未决预期；value=null 不按键集合检查。"""
         return {
             "exit_code": 2,
+            "required_stdout_keys": ["schema_version", "result", "actionable", "gate_reason"],
             "stdout_paths": [
+                {"path": "schema_version", "equals": 1},
+                {"path": "result", "keys": result_keys},
                 {"path": "result.status", "equals": status},
                 {"path": "result.reason_code", "equals": reason},
                 {"path": "result.value", "equals": None},
+                {"path": "result.source", "equals": "fixture"},
+                {"path": "result.confidence", "equals": "low"},
                 {"path": "actionable", "equals": False},
                 *paths,
             ],
@@ -3479,6 +3635,33 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 },
             ),
             ready_variant(
+                "targeted_api_resolved",
+                label="合法新快照可解除核对而同快照不能",
+                steps=[
+                    m3_cmd("targeted_resolved_fresh_request"),
+                    m3_cmd("targeted_resolved_same_request"),
+                ],
+                fixture="fixtures/m3/probe/targeted_resolved_fresh_request.json",
+                assertions=[
+                    "合法新快照且目标已在 queued 时 outcome=null",
+                    "仅把 snapshot_id 改为同值后 outcome=unread_unverified",
+                    "前后预期不同，证明同快照拒绝不是被全局 unknown 遮蔽",
+                ],
+                acceptance={
+                    "steps": [
+                        probe_ok(
+                            {"path": "outcome", "equals": None},
+                            {"path": "initial_status", "equals": "ok"},
+                            {"path": "targeted_status", "equals": "ok"},
+                        ),
+                        probe_ok(
+                            {"path": "outcome", "equals": "unread_unverified"},
+                            {"path": "targeted_snapshot_id", "equals": "00000000-0000-4000-8000-000000000420"},
+                        ),
+                    ]
+                },
+            ),
+            ready_variant(
                 "targeted_api_unknown",
                 label="未知源定向核对 API",
                 steps=[m3_cmd("targeted_unknown_request")],
@@ -3514,11 +3697,24 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 ],
                 acceptance={
                     "steps": [
-                        probe_ok({"path": "outcome", "equals": "unread_unverified"}),
-                        probe_ok({"path": "outcome", "equals": "unread_unverified"}),
-                        probe_ok({"path": "outcome", "equals": "stale_snapshot"}),
-                        probe_ok({"path": "outcome", "equals": "stale_snapshot"}),
-                        probe_ok({"path": "outcome", "equals": "stale_snapshot"}),
+                        probe_ok({"path": "outcome", "equals": "unread_unverified"}, {"path": "targeted_status", "equals": "ok"}),
+                        probe_ok({"path": "outcome", "equals": "unread_unverified"}, {"path": "targeted_status", "equals": "ok"}),
+                        probe_ok(
+                            {"path": "outcome", "equals": "stale_snapshot"},
+                            {"path": "initial_status", "equals": "ok"},
+                            {"path": "targeted_status", "equals": "ok"},
+                            {"path": "targeted_unread_state", "equals": "present"},
+                        ),
+                        probe_ok(
+                            {"path": "outcome", "equals": "stale_snapshot"},
+                            {"path": "targeted_status", "equals": "ok"},
+                            {"path": "targeted_unread_state", "equals": "present"},
+                        ),
+                        probe_ok(
+                            {"path": "outcome", "equals": "stale_snapshot"},
+                            {"path": "targeted_status", "equals": "ok"},
+                            {"path": "targeted_unread_state", "equals": "present"},
+                        ),
                         probe_ok({"path": "outcome", "equals": "identity_ambiguous"}),
                     ]
                 },
@@ -3581,9 +3777,12 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 ],
                 fixture="fixtures/m3/read/unique_unread",
                 assertions=[
+                    "即使其它源 unknown 也可登记明确目标",
+                    "不宣告全局无未知",
+                    "不打开会话",
                     "M2 明确目标入库且其它源仍 unknown",
                     "M3 读到同一精确会话键与层级来源",
-                    "M3 前后五表签名、消息、设备、租约均不变；不打开会话",
+                    "M3 前后完整五表+事件签名、消息、设备、租约均不变",
                 ],
                 acceptance={
                     "steps": [
@@ -3610,6 +3809,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         probe_ok(
                             {"path": "task_count", "equals": 1},
                             {"path": "states.0", "equals": "queued"},
+                            {"path": "unchanged_since_seed", "equals": True},
                             {"path": "stable_unchanged_since_baseline", "equals": True},
                             {"path": "protected_task_unchanged_since_baseline", "equals": True},
                             {"path": "message_count", "equals": 0},
@@ -3665,6 +3865,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         probe_ok(
                             {"path": "task_count", "equals": 1},
                             {"path": "states.0", "equals": "queued"},
+                            {"path": "unchanged_since_seed", "equals": True},
                             {"path": "stable_unchanged_since_baseline", "equals": True},
                             {"path": "protected_task_unchanged_since_baseline", "equals": True},
                         ),
@@ -3699,6 +3900,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     m3_cmd("new_keys_cross_request"),
                     read_cmd("conversation_ambiguous"),
                     read_cmd("conversation_overlap"),
+                    read_cmd("conversation_boundary_diff_id"),
+                    read_cmd("conversation_no_stable_same_screen"),
+                    read_cmd("conversation_late_duplicate"),
                 ],
                 fixture="fixtures/m3/probe/new_keys_request.json",
                 assertions=[
@@ -3744,6 +3948,30 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "result.value.messages.2.message_key", "equals": message_key("m3")},
                             {"path": "result.value.messages.3.message_key", "equals": message_key("m4")},
                             {"path": "actionable", "equals": True},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.messages", "length_equals": 5},
+                            {"path": "result.value.messages.2.message_key", "equals": message_key("m3")},
+                            {"path": "result.value.messages.3.message_key", "equals": message_key("m4")},
+                            {"path": "result.value.inbound_state", "equals": "none"},
+                            {"path": "result.value.latest_inbound_key", "equals": None},
+                            {"path": "gate_reason", "equals": "no_target"},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.messages", "length_equals": 2},
+                            {"path": "result.value.messages.0.stable_identity_hash", "equals": None},
+                            {"path": "result.value.messages.1.stable_identity_hash", "equals": None},
+                            {"path": "result.value.messages.0.message_key", "equals": None},
+                            {"path": "result.value.inbound_state", "equals": "unknown"},
+                            {"path": "result.value.latest_inbound_key", "equals": None},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.messages", "length_equals": 5},
+                            {"path": "result.value.message_identity_verified", "equals": False},
+                            {"path": "result.value.messages.2.stable_identity_hash", "equals": None},
+                            {"path": "result.value.messages.3.stable_identity_hash", "equals": None},
+                            {"path": "result.value.inbound_state", "equals": "unknown"},
+                            {"path": "result.value.latest_inbound_key", "equals": None},
                         ),
                     ]
                 },
@@ -3804,14 +4032,18 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     read_cmd("conversation_truncated"),
                     read_cmd("conversation_direction_conflict"),
                     read_cmd("conversation_incomplete"),
+                    read_cmd("conversation_contact_mismatch"),
+                    read_cmd("job_missing_required"),
                     read_cmd("ambiguous_unread"),
                     m2_cmd("inspect"),
                 ],
                 fixture="fixtures/m3/read/ambiguous_unread",
                 assertions=[
+                    "不把截断文本交模型补全",
+                    "身份不唯一不点",
+                    "不丢其它正目标",
                     "截断/未知方向/重复或缺失身份不生成可发送键",
-                    "不把截断正文交模型补全，不点身份不唯一目标",
-                    "同批明确正目标仍保留，M2 已存发现与五表不变",
+                    "同批明确正目标仍保留，M2 已存发现与完整五表+事件不变",
                 ],
                 acceptance={
                     "steps": [
@@ -3848,6 +4080,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "gate_reason", "equals": "identity_ambiguous"},
                         ),
                         read_stop("undetermined", "incomplete_snapshot", {"path": "gate_reason", "equals": "not_ok"}),
+                        read_stop("undetermined", "identity_ambiguous", {"path": "gate_reason", "equals": "not_ok"}),
+                        read_stop("failed", "wrong_page", {"path": "gate_reason", "equals": "not_ok"}),
                         read_ok(
                             {"path": "result.value.unread_state", "equals": "present"},
                             {"path": "result.value.rows.0.conversation_key", "equals": None},
@@ -3858,6 +4092,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         probe_ok(
                             {"path": "task_count", "equals": 1},
                             {"path": "states.0", "equals": "queued"},
+                            {"path": "unchanged_since_seed", "equals": True},
                             {"path": "stable_unchanged_since_baseline", "equals": True},
                             {"path": "protected_task_unchanged_since_baseline", "equals": True},
                             {"path": "message_count", "equals": 0},
@@ -3874,6 +4109,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     read_cmd("job_list_unique"),
                     read_cmd("job_detail_complete"),
                     read_cmd("job_list_ambiguous"),
+                    read_cmd("page_popup"),
+                    read_cmd("page_unknown"),
                 ],
                 fixture="fixtures/m3/read/page_main",
                 assertions=[
@@ -3905,6 +4142,15 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "result.value.cards.2.job_key", "equals": job_other},
                             {"path": "actionable", "equals": True},
                         ),
+                        read_ok(
+                            {"path": "result.value.page", "equals": "popup"},
+                            {"path": "result.value.signals.0", "equals": "popup"},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.page", "equals": "unknown"},
+                            {"path": "result.value.field_evidence.0.state", "equals": "unknown"},
+                            {"path": "gate_reason", "equals": "field_unknown"},
+                        ),
                     ]
                 },
             ),
@@ -3932,7 +4178,11 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 label="应用/版式版本不符",
                 steps=[read_cmd("version_drift")],
                 fixture="fixtures/m3/read/version_drift",
-                assertions=["uncalibrated_profile", "value=null 且不可决策", "禁止沿用旧坐标/阈值/发送控件"],
+                assertions=[
+                    "uncalibrated_profile",
+                    "禁止沿用旧坐标/阈值/发送控件",
+                    "value=null 且不可决策",
+                ],
                 acceptance={
                     "steps": [
                         read_stop("undetermined", "uncalibrated_profile", {"path": "gate_reason", "equals": "not_ok"})
@@ -3956,16 +4206,25 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     read_cmd("pixel_absent_unverified"),
                     read_cmd("pixel_resolution_mismatch"),
                     read_cmd("pixel_corrupt"),
+                    read_cmd("pixel_threshold_exact"),
+                    read_cmd("pixel_threshold_below"),
+                    read_cmd("invalid_xml_with_pixel"),
                     m3_cmd("ladder_conflict_request"),
                     m3_cmd("ladder_failed_request"),
                     m3_cmd("ladder_context_request"),
                     m3_cmd("ladder_visual_request"),
+                    m3_cmd("ladder_visual_disabled_request"),
+                    m3_cmd("ladder_human_present_request"),
+                    m3_cmd("ladder_no_human_request"),
                 ],
                 fixture="fixtures/m3/read/pixel_present",
                 assertions=[
+                    "跨级冲突 undetermined",
+                    "转人工",
+                    "视觉不能证据发送/删除",
                     "真实 CLI 像素后备只证明 present 且不生成精确计数",
-                    "低阈值未标定空态/分辨率不符为 unknown，损坏为 failed",
-                    "真实领域接口：跨级冲突/上下文不一致/视觉单独启用均 undetermined 转人工",
+                    "恰阈值/阈值少 1/未标定空态/分辨率不符/损坏分别验证",
+                    "真实领域接口：冲突/失败/上下文/视觉默认关与启用/人工确认分别验证",
                     "前级 failed 保留 invalid_xml，不被后续像素成功覆盖",
                 ],
                 acceptance={
@@ -3991,6 +4250,17 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "gate_reason", "equals": "field_unknown"},
                         ),
                         read_stop("failed", "invalid_fixture", {"path": "gate_reason", "equals": "not_ok"}),
+                        read_ok(
+                            {"path": "result.value.rows.0.state", "equals": "present"},
+                            {"path": "result.value.rows.0.count", "equals": None},
+                        ),
+                        read_unactionable(
+                            {"path": "result.value.rows.0.state", "equals": "absent"},
+                            {"path": "result.value.rows.0.count", "equals": 0},
+                            {"path": "result.value.rows.0.source", "equals": "pixel"},
+                            {"path": "gate_reason", "equals": "field_unknown"},
+                        ),
+                        read_stop("failed", "invalid_xml", {"path": "gate_reason", "equals": "not_ok"}),
                         probe_ok(
                             {"path": "state", "equals": "undetermined"},
                             {"path": "reason_code", "equals": "ambiguous_signal"},
@@ -4019,10 +4289,98 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "requires_human", "equals": True},
                             {"path": "evidence_sources.2", "equals": "vision"},
                         ),
+                        probe_ok(
+                            {"path": "state", "equals": "undetermined"},
+                            {"path": "requires_human", "equals": True},
+                        ),
+                        probe_ok(
+                            {"path": "state", "equals": "present"},
+                            {"path": "count", "equals": 2},
+                            {"path": "source", "equals": "human"},
+                            {"path": "confidence", "equals": "high"},
+                            {"path": "requires_human", "equals": False},
+                            {"path": "evidence_sources.2", "equals": "human"},
+                        ),
+                        probe_ok(
+                            {"path": "state", "equals": "undetermined"},
+                            {"path": "requires_human", "equals": True},
+                        ),
                     ]
                 },
             ),
             variant("real_conflict", "O", label="真机字段未决", assertions=["不因高置信覆盖结构证据", "未获准不新采集"]),
+            ready_variant(
+                "log_trace_no_pixel",
+                label="无像素分支日志轨迹",
+                steps=[read_cmd("unique_unread"), read_cmd("invalid_xml_with_pixel")],
+                fixture="fixtures/m3/read/unique_unread",
+                assertions=[
+                    "正常未读只记 read/unread started→ok",
+                    "坏 XML 记 unread started→failed/invalid_xml",
+                    "未进入像素分支时不得伪造 pixel started",
+                    "日志不写合成正文、字段原文或夹具路径",
+                ],
+                acceptance={
+                    "steps": [
+                        read_ok({"path": "result.value.unread_state", "equals": "present"}),
+                        read_stop("failed", "invalid_xml", {"path": "gate_reason", "equals": "not_ok"}),
+                    ],
+                    "log_checks": [
+                        {
+                            "pairs": [
+                                ["unread", "started"],
+                                ["unread", "ok"],
+                                ["unread", "failed"],
+                                ["gate", "failed"],
+                            ],
+                            "forbid_operations": ["pixel"],
+                            "forbidden": ["合成联系人", "合成机构", "合成岗位", "screen.rgba", "calibration.json"],
+                        }
+                    ],
+                },
+            ),
+            ready_variant(
+                "log_trace_pixel_merge",
+                label="像素、merge 与 gate 日志轨迹",
+                steps=[
+                    read_cmd("pixel_corrupt"),
+                    read_cmd("conversation_ambiguous"),
+                    read_cmd("job_truncated"),
+                ],
+                fixture="fixtures/m3/read/pixel_corrupt",
+                assertions=[
+                    "坏像素实际记 pixel started→failed/invalid_fixture",
+                    "会话记 conversation/merge started→完成，gate 固定原因",
+                    "截断职位记 job_detail started→undetermined",
+                    "日志不写正文、原始 stable id 或像素路径",
+                ],
+                acceptance={
+                    "steps": [
+                        read_stop("failed", "invalid_fixture", {"path": "gate_reason", "equals": "not_ok"}),
+                        read_unactionable(
+                            {"path": "result.value.inbound_state", "equals": "unknown"},
+                            {"path": "gate_reason", "equals": "identity_ambiguous"},
+                        ),
+                        read_stop("undetermined", "incomplete_snapshot", {"path": "gate_reason", "equals": "not_ok"}),
+                    ],
+                    "log_checks": [
+                        {
+                            "pairs": [
+                                ["pixel", "started"],
+                                ["pixel", "failed"],
+                                ["conversation", "started"],
+                                ["merge", "started"],
+                                ["merge", "ok"],
+                                ["conversation", "ok"],
+                                ["job_detail", "started"],
+                                ["job_detail", "undetermined"],
+                                ["gate", "failed"],
+                            ],
+                            "forbidden": ["同文消息", "合成消息", "dup-1", "screen.rgba", "calibration.json"],
+                        }
+                    ],
+                },
+            ),
         ],
     )
     add(
@@ -4913,11 +5271,15 @@ def build_m3_fixtures() -> dict[str, dict[str, Any]]:
 
     def raw_rgba(width: int, height: int, *, red: bool) -> bytes:
         """构造 16 字节头 + RGBA 像素。"""
+        return raw_rgba_count(width, height, count=width * height if red else 0)
+
+    def raw_rgba_count(width: int, height: int, *, count: int) -> bytes:
+        """构造恰好 count 个红色像素的 RGBA 截图，用于阈值边界。"""
         pixels = bytearray(width * height * 4)
-        if red:
-            for offset in range(0, len(pixels), 4):
-                pixels[offset] = 255
-                pixels[offset + 3] = 255
+        for index in range(count):
+            offset = index * 4
+            pixels[offset] = 255
+            pixels[offset + 3] = 255
         return struct.pack("<IIII", width, height, 1, 0) + bytes(pixels)
 
     cases: dict[str, dict[str, Any]] = {}
@@ -5058,6 +5420,98 @@ def build_m3_fixtures() -> dict[str, dict[str, Any]]:
         context=base_context,
         active_profile=no_stable_profile,
     )
+    cases["conversation_boundary_diff_id"] = read_case(
+        "conversation_boundary_diff_id",
+        "conversation",
+        [
+            conversation_xml(
+                "合成联系人甲",
+                [
+                    {"text": "合成消息甲", "time": "10:00", "direction": "incoming", "stable": "m1"},
+                    {"text": "合成消息乙", "time": "10:01", "direction": "outgoing", "stable": "m2", "status": "已读"},
+                    {"text": "同文消息", "time": "10:05", "direction": "incoming", "stable": "m3"},
+                ],
+                scrollable=True,
+            ),
+            conversation_xml(
+                "合成联系人甲",
+                [
+                    {"text": "同文消息", "time": "10:05", "direction": "incoming", "stable": "m4"},
+                    {"text": "合成消息戊", "time": "10:06", "direction": "outgoing", "stable": "m5", "status": "已读"},
+                ],
+                scrollable=True,
+            ),
+        ],
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        context=base_context,
+    )
+    cases["conversation_no_stable_same_screen"] = read_case(
+        "conversation_no_stable_same_screen",
+        "conversation",
+        [
+            conversation_xml(
+                "合成联系人甲",
+                [
+                    {"text": "同文消息", "time": "10:05", "direction": "incoming", "stable": None},
+                ],
+                scrollable=True,
+            ),
+            conversation_xml(
+                "合成联系人甲",
+                [
+                    {"text": "同文消息", "time": "10:05", "direction": "incoming", "stable": None},
+                ],
+                scrollable=True,
+            ),
+        ],
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        context=base_context,
+        active_profile=no_stable_profile,
+    )
+    cases["conversation_late_duplicate"] = read_case(
+        "conversation_late_duplicate",
+        "conversation",
+        [
+            conversation_xml(
+                "合成联系人甲",
+                [
+                    {"text": "合成消息甲", "time": "10:00", "direction": "incoming", "stable": "m1"},
+                    {"text": "合成消息乙", "time": "10:01", "direction": "outgoing", "stable": "m2", "status": "已读"},
+                ],
+                scrollable=True,
+            ),
+            conversation_xml(
+                "合成联系人甲",
+                [
+                    {"text": "后页消息甲", "time": "10:02", "direction": "incoming", "stable": "late-dup"},
+                    {"text": "后页消息乙", "time": "10:02", "direction": "incoming", "stable": "late-dup"},
+                    {"text": "合成消息戊", "time": "10:03", "direction": "outgoing", "stable": "m5", "status": "已读"},
+                ],
+                scrollable=True,
+            ),
+        ],
+        coverage={"kind": "full_traversal", "top_proven": True, "bottom_proven": True},
+        context=base_context,
+    )
+    cases["conversation_contact_mismatch"] = read_case(
+        "conversation_contact_mismatch",
+        "conversation",
+        [conversation_xml("合成联系人乙", older_messages)],
+        context=base_context,
+    )
+    cases["page_popup"] = read_case("page_popup", "page", [page_xml(["温馨提示", "手机号登录"])])
+    cases["page_unknown"] = read_case("page_unknown", "page", [page_xml(["无匹配标记"])])
+    cases["job_missing_required"] = read_case(
+        "job_missing_required",
+        "job_detail",
+        [
+            '<hierarchy rotation="0"><node class="android.widget.FrameLayout" bounds="[0,0][1080,2400]">'
+            '<node text="合成岗位甲" resource-id="com.hpbr.bosszhipin:id/tv_position_name" bounds="[40,100][600,160]"/>'
+            '<node text="20-30K" resource-id="com.hpbr.bosszhipin:id/tv_salary_statue" bounds="[620,100][900,160]"/>'
+            '<node text="合成机构甲" resource-id="com.hpbr.bosszhipin:id/tv_company_name" bounds="[40,170][600,220]"/>'
+            "</node></hierarchy>"
+        ],
+    )
     cases["version_drift"] = read_case(
         "version_drift",
         "unread",
@@ -5088,6 +5542,24 @@ def build_m3_fixtures() -> dict[str, dict[str, Any]]:
         "unread",
         [unread_xml(pixel_row, row_bounds=(0, 0, 100, 100))],
         pixel=(calibration(threshold=10), b"broken"),
+    )
+    cases["pixel_threshold_exact"] = read_case(
+        "pixel_threshold_exact",
+        "unread",
+        [unread_xml(pixel_row, row_bounds=(0, 0, 100, 100))],
+        pixel=(calibration(threshold=10), raw_rgba_count(100, 100, count=10)),
+    )
+    cases["pixel_threshold_below"] = read_case(
+        "pixel_threshold_below",
+        "unread",
+        [unread_xml(pixel_row, row_bounds=(0, 0, 100, 100))],
+        pixel=(calibration(threshold=10), raw_rgba_count(100, 100, count=9)),
+    )
+    cases["invalid_xml_with_pixel"] = read_case(
+        "invalid_xml_with_pixel",
+        "unread",
+        ['<hierarchy><node class="x">'],
+        pixel=(calibration(threshold=10), raw_rgba(100, 100, red=True)),
     )
 
     positive_dir = FIXTURES / "m2" / "sensor" / "positive"
@@ -5215,6 +5687,25 @@ def build_m3_fixtures() -> dict[str, dict[str, Any]]:
         initial_id="00000000-0000-4000-8000-000000000416",
         targeted_id="00000000-0000-4000-8000-000000000417",
     ))
+    positive_conversation = "boss:conv:" + digest(["合成联系人甲", "合成机构甲", "合成岗位甲"])
+    positive_fingerprint = digest([digest("您好，想了解岗位"), "10:00", 1])
+    positive_candidate = "boss:discovery:" + digest([positive_conversation, positive_fingerprint])
+    add_probe("targeted_resolved_fresh_request", {
+        **targeted_request(
+            initial, fresh, now="2026-11-24T00:00:01.000Z",
+            initial_id="00000000-0000-4000-8000-000000000418",
+            targeted_id="00000000-0000-4000-8000-000000000419",
+        ),
+        "queued_keys": [positive_candidate],
+    })
+    add_probe("targeted_resolved_same_request", {
+        **targeted_request(
+            initial, fresh, now="2026-11-24T00:00:01.000Z",
+            initial_id="00000000-0000-4000-8000-000000000420",
+            targeted_id="00000000-0000-4000-8000-000000000420",
+        ),
+        "queued_keys": [positive_candidate],
+    })
 
     def new_keys_request(previous: str, current: str) -> dict[str, Any]:
         """构造同会话新增消息键请求。"""
@@ -5298,6 +5789,25 @@ def build_m3_fixtures() -> dict[str, dict[str, Any]]:
         vision=reading("vision", "present", count=None, reason=None, confidence="high"),
         human=None,
         vision_enabled=True,
+    ))
+    add_probe("ladder_visual_disabled_request", ladder_request(
+        hierarchy=reading("hierarchy", "unknown", count=None, reason="missing_signal", confidence="low"),
+        pixel=reading("pixel", "unknown", count=None, reason="missing_signal", confidence="low"),
+        vision=reading("vision", "present", count=None, reason=None, confidence="high"),
+        human=None,
+        vision_enabled=False,
+    ))
+    add_probe("ladder_human_present_request", ladder_request(
+        hierarchy=reading("hierarchy", "unknown", count=None, reason="missing_signal", confidence="low"),
+        pixel=reading("pixel", "unknown", count=None, reason="missing_signal", confidence="low"),
+        vision=None,
+        human=reading("human", "present", count=2, reason=None, confidence="high"),
+    ))
+    add_probe("ladder_no_human_request", ladder_request(
+        hierarchy=reading("hierarchy", "unknown", count=None, reason="missing_signal", confidence="low"),
+        pixel=reading("pixel", "unknown", count=None, reason="missing_signal", confidence="low"),
+        vision=None,
+        human=None,
     ))
     return cases
 
