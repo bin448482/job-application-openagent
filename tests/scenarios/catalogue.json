@@ -25313,8 +25313,10 @@
             "eval": "m4/policy/packs/eval"
           },
           "fixture_copies": {
-            "evals/private/holdout": "m4/eval/holdout",
-            "data/evals": "m4/eval/attestation"
+            "evals/private/holdout": "m4/eval/holdout"
+          },
+          "fixture_files": {
+            "data/evals/holdout-attestation.local.json": "m4/eval/attestation/holdout-attestation.synthetic.json"
           },
           "lf_inputs": [],
           "junctions": {}
@@ -25504,8 +25506,10 @@
             "eval": "m4/policy/packs/eval"
           },
           "fixture_copies": {
-            "evals/private/holdout": "m4/eval/holdout",
-            "data/evals": "m4/eval/attestation"
+            "evals/private/holdout": "m4/eval/holdout"
+          },
+          "fixture_files": {
+            "data/evals/holdout-attestation.local.json": "m4/eval/attestation/holdout-attestation.synthetic.json"
           },
           "lf_inputs": [],
           "junctions": {}

@@ -286,11 +286,13 @@ def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path
 
 
 def _normalize_text_file(path: Path) -> None:
-    """把可解码的合成文本夹具副本统一为 LF；不可解码字节保持不变。"""
+    """把不含 BOM/NUL 的可解码合成文本副本统一为 LF；边界字节保持原样。"""
     try:
         data = path.read_bytes()
         text = data.decode("utf-8")
     except (OSError, UnicodeError):
+        return
+    if data.startswith(b"\xef\xbb\xbf") or b"\x00" in data:
         return
     if b"\r\n" in data:
         path.write_bytes(text.replace("\r\n", "\n").encode("utf-8"))
@@ -450,6 +452,27 @@ def _prepare_isolation(
             target_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target_file)
             _normalize_text_file(target_file)
+    fixture_files = variant.get("fixture_files") or {}
+    if not isinstance(fixture_files, dict):
+        raise IsolationError("fixture_files 必须是对象")
+    source_fixtures = target / "tests" / "scenarios" / "fixtures"
+    for destination_rel, relative in fixture_files.items():
+        if not isinstance(destination_rel, str) or not isinstance(relative, str):
+            raise IsolationError("fixture_files 必须是相对路径对象")
+        destination = (root / destination_rel).resolve()
+        if not _within(destination, root.resolve()):
+            raise IsolationError("fixture_files 目标越界")
+        source = (source_fixtures / relative).resolve()
+        if not _within(source, source_fixtures.resolve()):
+            raise IsolationError("fixture_files 源越界")
+        _reject_link_ancestors(source, target, "单文件夹具")
+        if not source.is_file() or _is_link_like(source) or _is_expected_name(source):
+            raise IsolationError("fixture_files 源不是合法合成文件")
+        if destination.exists() or _is_link_like(destination):
+            raise IsolationError("fixture_files 目标已存在")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        _normalize_text_file(destination)
     local_packs = variant.get("local_packs") or {}
     if not isinstance(local_packs, dict):
         raise IsolationError("local_packs 必须是对象")

@@ -6,7 +6,7 @@
 
 ## 二、直接子项
 
-- `holdout-attestation.local.json`：合成输入文件。
+- `holdout-attestation.synthetic.json`：合成输入文件。
 
 ## 三、维护要求
 

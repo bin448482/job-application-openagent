@@ -1978,7 +1978,7 @@ def build_support_fixtures() -> None:
         },
     )
     write_json(
-        "fixtures/m4/eval/attestation/holdout-attestation.local.json",
+        "fixtures/m4/eval/attestation/holdout-attestation.synthetic.json",
         {
             "schema_version": 1,
             "scope": "holdout_local_no_upload",
@@ -1995,6 +1995,7 @@ def build_support_fixtures() -> None:
             "attested_at": "2026-11-24T00:00:00.000Z",
         },
     )
+
     write_json(
         "fixtures/m4/probe/d11_register.json",
         {
@@ -2475,6 +2476,7 @@ def variant(
     shared_inputs: list[str] | None = None,
     local_packs: dict[str, str] | None = None,
     fixture_copies: dict[str, str] | None = None,
+    fixture_files: dict[str, str] | None = None,
     lf_inputs: list[str] | None = None,
     junctions: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -2519,6 +2521,7 @@ def variant(
         "shared_inputs": shared_inputs or [],
         "local_packs": local_packs or {},
         "fixture_copies": fixture_copies or {},
+        **({"fixture_files": fixture_files} if fixture_files else {}),
         "lf_inputs": lf_inputs or [],
         "junctions": junctions or {},
     }
@@ -2536,6 +2539,7 @@ def ready_variant(
     shared_inputs: list[str] | None = None,
     local_packs: dict[str, str] | None = None,
     fixture_copies: dict[str, str] | None = None,
+    fixture_files: dict[str, str] | None = None,
     lf_inputs: list[str] | None = None,
     junctions: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -2553,6 +2557,7 @@ def ready_variant(
         shared_inputs=shared_inputs,
         local_packs=local_packs,
         fixture_copies=fixture_copies,
+        fixture_files=fixture_files,
         lf_inputs=lf_inputs,
         junctions=junctions,
     )
@@ -7073,7 +7078,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 local_packs={"eval": "m4/policy/packs/eval"},
                 fixture_copies={
                     "evals/private/holdout": "m4/eval/holdout",
-                    "data/evals": "m4/eval/attestation",
+                },
+                fixture_files={
+                    "data/evals/holdout-attestation.local.json":
+                        "m4/eval/attestation/holdout-attestation.synthetic.json",
                 },
                 assertions=[
                     "登记冻结批次",
@@ -7170,7 +7178,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 local_packs={"eval": "m4/policy/packs/eval"},
                 fixture_copies={
                     "evals/private/holdout": "m4/eval/holdout",
-                    "data/evals": "m4/eval/attestation",
+                },
+                fixture_files={
+                    "data/evals/holdout-attestation.local.json":
+                        "m4/eval/attestation/holdout-attestation.synthetic.json",
                 },
                 assertions=["首次授权失败也持久化并收尾 failed", "再次访问 repeat_access=true/new_evidence=false", "旧失败访问不丢失"],
                 acceptance={

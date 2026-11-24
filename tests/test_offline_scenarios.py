@@ -95,10 +95,11 @@ def _make_m4_project(root: Path) -> None:
         root / "evals/private/regression",
         dirs_exist_ok=True,
     )
-    shutil.copytree(
-        SCENARIO_ROOT / "fixtures/m4/eval/attestation",
-        root / "data/evals",
-        dirs_exist_ok=True,
+    (root / "data/evals").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(
+        SCENARIO_ROOT
+        / "fixtures/m4/eval/attestation/holdout-attestation.synthetic.json",
+        root / "data/evals/holdout-attestation.local.json",
     )
 
 
@@ -152,6 +153,25 @@ class AssetCompletenessTests(unittest.TestCase):
             self.assertIn(f"A0{action}_base", variant_ids)
             for fault in ("FA", "FB", "FC", "FD", "FE"):
                 self.assertIn(f"A0{action}_{fault}", variant_ids)
+
+    def test_holdout_attestation_fixture_is_present_and_bound(self) -> None:
+        """D11 合成无上传合同必须随资产交付，并与探针桥摘要一致。"""
+        from app.domain.eval import validate_holdout_attestation
+
+        path = (
+            SCENARIO_ROOT
+            / "fixtures/m4/eval/attestation/holdout-attestation.synthetic.json"
+        )
+        self.assertTrue(path.is_file(), "缺失合成无上传合同夹具")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        validated = validate_holdout_attestation(
+            data,
+            provider_id="local-process",
+            model_id="synthetic-model",
+            model_config_hash="0" * 64,
+        )
+        self.assertIs(validated["no_upload"], True)
+        self.assertEqual(validated["scope"], "holdout_local_no_upload")
 
     def test_expected_is_not_referenced_by_sensor_inputs(self) -> None:
         """sensor manifest 只含输入键，绝不引用独立答案文件。"""
@@ -570,6 +590,40 @@ class AcceptanceBoundaryTests(unittest.TestCase):
             self.assertFalse((root / "tests" / "scenarios" / "fixtures" / "expected.json").exists())
             self.assertTrue((root / "sitecustomize.py").is_file())
             self.assertTrue((root / "tripwire.log").parent.is_dir())
+
+    def test_fixture_files_maps_public_name_and_rejects_unsafe_paths(self) -> None:
+        """单文件夹具可映射为消费方固定名，越界/答案/缺失来源必须拒绝。"""
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / "app").mkdir()
+            (target / "app" / "__main__.py").write_text("", encoding="utf-8")
+            fixtures = target / "tests" / "scenarios" / "fixtures"
+            source_root = fixtures / "m4" / "attestation"
+            source_root.mkdir(parents=True)
+            source = source_root / "holdout-attestation.synthetic.json"
+            source.write_bytes(b'{"synthetic":true}\r\n')
+            (source_root / "expected.json").write_text("{}", encoding="utf-8")
+            variant = {
+                "steps": [],
+                "fixture_files": {
+                    "data/evals/holdout-attestation.local.json":
+                        "m4/attestation/holdout-attestation.synthetic.json",
+                },
+            }
+            root = runner._prepare_isolation(target, "run-test", "SC-D11", "mapped", variant)
+            destination = root / "data/evals/holdout-attestation.local.json"
+            self.assertEqual(destination.read_bytes(), b'{"synthetic":true}\n')
+            for bad in (
+                {"../escape.json": "m4/attestation/holdout-attestation.synthetic.json"},
+                {"data/evals/x.json": "../outside.json"},
+                {"data/evals/x.json": "m4/attestation/expected.json"},
+                {"data/evals/x.json": "m4/attestation/missing.json"},
+            ):
+                with self.assertRaises(runner.IsolationError):
+                    runner._prepare_isolation(
+                        target, "run-test", "SC-D11", "mapped",
+                        {"steps": [], "fixture_files": bad},
+                    )
 
     def test_expected_and_unselected_fixtures_are_not_copied(self) -> None:
         """只复制选定合成输入；expected.json 与未引用案例不得进入 SUT 树。"""
@@ -2133,6 +2187,37 @@ class M1DriverBoundaryTests(unittest.TestCase):
         differences = compare_invocation(invocation, oracle)
         self.assertTrue(any("outcomes" in item or "phases" in item for item in differences), differences)
 
+    def test_real_m4_holdout_attestation_gate_positive_and_missing_contract(self) -> None:
+        """合成无上传合同随资产交付时真实访问；缺合同时零桥调用拒绝。"""
+        requests = {
+            name: json.loads(
+                (SCENARIO_ROOT / f"fixtures/m4/probe/{name}.json").read_text(encoding="utf-8")
+            )
+            for name in ("d11_register", "d11_holdout_first")
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root):
+                m4_probe._eval_operation(requests["d11_register"])
+                allowed = m4_probe._eval_operation(requests["d11_holdout_first"])
+        self.assertEqual(allowed["status"], "ok", allowed)
+        self.assertGreater(allowed["bridge_calls"], 0)
+        self.assertTrue(allowed["authorize_viewed"])
+        self.assertEqual(allowed["authorize_intent_count"], 1)
+        self.assertIsNotNone(allowed["holdout"])
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            (root / "data/evals/holdout-attestation.local.json").unlink()
+            with mock.patch.object(m4_probe, "ROOT", root):
+                m4_probe._eval_operation(requests["d11_register"])
+                blocked = m4_probe._eval_operation(requests["d11_holdout_first"])
+        self.assertEqual(blocked["status"], "error")
+        self.assertEqual(blocked["reason_code"], "authorization_required")
+        self.assertEqual(blocked["bridge_calls"], 0)
+        self.assertIsNone(blocked["authorize_intent_count"])
+
     def test_real_m4_regression_admission_tamper_is_caught_by_d11_oracle(self) -> None:
         """真实 regression 准入样本被篡改时，D11 独立指纹 oracle 必须拒绝。"""
         assets = load_assets()
@@ -2790,6 +2875,14 @@ class P2M4CProbeBoundaryTests(unittest.TestCase):
             binary.write_bytes(b"\xff\r\n")
             runner._normalize_text_file(binary)
             self.assertEqual(binary.read_bytes(), b"\xff\r\n")
+            bom = root / "bom.txt"
+            bom.write_bytes(b"\xef\xbb\xbfa\r\nb\r\n")
+            runner._normalize_text_file(bom)
+            self.assertEqual(bom.read_bytes(), b"\xef\xbb\xbfa\r\nb\r\n")
+            nul = root / "nul.txt"
+            nul.write_bytes(b"a\r\n\x00b\r\n")
+            runner._normalize_text_file(nul)
+            self.assertEqual(nul.read_bytes(), b"a\r\n\x00b\r\n")
             for invalid in ("../outside.txt", str(root / "copy.txt")):
                 with self.assertRaises(runner.IsolationError):
                     runner._normalize_lf_inputs(root, [invalid])
