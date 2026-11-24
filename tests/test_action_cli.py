@@ -511,6 +511,84 @@ class ActionCliTests(unittest.TestCase):
         self.assertFalse(payload["result"]["eligible"])
         self.assertEqual(payload["result"]["reason"], "cooldown_active")
 
+    def test_reconcile_read_only_is_rejected_before_profile_gate_or_device(self) -> None:
+        """对账写终态只允许 draft_only；read_only 在打开/占用/读设备前拒绝。"""
+        fixture = self._fixture(
+            "reconcile-read-only",
+            {"observation": helpers.observation(error="device_disconnected")},
+        )
+        args = [
+            "action",
+            "reconcile",
+            "--profile",
+            "demo",
+            "--pack",
+            "prompts/local/demo",
+            "--action-key",
+            TEXT_KEY,
+            "--resolution",
+            "confirm_performed",
+            "--fixture",
+            fixture,
+            "--mode",
+            "read_only",
+            "--confirm-action",
+            "--confirm-device",
+            "--confirm-recovery",
+        ]
+        before_gate = sorted(
+            str(path.relative_to(self.os_root))
+            for path in self.os_root.rglob("*")
+        )
+        with patch("subprocess.run") as run, patch("subprocess.Popen") as popen:
+            code, payload, _ = self._run(args)
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["reason_code"], "authorization_required")
+        run.assert_not_called()
+        popen.assert_not_called()
+        self.assertFalse(self.profile_path.exists())
+        self.assertEqual(
+            sorted(
+                str(path.relative_to(self.os_root))
+                for path in self.os_root.rglob("*")
+            ),
+            before_gate,
+        )
+
+        code, payload, _ = self._run(
+            self._perform_args("send_text", fixture)
+        )
+        self.assertEqual(code, 0, payload)
+        key = payload["result"]["action_key"]
+        profile_before = self.profile_path.read_bytes()
+        gate_before = {
+            str(path.relative_to(self.os_root)): path.read_bytes()
+            for path in self.os_root.rglob("*")
+            if path.is_file()
+        }
+        args[args.index(TEXT_KEY)] = key
+        with patch("subprocess.run") as run, patch("subprocess.Popen") as popen:
+            code, payload, _ = self._run(args)
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["reason_code"], "authorization_required")
+        run.assert_not_called()
+        popen.assert_not_called()
+        self.assertEqual(self.profile_path.read_bytes(), profile_before)
+        self.assertEqual(
+            {
+                str(path.relative_to(self.os_root)): path.read_bytes()
+                for path in self.os_root.rglob("*")
+                if path.is_file()
+            },
+            gate_before,
+        )
+        self.assertEqual(
+            self._rows(
+                "SELECT state FROM action_records WHERE action_key = ?", (key,)
+            ),
+            [{"state": "unknown"}],
+        )
+
     def test_reconcile_confirm_performed_and_not_performed(self) -> None:
         """未决动作经本轮确认与真实证据收敛；核对不足不解锁。"""
         fixture = self._fixture(

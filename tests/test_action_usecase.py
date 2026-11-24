@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import unittest
 import uuid
@@ -318,6 +319,7 @@ class ActionUseCaseTests(unittest.TestCase):
         from unittest.mock import patch
 
         from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore
 
         wrong_job = (
             '<hierarchy><node text="合成联系人"><node text="合成公司" />'
@@ -325,16 +327,82 @@ class ActionUseCaseTests(unittest.TestCase):
         )
         calls: list[list[str]] = []
 
-        def run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess:
-            """记录命令并按 cat 返回合成层级。"""
-            calls.append(list(args))
-            return subprocess.CompletedProcess(
-                args=args, returncode=0, stdout=wrong_job, stderr=""
+        class Proc:
+            """合成 Popen：dump/cat 都返回错职位层级。"""
+
+            def __init__(self, args: list[str]) -> None:
+                """保存参数与成功返回码。"""
+                self.args = args
+                self.pid = 9500
+                self.returncode = 0
+
+            def communicate(self, timeout: float | None = None):
+                """按命令类型返回错职位层级。"""
+                calls.append(list(self.args))
+                if "cat" in self.args:
+                    return wrong_job, ""
+                return "", ""
+
+            def kill(self) -> None:
+                """无 kill。"""
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-wrong-job-"
+        ) as directory:
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=self.gate,
+                command_store=CommandIdentityStore(Path(directory)),
+                child_scan=lambda pid: [],
             )
+            with (
+                patch(
+                    "subprocess.Popen",
+                    side_effect=lambda args, **kwargs: Proc(args),
+                ),
+                patch("app.adapters.adb.actions._utc_now", return_value=self.clock.now()),
+            ):
+                result = perform_action(
+                    store=self.store,
+                    gate=self.gate,
+                    authorization=self._authorization(),
+                    lease=self.lease,
+                    action_kind="send_text",
+                    action_key=TEXT_KEY,
+                    target_key=MESSAGE,
+                    conversation_key=CONVERSATION,
+                    body_text="合成回复正文",
+                    attachment_name=None,
+                    identity=IDENTITY,
+                    anchor_label="消息",
+                    ime_component=None,
+                    tap_points=((10, 20),),
+                    current_base_hash=DIGEST,
+                    current_pack_hash=DIGEST,
+                    daily_sends=10,
+                    reply_cooldown_seconds=0,
+                    profile_db_path=str(self.path),
+                    executor=executor,
+                    now=self.clock.now(),
+                    clock=lambda: self.clock.now(),
+                )
+        self.assertEqual([c for c in calls if "input" in c or "tap" in c], [])
+        self.assertNotEqual(result["evidence"]["outcome"], "performed")
+
+    def test_public_path_without_ledger_cannot_converge_performed(self) -> None:
+        """无命令账本的真实适配器经生产用例拒绝启动任何动作命令。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
 
         executor = AdbActionExecutor(serial="<serial>", gate=self.gate)
         with (
-            patch("subprocess.run", side_effect=run),
+            patch("subprocess.run") as run,
+            patch("subprocess.Popen") as popen,
             patch("app.adapters.adb.actions._utc_now", return_value=self.clock.now()),
         ):
             result = perform_action(
@@ -361,9 +429,65 @@ class ActionUseCaseTests(unittest.TestCase):
                 now=self.clock.now(),
                 clock=lambda: self.clock.now(),
             )
-        self.assertEqual([c for c in calls if "input" in c or "tap" in c], [])
-        self.assertIn(result["state"], {"not_performed", "unknown", "pending"})
-        self.assertNotEqual(result["evidence"]["outcome"], "performed")
+        run.assert_not_called()
+        popen.assert_not_called()
+        self.assertEqual(result["evidence"]["outcome"], "not_performed")
+        self.assertNotEqual(result["state"], "performed")
+        self.assertEqual(result["state"], "pending")
+        self.assertFalse(result["gate_converged"])
+        self.assertIsNotNone(result["card"])
+        self.assertEqual(self.store.get_action(TEXT_KEY)["state"], "pending")
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path,
+                'SELECT state FROM hr_discoveries WHERE "key" = ?',
+                (self.lease.key,),
+            )["state"],
+            "blocked",
+        )
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path, "SELECT reservation_state FROM device_lease"
+            ),
+            {"reservation_state": "quarantined"},
+        )
+
+    def test_public_path_without_ledger_and_with_ime_starts_no_subprocess(self) -> None:
+        """已绑定动作的 IME 预读在缺账本时同样零子进程拒绝。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+
+        executor = AdbActionExecutor(serial="<serial>", gate=self.gate)
+        with (
+            patch("subprocess.run") as run,
+            patch("subprocess.Popen") as popen,
+            patch("app.adapters.adb.actions._utc_now", return_value=self.clock.now()),
+        ):
+            result = self._perform(
+                executor, ime_component="com.example/.Ime"
+            )
+        run.assert_not_called()
+        popen.assert_not_called()
+        self.assertEqual(result["evidence"]["outcome"], "not_performed")
+        self.assertEqual(result["state"], "pending")
+        self.assertFalse(result["gate_converged"])
+        self.assertEqual(self.store.get_action(TEXT_KEY)["state"], "pending")
+        self.assertEqual(self.store.load_ime_state(), None)
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path,
+                'SELECT state FROM hr_discoveries WHERE "key" = ?',
+                (self.lease.key,),
+            )["state"],
+            "blocked",
+        )
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path, "SELECT reservation_state FROM device_lease"
+            ),
+            {"reservation_state": "quarantined"},
+        )
 
     def test_public_path_missing_identity_rejects_before_subprocess(self) -> None:
         """公共 perform 缺完整身份时不启动任何设备子进程。"""
@@ -401,11 +525,298 @@ class ActionUseCaseTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "precondition_failed")
         run.assert_not_called()
 
-    def test_public_path_full_identity_performs_through_real_adapter(self) -> None:
-        """公共 perform + 真实 ADB 适配器：完整身份正常执行为 performed/tap1。"""
+    @unittest.skipUnless(sys.platform == "win32", "Windows Job Object only")
+    def test_public_path_full_identity_performs_with_bound_ledger(self) -> None:
+        """真实合成子进程 + 真实账本：生产 perform 一次 tap 后 performed/done/收敛。"""
         from unittest.mock import patch
 
         from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore
+
+        before = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" /></node></hierarchy>'
+        )
+        readback = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" />'
+            '<node class="android.widget.EditText" text="合成回复正文" />'
+            '</node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" />'
+            '<node text="合成回复正文" />'
+            '<node class="android.widget.EditText" text="" /></node></hierarchy>'
+        )
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-real-ledger-"
+        ) as directory:
+            root = Path(directory)
+            for index, text in enumerate((before, readback, after)):
+                (root / f"phase-{index}.xml").write_text(text, encoding="utf-8")
+            script = root / "synthetic_adb.py"
+            script.write_text(
+                "import pathlib, sys\n"
+                "root = pathlib.Path(__file__).resolve().parent\n"
+                "args = sys.argv[1:]\n"
+                "if 'cat' in args:\n"
+                "    counter = root / 'cat-count'\n"
+                "    try:\n"
+                "        index = int(counter.read_text('utf-8'))\n"
+                "    except Exception:\n"
+                "        index = 0\n"
+                "    counter.write_text(str(index + 1), 'utf-8')\n"
+                "    sys.stdout.write((root / ('phase-%d.xml' % min(index, 2)))"
+                ".read_text('utf-8'))\n"
+                "elif 'settings' in args:\n"
+                "    sys.stdout.write('com.example.default/.Ime\\n')\n",
+                encoding="utf-8",
+            )
+            ledger_dir = root / "ledger"
+            executor = AdbActionExecutor(
+                serial=str(script),
+                gate=self.gate,
+                adb=sys.executable,
+                command_store=CommandIdentityStore(ledger_dir),
+                child_scan=lambda pid: [],
+            )
+            with patch(
+                "app.adapters.adb.actions._utc_now", return_value=self.clock.now()
+            ):
+                result = self._perform(executor)
+            ledger = CommandIdentityStore(ledger_dir)
+            identities = ledger.identities(TEXT_KEY)
+            self.assertNotEqual(identities, [])
+            self.assertEqual(
+                ledger.check(TEXT_KEY, self.lease.owner.pid, lambda pid: "stopped"),
+                "stopped",
+            )
+        self.assertEqual(result["state"], "performed")
+        self.assertEqual(result["evidence"]["effect"], "sent")
+        self.assertTrue(result["gate_converged"])
+        self.assertIsNone(result["card"])
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path,
+                'SELECT state FROM hr_discoveries WHERE "key" = ?',
+                (self.lease.key,),
+            )["state"],
+            "done",
+        )
+        self.assertIsNone(
+            m1_helpers.fetch_one(self.path, "SELECT * FROM device_lease")
+        )
+
+    def test_public_path_evidence_index_failure_before_click_keeps_pending(self) -> None:
+        """before 索引落盘真实失败：零 tap、not_performed/pending、隔离不释放。"""
+        import hashlib
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore
+
+        before = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" /></node></hierarchy>'
+        )
+        calls: list[list[str]] = []
+
+        class Proc:
+            """合成 Popen：cat 返回 before 现场。"""
+
+            def __init__(self, args: list[str]) -> None:
+                """保存参数与成功返回码。"""
+                self.args = args
+                self.pid = 9600
+                self.returncode = 0
+
+            def communicate(self, timeout: float | None = None):
+                """记录并按命令返回合成输出。"""
+                calls.append(list(self.args))
+                if "cat" in self.args:
+                    return before, ""
+                return "", ""
+
+            def kill(self) -> None:
+                """无 kill。"""
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-index-before-"
+        ) as directory:
+            root = Path(directory)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            index_name = (
+                "action-"
+                + hashlib.sha256(TEXT_KEY.encode("utf-8")).hexdigest()[:16]
+                + ".index.jsonl"
+            )
+            (evidence / index_name).mkdir()
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=self.gate,
+                command_store=CommandIdentityStore(root / "ledger"),
+                evidence_dir=evidence,
+                child_scan=lambda pid: [],
+            )
+            with (
+                patch(
+                    "subprocess.Popen",
+                    side_effect=lambda args, **kwargs: Proc(args),
+                ),
+                patch(
+                    "app.adapters.adb.actions._utc_now",
+                    return_value=self.clock.now(),
+                ),
+            ):
+                result = self._perform(executor)
+            self.assertTrue((evidence / index_name).is_dir())
+        self.assertEqual([c for c in calls if "tap" in c], [])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result["evidence"]["outcome"], "not_performed")
+        self.assertEqual(result["state"], "pending")
+        self.assertFalse(result["gate_converged"])
+        self.assertIsNotNone(result["card"])
+        record = self.store.get_action(TEXT_KEY)
+        self.assertEqual(record["state"], "pending")
+        self.assertEqual(record["scene_settled"], 0)
+        self.assertEqual(record["confirmation_open"], 0)
+        self.assertEqual(record["command_quiet"], 0)
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path,
+                'SELECT state FROM hr_discoveries WHERE "key" = ?',
+                (self.lease.key,),
+            )["state"],
+            "blocked",
+        )
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path, "SELECT reservation_state FROM device_lease"
+            ),
+            {"reservation_state": "quarantined"},
+        )
+
+    def test_public_path_readback_index_failure_keeps_input_and_quiet_unknown(self) -> None:
+        """readback 索引失败保留已输入现场与未证明命令族，不得假 quiet。"""
+        import hashlib
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore
+
+        before = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" /></node></hierarchy>'
+        )
+        readback = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" />'
+            '<node class="android.widget.EditText" text="合成回复正文" />'
+            '</node></hierarchy>'
+        )
+        state = {"cat": 0}
+        calls: list[list[str]] = []
+        index_name = (
+            "action-"
+            + hashlib.sha256(TEXT_KEY.encode("utf-8")).hexdigest()[:16]
+            + ".index.jsonl"
+        )
+
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-index-readback-"
+        ) as directory:
+            root = Path(directory)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            index_path = evidence / index_name
+
+            class Proc:
+                """合成 Popen：input text 后把索引文件替换为目录。"""
+
+                def __init__(self, args: list[str]) -> None:
+                    """保存参数与成功返回码。"""
+                    self.args = args
+                    self.pid = 9650
+                    self.returncode = 0
+
+                def communicate(self, timeout: float | None = None):
+                    """按命令返回 before/readback，并在 input text 后制造冲突。"""
+                    calls.append(list(self.args))
+                    if "input" in self.args and "text" in self.args:
+                        if index_path.exists():
+                            index_path.unlink()
+                        index_path.mkdir()
+                        return "", ""
+                    if "cat" in self.args:
+                        index = state["cat"]
+                        state["cat"] = index + 1
+                        return (before, readback)[min(index, 1)], ""
+                    return "", ""
+
+                def kill(self) -> None:
+                    """无 kill。"""
+
+                def wait(self, timeout: float | None = None) -> int:
+                    """立即回收。"""
+                    return 0
+
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=self.gate,
+                command_store=CommandIdentityStore(root / "ledger"),
+                evidence_dir=evidence,
+                child_scan=lambda pid: [],
+            )
+            with (
+                patch(
+                    "subprocess.Popen",
+                    side_effect=lambda args, **kwargs: Proc(args),
+                ),
+                patch(
+                    "app.adapters.adb.actions._utc_now",
+                    return_value=self.clock.now(),
+                ),
+            ):
+                result = self._perform(executor)
+            self.assertTrue(index_path.is_dir())
+        self.assertEqual(len([c for c in calls if "input" in c and "text" in c]), 1)
+        self.assertEqual([c for c in calls if "tap" in c], [])
+        self.assertEqual(result["evidence"]["outcome"], "not_performed")
+        self.assertEqual(result["state"], "pending")
+        self.assertFalse(result["gate_converged"])
+        self.assertIsNotNone(result["card"])
+        record = self.store.get_action(TEXT_KEY)
+        self.assertEqual(record["state"], "pending")
+        self.assertEqual(record["scene_settled"], 0)
+        self.assertEqual(record["command_quiet"], 0)
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path,
+                'SELECT state FROM hr_discoveries WHERE "key" = ?',
+                (self.lease.key,),
+            )["state"],
+            "blocked",
+        )
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path, "SELECT reservation_state FROM device_lease"
+            ),
+            {"reservation_state": "quarantined"},
+        )
+
+    def test_public_path_evidence_index_failure_after_click_is_unknown(self) -> None:
+        """after 索引真实冲突：一次 tap、unknown/blocked、不重试且不假称命令已停。"""
+        import hashlib
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore
 
         before = (
             '<hierarchy><node text="合成联系人"><node text="合成公司" />'
@@ -425,52 +836,93 @@ class ActionUseCaseTests(unittest.TestCase):
         )
         state = {"cat": 0}
         calls: list[list[str]] = []
+        index_name = (
+            "action-"
+            + hashlib.sha256(TEXT_KEY.encode("utf-8")).hexdigest()[:16]
+            + ".index.jsonl"
+        )
 
-        def run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess:
-            """按命令类型返回合成层级，cat 依次给出 before/readback/after。"""
-            calls.append(list(args))
-            if "cat" in args:
-                index = state["cat"]
-                state["cat"] = index + 1
-                out = (before, readback, after)[min(index, 2)]
-            else:
-                out = ""
-            return subprocess.CompletedProcess(
-                args=args, returncode=0, stdout=out, stderr=""
-            )
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-index-after-"
+        ) as directory:
+            root = Path(directory)
+            evidence = root / "evidence"
+            evidence.mkdir()
+            index_path = evidence / index_name
 
-        executor = AdbActionExecutor(serial="<serial>", gate=self.gate)
-        with (
-            patch("subprocess.run", side_effect=run),
-            patch("app.adapters.adb.actions._utc_now", return_value=self.clock.now()),
-        ):
-            result = perform_action(
-                store=self.store,
+            class Proc:
+                """合成 Popen：tap 时把索引文件替换为目录制造真实冲突。"""
+
+                def __init__(self, args: list[str]) -> None:
+                    """保存参数与成功返回码。"""
+                    self.args = args
+                    self.pid = 9700
+                    self.returncode = 0
+
+                def communicate(self, timeout: float | None = None):
+                    """按命令返回 before/readback/after，并在 tap 后制造索引冲突。"""
+                    calls.append(list(self.args))
+                    if "tap" in self.args:
+                        if index_path.exists():
+                            index_path.unlink()
+                        index_path.mkdir()
+                        return "", ""
+                    if "cat" in self.args:
+                        index = state["cat"]
+                        state["cat"] = index + 1
+                        return (before, readback, after)[min(index, 2)], ""
+                    return "", ""
+
+                def kill(self) -> None:
+                    """无 kill。"""
+
+                def wait(self, timeout: float | None = None) -> int:
+                    """立即回收。"""
+                    return 0
+
+            executor = AdbActionExecutor(
+                serial="<serial>",
                 gate=self.gate,
-                authorization=self._authorization(),
-                lease=self.lease,
-                action_kind="send_text",
-                action_key=TEXT_KEY,
-                target_key=MESSAGE,
-                conversation_key=CONVERSATION,
-                body_text="合成回复正文",
-                attachment_name=None,
-                identity=IDENTITY,
-                anchor_label="消息",
-                ime_component=None,
-                tap_points=((10, 20),),
-                current_base_hash=DIGEST,
-                current_pack_hash=DIGEST,
-                daily_sends=10,
-                reply_cooldown_seconds=0,
-                profile_db_path=str(self.path),
-                executor=executor,
-                now=self.clock.now(),
-                clock=lambda: self.clock.now(),
+                command_store=CommandIdentityStore(root / "ledger"),
+                evidence_dir=evidence,
+                child_scan=lambda pid: [],
             )
-        self.assertEqual(result["state"], "performed")
-        self.assertEqual(result["evidence"]["effect"], "sent")
-        self.assertEqual(len([c for c in calls if "tap" in c]), 1)
+            with (
+                patch(
+                    "subprocess.Popen",
+                    side_effect=lambda args, **kwargs: Proc(args),
+                ),
+                patch(
+                    "app.adapters.adb.actions._utc_now",
+                    return_value=self.clock.now(),
+                ),
+            ):
+                result = self._perform(executor)
+        taps = [c for c in calls if "tap" in c]
+        self.assertEqual(len(taps), 1)
+        self.assertEqual(result["evidence"]["outcome"], "unknown")
+        self.assertEqual(result["state"], "unknown")
+        self.assertFalse(result["gate_converged"])
+        self.assertIsNotNone(result["card"])
+        record = self.store.get_action(TEXT_KEY)
+        self.assertEqual(record["state"], "unknown")
+        self.assertEqual(record["scene_settled"], 0)
+        self.assertEqual(record["confirmation_open"], 0)
+        self.assertEqual(record["command_quiet"], 0)
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path,
+                'SELECT state FROM hr_discoveries WHERE "key" = ?',
+                (self.lease.key,),
+            )["state"],
+            "blocked",
+        )
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path, "SELECT reservation_state FROM device_lease"
+            ),
+            {"reservation_state": "quarantined"},
+        )
 
     def test_identity_must_match_persisted_task_conversation(self) -> None:
         """身份与调用方会话键一致但持久任务不同，仍须在 pending 前拒绝。"""

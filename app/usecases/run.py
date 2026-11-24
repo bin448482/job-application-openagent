@@ -120,7 +120,8 @@ def check_preflight(
         "decisions": 0,
         "acceptance": acceptance,
         "limitations": [
-            "m5_actions_not_implemented",
+            "real_device_action_entry_not_delivered",
+            "m6_scheduling_not_implemented",
             "m8_run_not_implemented",
             "device_probe_not_run",
         ],

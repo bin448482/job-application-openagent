@@ -200,7 +200,7 @@ def _initialize_or_migrate(
     now: str,
     backup_root: Path | None,
 ) -> str | None:
-    """先分类空库/v1/v2，再在单事务建表或迁移；v1 先做本机备份。"""
+    """先分类空库/v1/v2；v1 先核验身份与完整 DDL，再本机备份并单事务迁移。"""
     version, objects = _read_schema(connection)
     if not objects and version == 0:
         _create_v2(connection, profile_id, now)
@@ -211,6 +211,9 @@ def _initialize_or_migrate(
         _verify_objects(connection, profile_id, PROFILE_SCHEMA_VERSION)
         return None
     if version == 1 and set(objects) == set(PROFILE_V1_EXPECTED_OBJECTS):
+        # 备份前先核验完整 DDL 与 profile 身份，避免把异 profile 内容复制到
+        # 目标 profile 目录，也避免为坏库或错身份库生成任何备份。
+        _verify_objects(connection, profile_id, 1)
         backup = _backup_profile(connection, path, backup_root)
         _migrate_v1_to_v2(connection, profile_id)
         return backup

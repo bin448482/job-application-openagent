@@ -15,7 +15,7 @@ from unittest.mock import patch
 from app.adapters.adb.actions import AdbActionExecutor
 from app.adapters.adb.recovery import AdbRecoveryObserver
 from app.adapters.simulated.actions import ScriptedActionExecutor
-from app.domain.actions import derive_action_outcome
+from app.domain.actions import ActionObservation, derive_action_outcome
 from app.domain.models import canonical_hash
 from app.ports.actions import ActionExecutionError, ActionPlan
 from app.ports.screen import HierarchyCapture
@@ -56,6 +56,49 @@ class FakeGate:
 
     def release(self, *args: object, **kwargs: object) -> None:
         """释放不参与本测试。"""
+
+
+class _NoOpCommandStore:
+    """观察逻辑测试替身：只满足执行边界，不写账本也不证明进程族。
+
+    真实 `CommandIdentityStore` 与 Job 证明由 `test_action_usecase` 及
+    `test_platform_bound_*` 等专门用例覆盖；本替身不支撑任何 performed 证据。
+    """
+
+    def mark_started(self, action_key: str) -> None:
+        """观察用例不应触达真实账本。"""
+        raise AssertionError("observation stub must not record")
+
+    def record(self, action_key: str, pid: int) -> None:
+        """观察用例不应触达真实账本。"""
+        raise AssertionError("observation stub must not record")
+
+    def record_unresolved(self, action_key: str) -> None:
+        """观察用例不应触达真实账本。"""
+        raise AssertionError("observation stub must not record")
+
+    def finish_family(self, *args: object, **kwargs: object) -> None:
+        """观察用例不应触达真实账本。"""
+        raise AssertionError("observation stub must not record")
+
+
+class _ObservationExecutor(AdbActionExecutor):
+    """只验证观察/前置逻辑：按计划绑定动作并关闭真实命令账本回调。
+
+    mock 的 `subprocess.run` 成功不构成进程族停止证明；真实账本/Job 路径必须
+    由使用 `CommandIdentityStore` 的专门用例断言。
+    """
+
+    def __init__(self, **kwargs: object) -> None:
+        """注入不写盘账本替身，保持执行边界非空。"""
+        kwargs.setdefault("command_store", _NoOpCommandStore())
+        super().__init__(**kwargs)
+
+    def execute(self, plan, *, before_command=None):
+        """绑定当前计划动作键后用 mock 观察输入执行一次。"""
+        self.bind_action(plan.action_key)
+        self._command_hooks = lambda: (None, None, None, None)  # type: ignore[method-assign]
+        return super().execute(plan, before_command=before_command)
 
 
 def plan(*, ime: bool = False, taps: int = 1) -> ActionPlan:
@@ -165,7 +208,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_send_text_command_order_parameters_and_single_attempt(self) -> None:
         """dump/cat、input、回读、tap、after 均 shell=false、5 秒、每步复核。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         runner, calls = self._runner()
         with patch("subprocess.run", side_effect=runner) as run:
             observation = executor.execute(plan())
@@ -189,7 +232,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_input_readback_mismatch_does_not_click(self) -> None:
         """输入回读不含正文时不发发送点击，观测可收敛 not_performed。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         runner, calls = self._runner(
             after_xml='<hierarchy><node class="android.widget.EditText" text="别的" />'
             '<node text="合成联系人" /><node text="消息" /></hierarchy>'
@@ -228,7 +271,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_duplicate_identity_does_not_tap(self) -> None:
         """目标标签不唯一时前置失败，任何点击均不发出。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         duplicate = (
             '<hierarchy><node text="合成联系人" /><node text="合成联系人" />'
             '<node text="消息" /></hierarchy>'
@@ -258,7 +301,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_resume_attachment_name_is_checked_before_confirm(self) -> None:
         """简历附件名不符时只做打开槽位，不点击确认。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         before = (
             '<hierarchy><node text="合成联系人" /><node text="消息" />'
             '<node text="发简历" /></hierarchy>'
@@ -290,7 +333,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_resume_and_contact_require_new_change_not_preexisting_marker(self) -> None:
         """既有“请求中”提示不证明本次效果；新增提示才可 request_sent。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         before = (
             '<hierarchy><node text="合成联系人" /><node text="消息" />'
             '<node text="附件简历请求已发送" /></hierarchy>'
@@ -325,7 +368,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_text_readback_wrong_identity_or_multiple_editors_does_not_click(self) -> None:
         """readback 换人或两个 editor 任一含正文都不发点击。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         wrong_person = (
             '<hierarchy><node text="另一联系人"><node text="消息" /></node>'
             '<node class="android.widget.EditText" text="您好" /></hierarchy>'
@@ -350,7 +393,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_text_unrelated_subtree_echo_is_not_performed(self) -> None:
         """正文只增加在另一会话子树时不得 performed。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         after_other = (
             '<hierarchy><node text="合成联系人"><node text="消息" /></node>'
             '<node text="另一联系人"><node text="您好" /></node>'
@@ -365,7 +408,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_contact_handled_or_disabled_slot_does_not_tap(self) -> None:
         """联系方式槽位已处理/不可点击时零 tap。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         handled = (
             '<hierarchy><node text="合成联系人"><node text="微信" clickable="true" />'
             '<node text="请求中" /></node></hierarchy>'
@@ -393,7 +436,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_contact_effect_is_type_specific(self) -> None:
         """另一类型新增请求不算本类型效果，点击后保持 unknown。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         before = (
             '<hierarchy><node text="合成联系人">'
             '<node text="微信" clickable="true" enabled="true" />'
@@ -432,7 +475,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_nested_slot_container_and_button_count_as_one_slot(self) -> None:
         """标签容器→交换按钮→状态视为同一槽位，不因两层含类型词而拒绝。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         before = (
             '<hierarchy><node text="合成联系人">'
             '<node><node text="微信" /><node text="交换微信" clickable="true"'
@@ -470,7 +513,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_other_type_handled_slot_does_not_block_current_type(self) -> None:
         """另一类型已处理不污染本类型未处理槽位的准入与效果。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         before = (
             '<hierarchy><node text="合成联系人">'
             '<node><node text="微信" /><node text="已处理" /></node>'
@@ -510,7 +553,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_dialog_disabled_slot_is_not_confirmed(self) -> None:
         """打开槽位后 dialog 同类型槽位变 disabled 时不再确认点击。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         before = (
             '<hierarchy><node text="合成联系人">'
             '<node text="电话" clickable="true" enabled="true" />'
@@ -547,7 +590,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_row_or_anchor_false_is_not_list_coverage(self) -> None:
         """行/锚点自身 false 或外层列表无覆盖事实都不构成完整列表。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         row_false = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' bounds="[0,0][1000,1800]">'
@@ -598,7 +641,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_incomplete_after_viewport_is_not_performed(self) -> None:
         """删除后只看到可滚动不完整视口时不得判为已删除。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         before = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' scrollable="false" bounds="[0,0][1000,1800]">'
@@ -635,7 +678,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_other_row_or_external_clip_is_not_complete(self) -> None:
         """其它行被列表容器裁剪或整个列表超出外层可见区域都不算完整。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         delete = ActionPlan(
             action_key=f"{CONVERSATION}:delete",
             action_kind="delete_conversation",
@@ -705,7 +748,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_missing_bad_or_zero_bounds_is_not_complete(self) -> None:
         """缺失、坏格式、零面积与自相矛盾 bounds 在不可逆点击前拒绝。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         delete = ActionPlan(
             action_key=f"{CONVERSATION}:delete",
             action_kind="delete_conversation",
@@ -759,7 +802,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_two_same_type_slots_are_ambiguous_and_zero_tap(self) -> None:
         """同一分组两个独立同类型槽位不得上溯合并，两个类型都零点击。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         before = (
             '<hierarchy><node text="合成联系人">'
             '<node><node text="微信" /><node text="交换微信"'
@@ -791,7 +834,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_disabled_after_button_still_proves_new_type_status(self) -> None:
         """动作后按钮禁用但本类型精确新状态仍在同一槽位时证明 request_sent。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         for kind, suffix, marker, button in (
             ("change_wechat", "wechat", "微信", "交换微信"),
             ("change_phone", "phone", "电话", "交换电话"),
@@ -833,7 +876,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_visible_leaf_bad_bounds_blocks_each_phase(self) -> None:
         """行内可见叶节点缺失/坏/零面积 bounds 在三阶段分别拒绝。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         delete = ActionPlan(
             action_key=f"{CONVERSATION}:delete",
             action_kind="delete_conversation",
@@ -926,7 +969,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_outer_clip_or_scroll_blocks_each_phase(self) -> None:
         """更外层祖先裁剪或 scrollable=true 在三阶段分别拒绝。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         delete = ActionPlan(
             action_key=f"{CONVERSATION}:delete",
             action_kind="delete_conversation",
@@ -1009,7 +1052,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_intermediate_inner_clip_blocks_each_phase(self) -> None:
         """列表内中间祖先裁剪在有意义节点链上被三阶段拒绝。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         delete = ActionPlan(
             action_key=f"{CONVERSATION}:delete",
             action_kind="delete_conversation",
@@ -1078,7 +1121,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_content_desc_leaf_missing_bounds_blocks_each_phase(self) -> None:
         """仅有 content-desc 的可见叶节点缺 bounds 在三阶段拒绝。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         delete = ActionPlan(
             action_key=f"{CONVERSATION}:delete",
             action_kind="delete_conversation",
@@ -1161,7 +1204,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_non_target_leaf_inner_scroll_blocks_each_phase(self) -> None:
         """非目标可见叶节点内部中间 ScrollView scrollable=true 三阶段拒绝。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         delete = ActionPlan(
             action_key=f"{CONVERSATION}:delete",
             action_kind="delete_conversation",
@@ -1238,7 +1281,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_complete_list_removal_is_performed(self) -> None:
         """完整列表内目标消失且锚点仍在时为 deleted 正例。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         before = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' scrollable="false" bounds="[0,0][1000,1800]">'
@@ -1275,7 +1318,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_scrollable_viewport_and_single_tap_resume_do_not_tap(self) -> None:
         """可滚动不完整列表与单 tap 简历均在不可逆点击前拒绝。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         scrollable = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' scrollable="true" bounds="[0,0][1000,1800]"><node text="合成联系人">'
@@ -1309,7 +1352,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_identity_failure_does_not_switch_ime(self) -> None:
         """无需改变设备的前置失败不触发 IME 切换。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         duplicate = (
             '<hierarchy><node text="合成联系人"><node text="消息" /></node>'
             '<node text="合成联系人" /></hierarchy>'
@@ -1324,7 +1367,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_failure_after_ime_switch_restores_original(self) -> None:
         """切换后出现可恢复早退时执行有界原 IME 恢复并读回。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         wrong = (
             '<hierarchy><node text="合成联系人"><node text="消息" /></node>'
             '<node class="android.widget.EditText" text="别的" /></hierarchy>'
@@ -1340,7 +1383,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_identity_labels_reject_wrong_job(self) -> None:
         """同名但缺少目标职位标签时前置失败，不点击。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         labeled = replace(plan(), identity_labels=("错误职位",))
         runner, calls = self._custom_run((BEFORE_XML, BEFORE_XML, BEFORE_XML))
         with patch("subprocess.run", side_effect=runner):
@@ -1351,7 +1394,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_delete_requires_target_list_coverage_not_unrelated_button(self) -> None:
         """任意节点 scrollable=false 不能替代目标列表覆盖。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         incomplete = (
             '<hierarchy><node text="无关按钮" scrollable="false" />'
             '<node text="合成联系人"><node text="消息" /></node></hierarchy>'
@@ -1378,7 +1421,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_failure_before_click_does_not_retry(self) -> None:
         """首条命令非零退出即停止，只调用一次并标记未点击。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         runner, calls = self._runner(fail_at=1)
         with patch("subprocess.run", side_effect=runner) as run:
             with self.assertRaises(ActionExecutionError) as caught:
@@ -1392,7 +1435,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_failure_after_irreversible_tap_keeps_clicked(self) -> None:
         """点击后读取失败为 clicked=True，调用方必须收敛 unknown。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         runner, calls = self._runner(fail_at=7)
         with patch("subprocess.run", side_effect=runner) as run:
             with self.assertRaises(ActionExecutionError) as caught:
@@ -1405,7 +1448,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
     def test_ime_switch_and_restore_are_bounded_and_read_back(self) -> None:
         """输入前实际切到目标 IME，恢复后读回原值；失败保持未知。"""
         gate = FakeGate()
-        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
         runner, calls = self._runner()
         with patch("subprocess.run", side_effect=runner):
             observation = executor.execute(plan(ime=True))
@@ -1419,7 +1462,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         """动作 ADB 事件区分 dump/cat/input/tap/IME，不写参数或 serial。"""
         gate = FakeGate()
         log = ProcessLog(path=helpers.ROOT / "data" / "logs" / "m5-adb.jsonl")
-        executor = AdbActionExecutor(
+        executor = _ObservationExecutor(
             serial="<serial>", gate=gate, process_log=log
         )
         runner, _calls = self._runner()
@@ -1462,7 +1505,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
                 raise DeviceGateError("device_not_held")
 
         log = ProcessLog(path=helpers.ROOT / "data" / "logs" / "m5-gate-fail.jsonl")
-        executor = AdbActionExecutor(
+        executor = _ObservationExecutor(
             serial="<serial>", gate=FailingGate(), process_log=log
         )
         with self.assertRaises(ActionExecutionError):
@@ -1486,7 +1529,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         gate = FakeGate()
         with tempfile.TemporaryDirectory() as directory:
             log = ProcessLog(path=Path(directory) / "action-evidence.jsonl")
-            executor = AdbActionExecutor(
+            executor = _ObservationExecutor(
                 serial="<serial>",
                 gate=gate,
                 evidence_dir=Path(directory),
@@ -2250,6 +2293,219 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             ),
         ):
             self.assertEqual(executor.read_current_ime(), "com.example/.Ime")
+
+
+class LedgerBoundaryTests(unittest.TestCase):
+    """执行边界必须在任何 ADB 命令/IME/点击前拒绝缺失或未绑定的命令账本。"""
+
+    def _assert_refused_before_commands(self, executor) -> ActionExecutionError:
+        """断言拒绝发生在零 subprocess/零门禁复核，且不虚构收敛事实。"""
+        with patch("subprocess.run") as run, patch("subprocess.Popen") as popen:
+            with self.assertRaises(ActionExecutionError) as caught:
+                executor.execute(plan())
+        run.assert_not_called()
+        popen.assert_not_called()
+        self.assertEqual(caught.exception.reason_code, "executor_interrupted")
+        self.assertFalse(caught.exception.clicked)
+        self.assertFalse(caught.exception.scene_settled)
+        self.assertFalse(caught.exception.input_box_empty)
+        self.assertFalse(caught.exception.command_quiet)
+        self.assertFalse(caught.exception.ime_restored)
+        return caught.exception
+
+    def test_missing_command_store_rejects_before_any_command(self) -> None:
+        """缺少 command_store 时即使已绑定动作也在零命令处拒绝。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor.bind_action(TEXT_KEY)
+        self._assert_refused_before_commands(executor)
+        self.assertEqual(gate.verified, 0)
+
+    def test_missing_action_binding_rejects_even_with_store(self) -> None:
+        """有账本但从未 bind_action 时同样在零命令处拒绝。"""
+        from app.adapters.adb.command import CommandIdentityStore
+
+        gate = FakeGate()
+        with tempfile.TemporaryDirectory() as directory:
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=gate,
+                command_store=CommandIdentityStore(Path(directory)),
+            )
+            self._assert_refused_before_commands(executor)
+        self.assertEqual(gate.verified, 0)
+
+    def test_mismatched_action_binding_rejects_before_any_command(self) -> None:
+        """绑定到别的动作键时不得把命令记入错误动作族。"""
+        from app.adapters.adb.command import CommandIdentityStore
+
+        gate = FakeGate()
+        with tempfile.TemporaryDirectory() as directory:
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=gate,
+                command_store=CommandIdentityStore(Path(directory)),
+            )
+            executor.bind_action(f"{CONVERSATION}:resume")
+            self._assert_refused_before_commands(executor)
+            self.assertEqual(
+                CommandIdentityStore(Path(directory)).identities(
+                    TEXT_KEY
+                ),
+                [],
+            )
+        self.assertEqual(gate.verified, 0)
+
+    def test_bound_action_ime_read_requires_ledger(self) -> None:
+        """已绑定动作的 IME 预读不得借 reconcile 独立读绕过账本。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        executor.bind_action(TEXT_KEY)
+        with patch("subprocess.run") as run, patch("subprocess.Popen") as popen:
+            with self.assertRaises(ActionExecutionError) as caught:
+                executor.read_current_ime()
+        run.assert_not_called()
+        popen.assert_not_called()
+        self.assertEqual(caught.exception.reason_code, "executor_interrupted")
+        self.assertFalse(caught.exception.clicked)
+        self.assertFalse(caught.exception.command_quiet)
+        self.assertEqual(gate.verified, 0)
+
+    def test_unbound_reconcile_ime_read_stays_allowed(self) -> None:
+        """未绑定动作的 reconcile 维护读取仍可不带账本执行一次。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        with patch(
+            "subprocess.run",
+            return_value=subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="com.example/.Ime\n", stderr=""
+            ),
+        ) as run:
+            self.assertEqual(executor.read_current_ime(), "com.example/.Ime")
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(gate.verified, 1)
+
+    def test_before_index_failure_keeps_clicked_false_and_no_tap(self) -> None:
+        """before 证据索引真实失败时不得固定 clicked=True，也不虚构命令已停。"""
+        import hashlib
+        import tempfile as temp
+
+        gate = FakeGate()
+        with temp.TemporaryDirectory() as directory:
+            root = Path(directory)
+            index_name = (
+                "action-"
+                + hashlib.sha256(TEXT_KEY.encode("utf-8")).hexdigest()[:16]
+                + ".index.jsonl"
+            )
+            (root / index_name).mkdir()
+            executor = _ObservationExecutor(
+                serial="<serial>",
+                gate=gate,
+                evidence_dir=root,
+            )
+            runner, calls = AdbActionPrimitiveTests()._runner()
+            with patch("subprocess.run", side_effect=runner):
+                with self.assertRaises(ActionExecutionError) as caught:
+                    executor.execute(plan())
+        self.assertFalse(caught.exception.clicked)
+        self.assertFalse(caught.exception.scene_settled)
+        self.assertFalse(caught.exception.input_box_empty)
+        self.assertFalse(caught.exception.command_quiet)
+        self.assertFalse(caught.exception.ime_restored)
+        self.assertEqual([c for c in calls if "tap" in c], [])
+        observation = ActionObservation(
+            action_key=TEXT_KEY,
+            action_kind="send_text",
+            **helpers.observation(
+                clicked=False,
+                error="executor_interrupted",
+                command_quiet=False,
+                scene_settled=False,
+                input_box_empty=False,
+            ),
+        )
+        outcome = derive_action_outcome(observation)
+        self.assertEqual(outcome.evidence.outcome, "not_performed")
+        self.assertTrue(outcome.pause)
+
+    def test_after_index_failure_keeps_clicked_true_and_tap_count(self) -> None:
+        """after 证据索引真实失败时保留一次点击事实，调用方必须收敛 unknown。"""
+        import hashlib
+        import tempfile as temp
+
+        gate = FakeGate()
+        with temp.TemporaryDirectory() as directory:
+            root = Path(directory)
+            index_name = (
+                "action-"
+                + hashlib.sha256(TEXT_KEY.encode("utf-8")).hexdigest()[:16]
+                + ".index.jsonl"
+            )
+            index_path = root / index_name
+            runner, calls = AdbActionPrimitiveTests()._runner()
+
+            def run(args: list[str], **kwargs: object):
+                """在 tap 后把索引文件替换为目录，制造 after 阶段真实冲突。"""
+                if "tap" in args:
+                    if index_path.exists():
+                        index_path.unlink()
+                    index_path.mkdir()
+                return runner(args, **kwargs)
+
+            executor = _ObservationExecutor(
+                serial="<serial>",
+                gate=gate,
+                evidence_dir=root,
+            )
+            with patch("subprocess.run", side_effect=run):
+                with self.assertRaises(ActionExecutionError) as caught:
+                    executor.execute(plan())
+            self.assertTrue(index_path.is_dir())
+        self.assertTrue(caught.exception.clicked)
+        self.assertFalse(caught.exception.command_quiet)
+        self.assertEqual(len([c for c in calls if "tap" in c]), 1)
+
+
+    def test_readback_index_failure_keeps_input_and_quiet_unset(self) -> None:
+        """readback 索引失败保留已输入事实，不按 idle 推断输入为空或命令已停。"""
+        import hashlib
+        import tempfile as temp
+
+        gate = FakeGate()
+        with temp.TemporaryDirectory() as directory:
+            root = Path(directory)
+            index_name = (
+                "action-"
+                + hashlib.sha256(TEXT_KEY.encode("utf-8")).hexdigest()[:16]
+                + ".index.jsonl"
+            )
+            index_path = root / index_name
+            runner, calls = AdbActionPrimitiveTests()._runner()
+
+            def run(args: list[str], **kwargs: object):
+                """在 input text 后把索引文件替换为目录，制造 readback 真实冲突。"""
+                if "input" in args and "text" in args:
+                    if index_path.exists():
+                        index_path.unlink()
+                    index_path.mkdir()
+                return runner(args, **kwargs)
+
+            executor = _ObservationExecutor(
+                serial="<serial>",
+                gate=gate,
+                evidence_dir=root,
+            )
+            with patch("subprocess.run", side_effect=run):
+                with self.assertRaises(ActionExecutionError) as caught:
+                    executor.execute(plan())
+            self.assertTrue(index_path.is_dir())
+        self.assertFalse(caught.exception.clicked)
+        self.assertFalse(caught.exception.scene_settled)
+        self.assertFalse(caught.exception.input_box_empty)
+        self.assertFalse(caught.exception.command_quiet)
+        self.assertEqual(len([c for c in calls if "text" in c]), 1)
+        self.assertEqual([c for c in calls if "tap" in c], [])
 
 
 class ScriptedExecutorTests(unittest.TestCase):

@@ -1073,7 +1073,7 @@ class ProfileMigrationTests(unittest.TestCase):
         """只清理本用例临时根。"""
         self.tmp.cleanup()
 
-    def _create_v1(self, path: Path) -> None:
+    def _create_v1(self, path: Path, profile_id: str = "demo") -> None:
         """按 v1 对象集与 meta 行创建严格旧 profile 库并写入事实/任务。"""
         path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(str(path))
@@ -1085,8 +1085,8 @@ class ProfileMigrationTests(unittest.TestCase):
                 connection.execute(sql)
             connection.execute(
                 "INSERT INTO profile_meta(singleton, profile_id, schema_version, created_at) "
-                "VALUES (1, 'demo', 1, ?)",
-                (NOW,),
+                "VALUES (1, ?, 1, ?)",
+                (profile_id, NOW),
             )
             connection.execute(
                 "INSERT INTO profile_facts(fact_key, source_id, value, state, "
@@ -1103,11 +1103,16 @@ class ProfileMigrationTests(unittest.TestCase):
         """迁移先备份、后单事务加三表并保留事实；失败不污染原库。"""
         path = profile_runtime_path(self.root, "demo")
         self._create_v1(path)
+        existing = path.parent / "runtime.sqlite3.v1-backup-existing.sqlite3"
+        existing.write_bytes(b"sentinel")
         backup = initialize_profile_database(path, "demo", now=NOW)
         self.assertIsNotNone(backup)
         backups = list(path.parent.glob("runtime.sqlite3.v1-backup-*.sqlite3"))
-        self.assertEqual(len(backups), 1)
-        connection = sqlite3.connect(str(backups[0]))
+        self.assertEqual(len(backups), 2)
+        self.assertEqual(existing.read_bytes(), b"sentinel")
+        new_backups = [item for item in backups if item != existing]
+        self.assertEqual(len(new_backups), 1)
+        connection = sqlite3.connect(str(new_backups[0]))
         try:
             self.assertEqual(
                 connection.execute("PRAGMA user_version").fetchone()[0], 1
@@ -1169,6 +1174,59 @@ class ProfileMigrationTests(unittest.TestCase):
             )
         finally:
             connection.close()
+
+    def test_wrong_profile_v1_is_rejected_before_any_backup(self) -> None:
+        """错 profile 身份的 v1 库拒绝时不生成含异 profile 内容的备份。"""
+        path = profile_runtime_path(self.root, "wrong")
+        self._create_v1(path, profile_id="other")
+        before_files = sorted(item.name for item in path.parent.iterdir())
+        with self.assertRaises(Exception) as caught:
+            initialize_profile_database(path, "wrong", now=NOW)
+        self.assertEqual(caught.exception.reason_code, "profile_mismatch")
+        self.assertEqual(
+            sorted(item.name for item in path.parent.iterdir()), before_files
+        )
+        self.assertEqual(
+            list(path.parent.glob("*.v1-backup-*.sqlite3")), []
+        )
+        connection = sqlite3.connect(str(path))
+        try:
+            self.assertEqual(
+                connection.execute("PRAGMA user_version").fetchone()[0], 1
+            )
+            self.assertEqual(
+                connection.execute("SELECT profile_id FROM profile_meta").fetchone()[
+                    0
+                ],
+                "other",
+            )
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM profile_facts").fetchone()[0],
+                1,
+            )
+            names = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'"
+                )
+            }
+            self.assertNotIn("action_records", names)
+        finally:
+            connection.close()
+
+    def test_corrupt_profile_is_rejected_without_backup_or_rewrite(self) -> None:
+        """坏库拒绝时不创建备份，原文件字节保持不变。"""
+        path = profile_runtime_path(self.root, "demo")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = b"not a sqlite database"
+        path.write_bytes(payload)
+        with self.assertRaises(Exception) as caught:
+            initialize_profile_database(path, "demo", now=NOW)
+        self.assertEqual(caught.exception.reason_code, "profile_io_error")
+        self.assertEqual(path.read_bytes(), payload)
+        self.assertEqual(
+            list(path.parent.glob("*.v1-backup-*.sqlite3")), []
+        )
 
 
 if __name__ == "__main__":

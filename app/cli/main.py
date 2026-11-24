@@ -603,7 +603,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "reconcile",
         allow_abbrev=False,
         help="人工确认已执行/未执行或放弃任务。",
-        description="确认需本轮显式确认、原命令停止与现场/IME 收敛；abandon 不解锁。",
+        description="会写业务终态，只允许 draft_only；确认需本轮显式确认、原命令停止与现场/IME 收敛；abandon 不解锁。",
     )
     action_reconcile.add_argument(
         "--profile", action=_UniqueStore, required=True, metavar="<profile_id>"
@@ -1682,6 +1682,10 @@ def _run_action(
         if operation == "card":
             result = _action_card(args, log)
             return _action_success(log, started, stage_started, result, operation)
+        # 对账会写业务终态，固定只允许 draft_only；read_only 必须在打开/迁移
+        # profile、取得/恢复共享门禁、读取设备或写状态之前拒绝。
+        if operation == "reconcile" and args.mode != "draft_only":
+            raise ActionError("authorization_required")
         if operation not in {"perform", "eligibility", "reconcile"}:
             raise ActionError("invalid_action")
 

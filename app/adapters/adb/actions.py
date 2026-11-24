@@ -64,6 +64,7 @@ class AdbActionExecutor:
         self._current_action_key: str | None = None
         self._current_command_label: str | None = None
         self._family_unproven = False
+        self._executing = False
         self._screen = screen_reader or AdbScreenReader(
             evidence_dir=self._evidence_dir,
             adb=adb,
@@ -81,7 +82,22 @@ class AdbActionExecutor:
     def read_current_ime(
         self, *, before_command: Callable[[], None] | None = None
     ) -> str:
-        """读取当前输入法标识；失败不重试并归为断连。"""
+        """读取当前输入法标识；失败不重试并归为断连。
+
+        该读取是 reconcile 维护路径的合法独立用途，可不绑定动作或命令账本；
+        `execute` 不因此获得绕过账本的能力，动作命令仍必须已绑定账本。一旦
+        动作上下文已绑定（生产用例在动作预读前绑定），IME 预读同样要求账本，
+        在零设备命令处拒绝。
+        """
+        if self._current_action_key is not None and self._command_store is None:
+            raise ActionExecutionError(
+                "executor_interrupted",
+                clicked=False,
+                scene_settled=False,
+                input_box_empty=False,
+                command_quiet=False,
+                ime_restored=False,
+            )
         text = self._run(
             [
                 self._adb,
@@ -116,10 +132,38 @@ class AdbActionExecutor:
         *,
         before_command: Callable[[], None] | None = None,
     ) -> ActionObservation:
-        """先验证动作前置，再执行一次；只接受动作目标对应的前后新增变化。"""
-        if self._current_action_key != plan.action_key:
-            self._family_unproven = False
-        self._current_action_key = plan.action_key
+        """要求已绑定动作与唯一命令账本后执行一次；边界拒绝时零设备命令。
+
+        缺少 `command_store`、从未 `bind_action`、或绑定到别的动作键都在任何
+        ADB 子进程/IME 切换/点击之前拒绝，不把 `command_quiet` 事后置假。
+        """
+        if (
+            not isinstance(plan, ActionPlan)
+            or self._command_store is None
+            or self._current_action_key is None
+            or self._current_action_key != plan.action_key
+        ):
+            raise ActionExecutionError(
+                "executor_interrupted",
+                clicked=False,
+                scene_settled=False,
+                input_box_empty=False,
+                command_quiet=False,
+                ime_restored=False,
+            )
+        self._executing = True
+        try:
+            return self._execute_verified(plan, before_command=before_command)
+        finally:
+            self._executing = False
+
+    def _execute_verified(
+        self,
+        plan: ActionPlan,
+        *,
+        before_command: Callable[[], None] | None,
+    ) -> ActionObservation:
+        """账本校验通过后先验证动作前置，再执行一次；不自动重试。"""
         before_xml = self._read_hierarchy(
             plan.action_key,
             phase="before",
@@ -181,12 +225,14 @@ class AdbActionExecutor:
                     plan.ime_original, before_command=before_command
                 )
                 reason_code = getattr(error, "reason_code", "device_disconnected")
+                # 输入/回读异常不能推断场景已稳定或命令族已停；保留底层
+                # 可证明事实，输入框可能已有内容一律保守为非空。
                 raise ActionExecutionError(
                     reason_code,
                     clicked=False,
-                    scene_settled=True,
+                    scene_settled=getattr(error, "scene_settled", False),
                     input_box_empty=False,
-                    command_quiet=True,
+                    command_quiet=getattr(error, "command_quiet", False),
                     ime_restored=(
                         plan.ime_original is None
                         or restored == plan.ime_original
@@ -688,6 +734,7 @@ class AdbActionExecutor:
             capture.xml_text,
             capture.evidence_name,
             capture.byte_size,
+            clicked=clicked,
         )
         return capture.xml_text
 
@@ -702,6 +749,12 @@ class AdbActionExecutor:
     ) -> str:
         """每条命令前重核条件，单次有界执行；失败立即停止且不重发。"""
         started = time.perf_counter()
+        if self._executing and (
+            self._command_store is None or self._current_action_key is None
+        ):
+            raise ActionExecutionError(
+                "executor_interrupted", clicked=clicked, **_phase_flags(phase)
+            )
         self._current_command_label = command
         self._record(command, "started", 0)
         try:
@@ -840,8 +893,15 @@ class AdbActionExecutor:
         xml_text: str,
         evidence_name: str,
         byte_size: int,
+        *,
+        clicked: bool,
     ) -> None:
-        """只追加动作相位到内容 UUID/采集证据名的本机索引，不重复保存 XML。"""
+        """只追加动作相位到内容 UUID/采集证据名的本机索引，不重复保存 XML。
+
+        索引写失败保留真实点击事实与阶段现场：before/readback/dialog 未发生
+        不可逆 tap 时不得固定 clicked=True；命令在途事实不得按阶段当作已停。
+        点击后仍为 unknown 且由调用方保留隔离，不重试。
+        """
         if self._evidence_dir is None:
             return
         index_name = (
@@ -870,7 +930,9 @@ class AdbActionExecutor:
                 )
         except OSError:
             raise ActionExecutionError(
-                "executor_interrupted", clicked=True
+                "executor_interrupted",
+                clicked=clicked,
+                **_evidence_index_failure_flags(phase, clicked),
             ) from None
 
     def _record(self, command: str, result: str, duration_ms: int) -> None:
@@ -1233,6 +1295,18 @@ def _phase_flags(phase: str) -> dict[str, bool]:
         "command_quiet": False,
         "ime_restored": phase == "idle",
     }
+
+
+def _evidence_index_failure_flags(phase: str, clicked: bool) -> dict[str, bool]:
+    """证据索引失败只保留真实点击事实，不按尚未不可逆的点击推断收敛。
+
+    readback 发生在 `input text` 之后，不能按 idle 推断输入为空或 IME 已恢复；
+    before/readback/dialog 也都不能证明在途命令族已停，因此统一采用 input 阶段
+    的保守标志（全部 False）。已点击时按 clicked 阶段全部保守。
+    """
+    if phase not in {"before", "readback", "dialog", "after"}:
+        raise ValueError("phase is invalid")
+    return _phase_flags("clicked" if clicked else "input")
 
 
 def _escape_input_text(value: str) -> str:

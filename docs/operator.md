@@ -308,7 +308,7 @@ python -m app facts forget --profile demo --key work_location --confirm
 - 只接受 `work_location`、`salary_expectation`、`years_experience` 三个注册键；值 1–200 个单行字符，拒绝控制字符、孤立代理和联系方式模式。值只在本机 CLI stdout、本机 profile 库与 `select_profile_facts` 的请求内存中；不写策略包、过程日志、公开报告或错误文本。`--value` 仍会作为本机命令行参数出现，可能进入本机 shell 历史或进程列表；请在本机受控环境运行，程序不把它写入其它产物。
 - `set` 未带 `--confirm` 只返回 `confirmation_required` 提案，不写事实；确认后由程序生成来源 ID、记录确认时间并**再次从库中重读显示**该值。同键多个 active 来源不按较新时间自动择一，`show --pack` 将其列为 `conflict` 待办；显式 `--replace` 才把旧来源置 `superseded` 并写入新来源。
 - 有效期为空或晚于当前 UTC；到期、缺失、冲突分别转 `expired/missing/conflict` 待办，不进入 envelope 的 `allowed_facts`。`revoke` 只把当前 active 来源置 `revoked`，保留历史；`forget` 删除当前事实行并只保留来源 ID/无值审计事件，且明确 `secure_erase_claimed=false`：SQLite WAL 页面和既有本机备份不能因此宣称已安全擦除。
-- 事实与 profile 元数据绑定 `data/runtime/profiles/<profile_id>/runtime.sqlite3`；M5 的额度/冷却/动作历史绑定同一库的结构版本 2（`action_records/action_events/action_ime_state`），首次从严格 v1 库迁移时先写不覆盖备份再单事务追加。不同 profile 不复制；旧 `data/runtime/runtime.sqlite3` 不自动导入，普通 M1 v1 五表结构不改、不宽放。带 `--pack` 时 pack.profile_id 必须等于 `--profile`，否则 `profile_mismatch`；profile 路径存在但为目录/非普通文件时 `profile_io_error`，不返回空事实冒充成功。
+- 事实与 profile 元数据绑定 `data/runtime/profiles/<profile_id>/runtime.sqlite3`；M5 的额度/冷却/动作历史绑定同一库的结构版本 2（`action_records/action_events/action_ime_state`），首次从严格 v1 库迁移时先核验完整 DDL 与 profile 身份，再写不覆盖备份并单事务追加。不同 profile 不复制；错 profile、坏库与旧 `data/runtime/runtime.sqlite3` 不自动导入，普通 M1 v1 五表结构不改、不宽放。带 `--pack` 时 pack.profile_id 必须等于 `--profile`，否则 `profile_mismatch`；profile 路径存在但为目录/非普通文件时 `profile_io_error`，不返回空事实冒充成功。
 - 合法 profile 库在完整 profile schema/绑定校验后可由唯一 `SqliteStore` 复用 M1 任务能力；普通 M1 库仍走精确五表验证，不放宽旧库。profile 模式写入前还核对 `UnreadSnapshot.profile_id` 必须等于本库绑定，另一 profile 的合法快照固定 `invalid_input`，所有表/事件不变。
 - `ProfileSessionLease` 保存取得时 `Lease/Owner/nonce`；每次读取比较 store.profile_id/path、门禁 `session_identity` 的 profile/原库/owner/自身 nonce，并用 `validate_lease` 后按 app/key/nonce 选择同一任务，重核任务/设备两行 owner/pid/host/nonce 与取得时 Lease 一致及未过期。跨 profile、另一 clone 路径、复制库且参数也指向副本、门禁 owner 不符、门禁 nonce 桥前/桥中变化、错误任务 key/app 或任务两行 owner 同步变化均不返回租约；`decide` 桥前/桥后 `stale_decision` 拒绝且不重发。
 - 临时偏好只属于本轮运行上下文，不写入长期事实；M4c 没有运行上下文入口，因此不提供“临时值改长期库”的按钮。
@@ -343,7 +343,7 @@ python -m app run check --pack prompts/local/demo --mode draft_only --confirm-de
 python -m app run check --pack prompts/local/demo --mode auto_send_tier_a --confirm-device
 ```
 
-- `run check` 只做预检：不探测设备、不调用模型、不执行 M5 动作、不写动作表。成功输出 `preflight_only=true`、`actions_performed=0`、`decisions=0` 与 `m5_actions_not_implemented`/`m8_run_not_implemented` 限制，**不**表示完整运行或发送授权。
+- `run check` 只做预检：不探测设备、不调用模型、不执行 M5 动作、不写动作表。成功输出 `preflight_only=true`、`actions_performed=0`、`decisions=0` 与 `real_device_action_entry_not_delivered`/`m6_scheduling_not_implemented`/`m8_run_not_implemented`/`device_probe_not_run` 限制，**不**表示完整运行、真实设备动作入口或发送授权。
 - read_only 只要求本轮 `--confirm-device`；draft_only 另要求当前验收且 provider/model/model_config_hash 齐全；`auto_send_tier_a` 在 v1 缺独立前置判据且固定 `policy_tier=C` 时始终 `authorization_required`。
 - 预检先取得共享占用，再打开 profile 库；profile 库坏、绑定不符或存在 leased/running/blocked 未决时保留共享占用并置 `quarantined`，不补偿为设备空闲。正常预检结束才释放。门禁与 profile 打开步骤都有配对日志。
 - 实际 CLI 受控合成桥 eval→snapshot→restore→validate/preview→eval 串行闭环已验证：快照/恢复/验证与两次报告 pack_hash 一致，同 profile 既有事实与任务审计不变；模拟/真实 provider 外发边界不变。
@@ -373,7 +373,9 @@ python -m app action reconcile --profile demo --pack prompts/local/demo --mode d
 
 - `perform` 只接受 `draft_only`，且必须 `--confirm-device`、`--confirm-action` 与至少一个 `--authorize`；每次授权只覆盖列出的动作类型，文本授权不能覆盖附件、联系方式或删除。执行前及每条设备命令/提交前再复核实际 store/profile/原库、running 租约、共享门禁身份与当前 base/pack/验收；动作键必须由同一 `action_key_for` 与实际消息/会话目标一致，任一不符不写 pending、不调用执行器。
 - 五动作前置在不可逆点击前独立验证：文本要求唯一会话身份与 EditText 正文回读；简历要求附件名在确认框匹配；微信/电话要求槽位可用；删除要求唯一姓名+职位、列表完整、保护项为空且目标存在。动作后只接受目标节点的新增差分：文本新增回显、简历新增请求/交付行、联系方式新增“请求中”、删除目标消失且锚点仍在；既有提示、坏 XML、同内容快照或无关变化都不证明 performed。
-- `--seed-fixture` 只读合成 M2 未读夹具并向当前 profile 库 upsert；`--fixture` 只作为 `ScriptedActionExecutor` 的合成观察/失败脚本，不接受 `outcome/effect` 等 Evidence 字段。真实 ADB 动作原语只存在于适配器并由 mock subprocess 测试，CLI 不提供真实设备动作入口。
+- `--seed-fixture` 只读合成 M2 未读夹具并向当前 profile 库 upsert；`--fixture` 只作为 `ScriptedActionExecutor` 的合成观察/失败脚本，不接受 `outcome/effect` 等 Evidence 字段。真实 ADB 动作原语只存在于适配器并由 mock subprocess 测试，CLI 不提供真实设备动作入口。真实 `AdbActionExecutor.execute` 必须已 `bind_action` 且提供非空命令账本，缺失/未绑定/错绑定在任何 ADB 命令前拒绝；`read_current_ime` 只保留为 reconcile 维护读取的合法无账本用途，动作上下文绑定后的 IME 预读同样要求账本。
+- `action reconcile` 会写业务终态，固定只允许 `draft_only`；`read_only` 在打开/迁移 profile、取得/恢复共享门禁、读取设备或写状态前返回 `authorization_required`。只读 `action card` 不受模式限制，confirm/abandon 授权不因此扩大。
+- 证据索引写失败保留真实点击事实：before/readback/dialog 阶段未发生不可逆 tap 时 `clicked=false`；readback 已发生输入，不按 idle 推断输入为空/IME 已恢复，也不把在途命令事实当作已停。点击后索引失败仍为 unknown 且不重试。
 - 文本额度/冷却是唯一持久化护栏：UTC 日期内跨 app 合计 performed+sent 文本；按 profile/app/会话冷却；任一文本 pending/unknown 阻断新发送。额度检查与本次 pending/键锁在同一事务。换包、restore、重启或调低额度不清零历史；未决文本、附件 `sent`/`request_sent`、`not_performed` 不充当成功文本；同一动作键已有记录时资格返回 `action_conflict`/`text_send_blocked`。
 - 证据：`performed` 必须前后快照非空且不同（真实适配器由层级内容派生快照身份），并由动作特有变化证明。未点击/点击前断连为 `not_performed`；点击后断连/异常/坏观察为 `unknown`。输入框不空、确认框仍开、IME 未恢复或在途命令未退出时，即使已证明未点击也保持 pending 与共享隔离。
 - `pending/unknown/cancelled` 生成固定人工卡 `{task_id,action_key,reason_code,snapshot_ids,allowed_resolutions}`，处置固定 `confirm_performed/confirm_not_performed/abandon`。confirm 需本轮显式确认、当前证据、原 host、原父子命令停止检查器与现场/IME 收敛；成功文本 `confirm_performed` 只计一次额度。`abandon` 只把任务置 cancelled，动作锁与共享/profile 设备隔离保留；之后仍可对 cancelled 动作受控 confirm 清锁，但不重开任务。
@@ -386,6 +388,7 @@ python -m app action reconcile --profile demo --pack prompts/local/demo --mode d
 - 第7轮返修补充：列表覆盖对容器内所有有可见意义的后代强制可解析 bounds，并逐层核验全部祖先的 bounds 与滚动事实（不再遇首个合法祖先即停止）。命令族在 Popen 前先建 Job，进程以 `CREATE_SUSPENDED` 启动、加入 Job 后恢复主线程，权限为 `PROCESS_SET_QUOTA|PROCESS_TERMINATE`；任一命令未证明族停止时公开观察 `command_quiet=false`，保留已证动作效果但不报 `gate_converged`、不释放共享占用，生成人工卡；本机自有合成 Python 子孙的真实 Job 正常停止正例单独验证。
 - 第8轮返修补充：列表覆盖把 `content-desc` 计入可见意义，并按每个有意义节点的真实祖先链逐层核验中间/外层裁剪与 `scrollable` 事实；命令边界在 Popen 前先写账本未闭合事实，assign 失败不恢复执行，assign/resume/首次 PID/二次超时/wait 再超时/OSError 统一走有界 finally 并终止/关闭专属 Job；finish 写失败与空 IME 早退都保持 `command_quiet=false`，未证明全停时动作记录 unknown、任务暂停、profile/共享隔离与人工卡一致保留，已证效果不改写。
 - 第9轮返修补充：唯一账本闭合步骤在真实 complete 写失败时记录 `stage=action/operation=action_finish_command` 的 started→failed 固定安全终态（`reason_code=store_io_error`、`error_category=store`），可由同一 ProcessLog/correlation 关联，不写异常原文、参数、现场或绝对路径；公开仍保持 unknown/隔离、已证效果与人工卡。
+- 第10轮返修补充：真实 ADB `execute` 在无账本、未绑定动作或绑定不一致时零命令拒绝，生产用例无账本只会 pending/blocked/隔离；证据索引失败按真实点击与阶段保守收敛；v1→v2 备份前核验完整 DDL 与 profile 身份，错 profile/坏库零备份；`reconcile` 固定 `draft_only`；`run check` 的 limitations 改为真实设备入口/M6 调度/M8 run 未交付，不再声称 M5 动作未实现。
 
 ## 八、显式真实设备模式
 只有同时给出 `--device`、`--serial` 与 `--confirm-device` 才启用真实探针：

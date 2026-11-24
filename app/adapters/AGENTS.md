@@ -24,7 +24,7 @@
 - 文件适配器只读写项目内 `prompts/`、固定 preview、公开/私有套件与被忽略的 `data/evals`，保留原始换行，拒绝越界/链接/BOM/NUL/大小越界；暂存路径不被活动包发现器接纳，发布不覆盖，清理只限本次自有路径。`list` 对链接/junction 候选保留相对路径并标 `valid=false`，不跟随；活动包与快照读取复用同一路径形状和指南读取核心。
 - M4b 桥适配器只用显式参数数组、`shell=False`、20 秒超时与有界 stdout；固定 system/developer/user 三角色、无工具无历史，拒绝角色声明不符/坏 JSON/坏编码/超大输出；不重试、不读凭据、不写正文。桥自报角色/工具/历史只是协议声明，不代表第三方 provider 实际能力。
 - M4c profile 库只按固定 profile 路径读写事实/元数据/审计并只读现有 M1 状态，不跨 profile 复制；共享门禁固定 Windows `LOCALAPPDATA` 唯一 primary，acquire/verify/release 比较完整 owner/profile 身份，未知版本/额外对象不改写，不做 TTL/PID 自动解锁，路径不写日志/报告；活动检查不释放占用、不改库，M5 起把 `pending/unknown/cancelled` 动作也视为未决。`recover` 只用于原 profile/原库的显式受控接管，要求原 PID 已停止。
-- M5 ADB 动作适配器只在显式设备入口使用参数数组、`shell=False`、5 秒超时、每条命令前门禁复核与单次 attempt；不重发原命令，不把 captured 输出写入日志。当前 CLI 不暴露真实动作入口，测试只 mock subprocess。
+- M5 ADB 动作适配器只在显式设备入口使用参数数组、`shell=False`、5 秒超时、每条命令前门禁复核与单次 attempt；不重发原命令，不把 captured 输出写入日志。`execute` 要求已绑定动作与非空命令账本，缺失/未绑定/错绑定在任何子进程前拒绝；动作绑定后的 IME 预读同样要求账本，未绑定动作的 `read_current_ime` 仅服务 reconcile 维护读取。当前 CLI 不暴露真实动作入口，测试只 mock subprocess 或用本机合成子进程验证账本/Job。
 - `simulated/` 只服务 M5 离线 CLI/测试；不接受 Evidence 字段，不替代真实设备。
 - ADB 命令过程日志只用固定 `adb_devices`/`adb_window`/`adb_hierarchy_dump`/`adb_hierarchy_cat`/`adb_screencap`、固定错误类别和耗时；SQLite 只记 `store` 阶段与固定错误码，不写 serial、窗口原文、SQL 参数、绝对路径或异常；BOSS 解析不写 XML、身份、正文、像素、原始稳定 ID 或夹具路径；文件适配器不写文件内容或绝对路径；桥适配器不写 argv、端点或凭据。
 - 不预建猎聘等未实现适配器目录；M4b 桥只服务单次决策评测/运行绑定预留，不提供发送、设备或事实写入。
