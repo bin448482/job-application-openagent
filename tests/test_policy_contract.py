@@ -840,6 +840,21 @@ class ReplyValidationTests(unittest.TestCase):
         self.complete("期望薪资 20000", allowed_facts=salary_yuan)
         with self.assertRaises(ReplyError):
             self.complete("期望薪资 30000", allowed_facts=salary_yuan)
+        self.complete("我有3个问题想了解", allowed_facts=[])
+        with self.assertRaises(ReplyError):
+            self.complete("我有3亿年经验", allowed_facts=years)
+        salary_unitless = [
+            {
+                "key": "salary_expectation",
+                "value": "30",
+                "source": "user_confirmed",
+                "expires_at": None,
+            }
+        ]
+        with self.assertRaises(ReplyError):
+            self.complete("期望月薪30亿美元", allowed_facts=salary_unitless)
+        with self.assertRaises(ReplyError):
+            self.complete("我有3年半经验", allowed_facts=years)
 
     def test_control_and_lone_surrogate_rejected(self) -> None:
         """验证 CR、TAB、其它控制字符与孤立代理被拒绝。"""
