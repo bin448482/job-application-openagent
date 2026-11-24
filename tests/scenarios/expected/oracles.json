@@ -6143,6 +6143,18 @@
               {
                 "equals": true,
                 "path": "apply_confirmed"
+              },
+              {
+                "equals": 0,
+                "path": "after_revoke_count"
+              },
+              {
+                "equals": 0,
+                "path": "raw_fact_rows_after_forget"
+              },
+              {
+                "equals": 3,
+                "path": "raw_fact_events_after_forget"
               }
             ]
           }
@@ -6151,7 +6163,8 @@
       "assertions": [
         "提案无值写入",
         "显式 apply 后才可见",
-        "值不出现在输出"
+        "值不出现在输出",
+        "forget 后真实事实行删除"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -7664,8 +7677,48 @@
                     "path": "outcome"
                   },
                   {
-                    "equals": "00000000-0000-4000-8000-000000000081",
+                    "in": [
+                      "00000000-0000-4000-8000-000000000081",
+                      "00000000-0000-4000-8000-000000000082"
+                    ],
+                    "path": "owner_id"
+                  },
+                  {
+                    "in": [
+                      1,
+                      2
+                    ],
+                    "path": "owner_pid"
+                  },
+                  {
+                    "path": "owner_host",
+                    "pattern": "[0-9a-f]{64}"
+                  },
+                  {
+                    "path": "profile_path_token",
+                    "pattern": "[0-9a-f]{64}"
+                  },
+                  {
+                    "in": [
+                      "00000000-0000-4000-8000-000000000081",
+                      "00000000-0000-4000-8000-000000000082"
+                    ],
                     "path": "shared_owner_id"
+                  },
+                  {
+                    "in": [
+                      1,
+                      2
+                    ],
+                    "path": "shared_owner_pid"
+                  },
+                  {
+                    "path": "shared_owner_host",
+                    "pattern": "[0-9a-f]{64}"
+                  },
+                  {
+                    "path": "shared_nonce",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
                   },
                   {
                     "in": [
@@ -7673,6 +7726,10 @@
                       "synthetic-beta"
                     ],
                     "path": "shared_profile_id"
+                  },
+                  {
+                    "path": "shared_profile_path_token",
+                    "pattern": "[0-9a-f]{64}"
                   },
                   {
                     "equals": "held",
@@ -7695,8 +7752,48 @@
                     "path": "outcome"
                   },
                   {
-                    "equals": "00000000-0000-4000-8000-000000000081",
+                    "in": [
+                      "00000000-0000-4000-8000-000000000081",
+                      "00000000-0000-4000-8000-000000000082"
+                    ],
+                    "path": "owner_id"
+                  },
+                  {
+                    "in": [
+                      1,
+                      2
+                    ],
+                    "path": "owner_pid"
+                  },
+                  {
+                    "path": "owner_host",
+                    "pattern": "[0-9a-f]{64}"
+                  },
+                  {
+                    "path": "profile_path_token",
+                    "pattern": "[0-9a-f]{64}"
+                  },
+                  {
+                    "in": [
+                      "00000000-0000-4000-8000-000000000081",
+                      "00000000-0000-4000-8000-000000000082"
+                    ],
                     "path": "shared_owner_id"
+                  },
+                  {
+                    "in": [
+                      1,
+                      2
+                    ],
+                    "path": "shared_owner_pid"
+                  },
+                  {
+                    "path": "shared_owner_host",
+                    "pattern": "[0-9a-f]{64}"
+                  },
+                  {
+                    "path": "shared_nonce",
+                    "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
                   },
                   {
                     "in": [
@@ -7706,12 +7803,82 @@
                     "path": "shared_profile_id"
                   },
                   {
+                    "path": "shared_profile_path_token",
+                    "pattern": "[0-9a-f]{64}"
+                  },
+                  {
                     "equals": "held",
                     "path": "shared_state"
                   }
                 ]
               }
             ],
+            "children_relation": {
+              "loser_paths": [
+                {
+                  "equals": false,
+                  "path": "shared_owner_matches_self"
+                },
+                {
+                  "equals": false,
+                  "path": "shared_nonce_matches_session"
+                },
+                {
+                  "equals": false,
+                  "path": "shared_profile_matches_self"
+                },
+                {
+                  "equals": "held",
+                  "path": "shared_state"
+                }
+              ],
+              "loser_value": "busy",
+              "pairs": [
+                {
+                  "loser": "shared_owner_id",
+                  "winner": "owner_id"
+                },
+                {
+                  "loser": "shared_owner_pid",
+                  "winner": "owner_pid"
+                },
+                {
+                  "loser": "shared_owner_host",
+                  "winner": "owner_host"
+                },
+                {
+                  "loser": "shared_nonce",
+                  "winner": "session_nonce"
+                },
+                {
+                  "loser": "shared_profile_id",
+                  "winner": "profile_id"
+                },
+                {
+                  "loser": "shared_profile_path_token",
+                  "winner": "profile_path_token"
+                },
+                {
+                  "loser": "shared_state",
+                  "winner": "shared_state"
+                }
+              ],
+              "winner_paths": [
+                {
+                  "equals": true,
+                  "path": "shared_owner_matches_self"
+                },
+                {
+                  "equals": true,
+                  "path": "shared_nonce_matches_session"
+                },
+                {
+                  "equals": true,
+                  "path": "shared_profile_matches_self"
+                }
+              ],
+              "winner_value": "held"
+            },
             "outcome_counts": {
               "busy": 1,
               "held": 1

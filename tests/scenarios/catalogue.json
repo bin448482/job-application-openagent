@@ -21575,7 +21575,8 @@
           "assertions": [
             "提案无值写入",
             "显式 apply 后才可见",
-            "值不出现在输出"
+            "值不出现在输出",
+            "forget 后真实事实行删除"
           ],
           "acceptance": {
             "steps": [
@@ -21597,6 +21598,18 @@
                   {
                     "path": "apply_confirmed",
                     "equals": true
+                  },
+                  {
+                    "path": "after_revoke_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "raw_fact_rows_after_forget",
+                    "equals": 0
+                  },
+                  {
+                    "path": "raw_fact_events_after_forget",
+                    "equals": 3
                   }
                 ]
               }
@@ -22811,8 +22824,48 @@
                         ]
                       },
                       {
+                        "path": "owner_id",
+                        "in": [
+                          "00000000-0000-4000-8000-000000000081",
+                          "00000000-0000-4000-8000-000000000082"
+                        ]
+                      },
+                      {
+                        "path": "owner_pid",
+                        "in": [
+                          1,
+                          2
+                        ]
+                      },
+                      {
+                        "path": "owner_host",
+                        "pattern": "[0-9a-f]{64}"
+                      },
+                      {
+                        "path": "profile_path_token",
+                        "pattern": "[0-9a-f]{64}"
+                      },
+                      {
                         "path": "shared_owner_id",
-                        "equals": "00000000-0000-4000-8000-000000000081"
+                        "in": [
+                          "00000000-0000-4000-8000-000000000081",
+                          "00000000-0000-4000-8000-000000000082"
+                        ]
+                      },
+                      {
+                        "path": "shared_owner_pid",
+                        "in": [
+                          1,
+                          2
+                        ]
+                      },
+                      {
+                        "path": "shared_owner_host",
+                        "pattern": "[0-9a-f]{64}"
+                      },
+                      {
+                        "path": "shared_nonce",
+                        "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
                       },
                       {
                         "path": "shared_profile_id",
@@ -22820,6 +22873,10 @@
                           "synthetic-alpha",
                           "synthetic-beta"
                         ]
+                      },
+                      {
+                        "path": "shared_profile_path_token",
+                        "pattern": "[0-9a-f]{64}"
                       },
                       {
                         "path": "shared_state",
@@ -22842,8 +22899,48 @@
                         ]
                       },
                       {
+                        "path": "owner_id",
+                        "in": [
+                          "00000000-0000-4000-8000-000000000081",
+                          "00000000-0000-4000-8000-000000000082"
+                        ]
+                      },
+                      {
+                        "path": "owner_pid",
+                        "in": [
+                          1,
+                          2
+                        ]
+                      },
+                      {
+                        "path": "owner_host",
+                        "pattern": "[0-9a-f]{64}"
+                      },
+                      {
+                        "path": "profile_path_token",
+                        "pattern": "[0-9a-f]{64}"
+                      },
+                      {
                         "path": "shared_owner_id",
-                        "equals": "00000000-0000-4000-8000-000000000081"
+                        "in": [
+                          "00000000-0000-4000-8000-000000000081",
+                          "00000000-0000-4000-8000-000000000082"
+                        ]
+                      },
+                      {
+                        "path": "shared_owner_pid",
+                        "in": [
+                          1,
+                          2
+                        ]
+                      },
+                      {
+                        "path": "shared_owner_host",
+                        "pattern": "[0-9a-f]{64}"
+                      },
+                      {
+                        "path": "shared_nonce",
+                        "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
                       },
                       {
                         "path": "shared_profile_id",
@@ -22851,6 +22948,10 @@
                           "synthetic-alpha",
                           "synthetic-beta"
                         ]
+                      },
+                      {
+                        "path": "shared_profile_path_token",
+                        "pattern": "[0-9a-f]{64}"
                       },
                       {
                         "path": "shared_state",
@@ -22862,6 +22963,72 @@
                 "outcome_counts": {
                   "held": 1,
                   "busy": 1
+                },
+                "children_relation": {
+                  "winner_value": "held",
+                  "loser_value": "busy",
+                  "pairs": [
+                    {
+                      "winner": "owner_id",
+                      "loser": "shared_owner_id"
+                    },
+                    {
+                      "winner": "owner_pid",
+                      "loser": "shared_owner_pid"
+                    },
+                    {
+                      "winner": "owner_host",
+                      "loser": "shared_owner_host"
+                    },
+                    {
+                      "winner": "session_nonce",
+                      "loser": "shared_nonce"
+                    },
+                    {
+                      "winner": "profile_id",
+                      "loser": "shared_profile_id"
+                    },
+                    {
+                      "winner": "profile_path_token",
+                      "loser": "shared_profile_path_token"
+                    },
+                    {
+                      "winner": "shared_state",
+                      "loser": "shared_state"
+                    }
+                  ],
+                  "winner_paths": [
+                    {
+                      "path": "shared_owner_matches_self",
+                      "equals": true
+                    },
+                    {
+                      "path": "shared_nonce_matches_session",
+                      "equals": true
+                    },
+                    {
+                      "path": "shared_profile_matches_self",
+                      "equals": true
+                    }
+                  ],
+                  "loser_paths": [
+                    {
+                      "path": "shared_owner_matches_self",
+                      "equals": false
+                    },
+                    {
+                      "path": "shared_nonce_matches_session",
+                      "equals": false
+                    },
+                    {
+                      "path": "shared_profile_matches_self",
+                      "equals": false
+                    },
+                    {
+                      "path": "shared_state",
+                      "equals": "held"
+                    }
+                  ]
                 }
               }
             ]

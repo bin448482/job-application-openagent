@@ -39,6 +39,7 @@ from app.domain.models import (
     UnreadRow,
     UnreadSignal,
     UnreadSnapshot,
+    canonical_hash,
     discovery_key_for,
     fingerprint_for,
     identity_hash_for,
@@ -166,6 +167,26 @@ def _profile(profile_id: str) -> tuple[SqliteProfileStore, Path]:
 def _os_root(request: Mapping[str, Any]) -> Path:
     """读取请求指定的隔离 os_root；默认固定在隔离根 data 下。"""
     return _relative(str(request.get("os_root", "data/runtime/os-gate")), "os_root")
+
+
+def _owner_from_request(request: Mapping[str, Any]) -> Owner:
+    """读取可区分的合成 owner 身份；只接受显式类型。"""
+    owner_id = request.get("owner_id", OWNER_ID)
+    owner_pid = request.get("owner_pid", 1)
+    owner_host = request.get("owner_host", OWNER_HOST)
+    if not isinstance(owner_id, str) or not isinstance(owner_host, str):
+        raise ProbeError("owner 文本字段非法")
+    if type(owner_pid) is not int or owner_pid <= 0:
+        raise ProbeError("owner_pid 必须是正整数")
+    return Owner(owner_id, owner_pid, owner_host)
+
+
+def _path_token(shared: Mapping[str, object] | None) -> str | None:
+    """返回共享行 canonical profile 路径的摘要，避免输出绝对路径。"""
+    if not shared or not isinstance(shared.get("profile_db_path"), str):
+        return None
+    return canonical_hash(str(Path(str(shared["profile_db_path"])).resolve()))
+
 
 
 def _signals() -> dict[str, UnreadSignal]:
@@ -544,12 +565,13 @@ def _gate_race(request: Mapping[str, Any]) -> dict[str, Any]:
     profile_id = str(request.get("profile_id", "synthetic-profile"))
     store, db_path = _profile(profile_id)
     store.close()
+    owner = _owner_from_request(request)
     gate = SharedDeviceGate(
         profile_id=profile_id,
         profile_db_path=db_path,
         os_root=_os_root(request),
     )
-    owner = Owner(OWNER_ID, 1, OWNER_HOST)
+    path_token = canonical_hash(str(db_path.resolve()))
     _barrier()
     try:
         gate.acquire(
@@ -564,11 +586,26 @@ def _gate_race(request: Mapping[str, Any]) -> dict[str, Any]:
             "status": "ok",
             "outcome": "busy" if error.reason_code == "device_busy" else error.reason_code,
             "held": False,
+            "profile_id": profile_id,
+            "profile_path_token": path_token,
+            "owner_id": owner.id,
+            "owner_pid": owner.pid,
+            "owner_host": owner.host,
+            "session_nonce": None,
             "shared_owner_id": shared.get("owner_id") if shared else None,
+            "shared_owner_pid": shared.get("owner_pid") if shared else None,
+            "shared_owner_host": shared.get("owner_host") if shared else None,
+            "shared_nonce": shared.get("nonce") if shared else None,
             "shared_profile_id": shared.get("profile_id") if shared else None,
+            "shared_profile_path_token": _path_token(shared),
             "shared_state": shared.get("state") if shared else None,
-            "shared_profile_path_match": bool(shared)
-            and Path(str(shared.get("profile_db_path", ""))).resolve() == db_path,
+            "shared_owner_matches_self": bool(shared)
+            and shared.get("owner_id") == owner.id
+            and shared.get("owner_pid") == owner.pid
+            and shared.get("owner_host") == owner.host,
+            "shared_nonce_matches_session": False,
+            "shared_profile_matches_self": bool(shared)
+            and _path_token(shared) == path_token,
         }
     identity = gate.session_identity()
     shared = gate.inspect()
@@ -577,18 +614,26 @@ def _gate_race(request: Mapping[str, Any]) -> dict[str, Any]:
         "outcome": "held",
         "held": True,
         "profile_id": identity.profile_id,
+        "profile_path_token": path_token,
         "owner_id": identity.owner.id,
         "owner_pid": identity.owner.pid,
         "owner_host": identity.owner.host,
-        "nonce_present": bool(identity.nonce),
-        "profile_path_match": identity.profile_db_path == str(db_path),
+        "session_nonce": identity.nonce,
         "shared_owner_id": shared.get("owner_id") if shared else None,
+        "shared_owner_pid": shared.get("owner_pid") if shared else None,
+        "shared_owner_host": shared.get("owner_host") if shared else None,
+        "shared_nonce": shared.get("nonce") if shared else None,
         "shared_profile_id": shared.get("profile_id") if shared else None,
+        "shared_profile_path_token": _path_token(shared),
         "shared_state": shared.get("state") if shared else None,
+        "shared_owner_matches_self": bool(shared)
+        and shared.get("owner_id") == identity.owner.id
+        and shared.get("owner_pid") == identity.owner.pid
+        and shared.get("owner_host") == identity.owner.host,
         "shared_nonce_matches_session": bool(shared)
         and shared.get("nonce") == identity.nonce,
-        "shared_profile_path_match": bool(shared)
-        and Path(str(shared.get("profile_db_path", ""))).resolve() == db_path,
+        "shared_profile_matches_self": bool(shared)
+        and _path_token(shared) == path_token,
     }
 
 

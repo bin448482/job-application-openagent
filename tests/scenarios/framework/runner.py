@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .compare import compare_invocation
+from .compare import MISSING, compare_invocation, compare_step, resolve_path, strict_equal
 from .model import (
     AssetError,
     LoadedAssets,
@@ -1132,6 +1132,53 @@ def _variant_status(scenario: dict[str, Any], variant: dict[str, Any], target: P
     return "READY"
 
 
+def _compare_children_relation(
+    children: list[dict[str, Any]], relation: object
+) -> list[str]:
+    """按唯一 winner/loser 核对跨子进程完整身份关联，不读取测试期望生成结果。"""
+    if not isinstance(relation, dict):
+        return ["children_relation 必须是对象"]
+    selector = relation.get("outcome_path", "outcome")
+    winner_value = relation.get("winner_value")
+    loser_value = relation.get("loser_value")
+    if not isinstance(selector, str) or not isinstance(winner_value, str) or not isinstance(loser_value, str):
+        return ["children_relation 的 outcome/winner/loser 必须是字符串"]
+    winners: list[dict[str, Any]] = []
+    losers: list[dict[str, Any]] = []
+    for child in children:
+        payload = child.get("stdout_json")
+        if not isinstance(payload, dict):
+            continue
+        value = resolve_path(payload, selector)
+        if strict_equal(value, winner_value):
+            winners.append(payload)
+        elif strict_equal(value, loser_value):
+            losers.append(payload)
+    if len(winners) != 1 or len(losers) != 1:
+        return [f"children_relation 需要恰一 winner/一 loser，实际 {len(winners)}/{len(losers)}"]
+    winner = winners[0]
+    loser = losers[0]
+    errors: list[str] = []
+    for pair in relation.get("pairs", []):
+        if not isinstance(pair, dict) or not isinstance(pair.get("winner"), str) or not isinstance(pair.get("loser"), str):
+            errors.append("children_relation 的 pairs 形状非法")
+            continue
+        left = resolve_path(winner, pair["winner"])
+        right = resolve_path(loser, pair["loser"])
+        if left is MISSING or right is MISSING or not strict_equal(left, right):
+            errors.append(
+                f"{pair['loser']} 必须与 winner.{pair['winner']} 相同"
+            )
+    for side, payload in (("winner", winner), ("loser", loser)):
+        assertions = relation.get(f"{side}_paths", [])
+        if not isinstance(assertions, list):
+            errors.append(f"children_relation 的 {side}_paths 必须是数组")
+            continue
+        for error in compare_step(payload, {"stdout_paths": assertions}):
+            errors.append(f"{side}: {error}")
+    return errors
+
+
 def _execute_variant(
     assets: LoadedAssets,
     scenario: dict[str, Any],
@@ -1205,6 +1252,9 @@ def _execute_variant(
         expected_counts = step_expectation.get("outcome_counts")
         if expected_counts is not None and counts != expected_counts:
             errors.append(f"并发 outcome 计数不符: {counts} != {expected_counts}")
+        relation = step_expectation.get("children_relation")
+        if relation is not None:
+            errors.extend(f"并发关联: {item}" for item in _compare_children_relation(child_results, relation))
         step_results.append({"concurrent": child_results, "outcomes": counts})
         step_logs.append(None)
     for check in acceptance.get("db_checks", []):

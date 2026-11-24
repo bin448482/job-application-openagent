@@ -2738,6 +2738,116 @@ class P2M4CProbeBoundaryTests(unittest.TestCase):
         errors = compare_step(mutated, expected)
         self.assertTrue(any("active_assessment" in error for error in errors), errors)
 
+    def test_d06_facts_entry_oracle_rejects_forget_residue(self) -> None:
+        """D06 事实入口 oracle 必须拒绝 forget 后仍残留真实行。"""
+        assets = load_assets()
+        expected = assets.oracles["variants"]["SC-D06/m4c_facts_entry"]["acceptance"]["steps"][0]
+        payload = {
+            "status": "ok",
+            "before_count": 0,
+            "propose_confirmed": False,
+            "apply_confirmed": True,
+            "after_revoke_count": 0,
+            "raw_fact_rows_after_forget": 0,
+            "raw_fact_events_after_forget": 3,
+        }
+        self.assertEqual(compare_step(payload, expected), [])
+        mutated = dict(payload, raw_fact_rows_after_forget=1)
+        errors = compare_step(mutated, expected)
+        self.assertTrue(any("raw_fact_rows_after_forget" in error for error in errors), errors)
+
+    def _race_payloads(self) -> tuple[dict, dict]:
+        """构造一份 winner/loser 合成 payload，仅用于比较器自检。"""
+        winner = {
+            "status": "ok",
+            "outcome": "held",
+            "owner_id": "00000000-0000-4000-8000-000000000081",
+            "owner_pid": 1,
+            "owner_host": "a" * 64,
+            "profile_id": "synthetic-alpha",
+            "profile_path_token": "1" * 64,
+            "session_nonce": "00000000-0000-4000-8000-0000000000aa",
+            "shared_owner_id": "00000000-0000-4000-8000-000000000081",
+            "shared_owner_pid": 1,
+            "shared_owner_host": "a" * 64,
+            "shared_nonce": "00000000-0000-4000-8000-0000000000aa",
+            "shared_profile_id": "synthetic-alpha",
+            "shared_profile_path_token": "1" * 64,
+            "shared_state": "held",
+            "shared_owner_matches_self": True,
+            "shared_nonce_matches_session": True,
+            "shared_profile_matches_self": True,
+        }
+        loser = {
+            "status": "ok",
+            "outcome": "busy",
+            "owner_id": "00000000-0000-4000-8000-000000000082",
+            "owner_pid": 2,
+            "owner_host": "a" * 64,
+            "profile_id": "synthetic-beta",
+            "profile_path_token": "2" * 64,
+            "session_nonce": None,
+            "shared_owner_id": "00000000-0000-4000-8000-000000000081",
+            "shared_owner_pid": 1,
+            "shared_owner_host": "a" * 64,
+            "shared_nonce": "00000000-0000-4000-8000-0000000000aa",
+            "shared_profile_id": "synthetic-alpha",
+            "shared_profile_path_token": "1" * 64,
+            "shared_state": "held",
+            "shared_owner_matches_self": False,
+            "shared_nonce_matches_session": False,
+            "shared_profile_matches_self": False,
+        }
+        return winner, loser
+
+    def test_children_relation_accepts_winner_row(self) -> None:
+        """跨子进程关联接受 loser 读取的共享行等于唯一 winner。"""
+        winner, loser = self._race_payloads()
+        relation = {
+            "winner_value": "held",
+            "loser_value": "busy",
+            "pairs": [
+                {"winner": "owner_id", "loser": "shared_owner_id"},
+                {"winner": "owner_pid", "loser": "shared_owner_pid"},
+                {"winner": "owner_host", "loser": "shared_owner_host"},
+                {"winner": "session_nonce", "loser": "shared_nonce"},
+                {"winner": "profile_id", "loser": "shared_profile_id"},
+                {"winner": "profile_path_token", "loser": "shared_profile_path_token"},
+            ],
+            "winner_paths": [
+                {"path": "shared_owner_matches_self", "equals": True},
+                {"path": "shared_nonce_matches_session", "equals": True},
+                {"path": "shared_profile_matches_self", "equals": True},
+            ],
+            "loser_paths": [
+                {"path": "shared_owner_matches_self", "equals": False},
+                {"path": "shared_nonce_matches_session", "equals": False},
+                {"path": "shared_profile_matches_self", "equals": False},
+            ],
+        }
+        children = [
+            {"stdout_json": winner},
+            {"stdout_json": loser},
+        ]
+        self.assertEqual(runner._compare_children_relation(children, relation), [])
+        wrong_owner = dict(loser, shared_owner_id="00000000-0000-4000-8000-000000000099")
+        errors = runner._compare_children_relation(
+            [{"stdout_json": winner}, {"stdout_json": wrong_owner}], relation
+        )
+        self.assertTrue(any("shared_owner_id" in error for error in errors), errors)
+        for field in ("shared_nonce", "shared_profile_path_token"):
+            wrong = dict(loser, **{field: "9" * 64})
+            errors = runner._compare_children_relation(
+                [{"stdout_json": winner}, {"stdout_json": wrong}], relation
+            )
+            self.assertTrue(any(field in error for error in errors), errors)
+        two_winners = [
+            {"stdout_json": winner},
+            {"stdout_json": dict(loser, outcome="held")},
+        ]
+        errors = runner._compare_children_relation(two_winners, relation)
+        self.assertTrue(any("恰一" in error for error in errors), errors)
+
 
 class BuilderProvenanceTests(unittest.TestCase):
     """确认清单可追溯到作者脚本，且脚本存在的判据字段未被手改丢失。"""
