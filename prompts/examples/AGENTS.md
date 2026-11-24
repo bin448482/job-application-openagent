@@ -7,6 +7,7 @@
 ## 二、当前子目录
 
 - `default/`：v1 四载荷示例（全 C、空事实白名单）；见 `default/AGENTS.md`。
+- `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、契约
 

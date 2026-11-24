@@ -10,6 +10,7 @@
 - `sensor/`：M2 合成 profile、列表 XML、manifest 与独立 expected；见 `sensor/AGENTS.md`。
 - `read/`：M3 合成页面/职位/未读/会话 profile、XML、manifest 与独立 expected；见 `read/AGENTS.md`。
 - `policy-preview/`：M4a 固定 `policy-greeting` 等独立合成 preview 输入，生产 preview 从项目根读取；见 `policy-preview/AGENTS.md`。
+- `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、约束
 

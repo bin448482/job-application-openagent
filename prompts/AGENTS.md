@@ -9,6 +9,7 @@
 - `base/`：`intent-and-reply.md` 与 `job-evaluate.md` 两份公开 base；见 `base/AGENTS.md`。
 - `examples/`：公开纯合成示例根；见 `examples/AGENTS.md`。
 - `local/`：`policy init` 才创建的本机直接 profile 子目录与 `history/` 快照；不提交、不预建、不存放个人事实。
+- `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、契约
 

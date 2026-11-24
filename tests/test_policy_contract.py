@@ -211,6 +211,13 @@ class EnvelopeValidationTests(unittest.TestCase):
         }
         hr = rehash(hr)
         validate_decision_envelope(hr, now=NOW)
+        hr_empty_secondary = rehash(valid_envelope())
+        hr_empty_secondary["subject"] = {
+            "conversation_key": "boss:conv:" + "0" * 64,
+            "job_brief": "",
+        }
+        hr_empty_secondary = rehash(hr_empty_secondary)
+        validate_decision_envelope(hr_empty_secondary, now=NOW)
         hr_missing = rehash(valid_envelope())
         hr_missing["subject"] = {"conversation_key": None, "job_brief": None}
         hr_missing = rehash(hr_missing)
@@ -220,6 +227,14 @@ class EnvelopeValidationTests(unittest.TestCase):
         job["subject"] = {"conversation_key": None, "job_brief": "后端开发"}
         job = rehash(job)
         validate_decision_envelope(job, now=NOW)
+        job_empty_secondary = rehash(valid_envelope())
+        job_empty_secondary["kind"] = "job_card"
+        job_empty_secondary["subject"] = {
+            "conversation_key": "",
+            "job_brief": "后端开发",
+        }
+        job_empty_secondary = rehash(job_empty_secondary)
+        validate_decision_envelope(job_empty_secondary, now=NOW)
         job_missing = rehash(valid_envelope())
         job_missing["kind"] = "job_card"
         job_missing["subject"] = {"conversation_key": None, "job_brief": None}
@@ -230,6 +245,11 @@ class EnvelopeValidationTests(unittest.TestCase):
         anomaly["subject"] = {"conversation_key": None, "job_brief": None}
         anomaly = rehash(anomaly)
         validate_decision_envelope(anomaly, now=NOW)
+        anomaly_empty = rehash(valid_envelope())
+        anomaly_empty["kind"] = "anomaly"
+        anomaly_empty["subject"] = {"conversation_key": None, "job_brief": ""}
+        anomaly_empty = rehash(anomaly_empty)
+        validate_decision_envelope(anomaly_empty, now=NOW)
         for subject in (
             {"conversation_key": "x"},
             {"conversation_key": None, "job_brief": None, "extra": 1},
@@ -272,8 +292,16 @@ class EnvelopeValidationTests(unittest.TestCase):
         validate_decision_envelope(envelope, now=NOW)
         expired = dict(fact)
         expired["expires_at"] = NOW
+        expired_selected = valid_envelope(allowed_facts=[expired], pack=pack)
+        self.assertEqual(expired_selected["allowed_facts"], [])
+        expired_envelope = valid_envelope(allowed_facts=[], pack=pack)
+        expired_envelope["allowed_facts"] = [expired]
+        expired_envelope["prompt_hash"] = compute_prompt_hash(
+            real_base_files(), pack, expired_envelope
+        )
+        expired_envelope["input_hash"] = compute_input_hash(expired_envelope)
         with self.assertRaises(DecisionError):
-            valid_envelope(allowed_facts=[expired], pack=pack)
+            validate_decision_envelope(expired_envelope, now=NOW)
         for mutation in (
             {"key": "", "value": "x", "source": "user_confirmed", "expires_at": None},
             {"key": "unknown_fact", "value": "x", "source": "user_confirmed", "expires_at": None},
@@ -293,6 +321,73 @@ class EnvelopeValidationTests(unittest.TestCase):
         valid = dict(envelope)
         valid["allowed_facts"] = [empty_value]
         validate_decision_envelope(rehash(valid), now=NOW)
+
+    def test_build_envelope_filters_effective_fact_intersection(self) -> None:
+        """验证构建器按 now/白名单/确认/冲突过滤事实并保留独立有效项。"""
+        from app.domain.policy import parse_and_validate_pack
+
+        files = real_example_files()
+        files["pack.toml"] = files["pack.toml"].replace(
+            "allow_keys = []",
+            'allow_keys = ["work_location", "years_experience"]',
+        )
+        pack, issues = parse_and_validate_pack(files)
+        self.assertEqual(issues, [])
+        assert pack is not None
+        valid_years = {
+            "key": "years_experience",
+            "value": "5",
+            "source": "user_confirmed",
+            "expires_at": None,
+        }
+        facts = [
+            valid_years,
+            {
+                "key": "work_location",
+                "value": "合成城市",
+                "source": "user_confirmed",
+                "expires_at": NOW,
+            },
+            {
+                "key": "salary_expectation",
+                "value": "合成薪资",
+                "source": "user_confirmed",
+                "expires_at": None,
+            },
+            {
+                "key": "work_location",
+                "value": "合成城市",
+                "source": "assistant",
+                "expires_at": None,
+            },
+            {
+                "key": "work_location",
+                "value": "合成城市甲",
+                "source": "user_confirmed",
+                "expires_at": add_seconds(NOW, 60),
+            },
+            {
+                "key": "work_location",
+                "value": "合成城市乙",
+                "source": "user_confirmed",
+                "expires_at": add_seconds(NOW, 60),
+            },
+        ]
+        envelope = valid_envelope(allowed_facts=facts, pack=pack)
+        self.assertEqual(
+            [fact["key"] for fact in envelope["allowed_facts"]],
+            ["years_experience"],
+        )
+        from app.domain.policy import select_allowed_facts
+
+        duplicate_selected = select_allowed_facts(
+            [valid_years, dict(valid_years)], pack, now=NOW
+        )
+        self.assertEqual(duplicate_selected, [])
+        self.assertEqual(
+            [fact["key"] for fact in envelope["allowed_facts"]],
+            ["years_experience"],
+        )
 
     def test_constraints_types_and_fixed_values(self) -> None:
         """验证 constraints 的整数范围、固定 true/2048 与额外键拒绝。"""
@@ -673,6 +768,43 @@ class ReplyValidationTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_recognized_fact_values_must_match_confirmed_values(self) -> None:
+        """验证已识别事实形式与已确认值不一致时拒绝，一致时放行。"""
+        years = [
+            {
+                "key": "years_experience",
+                "value": "3",
+                "source": "user_confirmed",
+                "expires_at": None,
+            }
+        ]
+        self.complete("我有3年经验", allowed_facts=years)
+        with self.assertRaises(ReplyError) as raised:
+            self.complete("我有99年经验", allowed_facts=years)
+        self.assertEqual(raised.exception.code, "conflict")
+        location = [
+            {
+                "key": "work_location",
+                "value": "北京",
+                "source": "user_confirmed",
+                "expires_at": None,
+            }
+        ]
+        self.complete("我目前在北京", allowed_facts=location)
+        with self.assertRaises(ReplyError):
+            self.complete("我目前在上海", allowed_facts=location)
+        salary = [
+            {
+                "key": "salary_expectation",
+                "value": "20000",
+                "source": "user_confirmed",
+                "expires_at": None,
+            }
+        ]
+        self.complete("期望薪资 20000", allowed_facts=salary)
+        with self.assertRaises(ReplyError):
+            self.complete("期望薪资 30000", allowed_facts=salary)
 
     def test_control_and_lone_surrogate_rejected(self) -> None:
         """验证 CR、TAB、其它控制字符与孤立代理被拒绝。"""

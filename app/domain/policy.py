@@ -50,6 +50,25 @@ SUB_INTENTS = (
 POLICY_KEYS = tuple(f"{intent}.{sub}" for intent in INTENTS for sub in SUB_INTENTS)
 INTENT_WILDCARDS = tuple(f"{intent}.*" for intent in INTENTS)
 HARD_FLOOR_A_KEYS = frozenset({"interested.greeting", "interested.job_question"})
+HARD_FLOOR_B_KEYS = frozenset(
+    {
+        "interested.resume_request",
+        "interested.interview",
+        "interested.salary",
+        "interested.jd_request",
+    }
+)
+HARD_FLOOR_C_KEYS = frozenset(POLICY_KEYS) - HARD_FLOOR_A_KEYS - HARD_FLOOR_B_KEYS
+HARD_FLOOR_TIERS = {
+    key: (
+        "A"
+        if key in HARD_FLOOR_A_KEYS
+        else "B"
+        if key in HARD_FLOOR_B_KEYS
+        else "C"
+    )
+    for key in POLICY_KEYS
+}
 TIER_RANK = {"A": 0, "B": 1, "C": 2}
 POLICY_TIERS = ("A", "B", "C")
 FACT_KEYS = frozenset({"work_location", "salary_expectation", "years_experience"})
@@ -133,9 +152,15 @@ _CONTACT_PATTERNS = (
     re.compile(r"(?i)(?:微信|wechat|weixin|wx|vx|qq)\s*[:：]?\s*[A-Za-z0-9_-]{4,}"),
 )
 _FACT_PATTERNS = (
-    ("years_experience", re.compile(r"(?:我有|拥有|具备)\s*\d+\s*年")),
-    ("work_location", re.compile(r"我(?:现在|目前)?(?:在|住在|位于)\s*[^\s，。；]{1,12}")),
-    ("salary_expectation", re.compile(r"(?:期望|要求|希望).{0,8}(?:薪资|工资|月薪).{0,8}\d")),
+    ("years_experience", re.compile(r"(?:我有|拥有|具备)\s*(\d+)\s*年")),
+    (
+        "work_location",
+        re.compile(r"我(?:现在|目前)?(?:在|住在|位于)\s*([^\s，。；]{1,12})"),
+    ),
+    (
+        "salary_expectation",
+        re.compile(r"(?:期望|要求|希望).{0,8}?(?:薪资|工资|月薪).{0,8}?(\d+)"),
+    ),
 )
 _FORBIDDEN_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
@@ -209,13 +234,14 @@ class RenderedRequest:
     pack_config: dict[str, object]
     pack_files: dict[str, str]
     data: dict[str, object]
+    content: dict[str, object]
     protocol: dict[str, object]
     system_message: str
     developer_message: str
     user_message: str
 
     def to_dict(self) -> dict[str, object]:
-        """序列化为 preview 使用的固定结果对象。"""
+        """序列化为 preview 使用的固定结果对象，content 为唯一规范内容对象。"""
         return {
             "base_version": self.base_version,
             "base_hash": self.base_hash,
@@ -227,6 +253,7 @@ class RenderedRequest:
             "pack_config": self.pack_config,
             "pack_files": self.pack_files,
             "data": self.data,
+            "content": self.content,
             "protocol": self.protocol,
             "system_message": self.system_message,
             "developer_message": self.developer_message,
@@ -247,6 +274,54 @@ def is_case_id(value: object) -> bool:
 def is_snapshot_id(value: object) -> bool:
     """判断快照 ID 是否为 UTC 时间加八位随机后缀的固定词法。"""
     return isinstance(value, str) and _SNAPSHOT_ID_RE.fullmatch(value) is not None
+
+
+def normalize_policy_rel_path(value: object) -> str:
+    """把项目内策略相对路径规范为 POSIX 形式并拒绝绝对/越界输入。"""
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise ValueError("policy path is invalid")
+    normalized = value.replace("\\", "/").strip()
+    while normalized.endswith("/"):
+        normalized = normalized[:-1]
+    if not normalized or normalized.startswith("~") or normalized.startswith("/"):
+        raise ValueError("policy path is invalid")
+    parts = normalized.split("/")
+    if any(part in ("", "..") for part in parts) or (
+        len(parts[0]) == 2 and parts[0][1] == ":"
+    ):
+        raise ValueError("policy path is invalid")
+    return normalized
+
+
+def normalize_active_pack_path(value: object) -> str:
+    """校验并返回 prompts/local 直接 profile 活动包相对路径。"""
+    normalized = normalize_policy_rel_path(value)
+    parts = normalized.split("/")
+    if (
+        len(parts) != 3
+        or parts[0] != "prompts"
+        or parts[1] != "local"
+        or parts[2] == "history"
+        or parts[2].startswith(".")
+        or not is_profile_id(parts[2])
+    ):
+        raise ValueError("active pack path is invalid")
+    return normalized
+
+
+def normalize_snapshot_path(value: object) -> str:
+    """校验并返回 prompts/local/history 直接快照目录相对路径。"""
+    normalized = normalize_policy_rel_path(value)
+    parts = normalized.split("/")
+    if (
+        len(parts) != 4
+        or parts[0] != "prompts"
+        or parts[1] != "local"
+        or parts[2] != "history"
+        or not is_snapshot_id(parts[3])
+    ):
+        raise ValueError("snapshot path is invalid")
+    return normalized
 
 
 def v1_policy_tier() -> str:
@@ -306,6 +381,32 @@ def _has_reply_control(value: str) -> bool:
 def _has_contact(value: str) -> bool:
     """判断是否命中手机号、邮箱或微信/QQ 类联系方式模式。"""
     return any(pattern.search(value) for pattern in _CONTACT_PATTERNS)
+
+
+def _fact_claims(value: str) -> list[tuple[str, str]]:
+    """返回可确定识别的个人事实形式及其捕获值，不推断未命中文本。"""
+    claims: list[tuple[str, str]] = []
+    for key, pattern in _FACT_PATTERNS:
+        for match in pattern.finditer(value):
+            claims.append((key, match.group(1)))
+    return claims
+
+
+def _fact_value_matches(key: str, claimed: str, allowed: object) -> bool:
+    """比较已识别事实值与同键已确认值的最小一致形式。"""
+    if not isinstance(allowed, str):
+        return False
+    claimed_text = claimed.strip()
+    allowed_text = allowed.strip()
+    if key in {"years_experience", "salary_expectation"}:
+        claimed_digits = re.sub(r"\D", "", claimed_text)
+        allowed_digits = re.sub(r"\D", "", allowed_text)
+        return bool(claimed_digits) and claimed_digits == allowed_digits
+    return (
+        claimed_text == allowed_text
+        or (len(allowed_text) >= 2 and allowed_text in claimed_text)
+        or (len(claimed_text) >= 2 and claimed_text in allowed_text)
+    )
 
 
 def _issue(
@@ -466,6 +567,8 @@ def _text_issue(
         issues.append(_issue(name, None, line, "encoding"))
     if _has_contact(text):
         issues.append(_issue(name, None, line, "sensitive"))
+    for key in sorted({key for key, _ in _fact_claims(text)}):
+        issues.append(_issue(name, None, line, "sensitive"))
     return issues
 
 
@@ -615,13 +718,16 @@ def _parse_phrase_bank(text: str) -> tuple[dict[str, tuple[str, ...]], list[Poli
         if stripped.startswith("#"):
             if not stripped.startswith("## "):
                 issues.append(_issue("phrase-bank.md", None, index, "format"))
+                current = None
                 continue
             title = stripped[3:].strip()
             if title not in POLICY_KEYS:
-                issues.append(_issue("phrase-bank.md", title, index, "vocabulary"))
+                issues.append(_issue("phrase-bank.md", None, index, "vocabulary"))
+                current = None
                 continue
             if title in sections:
                 issues.append(_issue("phrase-bank.md", title, index, "duplicate"))
+                current = None
                 continue
             sections[title] = []
             current = title
@@ -837,7 +943,6 @@ def parse_and_validate_pack(
     tiers = _table(config, "tiers", issues)
     tier_by_key: dict[str, str] = {}
     tier_owner: dict[str, str] = {}
-    tier_lines: dict[str, dict[str, int | None]] = {}
     if tiers is not None:
         _check_table_keys(tiers, "tiers", ("A", "B", "C"), issues)
         for tier_name in POLICY_TIERS:
@@ -873,31 +978,15 @@ def parse_and_validate_pack(
                         code = "duplicate" if tier_owner[key] == tier_name else "conflict"
                         issues.append(_issue("pack.toml", item_field, item_line, code))
                         continue
+                    if TIER_RANK[tier_name] < TIER_RANK[HARD_FLOOR_TIERS[key]]:
+                        issues.append(
+                            _issue("pack.toml", item_field, item_line, "safety_floor")
+                        )
                     tier_owner[key] = tier_name
                     tier_by_key[key] = tier_name
-                    tier_lines.setdefault(key, {})[tier_name] = item_line
         missing = [key for key in POLICY_KEYS if key not in tier_owner]
         if missing:
             issues.append(_issue("pack.toml", "tiers", line_for_field(raw, "tiers"), "coverage"))
-        for index, item in enumerate(tiers.get("A", []) if isinstance(tiers.get("A"), list) else []):
-            if not isinstance(item, str):
-                continue
-            if item in POLICY_KEYS:
-                expanded = (item,)
-            elif item in INTENT_WILDCARDS:
-                prefix = item[:-2] + "."
-                expanded = tuple(key for key in POLICY_KEYS if key.startswith(prefix))
-            else:
-                continue
-            if any(key not in HARD_FLOOR_A_KEYS for key in expanded):
-                issues.append(
-                    _issue(
-                        "pack.toml",
-                        f"tiers.A[{index}]",
-                        line_for_field(raw, f"tiers.A[{index}]"),
-                        "safety_floor",
-                    )
-                )
 
     forbidden = _table(config, "forbidden", issues)
     extra_topics: list[str] | None = None
@@ -1029,6 +1118,7 @@ def resolve_policy_tier(
                 raise ValueError("sub intent is invalid")
             keys.append(f"{intent}.{sub}")
     tiers = [pack.tier_by_key[key] for key in keys]
+    tiers.extend(HARD_FLOOR_TIERS[key] for key in keys)
     tiers.append(upper_tier)
     return max(tiers, key=TIER_RANK.__getitem__)
 
@@ -1098,6 +1188,62 @@ def envelope_bytes(envelope: Mapping[str, object]) -> int:
     return len(canonical_json_bytes(envelope))
 
 
+def select_allowed_facts(
+    allowed_facts: object, pack: PolicyPack, *, now: str
+) -> list[dict[str, object]]:
+    """按显式 now 取包白名单/注册表/已确认/未过期且无重复/冲突的事实交集。
+
+    候选结构、来源、键、值或有效期不可用时逐项丢弃；同一键只保留唯一剩余
+    候选，重复键或值/有效期不一致均受控丢弃该键并留给待办，不做同值去重。
+    """
+    if not isinstance(allowed_facts, list):
+        raise DecisionError("invalid_decision")
+    try:
+        now_dt = parse_utc(now)
+    except ValueError:
+        raise DecisionError("invalid_decision") from None
+    fact_keys = set(effective_limits(pack)["fact_keys"])
+    order: list[str] = []
+    candidates: dict[str, list[dict[str, object]]] = {}
+    for raw in allowed_facts:
+        if not isinstance(raw, dict) or set(raw) != set(FACT_KEYS_SET):
+            continue
+        key = raw["key"]
+        if not is_nonempty_text(key) or key not in FACT_KEYS or key not in fact_keys:
+            continue
+        if raw["source"] != "user_confirmed":
+            continue
+        value = raw["value"]
+        if not _encodable(value):
+            continue
+        expires_at = raw["expires_at"]
+        if expires_at is not None:
+            if not isinstance(expires_at, str):
+                continue
+            try:
+                expires_dt = parse_utc(expires_at)
+            except ValueError:
+                continue
+            if expires_dt <= now_dt:
+                continue
+        candidate = {
+            "key": key,
+            "value": value,
+            "source": "user_confirmed",
+            "expires_at": expires_at,
+        }
+        if key not in candidates:
+            order.append(key)
+            candidates[key] = []
+        candidates[key].append(candidate)
+    selected: list[dict[str, object]] = []
+    for key in order:
+        values = candidates[key]
+        if len(values) == 1:
+            selected.append(values[0])
+    return selected
+
+
 def build_envelope(
     *,
     task_id: str,
@@ -1113,10 +1259,7 @@ def build_envelope(
 ) -> dict[str, object]:
     """按已校验 base/pack 构建带四类摘要的 envelope，并执行同一契约校验。"""
     limits = effective_limits(pack)
-    fact_keys = set(limits["fact_keys"])
-    for fact in allowed_facts:
-        if not isinstance(fact, dict) or fact.get("key") not in fact_keys:
-            raise DecisionError("invalid_decision")
+    selected_facts = select_allowed_facts(allowed_facts, pack, now=now)
     envelope: dict[str, object] = {
         "schema_version": POLICY_SCHEMA_VERSION,
         "task_id": task_id,
@@ -1127,7 +1270,7 @@ def build_envelope(
         "subject": dict(subject),
         "inbound": inbound,
         "context": list(context),
-        "allowed_facts": [dict(item) for item in allowed_facts],
+        "allowed_facts": selected_facts,
         "base_version": BASE_VERSION,
         "base_hash": compute_base_hash(base_files),
         "policy_pack_id": pack.profile_id,
@@ -1144,6 +1287,23 @@ def build_envelope(
     envelope["input_hash"] = compute_input_hash(envelope)
     validate_decision_envelope(envelope, now=now)
     return envelope
+
+
+def validate_subject_fields(app: str, kind: str, subject: object) -> None:
+    """校验 subject 两键类型与 kind 最小要求，允许次要字段为空字符串。"""
+    if not isinstance(subject, dict) or set(subject) != set(SUBJECT_KEYS):
+        raise ValueError("subject keys are invalid")
+    for key in SUBJECT_KEYS:
+        value = subject[key]
+        if value is not None and not _encodable(value):
+            raise ValueError("subject value is invalid")
+    if kind == "hr_message" and not is_nonempty_text(subject["conversation_key"]):
+        raise ValueError("conversation key is required")
+    if kind == "job_card" and not is_nonempty_text(subject["job_brief"]):
+        raise ValueError("job brief is required")
+    conversation_key = subject["conversation_key"]
+    if conversation_key not in (None, "") and not is_conversation_key(app, conversation_key):
+        raise ValueError("conversation key is invalid")
 
 
 def validate_decision_envelope(data: object, *, now: str) -> None:
@@ -1165,20 +1325,10 @@ def validate_decision_envelope(data: object, *, now: str) -> None:
     if not isinstance(data["kind"], str) or data["kind"] not in KINDS:
         raise DecisionError("invalid_decision")
     subject = data["subject"]
-    if not isinstance(subject, dict) or set(subject) != set(SUBJECT_KEYS):
-        raise DecisionError("invalid_decision")
-    for key in SUBJECT_KEYS:
-        value = subject[key]
-        if value is not None and not is_nonempty_text(value):
-            raise DecisionError("invalid_decision")
-    if subject["conversation_key"] is not None and not is_conversation_key(
-        data["app"], subject["conversation_key"]
-    ):
-        raise DecisionError("invalid_decision")
-    if data["kind"] == "hr_message" and not is_nonempty_text(subject["conversation_key"]):
-        raise DecisionError("invalid_decision")
-    if data["kind"] == "job_card" and not is_nonempty_text(subject["job_brief"]):
-        raise DecisionError("invalid_decision")
+    try:
+        validate_subject_fields(data["app"], data["kind"], subject)
+    except ValueError:
+        raise DecisionError("invalid_decision") from None
     if not is_nonempty_text(data["inbound"]):
         raise DecisionError("invalid_decision")
     context = data["context"]
@@ -1358,13 +1508,19 @@ def append_and_validate_reply(
     for term in tuple(never_say) + tuple(extra_topics):
         if term and term in complete:
             raise ReplyError("sensitive")
-    allowed_keys = {
-        fact.get("key")
-        for fact in allowed_facts
-        if isinstance(fact, Mapping) and fact.get("source") == "user_confirmed"
-    }
-    for key, pattern in _FACT_PATTERNS:
-        if key not in allowed_keys and pattern.search(complete):
+    allowed_values: dict[str, list[object]] = {}
+    for fact in allowed_facts:
+        if (
+            isinstance(fact, Mapping)
+            and fact.get("source") == "user_confirmed"
+            and isinstance(fact.get("key"), str)
+        ):
+            allowed_values.setdefault(str(fact["key"]), []).append(fact.get("value"))
+    for key, claimed in _fact_claims(complete):
+        values = allowed_values.get(key)
+        if not values or not any(
+            _fact_value_matches(key, claimed, value) for value in values
+        ):
             raise ReplyError("conflict")
     return complete
 
@@ -1397,16 +1553,10 @@ def validate_preview_case(data: object) -> dict[str, object]:
     if not isinstance(data["kind"], str) or data["kind"] not in KINDS:
         raise ValueError("preview case kind is invalid")
     subject = data["subject"]
-    if not isinstance(subject, dict) or set(subject) != set(SUBJECT_KEYS):
-        raise ValueError("preview case subject is invalid")
-    for key in SUBJECT_KEYS:
-        value = subject[key]
-        if value is not None and not is_nonempty_text(value):
-            raise ValueError("preview case subject is invalid")
-    if data["kind"] == "hr_message" and not is_nonempty_text(subject["conversation_key"]):
-        raise ValueError("preview case subject is invalid")
-    if data["kind"] == "job_card" and not is_nonempty_text(subject["job_brief"]):
-        raise ValueError("preview case subject is invalid")
+    try:
+        validate_subject_fields("boss", str(data["kind"]), subject)
+    except ValueError:
+        raise ValueError("preview case subject is invalid") from None
     if not is_nonempty_text(data["inbound"]):
         raise ValueError("preview case inbound is invalid")
     context = data["context"]
@@ -1478,6 +1628,10 @@ def render_request(
 ) -> RenderedRequest:
     """验证 base/pack/prompt 摘要后生成固定三分区投影，不调用模型。"""
     validate_decision_envelope(envelope, now=now)
+    canonical_pack, issues = parse_and_validate_pack(pack.files)
+    if issues or canonical_pack is None:
+        raise DecisionError("invalid_decision")
+    pack = canonical_pack
     base_hash = compute_base_hash(base_files)
     pack_hash = compute_pack_hash(pack.files)
     prompt_hash = compute_prompt_hash(base_files, pack, envelope)
@@ -1503,6 +1657,25 @@ def render_request(
     developer_message = _render_developer(pack, limits)
     data = envelope_projection(envelope)
     user_message = _canonical_text(data)
+    content = {
+        "base": {
+            "version": BASE_VERSION,
+            "hash": base_hash,
+            "files": {
+                BASE_RELATIVE_PATHS[name]: base_files[name] for name in BASE_FILE_NAMES
+            },
+        },
+        "pack": {
+            "hash": pack_hash,
+            "config": pack.config,
+            "files": {name: pack.files[name] for name in PACK_FILE_NAMES},
+        },
+        "data": data,
+    }
+    if canonical_hash(content) != prompt_hash:
+        raise DecisionError("invalid_decision")
+    if len(canonical_json_bytes(content)) > RENDERED_MAX_BYTES:
+        raise DecisionError("input_too_large")
     if len(system_message.encode("utf-8")) + len(developer_message.encode("utf-8")) + len(
         user_message.encode("utf-8")
     ) > RENDERED_MAX_BYTES:
@@ -1520,6 +1693,7 @@ def render_request(
         pack_config=dict(pack.config),
         pack_files={name: pack.files[name] for name in PACK_FILE_NAMES},
         data=data,
+        content=content,
         protocol={
             "task_id": envelope["task_id"],
             "nonce": envelope["nonce"],

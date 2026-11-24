@@ -8,6 +8,7 @@
 
 - `__init__.py`：声明命令行包。
 - `main.py`：`main(argv, process_log=...)` 入口、严格 argparse、配置校验/夹具读取、共享 JSON 重复键边界、fixture 与 ADB 组合、`store init --db` 接线、`sense --fixture/--db` 接线、`read --fixture` 接线、`policy init/validate/preview/list/snapshot/restore` 接线、唯一安全 JSON 输出、退出码与过程日志阶段记录。
+- `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、行为契约
 
@@ -23,9 +24,9 @@
 10. `sense` 必须给 `--fixture`，`--db` 可省略为 `data/runtime/runtime.sqlite3`；不接受 `--device`/`--serial`。只有 manifest/profile/XML 全部通过且合并 `status=ok` 后才初始化/打开 SQLite；先 upsert 再查 `unresolved_conversations` 并聚合。成功/业务停止输出 `{schema_version:1,result:<ReadResult>,stop_reason:<固定原因或 null>}`；`stop_reason=null` 退出 `0`，其它退出 `2`。解析器已构造 ReadResult 的非 ok 结果保留其完整输出且不写库；仓储错误只输出三键安全对象，不伪造成功 ReadResult。
 11. 过程日志阶段覆盖 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/sense/read/adb_hierarchy/adb_screen/adb_evidence/output/exit`；store 调用先记 `started` 再记 `ok/failed`，`operation=init/parse/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，`read` 阶段取 `load/page/job_list/job_detail/unread/conversation/merge/pixel/gate`；结果含 `started/ok/undetermined/failed`。已知 `StoreError` 的失败事件使用固定仓储原因与 `error_category=store`，非预期异常只写失败事件 `reason_code=null`/`error_category=internal`；对应业务 stdout 仍为 `store_io_error` 和退出 `2`，最终 exit 的公共错误分类与失败事件分类分别记录、互不替代。sense/read 解析复用入口同一日志实例/correlation；`read` 的 load、解析、像素、merge、gate 均成对记录，未标定/未决记 `undetermined`；`ok` 但门禁失败时 `gate/decision=failed` 且带固定 gate 原因。不写 XML、身份、正文、像素、原始稳定 ID 或夹具/数据库路径。每次运行由 `ProcessLog` 生成独立 UUID 文件，显式路径也只作命名基础；日志降级时由唯一 `emit_degraded_warning` 写一次固定 stderr 标记，CLI 与仓储 API 不双报；stdout 不包含 `correlation_id`。
 12. `read` 必须给 `--fixture`，不接受 `--device`/`--serial`/`--db`；输出 `{schema_version:1,result:<ReadResult>,actionable:<bool>,gate_reason:<null|fixed>}`，`status=ok` 且 `actionable=true` 退出 `0`，其它退出 `2`。`read` 不调用仓储、不写库；真实设备入口在共享门禁交付前不存在。
-13. `policy` 子命令为 `init --dest`、`validate --pack`、`preview --pack --case`、`list`、`snapshot --pack`、`restore --snapshot --dest`；全部复用同一组合根、`_finalize_output`、唯一 `ProcessLog`/correlation，不另造 JSON 出口或日志器。成功四键 `{schema_version:1,status:"ok",reason_code:null,result:...}`；失败四键 `{schema_version:1,status:"failed",reason_code:<固定>,errors:[{file,field,line,code}]}`，`errors` 可为空。`policy` 参数形状错误也使用四键，其它命令保持三键；只依据 argv 第一个位置参数识别命令，不因任意值含 `policy` 改变外层。
+13. `policy` 子命令为 `init --dest`、`validate --pack`、`preview --pack --case`、`list`、`snapshot --pack`、`restore --snapshot --dest`；全部复用同一组合根、`_finalize_output`、唯一 `ProcessLog`/correlation，不另造 JSON 出口或日志器。成功四键 `{schema_version:1,status:"ok",reason_code:null,result:...}`；失败四键 `{schema_version:1,status:"failed",reason_code:<固定>,errors:[{file,field,line,code}]}`，`errors` 可为空。`policy` 参数形状错误、全局配置受控错误与配置读取意外异常都使用四键（配置错误保留 `invalid_config`），其它命令保持三键；只依据 argv 第一个位置参数识别命令，不因任意值含 `policy` 改变外层。
 14. `policy` 只接受项目内相对路径：`init`/`restore` 目标为 `prompts/local/<profile>` 直接子目录，`snapshot` 目标为 `prompts/local/history/<snapshot-id>`，preview 案例固定 `tests/fixtures/policy-preview/<case>.json`。不读取根 `config.json`、设备、网络、模型或黄金答案；生产 `restore` 固定注入 `RefusingPolicyActivity`（unknown → `policy_changed`），不新增公开测试绕过参数。
-15. `policy` 过程日志使用 `stage=policy`、`operation=init/validate/preview/list/snapshot/restore`、`error_category=policy` 与固定原因码；每次命令记录 `started` 与 `ok/failed/undetermined` 及耗时，`restore` 的活动未知记 `undetermined`，不写文件正文、绝对路径或原异常。
+15. `policy` 过程日志使用 `stage=policy`、命令操作 `init/validate/preview/list/snapshot/restore`，并由 usecase 在实际边界追加 `load/validate/render/publish` 阶段；`error_category=policy` 与固定原因码；每次阶段记录 `started` 与 `ok/failed/undetermined` 及耗时，`restore` 的活动未知记 `undetermined`，不写文件正文、绝对路径或原异常；日志失败不改变业务输出/退出码。
 
 ## 四、测试
 

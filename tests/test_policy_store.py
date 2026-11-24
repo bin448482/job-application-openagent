@@ -164,6 +164,38 @@ class FileAdapterTests(unittest.TestCase):
             self.repo.read_preview_case("duplicate")
         self.assertEqual(raised.exception.reason_code, "unknown_case")
 
+    def test_list_keeps_link_candidates_without_following(self) -> None:
+        """验证 list 保留链接候选路径并标无效，不跟随或递归读取。"""
+        files = real_example_files()
+        write_pack(self.root, "prompts/local/link", files)
+        with patch(
+            "app.adapters.files.policy._is_link_like",
+            side_effect=lambda path: Path(path).name == "link",
+        ):
+            self.assertIn("prompts/local/link", self.repo.list_pack_dirs())
+            listed = policy_usecases.list_packs(self.repo)
+        self.assertEqual(listed["packs"][0]["path"], "prompts/local/link")
+        self.assertFalse(listed["packs"][0]["valid"])
+        self.assertIsNone(listed["packs"][0]["pack_hash"])
+
+    def test_list_history_keeps_link_candidates_without_following(self) -> None:
+        """验证 history 链接候选也保留路径并标无效，不跟随目标。"""
+        history = self.root / "prompts/local/history"
+        history.mkdir(parents=True)
+        snapshot_id = "20261124T000000000Z-abcdef05"
+        (history / snapshot_id).mkdir()
+        with patch(
+            "app.adapters.files.policy._is_link_like",
+            side_effect=lambda path: Path(path).name == snapshot_id,
+        ):
+            self.assertIn(
+                f"prompts/local/history/{snapshot_id}",
+                self.repo.list_history_dirs(),
+            )
+            listed = policy_usecases.list_packs(self.repo)
+        self.assertEqual(listed["history"][0]["path"], f"prompts/local/history/{snapshot_id}")
+        self.assertFalse(listed["history"][0]["valid"])
+
     def test_list_skips_history_and_dot_dirs(self) -> None:
         """验证 list 只列 local 直接活动包并跳过 history/点目录。"""
         files = real_example_files()
@@ -203,6 +235,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(validated["profile_id"], "demo")
         self.assertEqual(validated["base_version"], "2026-11-24")
         self.assertEqual(validated["tiers"]["C"], sorted(validated["tiers"]["C"]))
+        self.assertEqual(len(validated["hard_floor"]["A_allowed"]), 2)
+        self.assertEqual(len(validated["hard_floor"]["B_minimum"]), 4)
+        self.assertEqual(len(validated["hard_floor"]["C_only"]), 39)
         preview = policy_usecases.preview_pack(
             self.repo, "prompts/local/demo", "policy-greeting"
         )
@@ -293,6 +328,26 @@ class WorkflowTests(unittest.TestCase):
         preview = policy_usecases.preview_pack(self.repo, "prompts/local/demo", "policy-greeting")
         self.assertIn("新的合成语气。", preview["rendered"]["developer_message"])
         self.assertIn("个人开发AI助手（合成）", preview["rendered"]["developer_message"])
+
+    def test_init_invalid_example_returns_controlled_four_key_error(self) -> None:
+        """验证坏示例下 init 不崩溃、输出四键错误且不留半包。"""
+        example = self.root / "prompts/examples/default/pack.toml"
+        text = example.read_bytes().decode("utf-8")
+        example.write_bytes(text.replace("max_chars = 300", "max_chars = 0").encode("utf-8"))
+        code, payload, stderr = run_cli(
+            self.root, ["policy", "init", "--dest", "prompts/local/failed"]
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(stderr, "")
+        self.assertEqual(
+            set(payload), {"schema_version", "status", "reason_code", "errors"}
+        )
+        self.assertEqual(payload["reason_code"], "invalid_policy")
+        self.assertTrue(payload["errors"])
+        self.assertTrue(
+            all(set(item) == {"file", "field", "line", "code"} for item in payload["errors"])
+        )
+        self.assertFalse((self.root / "prompts/local/failed").exists())
 
     def test_guide_sensitive_content_is_rejected(self) -> None:
         """验证可选双指南也须通过控制字符与联系方式检查。"""
@@ -443,6 +498,38 @@ class SnapshotRestoreTests(unittest.TestCase):
         self.assertFalse(
             (self.root / "prompts/local/history/20261124T000000000Z-abcdef03.local.json").exists()
         )
+
+    def test_snapshot_rejects_source_change_during_copy(self) -> None:
+        """验证复制期间活动包被改时受控拒绝并清理本次发布/暂存。"""
+        original = self.repo.write_text_exact
+        changed = False
+
+        def changing_write(rel: str, text: str) -> None:
+            """首次暂存 tone 写入后模拟活动包被外部编辑。"""
+            nonlocal changed
+            original(rel, text)
+            if not changed and rel.endswith("/tone.md") and ".staging-" in rel:
+                changed = True
+                active = self.root / "prompts/local/demo/tone.md"
+                active.write_bytes(active.read_bytes() + "合成编辑".encode("utf-8"))
+
+        with patch.object(self.repo, "write_text_exact", side_effect=changing_write):
+            with self.assertRaises(PolicyError) as raised:
+                policy_usecases.snapshot_pack(
+                    self.repo,
+                    "prompts/local/demo",
+                    now=NOW,
+                    snapshot_id="20261124T000000000Z-abcdef04",
+                )
+        self.assertEqual(raised.exception.reason_code, "policy_changed")
+        history = self.root / "prompts/local/history"
+        self.assertFalse(
+            (history / "20261124T000000000Z-abcdef04").exists()
+        )
+        self.assertFalse(
+            (history / "20261124T000000000Z-abcdef04.local.json").exists()
+        )
+        self.assertTrue((self.root / "prompts/local/demo/tone.md").exists())
 
     def test_restore_production_is_controlled_refusal(self) -> None:
         """验证生产 CLI restore 无可信停止证据时受控拒绝。"""
@@ -633,6 +720,41 @@ class CliAndLogTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertEqual(set(payload), {"schema_version", "status", "reason_code"})
 
+    def test_policy_config_errors_keep_four_keys_and_other_commands_keep_three(self) -> None:
+        """验证配置受控/意外错误在 policy 分支保持四键，其它命令仍三键。"""
+        code, payload, _ = run_cli(
+            self.root, ["--config", "missing-synthetic.json", "policy", "list"]
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(
+            set(payload), {"schema_version", "status", "reason_code", "errors"}
+        )
+        self.assertEqual(payload["reason_code"], "invalid_config")
+        self.assertEqual(payload["errors"], [])
+        with patch("app.cli.main._validate_config", side_effect=RuntimeError("synthetic")):
+            code, payload, _ = run_cli(self.root, ["--config", "any", "policy", "list"])
+        self.assertEqual(code, 2)
+        self.assertEqual(
+            set(payload), {"schema_version", "status", "reason_code", "errors"}
+        )
+        self.assertEqual(payload["reason_code"], "invalid_config")
+        code, payload, _ = run_cli(
+            self.root,
+            ["--config", "missing-synthetic.json", "doctor", "--fixture", "tests/fixtures/doctor/ready.json"],
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(set(payload), {"schema_version", "status", "reason_code"})
+
+    def test_config_value_containing_policy_does_not_change_command_outer(self) -> None:
+        """验证只按命令位置识别 policy，配置值含 policy 不改变三键出口。"""
+        code, payload, _ = run_cli(
+            self.root,
+            ["--config", "policy", "doctor", "--fixture", "tests/fixtures/doctor/ready.json"],
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(set(payload), {"schema_version", "status", "reason_code"})
+        self.assertEqual(payload["reason_code"], "invalid_config")
+
     def test_list_and_unknown_case(self) -> None:
         """验证空 list 输出与未知 preview 案例错误。"""
         code, payload, _ = run_cli(self.root, ["policy", "list"])
@@ -679,9 +801,18 @@ class CliAndLogTests(unittest.TestCase):
         policy_events = [event for event in events if event["stage"] == "policy"]
         self.assertEqual(
             [(event["operation"], event["result"]) for event in policy_events],
-            [("init", "started"), ("init", "ok")],
+            [
+                ("init", "started"),
+                ("load", "started"),
+                ("load", "ok"),
+                ("validate", "started"),
+                ("validate", "ok"),
+                ("publish", "started"),
+                ("publish", "ok"),
+                ("init", "ok"),
+            ],
         )
-        self.assertTrue(policy_events[0]["duration_ms"] >= 0)
+        self.assertTrue(all(event["duration_ms"] >= 0 for event in policy_events))
         self.assertEqual({event["correlation_id"] for event in events}, {"corr"})
 
     def test_failed_and_undetermined_policy_logs(self) -> None:
@@ -742,6 +873,105 @@ class CliAndLogTests(unittest.TestCase):
         ]
         self.assertEqual(restore_events[-1]["result"], "undetermined")
         self.assertEqual(restore_events[-1]["reason_code"], "policy_changed")
+        validate_events = [
+            event
+            for event in events
+            if event["stage"] == "policy" and event["operation"] == "validate"
+        ]
+        self.assertTrue(
+            any(
+                event["result"] == "undetermined"
+                and event["reason_code"] == "policy_changed"
+                for event in validate_events
+            )
+        )
+
+    def test_preview_and_snapshot_log_real_stages(self) -> None:
+        """验证 preview 记录 load/validate/render，snapshot 记录 publish。"""
+        run_cli(self.root, ["policy", "init", "--dest", "prompts/local/demo"])
+        log = ProcessLog(self.root / "stages.jsonl", correlation_id="corr")
+        code, _, _ = run_cli(
+            self.root,
+            ["policy", "preview", "--pack", "prompts/local/demo", "--case", "policy-greeting"],
+            process_log=log,
+        )
+        self.assertEqual(code, 0)
+        events = [
+            json.loads(line)
+            for line in log.path.read_bytes().decode("utf-8").splitlines()
+        ]
+        operations = [
+            (event["operation"], event["result"])
+            for event in events
+            if event["stage"] == "policy"
+        ]
+        self.assertIn(("load", "started"), operations)
+        self.assertIn(("load", "ok"), operations)
+        self.assertIn(("validate", "ok"), operations)
+        self.assertIn(("render", "started"), operations)
+        self.assertIn(("render", "ok"), operations)
+        self.assertIn(("preview", "ok"), operations)
+        log2 = ProcessLog(self.root / "snapshot-stages.jsonl", correlation_id="corr2")
+        code, _, _ = run_cli(
+            self.root,
+            ["policy", "snapshot", "--pack", "prompts/local/demo"],
+            process_log=log2,
+        )
+        self.assertEqual(code, 0)
+        events2 = [
+            json.loads(line)
+            for line in log2.path.read_bytes().decode("utf-8").splitlines()
+        ]
+        operations2 = [
+            (event["operation"], event["result"])
+            for event in events2
+            if event["stage"] == "policy"
+        ]
+        self.assertIn(("publish", "started"), operations2)
+        self.assertIn(("publish", "ok"), operations2)
+        self.assertIn(("snapshot", "ok"), operations2)
+
+    def test_direct_usecase_logs_stages_with_same_correlation(self) -> None:
+        """验证直接调用用例也由拥有实际操作的层记录阶段，不依赖 CLI 事后补写。"""
+        repo = FilePolicyRepository(self.root)
+        policy_usecases.init_pack(repo, "prompts/local/demo", now=NOW)
+        log = ProcessLog(self.root / "direct.jsonl", correlation_id="direct")
+        policy_usecases.validate_pack(repo, "prompts/local/demo", process_log=log)
+        events = [
+            json.loads(line)
+            for line in log.path.read_bytes().decode("utf-8").splitlines()
+        ]
+        self.assertEqual(
+            [(event["operation"], event["result"]) for event in events],
+            [
+                ("load", "started"),
+                ("load", "ok"),
+                ("validate", "started"),
+                ("validate", "ok"),
+            ],
+        )
+        self.assertEqual({event["correlation_id"] for event in events}, {"direct"})
+
+    def test_log_failure_does_not_change_policy_business_result(self) -> None:
+        """验证选择性/全量日志写入失败不改 policy 业务输出与退出码。"""
+        log = ProcessLog(self.root / "degraded.jsonl", correlation_id="corr")
+
+        def failing_record(**kwargs):
+            """模拟所有日志写入失败并置降级标记。"""
+            del kwargs
+            log.degraded = True
+            return False
+
+        with patch.object(log, "record", side_effect=failing_record):
+            code, payload, stderr = run_cli(
+                self.root,
+                ["policy", "init", "--dest", "prompts/local/demo"],
+                process_log=log,
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(stderr, "m0_process_log_degraded\n")
+        self.assertTrue((self.root / "prompts/local/demo").exists())
 
     def test_full_edit_snapshot_restore_validate_preview_path(self) -> None:
         """验证编辑→validate→preview→snapshot→恢复→再 validate/preview 全路径。"""

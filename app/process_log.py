@@ -139,6 +139,8 @@ OPERATIONS = frozenset(
         "init",
         "validate",
         "preview",
+        "render",
+        "publish",
         "list",
         "snapshot",
         "restore",

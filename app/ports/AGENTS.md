@@ -11,6 +11,7 @@
 - `screen.py`：`HierarchyCapture`（XML 内存文本、受控证据名、字节数）、`ScreenCapture`（原始 RGBA 内存字节、受控证据名）、`ScreenReadError`（仅 `device_disconnected/invalid_fixture`）、`ScreenPort`（dump_hierarchy/capture_screen）与 `DeviceGate`/`DeviceGateUnavailable`。端口不暴露 serial、绝对路径或原始异常。
 - `store.py`：`StorePort` 协议与 `StoreError`；方法为 `upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，错误码固定为 `invalid_input/lease_busy/stale_lease/owner_not_stopped/clock_changed/store_busy/store_io_error/db_version_unsupported/migration_failed`。`sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，`upsert_snapshot` 的返回值限定为写后仍 queued 的发现键；M3 `read` 不调用本端口。
 - `policy.py`：M4a `PolicyError(reason_code, issues, *, activity_state)`、`PolicyRepositoryPort`（base/示例/活动包/快照/指南/preview 读取、暂存、原字节写、同卷发布、受控清理）与 `PolicyActivityPort.assess_restore(*, profile_id, dest_pack)->stopped|active|unknown`。原因码固定 `invalid_input/invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case`；M4a 生产只注入返回 `unknown` 的受控实现，M4c 才接真实活动/未决检查。
+- `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、边界
 

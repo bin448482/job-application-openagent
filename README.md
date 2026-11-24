@@ -115,7 +115,7 @@ python -m app policy snapshot --pack prompts/local/demo
 python -m app policy restore --snapshot prompts/local/history/<snapshot-id> --dest prompts/local/demo-rollback
 ```
 
-M4a 交付公开 `prompts/base/` 两份 base、`prompts/examples/default/` 全 C 空事实示例、固定 `tests/fixtures/policy-preview/` 独立合成 preview 输入，以及完整 DecisionEnvelope/Decision 严格契约、TOML+三 md schema、45 组合唯一覆盖与 A 档硬下限、四类无自引用摘要、system/developer/user 固定投影和披露追加复验。`validate` 输出有效限制、分档、来源与摘要；`preview` 只做纯渲染，不读黄金答案、不调用桥、设备、网络或模型；`init` 只建 `prompts/local` 直接子目录且不覆盖；`snapshot` 复制前后 pack_hash 一致、清单与副本全部完成才成功；`restore` 要求清单/快照/目标三值 pack_hash 相等、base 匹配并保留原 profile_id，暂存后同卷发布、不覆盖旧包。
+M4a 交付公开 `prompts/base/` 两份 base、`prompts/examples/default/` 全 C 空事实示例、固定 `tests/fixtures/policy-preview/` 独立合成 preview 输入，以及完整 DecisionEnvelope/Decision 严格契约、TOML+三 md schema、45 组合唯一覆盖与统一硬下限（2 个可 A、4 个至少 B、其余 39 个固定 C）、四类无自引用摘要、唯一 `{base,pack,data}` 内容对象、system/developer/user 固定投影和披露/事实复验。`validate` 输出有效限制、分档、硬下限、来源与摘要；`preview` 只做纯渲染，不读黄金答案、不调用桥、设备、网络或模型；`init` 只建 `prompts/local` 直接子目录且不覆盖；`snapshot` 复制前后重读活动源并保证清单与副本完成；`restore` 要求清单/快照/目标三值 pack_hash 相等、base 匹配并保留原 profile_id，暂存后同卷发布、不覆盖旧包。策略命令的成功/失败四键外层、配置错误四键、`load/validate/render/publish` 阶段日志与恢复受控拒绝见操作手册。
 
 策略命令成功/失败使用四键外层（失败带 `errors:[{file,field,line,code}]`），这是对既有 doctor/sense/read 三键外层之外的明确扩展。M4a 尚无 M4c 真实活动/未决检查，因此生产 CLI `restore` 固定受控拒绝为 `policy_changed`；只有测试可向同一生产用例注入明确合成停止证据验证文件事务，完整 CLI 安全接线留 M4c。M4b 真实桥/eval、真实模型外发、真实设备执行与事实授权均未由本里程碑交付；preview/snapshot 通过不构成发送授权。完整命令、字段、错误码与回滚边界见 [docs/operator.md](docs/operator.md)。
 

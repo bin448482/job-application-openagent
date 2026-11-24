@@ -191,9 +191,9 @@ python -m app policy init --dest prompts/local/my-profile
 - `tone.md`：通用语气，普通非空文本。
 - `phrase-bank.md`：`## intent.sub_intent` 标题与 `- 通用短句`；可空文件。
 - `never-say.md`：`- 禁用字面表达`；可空文件，程序逐字匹配最终完整回复。
-- `pack.toml`：披露、字数/冷却/每日上限、A/B/C 分档、额外禁谈主题、三份 md 文件名、事实白名单。公开示例为全 C、空事实；只能按策略包说明 §3.2 的硬下限调整，A 档也不授予发送权限。
+- `pack.toml`：披露、字数/冷却/每日上限、A/B/C 分档、额外禁谈主题、三份 md 文件名、事实白名单。公开示例为全 C、空事实；只能按策略包说明 §3.2 的硬下限调整。硬下限由同一数据源派生：仅 `interested.greeting`/`interested.job_question` 允许 A，`interested.resume_request`/`interview`/`salary`/`jd_request` 至少 B，其余 39 个组合固定 C；把固定 C 组合放入 B/A 会在具体数组项报 `safety_floor`，但不会把合法 A/B 编辑全包强制 C。A 档不授予发送权限。
 
-不要写个人事实、真实聊天、联系方式、凭据或旧个人策略。四载荷及可选双指南须为普通文件；拒绝链接/junction、BOM、NUL、非 UTF-8、`pack.toml` >16 KiB、单份 md >32 KiB、四文件合计 >64 KiB、联系方式模式与非法 Markdown 语法。
+不要写个人事实、真实聊天、联系方式、凭据或旧个人策略。四载荷及可选双指南须为普通文件；拒绝链接/junction、BOM、NUL、非 UTF-8、`pack.toml` >16 KiB、单份 md >32 KiB、四文件合计 >64 KiB、联系方式模式、可确定识别的个人事实形式与非法 Markdown 语法。
 
 ### 7.3 校验与预览
 
@@ -206,10 +206,14 @@ python -m app policy preview --pack prompts/local/my-profile --case policy-greet
 
 `preview` 只读固定 `tests/fixtures/policy-preview/` 的独立合成案例（发布清单固定包含 `policy-greeting`，另有 job/anomaly/injection），用当前 base/包实际构建 envelope 与 `system/developer/user` 三分区投影，输出完整渲染、有效限制、硬下限、来源与四类摘要。它不读取 `evals/cases.json`、参考 provider、expected、私有回归/留出答案，不调用桥、设备或模型。`tests/fixtures/policy-preview/` 是生产 preview 的公开运行资源，部署时必须携带，不能当作可删除的临时测试目录。
 
-- ENVELOPE 全部键必填、拒绝额外键；`nonce` 为规范 UUID，摘要为 64 位小写十六进制，完整 envelope 按规范 UTF-8 不超过 2048 字节，超限 `input_too_large`，不截断原文。
-- Decision 的前三个标识逐字回显；`evidence` 必须是 inbound 非空原样子串；`reply` 0–300 码点、只允许 LF；程序非空追加披露后复验完整码点数、联系方式、`never-say`、额外禁谈主题与有限事实来源模式，超限/冲突不截断。
+- 唯一规范内容对象固定为 `{base:{version,hash,files},pack:{hash,config,files},data:<envelope 投影>}`；`H(content)` 必须等于 `prompt_hash`，协议回显、分区消息和 preview 元数据只作外层包装。
+- 该完整内容对象 ≤64 KiB（同时保留实际发送 system/developer/user 文本上限）；渲染前从已加载四载荷原文重派生包结构，篡改内存派生的短语/分档不会被接受为同一摘要的不同策略内容。
+
+- ENVELOPE 全部键必填、拒绝额外键；`nonce` 为规范 UUID，摘要为 64 位小写十六进制，完整 envelope 按规范 UTF-8 不超过 2048 字节，超限 `input_too_large`，不截断原文。HR 的 `conversation_key` 必须是非空的 `boss:conv:<64hex>`；职位 `job_brief` 必须非空；按已采纳裁定，另一 subject 键是 string|null，允许合法空字符串，anomaly 两个 subject 键可为 null/空。
+- 构建器按显式 now 过滤事实：只保留注册表、包 `allow_keys`、`source=user_confirmed` 且未过期（`expires_at<=now` 丢弃）的候选；同一 key 重复或值/有效期冲突时整键受控丢弃、留给待办，不做同值去重；其它独立有效键保留。公开 Envelope 校验仍拒绝已到期事实、非法结构和重复 key，不通过放松 validator 掩盖构建器过滤。
+- Decision 的前三个标识逐字回显；`evidence` 必须是 inbound 非空原样子串；`reply` 0–300 码点、只允许 LF；程序非空追加披露后复验完整码点数、联系方式、`never-say`、额外禁谈主题与有限事实来源模式，超限/冲突不截断。当前已识别“我有 N 年/我在某地/期望薪资 N”等形式时，必须匹配同键已确认值；未识别语义不能因此放行，最终仍按 C 待办。
 - 租约有效期不使用 Envelope 新字段：由调用方传入可信 `lease_expires_at`（M1 `Lease.expires_at`），`now>=lease_expires_at` 拒绝。M4a preview 不生成 Decision，也不证明模型语义安全。
-- 有限正则未命中不等于语义安全；v1 无独立 A 档前置判据时程序前置档位固定 C，最终档位再与包分档取最严格者。
+- 有限正则未命中不等于语义安全；v1 无独立 A 档前置判据时程序前置档位固定 C，最终档位再与包分档及硬下限取最严格者。
 
 ### 7.4 列表、快照与恢复
 
@@ -219,9 +223,11 @@ python -m app policy snapshot --pack prompts/local/my-profile
 python -m app policy restore --snapshot prompts/local/history/<snapshot-id> --dest prompts/local/my-profile-rollback
 ```
 
-- `list` 分别列出 local 直接活动包与 history 快照的相对路径、profile_id、base/pack 摘要与有效性；不输出正文、不自动选最新，history 不是活动包，链接/坏包只标无效。
-- `snapshot` 把已校验四载荷与可选双指南复制到 `prompts/local/history/<UTC时间-随机后缀>/`，旁边写 `<snapshot-id>.local.json`；清单固定 `{schema_version,profile_id,source_pack,base_version,base_hash,pack_hash,created_at}`。复制前后 pack_hash 必须一致，清单与副本全部完成才发布成功；失败清理本次暂存/发布路径，不覆盖已有 ID。
+- `list` 分别列出 local 直接活动包与 history 快照的相对路径、profile_id、base/pack 摘要与有效性；不输出正文、不自动选最新，history 不是活动包，坏包只标无效。链接/junction 候选保留相对路径并标 `valid=false`，不跟随、不递归；读取边界仍拒绝链接。
+- `snapshot` 把已校验四载荷与可选双指南复制到 `prompts/local/history/<UTC时间-随机后缀>/`，旁边写 `<snapshot-id>.local.json`；清单固定 `{schema_version,profile_id,source_pack,base_version,base_hash,pack_hash,created_at}`。复制前后不仅复核暂存副本，还重读活动源四载荷与指南，源变化或读取失败受控 `policy_changed` 并清理本次自有暂存/发布；清单与副本全部完成才发布成功，不覆盖已有 ID。
 - `restore` 要求清单 `pack_hash`、快照重算 `pack_hash`、目标重算 `pack_hash` 三值完全相等，`base_hash` 与当前 base 相等、`base_version` 匹配，并保留原 `profile_id`；只恢复到新的 local 直接子目录，目标存在报 `policy_exists`，不覆盖原包。先写点前缀暂存并完整校验，再同卷改名；中断或失败不暴露半包。
+
+阶段日志：`policy` 命令除命令级 `started`/终态外，还在实际执行层用同一 `ProcessLog`/correlation 记录 `load`、`validate`、`render`、`publish` 的 `started` 与 `ok/failed/undetermined`、固定原因和耗时；恢复活动状态未知记 `undetermined`。日志写入失败/降级不改变业务输出、状态或退出码；不记录正文、事实、私有路径或异常原值。
 
 M4a 尚无 M4c 的真实运行/停止/未决租约检查，生产 CLI `restore` 固定受控拒绝为 `policy_changed`，`errors` 指向目标冲突，不把未知状态当 `stopped`、不用占位 `True`。只有测试可向同一生产 `restore_pack` 用例注入明确合成 `stopped` 证据，验证文件事务与三值一致；完整 CLI 安全接线与真实恢复须在 M4c 另行复验，没有公开 CLI 绕过参数。
 
@@ -235,7 +241,7 @@ M4a 尚无 M4c 的真实运行/停止/未决租约检查，生产 CLI `restore` 
 {"schema_version":1,"status":"ok","reason_code":null,"result":{}}
 ```
 
-失败也输出四键：`{schema_version:1,status:"failed",reason_code:<固定>,errors:[{file,field,line,code}]}`，`errors` 可为空；`policy` 参数形状错误同样使用四键，不改变其它命令的三键约定。原因码固定 `invalid_input/invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case`；字段诊断码固定 `missing/unknown_key/duplicate/type/range/vocabulary/coverage/safety_floor/encoding/path/size/sensitive/conflict/format`。`file` 仅为项目内相对路径或 null，`line` 为 1 起整数或 null；不得回显原值、可疑键名或底层异常。帮助退出 `0`，业务/校验/IO 失败退出 `2`。
+失败也输出四键：`{schema_version:1,status:"failed",reason_code:<固定>,errors:[{file,field,line,code}]}`，`errors` 可为空；`policy` 参数形状错误、全局配置受控错误或配置读取意外异常同样使用四键（配置错误保留 `invalid_config` 原因并以空 `errors` 表达），不改变其它命令的三键约定。`operation` 只按命令位置识别，配置值含 `policy` 不改变外层。原因码固定 `invalid_input/invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case`；配置错误沿用全局 `invalid_config`。字段诊断码固定 `missing/unknown_key/duplicate/type/range/vocabulary/coverage/safety_floor/encoding/path/size/sensitive/conflict/format`。`file` 仅为项目内相对路径或 null，`line` 为 1 起整数或 null；未知短语标题等不可信值只定位固定父字段或 null，不得回显原值、可疑键名或底层异常。帮助退出 `0`，业务/校验/IO 失败退出 `2`。
 
 ## 八、显式真实设备模式
 
@@ -328,7 +334,7 @@ M2 `sense` 的合成输入另用 `tests/fixtures/sensor/` 的 manifest/profile/X
 每行固定包含 `schema_version/ts/correlation_id/stage/operation/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`：
 
 - `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/sense/read/policy/adb_hierarchy/adb_screen/adb_evidence/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、ADB 命令与证据保存、sense 解析、M3 read 解析/像素/合并/门禁、M4a policy 文件阶段、业务判定、store 初始化/核验与 upsert/unresolved、输出和出口。
-- `operation` 仅在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，`sense` 阶段取 `parse/aggregate/stop_reason`，`read` 阶段取 `load/page/job_list/job_detail/unread/conversation/merge/pixel/gate`，`policy` 阶段取 `init/validate/preview/list/snapshot/restore`，其它阶段为 `null`；公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时；`sense/parse`、`read/load` 与各 read 操作按 `ReadResult.status` 记 `ok/undetermined/failed`，内部异常记 `failed/error_category=internal` 后继续公共安全出口；`policy` 每次先记 `started`，再记 `ok` 或带固定策略原因/`error_category=policy` 的 `failed`，恢复活动状态未知记 `undetermined`，并写耗时；不记 PID/host/nonce/键/正文/XML/SQL/文件内容/路径/异常。
+- `operation` 仅在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，`sense` 阶段取 `parse/aggregate/stop_reason`，`read` 阶段取 `load/page/job_list/job_detail/unread/conversation/merge/pixel/gate`，`policy` 阶段取 `load/validate/render/publish` 及命令名 `init/validate/preview/list/snapshot/restore`，其它阶段为 `null`；公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时；`sense/parse`、`read/load` 与各 read 操作按 `ReadResult.status` 记 `ok/undetermined/failed`，内部异常记 `failed/error_category=internal` 后继续公共安全出口；`policy` 在真实执行边界分别记录阶段 `started` 与终态，命令级再记 `started`/终态，恢复活动未知记 `undetermined`；不记 PID/host/nonce/键/正文/XML/SQL/文件内容/路径/异常。
 - `result` 固定为 `started/ok/undetermined/failed`；`reason_code` 沿用计划词表（含 `identity_ambiguous`、字段未知/像素原因与 gate 原因）与 M4a `invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case`；`error_category` 固定为 `argument/config/fixture/probe/business/store/sense/read/policy/pixel/gate/evidence/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
 - `command` 只写 `adb_devices/adb_window/adb_hierarchy_dump/adb_hierarchy_cat/adb_screencap`；每次命令先记 `started`，完成后再记 `ok` 或固定失败类别。
 - `store` 阶段先记 `started`，再记 `ok` 或带固定仓储原因与 `error_category=store` 的 `failed`；非预期异常只把失败事件记为 `reason_code=null`/`error_category=internal`，业务 stdout 仍为 `store_io_error`/退出 `2`，最终 exit 分类与失败事件分类分别记录、互不替代。不写数据库路径。

@@ -18,6 +18,7 @@
 4. `promote` 只做同卷改名，目标存在即 `policy_exists`；不提供覆盖、复制到任意目录或跨卷回退。
 5. `remove_owned` 只删除本次适配器实例登记过的暂存/发布路径，防止测试或调用方误删用户数据。
 6. preview 案例从项目根固定读取 `tests/fixtures/policy-preview/<case>.json`；未知或越界 ID 返回 `unknown_case`，不搜索其它目录、不读取答案或私有留出。
+7. `list_pack_dirs`/`list_history_dirs` 只枚举直接项元数据；链接/junction 候选保留路径交给上层标 `valid=false`，不跟随目标、不递归。活动包/快照/指南读取共用领域路径形状与同一正文读取核心。
 
 ## 四、测试
 

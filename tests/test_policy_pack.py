@@ -5,9 +5,13 @@ from __future__ import annotations
 import unittest
 
 from app.domain.policy import (
-    BASE_VERSION,
+    HARD_FLOOR_A_KEYS,
+    HARD_FLOOR_B_KEYS,
+    HARD_FLOOR_C_KEYS,
+    HARD_FLOOR_TIERS,
     POLICY_KEYS,
     SUB_INTENTS,
+    DecisionError,
     effective_limits,
     parse_and_validate_pack,
     resolve_policy_tier,
@@ -68,12 +72,45 @@ class PolicyPackTests(unittest.TestCase):
             msg=f"missing {code} {file} {field}: {[issue.to_dict() for issue in issues]}",
         )
 
+    def _newline(self, text: str | None = None) -> str:
+        """返回本次示例 pack.toml 使用的合法换行序列。"""
+        if text is None:
+            text = self.files()["pack.toml"]
+        return "\r\n" if "\r\n" in text else "\n"
+
+    def _with_newline(self, text: str, newline: str) -> str:
+        """把测试构造文本的 LF 转为目标文件换行，保留既有 CRLF。"""
+        if "\r\n" in text:
+            return text
+        return text.replace("\n", newline)
+
     def replace(self, old: str, new: str) -> dict[str, str]:
-        """在示例 pack.toml 中替换一次文本并返回新文件映射。"""
+        """在示例 pack.toml 中替换一次文本，兼容 LF/CRLF 构造。"""
         files = self.files()
         text = files["pack.toml"]
+        newline = self._newline(text)
+        old = self._with_newline(old, newline)
+        new = self._with_newline(new, newline)
         self.assertIn(old, text)
         files["pack.toml"] = text.replace(old, new, 1)
+        return files
+
+    def remove_line(self, line: str) -> dict[str, str]:
+        """删除指定完整行并兼容 LF/CRLF。"""
+        files = self.files()
+        text = files["pack.toml"]
+        needle = line + self._newline(text)
+        self.assertIn(needle, text)
+        files["pack.toml"] = text.replace(needle, "", 1)
+        return files
+
+    def append_line(self, line: str) -> dict[str, str]:
+        """在 pack.toml 末尾追加一行并兼容 LF/CRLF。"""
+        files = self.files()
+        text = files["pack.toml"]
+        if not text.endswith(("\n", "\r\n")):
+            text += self._newline(text)
+        files["pack.toml"] = text + line + self._newline(text)
         return files
 
     def test_example_pack_is_valid_and_all_c(self) -> None:
@@ -111,17 +148,15 @@ class PolicyPackTests(unittest.TestCase):
             "conflict = \"ask_user\"",
         )
         for line in lines:
-            files = self.files()
-            files["pack.toml"] = files["pack.toml"].replace(line + "\n", "", 1)
+            files = self.remove_line(line)
             self.assertCode(files, "missing")
 
     def test_extra_top_level_and_nested_keys(self) -> None:
         """验证顶层与子表额外键只定位父表并拒绝。"""
         files = self.files()
-        files["pack.toml"] = "extra = 1\n" + files["pack.toml"]
+        files["pack.toml"] = "extra = 1" + self._newline(files["pack.toml"]) + files["pack.toml"]
         self.assertCode(files, "unknown_key", file="pack.toml")
-        files = self.files()
-        files["pack.toml"] += "extra = 1\n"
+        files = self.append_line("extra = 1")
         self.assertCode(files, "unknown_key", field="facts")
 
     def test_schema_profile_locale_apps(self) -> None:
@@ -237,12 +272,14 @@ class PolicyPackTests(unittest.TestCase):
             self.assertCode(self.replace(old, new), "path")
 
     def test_markdown_tone_rules(self) -> None:
-        """验证 tone 非空普通文本且拒绝控制字符与联系方式。"""
+        """验证 tone 非空普通文本且拒绝控制字符、联系方式与可确定个人事实。"""
         for text in ("", "   \n", "联系 13800000000", "a\x01b"):
             files = self.files()
             files["tone.md"] = text
             self.assertCode(files, "range" if not text.strip() else "sensitive" if "138" in text else "encoding", file="tone.md")
-
+        files = self.files()
+        files["tone.md"] = "我有5年经验。\n"
+        self.assertCode(files, "sensitive", file="tone.md")
     def test_phrase_bank_syntax(self) -> None:
         """验证 phrase-bank 标题/列表语法、重复段与重复短句。"""
         valid = "## interested.greeting\n- 您好。\n\n## uncertain.ambiguous\n- 请人工确认。\n"
@@ -275,6 +312,19 @@ class PolicyPackTests(unittest.TestCase):
         files["phrase-bank.md"] = "## interested.greeting\n- 您好。\n- 您好。\n"
         self.assertCode(files, "duplicate", file="phrase-bank.md")
 
+    def test_unknown_phrase_heading_is_not_reflected(self) -> None:
+        """验证未知短语标题只定位固定父字段，不回显可疑标题原值。"""
+        files = self.files()
+        files["phrase-bank.md"] = "## synthetic-untrusted-heading\n- 您好。\n"
+        pack, issues = self.parse(files)
+        self.assertIsNone(pack)
+        rendered = str([issue.to_dict() for issue in issues])
+        self.assertNotIn("synthetic-untrusted-heading", rendered)
+        matches = [issue for issue in issues if issue.code == "vocabulary"]
+        self.assertTrue(matches)
+        self.assertIsNone(matches[0].field)
+        self.assertEqual(matches[0].line, 1)
+
     def test_never_say_syntax_and_disclosure_conflict(self) -> None:
         """验证 never-say 行语法、重复项与披露字面冲突。"""
         files = self.files()
@@ -295,17 +345,21 @@ class PolicyPackTests(unittest.TestCase):
             ("tone.md", "联系 13800000000"),
             ("phrase-bank.md", "## interested.greeting\n- 邮箱 test@example.com\n"),
             ("never-say.md", "- 微信 wxid_test\n"),
-            ("pack.toml", "# test@example.com\n" + self.files()["pack.toml"]),
         ):
             files = self.files()
             files[name] = text
             self.assertCode(files, "sensitive", file=name)
+        files = self.files()
+        files["pack.toml"] = (
+            "# test@example.com" + self._newline(files["pack.toml"]) + files["pack.toml"]
+        )
+        self.assertCode(files, "sensitive", file="pack.toml")
 
     def test_toml_duplicate_and_located_diagnostics(self) -> None:
         """验证重复 TOML 键、A 越权行号与未知键不回显可疑键名。"""
-        files = self.files()
-        files["pack.toml"] = files["pack.toml"].replace(
-            'profile_id = "default"', 'profile_id = "default"\nprofile_id = "default"', 1
+        files = self.replace(
+            'profile_id = "default"',
+            'profile_id = "default"\nprofile_id = "default"',
         )
         self.assertCode(files, "duplicate", file="pack.toml")
         overreach = (
@@ -327,13 +381,64 @@ class PolicyPackTests(unittest.TestCase):
         self.assertTrue(matches)
         self.assertIsInstance(matches[0].line, int)
         self.assertGreater(matches[0].line, 0)
-        files = self.files()
-        files["pack.toml"] += "supersecret = 1\n"
+        files = self.append_line("supersecret = 1")
         pack, issues = self.parse(files)
         self.assertIsNone(pack)
         rendered = str([issue.to_dict() for issue in issues])
         self.assertIn("facts", rendered)
         self.assertNotIn("supersecret", rendered)
+
+    def test_hard_floor_all_45_combinations(self) -> None:
+        """验证 45 键的 A/B 越权都按同一硬下限数据源拒绝。"""
+        self.assertEqual(len(POLICY_KEYS), 45)
+        self.assertEqual(len(HARD_FLOOR_C_KEYS), 39)
+        for key in POLICY_KEYS:
+            with self.subTest(key=key, tier="B"):
+                others = [item for item in POLICY_KEYS if item != key]
+                block = (
+                    "[tiers]\n"
+                    "A = []\n"
+                    f'B = ["{key}"]\n'
+                    "C = [" + ", ".join(f'"{item}"' for item in others) + "]"
+                )
+                files = self.replace(DEFAULT_TIERS, block)
+                pack, issues = self.parse(files)
+                if key in HARD_FLOOR_C_KEYS:
+                    self.assertIsNone(pack)
+                    self.assertTrue(
+                        any(
+                            issue.code == "safety_floor"
+                            and issue.field == "tiers.B[0]"
+                            for issue in issues
+                        )
+                    )
+                else:
+                    self.assertEqual(issues, [])
+                    assert pack is not None
+                    self.assertEqual(pack.tier_by_key[key], "B")
+            with self.subTest(key=key, tier="A"):
+                others = [item for item in POLICY_KEYS if item != key]
+                block = (
+                    "[tiers]\n"
+                    f'A = ["{key}"]\n'
+                    "B = []\n"
+                    "C = [" + ", ".join(f'"{item}"' for item in others) + "]"
+                )
+                files = self.replace(DEFAULT_TIERS, block)
+                pack, issues = self.parse(files)
+                if key in HARD_FLOOR_A_KEYS:
+                    self.assertEqual(issues, [])
+                    assert pack is not None
+                    self.assertEqual(pack.tier_by_key[key], "A")
+                else:
+                    self.assertIsNone(pack)
+                    self.assertTrue(
+                        any(
+                            issue.code == "safety_floor"
+                            and issue.field == "tiers.A[0]"
+                            for issue in issues
+                        )
+                    )
 
     def test_tier_resolution_and_hard_floor(self) -> None:
         """验证 45 键取最严档位、空子意图、escalate 与硬下限。"""
@@ -423,26 +528,123 @@ class RenderTests(unittest.TestCase):
         self.assertNotIn("task_id", rendered.user_message)
 
     def test_rendered_request_hash_matches_prompt_hash(self) -> None:
-        """验证手算 RenderedRequest 摘要等于 envelope.prompt_hash。"""
+        """验证唯一规范内容对象 {base,pack,data} 的摘要等于 prompt_hash。"""
         envelope, rendered = self.render()
-        manual = {
-            "base": {
-                "version": BASE_VERSION,
-                "hash": rendered.base_hash,
-                "files": rendered.base_files,
-            },
-            "pack": {
-                "hash": rendered.pack_hash,
-                "config": rendered.pack_config,
-                "files": rendered.pack_files,
-            },
-            "data": rendered.data,
-        }
+        self.assertEqual(set(rendered.content), {"base", "pack", "data"})
         from app.domain.models import canonical_hash
 
-        self.assertEqual(canonical_hash(manual), envelope["prompt_hash"])
+        self.assertEqual(canonical_hash(rendered.content), envelope["prompt_hash"])
         self.assertEqual(rendered.protocol["task_id"], envelope["task_id"])
         self.assertEqual(rendered.protocol["nonce"], envelope["nonce"])
+
+    def test_large_two_base_files_reject_content_object(self) -> None:
+        """验证两份各自未超上限的 base 合并后超过 64 KiB 内容对象仍拒绝。"""
+        from app.domain.policy import build_envelope, render_request
+
+        case = real_preview_case("policy-greeting")
+        base_text = "a" * 33000
+        base_files = {
+            "intent-and-reply.md": base_text,
+            "job-evaluate.md": base_text,
+        }
+        pack = real_example_pack()
+        envelope = build_envelope(
+            task_id=case["task_id"],
+            nonce=case["nonce"],
+            kind=case["kind"],
+            subject=case["subject"],
+            inbound=case["inbound"],
+            context=case["context"],
+            allowed_facts=case["allowed_facts"],
+            base_files=base_files,
+            pack=pack,
+            now=case["now"],
+        )
+        with self.assertRaises(DecisionError) as raised:
+            render_request(base_files, pack, envelope, now=str(case["now"]))
+        self.assertEqual(raised.exception.reason_code, "input_too_large")
+
+    def test_rendered_content_object_size_limit(self) -> None:
+        """验证完整规范内容对象 65536 字节接受、65537 字节拒绝。"""
+        from app.domain.policy import (
+            build_envelope,
+            canonical_json_bytes,
+            parse_and_validate_pack,
+            render_request,
+        )
+
+        case = real_preview_case("policy-greeting")
+        base_files = {
+            "intent-and-reply.md": "a" * 20000,
+            "job-evaluate.md": "a" * 20000,
+        }
+
+        def render_with_tone(length: int):
+            """按指定 tone 长度构造包与 envelope，并返回实际渲染结果。"""
+            files = real_example_files()
+            files["tone.md"] = "a" * length
+            pack, issues = parse_and_validate_pack(files)
+            self.assertEqual(issues, [])
+            assert pack is not None
+            envelope = build_envelope(
+                task_id=case["task_id"],
+                nonce=case["nonce"],
+                kind=case["kind"],
+                subject=case["subject"],
+                inbound=case["inbound"],
+                context=case["context"],
+                allowed_facts=case["allowed_facts"],
+                base_files=base_files,
+                pack=pack,
+                now=case["now"],
+            )
+            return render_request(base_files, pack, envelope, now=str(case["now"]))
+
+        low, high = 1, 32000
+        while low < high:
+            middle = (low + high + 1) // 2
+            try:
+                rendered = render_with_tone(middle)
+            except DecisionError as error:
+                self.assertEqual(error.reason_code, "input_too_large")
+                high = middle - 1
+            else:
+                self.assertLessEqual(
+                    len(canonical_json_bytes(rendered.content)), 65536
+                )
+                low = middle
+        accepted = render_with_tone(low)
+        self.assertEqual(len(canonical_json_bytes(accepted.content)), 65536)
+        with self.assertRaises(DecisionError) as raised:
+            render_with_tone(low + 1)
+        self.assertEqual(raised.exception.reason_code, "input_too_large")
+
+    def test_render_ignores_mutated_derived_pack_fields(self) -> None:
+        """验证渲染从经校验原文重派生，篡改派生短语不改变同摘要内容。"""
+        from app.domain.policy import build_envelope, render_request
+
+        case = real_preview_case("policy-greeting")
+        base = real_base_files()
+        pack = real_example_pack()
+        envelope = build_envelope(
+            task_id=case["task_id"],
+            nonce=case["nonce"],
+            kind=case["kind"],
+            subject=case["subject"],
+            inbound=case["inbound"],
+            context=case["context"],
+            allowed_facts=case["allowed_facts"],
+            base_files=base,
+            pack=pack,
+            now=case["now"],
+        )
+        original = render_request(base, pack, envelope, now=str(case["now"]))
+        pack.phrases["interested.greeting"] = ("被篡改的合成短语",)
+        pack.tier_by_key["interested.greeting"] = "A"
+        repeated = render_request(base, pack, envelope, now=str(case["now"]))
+        self.assertEqual(repeated.prompt_hash, envelope["prompt_hash"])
+        self.assertEqual(repeated.developer_message, original.developer_message)
+        self.assertNotIn("被篡改的合成短语", repeated.developer_message)
 
     def test_preview_case_schema(self) -> None:
         """验证四个 preview 案例正例与键/类型负例。"""
@@ -453,6 +655,15 @@ class RenderTests(unittest.TestCase):
             "policy-injection",
         ):
             validate_preview_case(real_preview_case(case_id))
+        case = dict(real_preview_case("policy-greeting"))
+        case["subject"] = {"conversation_key": "boss:conv:" + "0" * 64, "job_brief": ""}
+        validate_preview_case(case)
+        case = dict(real_preview_case("policy-job-card"))
+        case["subject"] = {"conversation_key": "", "job_brief": "后端开发"}
+        validate_preview_case(case)
+        case = dict(real_preview_case("policy-anomaly"))
+        case["subject"] = {"conversation_key": None, "job_brief": ""}
+        validate_preview_case(case)
         case = dict(real_preview_case("policy-greeting"))
         case["extra"] = 1
         with self.assertRaises(ValueError):

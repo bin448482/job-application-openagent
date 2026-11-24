@@ -13,7 +13,7 @@
 - `ports/`：能力端口与领域快照/租约类型；见 `ports/AGENTS.md`。
 - `usecases/`：单次用例的校验、持久化编排、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。
-- `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值；唯一 `emit_degraded_warning` 每次运行只写一次固定 stderr 标记，CLI 与仓储 API 共用。阶段已扩展到 `store/sense/read/policy/adb_hierarchy/adb_screen/adb_evidence`，结果含 `started/ok/undetermined/failed`，并以 `operation` 记录 init/parse/aggregate/stop_reason/load/page/job_list/job_detail/unread/conversation/merge/pixel/gate/open/upsert/claim/start/renew/finish/recover/unresolved_conversations/validate/preview/list/snapshot/restore，仍复用唯一日志器。
+- `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值；唯一 `emit_degraded_warning` 每次运行只写一次固定 stderr 标记，CLI 与仓储 API 共用。阶段已扩展到 `store/sense/read/policy/adb_hierarchy/adb_screen/adb_evidence`，结果含 `started/ok/undetermined/failed`，并以 `operation` 记录 init/parse/aggregate/stop_reason/load/page/job_list/job_detail/unread/conversation/merge/pixel/gate/open/upsert/claim/start/renew/finish/recover/unresolved_conversations/validate/preview/render/publish/list/snapshot/restore，仍复用唯一日志器。
 
 ## 三、依赖与边界
 
@@ -49,7 +49,7 @@ python -m app policy list
 python -m app policy snapshot --pack prompts/local/demo
 ```
 
-`tests.test_doctor` 覆盖 M0 CLI、配置与夹具校验、设备解析、日志与 fixture 零子进程；`tests.test_process_log_concurrency` 用两个独立进程验证默认与显式日志路径的隔离和完整关联；`tests.test_store` 覆盖候选入库、竞争、TTL、三态收敛、恢复、clock_changed、严格输入与事务回滚；`tests.test_migrations` 覆盖空库建表/核验、幂等、初始化回滚、schema 篡改与 `store init` CLI；`tests.test_sensor` 覆盖 M2 解析/合并/聚合/停止原因，`tests.test_sensor_store` 覆盖 sense 落库、重放、终态与仓储错误；`tests.test_read` 覆盖 M3 页面/职位/未读/会话、字段阶梯、像素、稳定消息身份、跨屏合并、门禁与 CLI，`tests.test_screen` 覆盖 mock ADB 采集与共享门禁；`tests.test_policy_contract`/`test_policy_pack` 覆盖 M4a Envelope/Decision、摘要、45 组合、渲染与披露复验，`tests.test_policy_store` 覆盖六命令文件事务、四键外层、受控恢复拒绝与日志。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行；M1/M2 测试只用合成库与注入检查器，M2/M3 只用合成 XML/RGBA，M4a 只用临时项目根与合成 preview 案例。
+`tests.test_doctor` 覆盖 M0 CLI、配置与夹具校验、设备解析、日志与 fixture 零子进程；`tests.test_process_log_concurrency` 用两个独立进程验证默认与显式日志路径的隔离和完整关联；`tests.test_store` 覆盖候选入库、竞争、TTL、三态收敛、恢复、clock_changed、严格输入与事务回滚；`tests.test_migrations` 覆盖空库建表/核验、幂等、初始化回滚、schema 篡改与 `store init` CLI；`tests.test_sensor` 覆盖 M2 解析/合并/聚合/停止原因，`tests.test_sensor_store` 覆盖 sense 落库、重放、终态与仓储错误；`tests.test_read` 覆盖 M3 页面/职位/未读/会话、字段阶梯、像素、稳定消息身份、跨屏合并、门禁与 CLI，`tests.test_screen` 覆盖 mock ADB 采集与共享门禁；`tests.test_policy_contract`/`test_policy_pack` 覆盖 M4a Envelope/Decision、摘要、事实交集、2/4/39 硬下限、唯一内容对象 64 KiB、渲染与披露/事实值复验，`tests.test_policy_store` 覆盖六命令文件事务、复制源重读、四键/配置错误外层、链接候选 list、load/validate/render/publish 阶段日志、受控恢复拒绝与 LF/CRLF。真实 ADB 模式只通过 mock 的 subprocess 输出验证，不代表已在真机运行；M1/M2 测试只用合成库与注入检查器，M2/M3 只用合成 XML/RGBA，M4a 只用临时项目根与合成 preview 案例。
 
 ## 五、维护要求
 

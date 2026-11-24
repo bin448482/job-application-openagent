@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import stat
 import uuid
@@ -20,14 +19,14 @@ from app.domain.policy import (
     PACK_TOTAL_MAX_BYTES,
     PolicyIssue,
     is_case_id,
-    is_profile_id,
     is_snapshot_id,
+    normalize_active_pack_path,
+    normalize_snapshot_path,
 )
 from app.ports.policy import PolicyError
 
 BASE_MAX_BYTES = 64 * 1024
 STAGING_PREFIX = ".staging-"
-SNAPSHOT_ID_RE = re.compile(r"^\d{8}T\d{9}Z-[0-9a-f]{8}$")
 PREVIEW_ROOT = "tests/fixtures/policy-preview"
 
 
@@ -92,32 +91,19 @@ class FilePolicyRepository:
 
     def _active_pack(self, value: str) -> str:
         """校验值恰为 local 直接活动包目录并返回规范相对路径。"""
-        posix = self._normalize_rel(value)
-        parts = posix.split("/")
-        if (
-            len(parts) != 3
-            or parts[0] != "prompts"
-            or parts[1] != "local"
-            or parts[2] in {"history", ""}
-            or parts[2].startswith(".")
-            or not is_profile_id(parts[2])
-        ):
-            raise PolicyError("invalid_input", [_issue(posix, None, "path")])
+        try:
+            posix = normalize_active_pack_path(value)
+        except ValueError:
+            raise PolicyError("invalid_input", [_issue(None, None, "path")]) from None
         self._resolve(posix)
         return posix
 
     def _history_snapshot(self, value: str) -> str:
         """校验值恰为 history 直接快照目录并返回规范相对路径。"""
-        posix = self._normalize_rel(value)
-        parts = posix.split("/")
-        if (
-            len(parts) != 4
-            or parts[0] != "prompts"
-            or parts[1] != "local"
-            or parts[2] != "history"
-            or SNAPSHOT_ID_RE.fullmatch(parts[3]) is None
-        ):
-            raise PolicyError("invalid_input", [_issue(posix, None, "path")])
+        try:
+            posix = normalize_snapshot_path(value)
+        except ValueError:
+            raise PolicyError("invalid_input", [_issue(None, None, "path")]) from None
         self._resolve(posix)
         return posix
 
@@ -218,9 +204,8 @@ class FilePolicyRepository:
         posix = self._history_snapshot(snapshot_rel)
         return self._read_payload_dir(posix, guides_required=False)
 
-    def read_snapshot_guides(self, snapshot_rel: str) -> dict[str, str]:
-        """读取快照内可选双指南；两者都不存在时返回空映射。"""
-        posix = self._history_snapshot(snapshot_rel)
+    def _read_guides_dir(self, posix: str) -> dict[str, str]:
+        """从给定包/快照目录读取可选双指南的共用正文核心。"""
         entries = self._entries(posix)
         names = {entry.name for entry in entries}
         present = set(GUIDE_FILE_NAMES) & names
@@ -230,23 +215,18 @@ class FilePolicyRepository:
             raise PolicyError("invalid_policy", [_issue(posix, None, "missing")])
         guides: dict[str, str] = {}
         for name in GUIDE_FILE_NAMES:
-            guides[name] = self._read_text(f"{posix}/{name}", max_bytes=PACK_MD_MAX_BYTES)
+            guides[name] = self._read_text(
+                f"{posix}/{name}", max_bytes=PACK_MD_MAX_BYTES
+            )
         return guides
+
+    def read_snapshot_guides(self, snapshot_rel: str) -> dict[str, str]:
+        """读取快照内可选双指南；两者都不存在时返回空映射。"""
+        return self._read_guides_dir(self._history_snapshot(snapshot_rel))
 
     def read_guides(self, pack_rel: str) -> dict[str, str]:
         """读取包内可选双指南；两者都不存在时返回空映射。"""
-        posix = self._active_pack(pack_rel)
-        entries = self._entries(posix)
-        names = {entry.name for entry in entries}
-        present = set(GUIDE_FILE_NAMES) & names
-        if not present:
-            return {}
-        if present != set(GUIDE_FILE_NAMES):
-            raise PolicyError("invalid_policy", [_issue(posix, None, "missing")])
-        guides: dict[str, str] = {}
-        for name in GUIDE_FILE_NAMES:
-            guides[name] = self._read_text(f"{posix}/{name}", max_bytes=PACK_MD_MAX_BYTES)
-        return guides
+        return self._read_guides_dir(self._active_pack(pack_rel))
 
     def read_preview_case(self, case_id: str) -> dict[str, object]:
         """读取固定 preview 目录内的合成案例，未知 ID 返回 unknown_case。"""
@@ -283,9 +263,8 @@ class FilePolicyRepository:
             if entry.name.startswith(".") or entry.name == "history":
                 continue
             path = Path(entry.path)
-            if _is_link_like(path) or not path.is_dir():
-                continue
-            result.append(f"prompts/local/{entry.name}")
+            if _is_link_like(path) or path.is_dir():
+                result.append(f"prompts/local/{entry.name}")
         return sorted(result)
 
     def list_history_dirs(self) -> list[str]:
@@ -301,12 +280,11 @@ class FilePolicyRepository:
             raise PolicyError("policy_io_error", [_issue("prompts/local/history", None, "format")]) from None
         result: list[str] = []
         for entry in entries:
-            if not SNAPSHOT_ID_RE.fullmatch(entry.name):
+            if not is_snapshot_id(entry.name):
                 continue
             path = Path(entry.path)
-            if _is_link_like(path) or not path.is_dir():
-                continue
-            result.append(f"prompts/local/history/{entry.name}")
+            if _is_link_like(path) or path.is_dir():
+                result.append(f"prompts/local/history/{entry.name}")
         return sorted(result)
 
     def list_files(self, rel_path: str) -> list[str]:

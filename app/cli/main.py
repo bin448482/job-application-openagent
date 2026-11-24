@@ -815,17 +815,23 @@ def _run_policy(log: ProcessLog, started: float, args: argparse.Namespace) -> in
         repository = FilePolicyRepository(PROJECT_ROOT)
         now = utc_now()
         if operation == "init":
-            result = policy_usecases.init_pack(repository, args.dest, now=now)
+            result = policy_usecases.init_pack(
+                repository, args.dest, now=now, process_log=log
+            )
         elif operation == "validate":
-            result = policy_usecases.validate_pack(repository, args.pack, now=now)
+            result = policy_usecases.validate_pack(
+                repository, args.pack, now=now, process_log=log
+            )
         elif operation == "preview":
             result = policy_usecases.preview_pack(
-                repository, args.pack, args.case, now=now
+                repository, args.pack, args.case, now=now, process_log=log
             )
         elif operation == "list":
-            result = policy_usecases.list_packs(repository, now=now)
+            result = policy_usecases.list_packs(repository, now=now, process_log=log)
         elif operation == "snapshot":
-            result = policy_usecases.snapshot_pack(repository, args.pack, now=now)
+            result = policy_usecases.snapshot_pack(
+                repository, args.pack, now=now, process_log=log
+            )
         elif operation == "restore":
             result = policy_usecases.restore_pack(
                 repository,
@@ -833,6 +839,7 @@ def _run_policy(log: ProcessLog, started: float, args: argparse.Namespace) -> in
                 args.dest,
                 RefusingPolicyActivity(),
                 now=now,
+                process_log=log,
             )
         else:
             raise PolicyError("invalid_input")
@@ -987,10 +994,15 @@ def main(
             error_category="config",
             config_source=config_source,
         )
+        payload = (
+            _policy_error_payload("invalid_config")
+            if policy_invocation
+            else _error_payload("invalid_config")
+        )
         return _finalize_output(
             log,
             started,
-            _error_payload("invalid_config"),
+            payload,
             2,
             "invalid_config",
             "config",
@@ -1003,10 +1015,15 @@ def main(
             error_category="internal",
             config_source=config_source,
         )
+        payload = (
+            _policy_error_payload("invalid_config")
+            if policy_invocation
+            else _error_payload("invalid_config")
+        )
         return _finalize_output(
             log,
             started,
-            _error_payload("invalid_config"),
+            payload,
             2,
             "invalid_config",
             "internal",
