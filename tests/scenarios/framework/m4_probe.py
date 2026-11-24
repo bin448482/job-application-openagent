@@ -1253,6 +1253,8 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
     if mode == "register_alt":
         holdout_path = ROOT / "evals/private/holdout/suite.json"
         alt_path = ROOT / "evals/private/holdout-alt/suite.json"
+        registry_path = ROOT / "data/evals/holdout-registry.local.json"
+        raw_before = registry_path.read_bytes() if registry_path.is_file() else None
         original = holdout_path.read_bytes()
         try:
             holdout_path.write_bytes(alt_path.read_bytes())
@@ -1269,10 +1271,32 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 ),
             )
         except Exception as error:
-            return {"status": "error", "reason_code": getattr(error, "reason_code", None)}
+            raw_after = registry_path.read_bytes() if registry_path.is_file() else None
+            return {
+                "status": "error",
+                "reason_code": getattr(error, "reason_code", None),
+                "registry_bytes_unchanged": raw_before == raw_after,
+            }
         finally:
             holdout_path.write_bytes(original)
-        return {"status": "ok", "reason_code": None, "batch": result.get("batch", {}).get("batch_id")}
+        registry_after = store.read_holdout_registry()
+        batch_id = result.get("batch", {}).get("batch_id")
+        batch = next(
+            (
+                item
+                for item in registry_after.get("batches", [])
+                if isinstance(item, dict) and item.get("batch_id") == batch_id
+            ),
+            None,
+        )
+        return {
+            "status": "ok",
+            "reason_code": None,
+            "batch": batch_id,
+            "batch_suite_hash": batch.get("suite_hash") if isinstance(batch, dict) else None,
+            "batch_sample_count": batch.get("sample_count") if isinstance(batch, dict) else None,
+            "batch_candidate_release": batch.get("candidate_release") if isinstance(batch, dict) else None,
+        }
     if mode == "register_domain":
         source = str(request.get("suite_source", "holdout"))
         suite_path = (
@@ -1317,6 +1341,8 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             }
         return {"status": "ok", "reason_code": None, "detail": None}
     if mode == "register":
+        registry_path = ROOT / "data/evals/holdout-registry.local.json"
+        raw_before = registry_path.read_bytes() if registry_path.is_file() else None
         try:
             result = eval_usecases.register_holdout(
                 store,
@@ -1331,8 +1357,30 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 ),
             )
         except Exception as error:
-            return {"status": "error", "reason_code": getattr(error, "reason_code", None)}
-        return {"status": "ok", "reason_code": None, "batch": result.get("batch", {}).get("batch_id")}
+            raw_after = registry_path.read_bytes() if registry_path.is_file() else None
+            return {
+                "status": "error",
+                "reason_code": getattr(error, "reason_code", None),
+                "registry_bytes_unchanged": raw_before == raw_after,
+            }
+        registry_after = store.read_holdout_registry()
+        batch = next(
+            (
+                item
+                for item in registry_after.get("batches", [])
+                if isinstance(item, dict)
+                and item.get("batch_id") == result.get("batch", {}).get("batch_id")
+            ),
+            None,
+        )
+        return {
+            "status": "ok",
+            "reason_code": None,
+            "batch": result.get("batch", {}).get("batch_id"),
+            "batch_suite_hash": batch.get("suite_hash") if isinstance(batch, dict) else None,
+            "batch_sample_count": batch.get("sample_count") if isinstance(batch, dict) else None,
+            "batch_candidate_release": batch.get("candidate_release") if isinstance(batch, dict) else None,
+        }
     if mode == "retire":
         try:
             result = eval_usecases.retire_holdout(
@@ -1514,6 +1562,32 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         patch_name = "link" if mode == "retire_admission_fail" else "replace"
         original_boundary = getattr(evals_module.os, patch_name)
         setattr(evals_module.os, patch_name, boundary)
+        contrast = ROOT / "data/evals/io-contrast"
+        contrast.mkdir(parents=True, exist_ok=True)
+        contrast_src = contrast / f"source-{mode}.contrast"
+        contrast_dst = contrast / f"destination-{mode}.contrast"
+        contrast_src.write_text("synthetic-non-target", encoding="utf-8")
+        if contrast_dst.exists():
+            contrast_dst.unlink()
+        non_target_ok = True
+        if patch_name == "replace":
+            try:
+                evals_module.os.replace(contrast_src, contrast_dst)
+                non_target_ok = (
+                    contrast_dst.read_text(encoding="utf-8")
+                    == "synthetic-non-target"
+                )
+            except OSError:
+                non_target_ok = False
+        else:
+            try:
+                evals_module.os.link(contrast_src, contrast_dst)
+                non_target_ok = (
+                    contrast_dst.read_text(encoding="utf-8")
+                    == "synthetic-non-target"
+                )
+            except OSError:
+                non_target_ok = False
         try:
             if mode == "register_write_fail":
                 eval_usecases.register_holdout(
@@ -1558,6 +1632,7 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 "replace_hits": hits["replace"],
                 "link_hits": hits["link"],
                 "non_target_calls": hits["non_target"],
+                "non_target_ok": non_target_ok,
                 "matched_targets": matched_targets,
                 "source_existed": source_existed,
                 "admission_written": admission_root.exists()

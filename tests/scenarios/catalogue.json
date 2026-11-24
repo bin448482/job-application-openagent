@@ -22661,7 +22661,8 @@
         "public_contract_terms",
         "holdout_freeze",
         "holdout_first_failure",
-        "holdout_conflicts",
+        "holdout_conflict_paths",
+        "holdout_conflict_domain",
         "holdout_io_failures",
         "no_provider",
         "unknown_case",
@@ -23444,8 +23445,144 @@
           "junctions": {}
         },
         {
-          "id": "holdout_conflicts",
-          "label": "批次/样本/候选发布冲突",
+          "id": "holdout_conflict_paths",
+          "label": "批次/样本/候选发布真实登记路径",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_same_batch.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_duplicate.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_alt.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_conflict_success_actual.json"
+          ],
+          "fixture": "fixtures/m4/eval/holdout/suite.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D11/holdout_conflict_paths",
+          "device_gate": false,
+          "assertions": [
+            "真实 register_holdout/FileEvalStore 路径覆盖同批/样本/发布冲突",
+            "不同 release/不同样本实际持久化成功",
+            "失败前后 registry raw bytes 不变"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "batch",
+                    "equals": "synthetic-batch"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  },
+                  {
+                    "path": "registry_bytes_unchanged",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  },
+                  {
+                    "path": "registry_bytes_unchanged",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  },
+                  {
+                    "path": "registry_bytes_unchanged",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "batch",
+                    "equals": "synthetic-alt-other"
+                  },
+                  {
+                    "path": "batch_suite_hash",
+                    "pattern": "[0-9a-f]{64}"
+                  },
+                  {
+                    "path": "batch_sample_count",
+                    "equals": 2
+                  },
+                  {
+                    "path": "batch_candidate_release",
+                    "equals": "synthetic-alt-release"
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [
+            "prompts/base"
+          ],
+          "local_packs": {
+            "eval": "m4/policy/packs/eval"
+          },
+          "fixture_copies": {
+            "evals/private/holdout": "m4/eval/holdout",
+            "evals/private/holdout-alt": "m4/eval/holdout_alt"
+          },
+          "junctions": {}
+        },
+        {
+          "id": "holdout_conflict_domain",
+          "label": "批次/样本/候选发布冲突 domain 子证据",
           "layer": "F",
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
@@ -23459,7 +23596,7 @@
           "fixture": "fixtures/m4/eval/holdout/suite.json",
           "setup": null,
           "required_api": null,
-          "expected_ref": "SC-D11/holdout_conflicts",
+          "expected_ref": "SC-D11/holdout_conflict_domain",
           "device_gate": false,
           "assertions": [
             "同批重复、跨批样本占用、candidate_release 冻结冲突分别给出独立原因",
@@ -23590,7 +23727,6 @@
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_admission_fail.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_registry_fail.json",
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_io_non_target.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
@@ -23651,6 +23787,10 @@
                   },
                   {
                     "path": "source_existed",
+                    "equals": true
+                  },
+                  {
+                    "path": "non_target_ok",
                     "equals": true
                   }
                 ]
@@ -23718,6 +23858,10 @@
                     "equals": true
                   },
                   {
+                    "path": "non_target_ok",
+                    "equals": true
+                  },
+                  {
                     "path": "admission_written",
                     "equals": false
                   }
@@ -23769,24 +23913,11 @@
                     "equals": true
                   },
                   {
+                    "path": "non_target_ok",
+                    "equals": true
+                  },
+                  {
                     "path": "admission_written",
-                    "equals": true
-                  }
-                ]
-              },
-              {
-                "exit_code": 0,
-                "stdout_paths": [
-                  {
-                    "path": "status",
-                    "equals": "ok"
-                  },
-                  {
-                    "path": "replace_ok",
-                    "equals": true
-                  },
-                  {
-                    "path": "link_ok",
                     "equals": true
                   }
                 ]

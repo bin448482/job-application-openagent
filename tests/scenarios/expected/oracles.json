@@ -7006,7 +7006,7 @@
       ],
       "variant_id": "three_hashes_equal"
     },
-    "SC-D11/holdout_conflicts": {
+    "SC-D11/holdout_conflict_domain": {
       "acceptance": {
         "steps": [
           {
@@ -7126,7 +7126,129 @@
         "K §2.2、§3–8",
         "场景方案 §8"
       ],
-      "variant_id": "holdout_conflicts"
+      "variant_id": "holdout_conflict_domain"
+    },
+    "SC-D11/holdout_conflict_paths": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "synthetic-batch",
+                "path": "batch"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "registry_bytes_unchanged"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "registry_bytes_unchanged"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "registry_bytes_unchanged"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "synthetic-alt-other",
+                "path": "batch"
+              },
+              {
+                "path": "batch_suite_hash",
+                "pattern": "[0-9a-f]{64}"
+              },
+              {
+                "equals": 2,
+                "path": "batch_sample_count"
+              },
+              {
+                "equals": "synthetic-alt-release",
+                "path": "batch_candidate_release"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "真实 register_holdout/FileEvalStore 路径覆盖同批/样本/发布冲突",
+        "不同 release/不同样本实际持久化成功",
+        "失败前后 registry raw bytes 不变"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "真实 register_holdout/FileEvalStore 路径覆盖同批/样本/发布冲突",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 eval 已交付",
+        "无合规本机 provider 即未测"
+      ],
+      "scenario_id": "SC-D11",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "holdout_conflict_paths"
     },
     "SC-D11/holdout_first_failure": {
       "acceptance": {
@@ -7762,6 +7884,10 @@
               {
                 "equals": true,
                 "path": "source_existed"
+              },
+              {
+                "equals": true,
+                "path": "non_target_ok"
               }
             ]
           },
@@ -7828,6 +7954,10 @@
                 "path": "source_existed"
               },
               {
+                "equals": true,
+                "path": "non_target_ok"
+              },
+              {
                 "equals": false,
                 "path": "admission_written"
               }
@@ -7880,24 +8010,11 @@
               },
               {
                 "equals": true,
+                "path": "non_target_ok"
+              },
+              {
+                "equals": true,
                 "path": "admission_written"
-              }
-            ]
-          },
-          {
-            "exit_code": 0,
-            "stdout_paths": [
-              {
-                "equals": "ok",
-                "path": "status"
-              },
-              {
-                "equals": true,
-                "path": "replace_ok"
-              },
-              {
-                "equals": true,
-                "path": "link_ok"
               }
             ]
           },

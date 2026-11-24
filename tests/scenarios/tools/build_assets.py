@@ -1857,6 +1857,7 @@ def build_support_fixtures() -> None:
             "mode": "register",
             "batch_id": "synthetic-batch-duplicate",
             "sample_count": 2,
+            "candidate_release": "synthetic-other-release",
         },
     )
     write_json(
@@ -1892,6 +1893,17 @@ def build_support_fixtures() -> None:
             "batch_id": "synthetic-alt",
             "sample_count": 2,
             "candidate_release": "synthetic-release",
+        },
+    )
+    write_json(
+        "fixtures/m4/probe/d11_conflict_success_actual.json",
+        {
+            "operation": "eval",
+            "pack": "prompts/local/eval",
+            "mode": "register_alt",
+            "batch_id": "synthetic-alt-other",
+            "sample_count": 2,
+            "candidate_release": "synthetic-alt-release",
         },
     )
     write_json(
@@ -6553,8 +6565,41 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 },
             ),
             ready_variant(
-                "holdout_conflicts",
-                label="批次/样本/候选发布冲突",
+                "holdout_conflict_paths",
+                label="批次/样本/候选发布真实登记路径",
+                steps=[
+                    m4_cmd("d11_register"),
+                    m4_cmd("d11_register_same_batch"),
+                    m4_cmd("d11_register_duplicate"),
+                    m4_cmd("d11_register_alt"),
+                    m4_cmd("d11_conflict_success_actual"),
+                ],
+                fixture="fixtures/m4/eval/holdout/suite.json",
+                shared_inputs=["prompts/base"],
+                local_packs={"eval": "m4/policy/packs/eval"},
+                fixture_copies={
+                    "evals/private/holdout": "m4/eval/holdout",
+                    "evals/private/holdout-alt": "m4/eval/holdout_alt",
+                },
+                assertions=["真实 register_holdout/FileEvalStore 路径覆盖同批/样本/发布冲突", "不同 release/不同样本实际持久化成功", "失败前后 registry raw bytes 不变"],
+                acceptance={
+                    "steps": [
+                        probe_ok({"path": "batch", "equals": "synthetic-batch"}),
+                        probe_error("eval_failed", {"path": "registry_bytes_unchanged", "equals": True}),
+                        probe_error("eval_failed", {"path": "registry_bytes_unchanged", "equals": True}),
+                        probe_error("eval_failed", {"path": "registry_bytes_unchanged", "equals": True}),
+                        probe_ok(
+                            {"path": "batch", "equals": "synthetic-alt-other"},
+                            {"path": "batch_suite_hash", "pattern": "[0-9a-f]{64}"},
+                            {"path": "batch_sample_count", "equals": 2},
+                            {"path": "batch_candidate_release", "equals": "synthetic-alt-release"},
+                        ),
+                    ]
+                },
+            ),
+            ready_variant(
+                "holdout_conflict_domain",
+                label="批次/样本/候选发布冲突 domain 子证据",
                 steps=[
                     m4_cmd("d11_register"),
                     m4_cmd("d11_conflict_same_batch"),
@@ -6588,7 +6633,6 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     m4_cmd("d11_register"),
                     m4_cmd("d11_retire_admission_fail"),
                     m4_cmd("d11_retire_registry_fail"),
-                    m4_cmd("d11_io_non_target"),
                     m4_cmd("d11_regression_check"),
                     m4_cmd("d11_retire"),
                     m4_cmd("d11_regression_check"),
@@ -6611,6 +6655,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "replace_hits", "equals": 1},
                             {"path": "matched_targets", "equals": ["holdout-registry.local.json"]},
                             {"path": "source_existed", "equals": True},
+                            {"path": "non_target_ok", "equals": True},
                         ),
                         probe_ok({"path": "batch", "equals": "synthetic-batch"}),
                         probe_error(
@@ -6624,6 +6669,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "link_hits", "equals": 1},
                             {"path": "matched_targets", "equals": ["regression-admissions/synthetic-batch/suite.json"]},
                             {"path": "source_existed", "equals": True},
+                            {"path": "non_target_ok", "equals": True},
                             {"path": "admission_written", "equals": False},
                         ),
                         probe_error(
@@ -6636,11 +6682,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "replace_hits", "equals": 1},
                             {"path": "matched_targets", "equals": ["holdout-registry.local.json"]},
                             {"path": "source_existed", "equals": True},
+                            {"path": "non_target_ok", "equals": True},
                             {"path": "admission_written", "equals": True},
-                        ),
-                        probe_ok(
-                            {"path": "replace_ok", "equals": True},
-                            {"path": "link_ok", "equals": True},
                         ),
                         probe_ok(
                             {"path": "regression_case_count", "equals": 0},

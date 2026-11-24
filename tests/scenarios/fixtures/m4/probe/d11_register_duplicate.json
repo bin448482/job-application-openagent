@@ -3,5 +3,6 @@
   "pack": "prompts/local/eval",
   "mode": "register",
   "batch_id": "synthetic-batch-duplicate",
-  "sample_count": 2
+  "sample_count": 2,
+  "candidate_release": "synthetic-other-release"
 }

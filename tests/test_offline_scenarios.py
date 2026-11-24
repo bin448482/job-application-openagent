@@ -2236,27 +2236,22 @@ class M1DriverBoundaryTests(unittest.TestCase):
         from app.domain import eval as eval_domain
 
         assets = load_assets()
-        oracle = assets.oracles["variants"]["SC-D11/holdout_conflicts"]["acceptance"]["steps"][2]
+        oracle = assets.oracles["variants"]["SC-D11/holdout_conflict_paths"]["acceptance"]["steps"][2]
         requests = {
             name: json.loads(
                 (SCENARIO_ROOT / f"fixtures/m4/probe/{name}.json").read_text(encoding="utf-8")
             )
-            for name in ("d11_register", "d11_conflict_samples")
+            for name in ("d11_register", "d11_register_duplicate")
         }
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             _make_m4_project(root)
-            shutil.copytree(
-                SCENARIO_ROOT / "fixtures/m4/eval/holdout_alt",
-                root / "evals/private/holdout-alt",
-                dirs_exist_ok=True,
-            )
             with mock.patch.object(m4_probe, "ROOT", root):
                 m4_probe._eval_operation(requests["d11_register"])
                 with mock.patch.object(
                     eval_domain, "occupied_sample_fingerprints", return_value=set()
                 ):
-                    actual = m4_probe._eval_operation(requests["d11_conflict_samples"])
+                    actual = m4_probe._eval_operation(requests["d11_register_duplicate"])
         invocation = {
             "exit_code": 0,
             "stdout_json": {"schema_version": 1, "status": actual["status"], **{
