@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 TOOL_NAME = "private-regression-extractor"
-TOOL_VERSION = "0.2.0"
+TOOL_VERSION = "0.3.0"
 SCHEMA_RECEIPT = "private-regression-safe-receipt/v1"
 SCHEMA_VALIDATION = "private-regression-validation/v1"
 SCHEMA_MANIFEST = "private-regression-manifest/v1"
@@ -54,6 +54,7 @@ MAX_COORDINATE = 20_000
 MAX_BOUNDED_NUMBER = 1_000_000_000
 MAX_JSON_BYTES = 1024 * 1024
 MAX_VALIDATE_FILES = 256
+MAX_VALIDATE_DIRS = 16
 MAX_VALIDATE_DEPTH = 4
 
 XML_FAULTS = (
@@ -96,6 +97,11 @@ UNCOVERED_REASONS = (
     "truncated_before_evidence",
     "log_read_error",
 )
+# 覆盖语义：XML 缺口与预算/读取缺口会限制覆盖；缺日志/未观察到失败是软观察结果。
+XML_UNCOVERED_NONE = "none"
+XML_UNCOVERED_MISSING = "no_xml_candidates"
+SOFT_LOG_UNCOVERED = frozenset({"log_missing", "no_failure_evidence"})
+COVERAGE_LOG_UNCOVERED = frozenset({"truncated_before_evidence", "log_read_error"})
 ERROR_REASONS = (
     "usage_error",
     "source_missing",
@@ -167,7 +173,7 @@ SYNTHETIC_ROTATION_MAX = 3
 BOUNDS_RE = re.compile(r"^\[(\d{1,6}),(\d{1,6})\]\[(\d{1,6}),(\d{1,6})\]$")
 DATE_RE = re.compile(r"\b(19|20)\d{2}-\d{2}-\d{2}\b")
 # 标签无关的粗扫：任何元素名都计入深度/宽度，未知标签也不能绕过解析前预算。
-TAG_RE = re.compile(r"<\s*(/?)\s*([A-Za-z_][A-Za-z0-9_.:-]*)((?:[^>\"']|\"[^\"]*\"|'[^']*')*)>")
+TAG_RE = re.compile(r"<\s*(/?)\s*([^\s/>!?=][^\s/>=]*)((?:[^>\"']|\"[^\"]*\"|'[^']*')*)>")
 DECLARATION_RE = re.compile(r"<!\s*(doctype|entity|element|attlist|notation)\b", re.IGNORECASE)
 UNSAFE_DECLARATION_RE = re.compile(r"<!(?!--|\[CDATA\[)", re.IGNORECASE)
 XML_DECLARATION_RE = re.compile(r"^\s*<\?xml\b[^>]*\?>", re.IGNORECASE)
@@ -352,6 +358,7 @@ class DiscoveryStats:
     candidate_stats: dict[str, "SourceStat"] = field(default_factory=dict)
     log_path: Path | None = None
     log_present: bool = False
+    log_stat: "SourceStat | None" = None
 
 
 @dataclass
@@ -639,10 +646,17 @@ def discover_source(source_root: Path) -> DiscoveryStats:
     if log_path.exists() and not _is_link_like(log_path) and log_path.is_file():
         try:
             _assert_within(source_root / "data", log_path)
+            log_stat = log_path.stat()
+        except (ExtractionError, OSError):
+            stats.log_path = None
+        else:
             stats.log_path = log_path
             stats.log_present = True
-        except ExtractionError:
-            stats.log_path = None
+            stats.log_stat = SourceStat(
+                relative="data/operations.log",
+                size=log_stat.st_size,
+                mtime_ns=log_stat.st_mtime_ns,
+            )
     elif log_path.exists():
         stats.skipped_symlink += 1
     return stats
@@ -956,7 +970,7 @@ def _to_event(record: dict[str, object]) -> TimelineEvent:
 def _read_log_events(
     log_path: Path, root: Path, budget: ReadBudget
 ) -> tuple[list[TimelineEvent], dict[str, object], ReadRecord]:
-    """流式读取精确白名单日志；打开前重核路径边界与链接。"""
+    """流式读取精确白名单日志；打开前重核边界/链接，并复核读取窗口 stat。"""
     _assert_within(root, log_path)
     if _is_link_like(log_path):
         raise ExtractionError("symlink_rejected")
@@ -1017,6 +1031,12 @@ def _read_log_events(
                 stats["invalid_lines"] = int(stats["invalid_lines"]) + 1
                 continue
             events.append(_to_event(record))
+    try:
+        after = log_path.stat()
+    except OSError as exc:
+        raise _SourceChanged() from exc
+    if after.st_size != st.st_size or after.st_mtime_ns != st.st_mtime_ns:
+        raise _SourceChanged()
     complete = not bool(stats["truncated"]) and not budget.exhausted
     record = ReadRecord(
         relative="data/operations.log",
@@ -1317,12 +1337,13 @@ def _hash_file_bounded(path: Path, budget: ReadBudget, expected_size: int) -> st
 def _verify_source_unchanged(
     source_root: Path,
     candidate_stats: dict[str, SourceStat],
+    log_stat: SourceStat | None,
     xml_records: list[ReadRecord],
     log_record: ReadRecord | None,
     xml_budget: ReadBudget,
     log_budget: ReadBudget,
 ) -> tuple[bool, bool]:
-    """有界校验全部已发现候选与已读源的边界未变；返回 (是否未变, 日志是否仅前缀)。"""
+    """有界校验全部已发现候选、日志发现期 stat 与已读源的边界未变。"""
     for stat_record in candidate_stats.values():
         path = source_root / stat_record.relative
         try:
@@ -1331,6 +1352,15 @@ def _verify_source_unchanged(
         except (ExtractionError, OSError):
             return False, False
         if st.st_size != stat_record.size or st.st_mtime_ns != stat_record.mtime_ns:
+            return False, False
+    if log_stat is not None:
+        path = source_root / log_stat.relative
+        try:
+            _assert_within(source_root / "data", path)
+            st = path.stat()
+        except (ExtractionError, OSError):
+            return False, False
+        if st.st_size != log_stat.size or st.st_mtime_ns != log_stat.mtime_ns:
             return False, False
     for record in xml_records:
         path = source_root / record.relative
@@ -1513,31 +1543,49 @@ def run_extraction(
     windows: list[dict[str, object]] = []
     log_record: ReadRecord | None = None
     if discovery.log_path is not None:
-        try:
-            events, log_stats, log_record = _read_log_events(
-                discovery.log_path, source / "data", log_read_budget
-            )
-        except (OSError, ExtractionError, _SourceChanged):
+        pre_open_changed = False
+        if discovery.log_stat is not None:
+            try:
+                _assert_within(source / "data", discovery.log_path)
+                pre_open = discovery.log_path.stat()
+            except (ExtractionError, OSError):
+                pre_open_changed = True
+            else:
+                pre_open_changed = (
+                    pre_open.st_size != discovery.log_stat.size
+                    or pre_open.st_mtime_ns != discovery.log_stat.mtime_ns
+                )
+        if pre_open_changed:
             observed_source_change = True
             log_summary["present"] = True
             log_summary["uncovered_reason"] = "log_read_error"
         else:
-            windows, summary = _summarize_timeline(events, log_stats, "none")
-            log_summary.update(summary)
-            log_summary.update(
-                {
-                    "present": True,
-                    "lines": log_stats["lines"],
-                    "invalid_lines": log_stats["invalid_lines"],
-                    "truncated": log_stats["truncated"],
-                }
-            )
-            for window in windows:
-                _write_json(batch_dir / "failure_windows" / f"{window['case_id']}.json", window)
+            try:
+                events, log_stats, log_record = _read_log_events(
+                    discovery.log_path, source / "data", log_read_budget
+                )
+            except (OSError, ExtractionError, _SourceChanged):
+                observed_source_change = True
+                log_summary["present"] = True
+                log_summary["uncovered_reason"] = "log_read_error"
+            else:
+                windows, summary = _summarize_timeline(events, log_stats, "none")
+                log_summary.update(summary)
+                log_summary.update(
+                    {
+                        "present": True,
+                        "lines": log_stats["lines"],
+                        "invalid_lines": log_stats["invalid_lines"],
+                        "truncated": log_stats["truncated"],
+                    }
+                )
+                for window in windows:
+                    _write_json(batch_dir / "failure_windows" / f"{window['case_id']}.json", window)
 
     source_unchanged, log_prefix_only = _verify_source_unchanged(
         source,
         discovery.candidate_stats,
+        discovery.log_stat,
         xml_read_records,
         log_record,
         verify_xml_budget,
@@ -1556,27 +1604,33 @@ def run_extraction(
         or discovery.depth_cap_hit
         or read_budget.exhausted
     )
-    truncated = (
+    has_output = bool(samples) or bool(windows)
+    xml_uncovered = (
+        XML_UNCOVERED_NONE if (samples or representations) else XML_UNCOVERED_MISSING
+    )
+    coverage_limited = (
         xml_truncated
         or bool(log_summary["truncated"])
         or bool(log_summary["window_truncated"])
-        or log_summary["uncovered_reason"] == "log_read_error"
+        or (
+            log_summary["uncovered_reason"] != "none"
+            and log_summary["uncovered_reason"] not in SOFT_LOG_UNCOVERED
+        )
         or log_read_budget.exhausted
+        or (has_output and xml_uncovered == XML_UNCOVERED_MISSING)
     )
-    has_output = bool(samples) or bool(windows)
     if not source_unchanged or not ignored or tracked:
         status = "error"
         error_reason = "source_changed" if not source_unchanged else "internal_error"
     elif not has_output:
         status = "no_candidates"
         error_reason = None
-    elif truncated:
+    elif coverage_limited:
         status = "partial"
         error_reason = None
     else:
         status = "ok"
         error_reason = None
-    xml_uncovered = "none" if (samples or representations) else "no_xml_candidates"
     xml_summary = {
         "selected": len(samples) - len(representative_entries),
         "representatives": len(representative_entries),
@@ -2213,9 +2267,10 @@ def _check_provenance_structure(
     return True
 
 
-def _enumerate_batch_files(directory: Path) -> set[str]:
-    """有界枚举批次内全部文件，拒绝链接/非普通文件并返回 POSIX 相对路径。"""
-    found: set[str] = set()
+def _enumerate_batch_entries(directory: Path) -> tuple[set[str], set[str]]:
+    """有界枚举批次内全部目录/文件，拒绝链接/非普通文件并返回 POSIX 相对路径。"""
+    files: set[str] = set()
+    dirs: set[str] = set()
     stack: list[tuple[Path, int]] = [(directory, 0)]
     while stack:
         current, depth = stack.pop()
@@ -2229,15 +2284,19 @@ def _enumerate_batch_files(directory: Path) -> set[str]:
             path = Path(entry.path)
             if _is_link_like(path):
                 raise ExtractionError("symlink_rejected")
+            relative = path.relative_to(directory).as_posix()
             if entry.is_dir(follow_symlinks=False):
+                dirs.add(relative)
+                if len(dirs) > MAX_VALIDATE_DIRS:
+                    raise ExtractErrorSize()
                 stack.append((path, depth + 1))
             elif entry.is_file(follow_symlinks=False):
-                found.add(path.relative_to(directory).as_posix())
-                if len(found) > MAX_VALIDATE_FILES:
+                files.add(relative)
+                if len(files) > MAX_VALIDATE_FILES:
                     raise ExtractErrorSize()
             else:
                 raise ExtractionError("symlink_rejected")
-    return found
+    return files, dirs
 
 
 def validate_batch(batch_dir: Path) -> dict[str, object]:
@@ -2273,7 +2332,7 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
         if not directory.is_dir() or _is_link_like(directory):
             raise ExtractionError("symlink_rejected")
         checks["batch_path_safe"] = True
-        actual_files = _enumerate_batch_files(directory)
+        actual_files, actual_dirs = _enumerate_batch_entries(directory)
         read_budget = ReadBudget(MAX_TOTAL_READ_BYTES)
         receipt = json.loads(
             _read_text_bounded(
@@ -2431,7 +2490,12 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
             expected_files |= {
                 f"failure_windows/{payload['case_id']}.json" for payload in payloads
             }
-        checks["batch_layout_ok"] = bool(windows_ok and actual_files == expected_files)
+        expected_dirs = {"xml", "xml/representatives", "failure_windows"}
+        checks["batch_layout_ok"] = bool(
+            windows_ok
+            and actual_files == expected_files
+            and actual_dirs == expected_dirs
+        )
         log_summary = receipt.get("log", {}) if isinstance(receipt, dict) else {}
         xml_summary = receipt.get("xml", {}) if isinstance(receipt, dict) else {}
         discovery = receipt.get("discovery", {}) if isinstance(receipt, dict) else {}
@@ -2546,8 +2610,8 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
             or log_summary.get("window_truncated") is True
             or budget.get("xml_read_exhausted") is True
             or budget.get("log_read_exhausted") is True
-            or xml_summary.get("uncovered_reason") not in (None, "none")
-            or log_summary.get("uncovered_reason") in {"truncated_before_evidence", "log_read_error"}
+            or xml_summary.get("uncovered_reason") not in (None, XML_UNCOVERED_NONE)
+            or log_summary.get("uncovered_reason") in COVERAGE_LOG_UNCOVERED
         )
         if status == "error":
             error_reason = receipt.get("error_reason")

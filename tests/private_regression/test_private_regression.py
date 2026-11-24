@@ -1328,6 +1328,260 @@ class PrivateRegressionTests(unittest.TestCase):
         self.assertNotIn(str(source), (batch / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(extract.validate_batch(batch)["status"], "valid")
 
+    # ---------- 复审阻塞：log-only 生成/验证互斥与状态组合 ----------
+
+    def test_log_only_window_is_partial_and_both_cli_entries_agree(self) -> None:
+        """只有日志失败窗口时抽取 partial、验证 valid，两个 CLI 入口一致。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "data" / "operations.log").write_text(
+            json.dumps({"event": "executor_error"}) + "\n", encoding="utf-8"
+        )
+        output = repo / "data" / "private-regression"
+        code, out, _ = _run_main(["--source", str(source), "--output", str(output)])
+        receipt = json.loads(out)
+        self.assertEqual(code, 0)
+        self.assertEqual(receipt["status"], "partial")
+        self.assertEqual(receipt["xml"]["uncovered_reason"], "no_xml_candidates")
+        batch = output / receipt["batch_id"]
+        windows = list((batch / "failure_windows").glob("*.json"))
+        self.assertEqual(len(windows), 1)
+        self.assertEqual(_read_json(windows[0])["expected"], "needs_label")
+        validate_code, validate_out, _ = _run_main(["--validate", str(batch)])
+        validation = json.loads(validate_out)
+        self.assertEqual(validate_code, 0)
+        self.assertEqual(validation["status"], "valid")
+        self.assertTrue(validation["checks"]["status_consistent"])
+
+    def test_status_combinations_follow_documented_coverage_rules(self) -> None:
+        """XML-only/无失败日志为软原因 ok；无输出 no_candidates；预算截断 partial。"""
+        cases = (
+            ("xml_only", {"screenshots/a.xml": _xml(_node(**{"class": "android.view.View"}))}, None, "ok", "log_missing", "valid"),
+            (
+                "xml_no_failure",
+                {
+                    "screenshots/a.xml": _xml(_node(**{"class": "android.view.View"})),
+                    "data/operations.log": json.dumps({"event": "task_started"}) + "\n",
+                },
+                None,
+                "ok",
+                "no_failure_evidence",
+                "valid",
+            ),
+            ("empty", {}, None, "no_candidates", "log_missing", "valid"),
+            (
+                "log_truncated_no_window",
+                {"data/operations.log": json.dumps({"event": "executor_error"}) + "\n"},
+                {"MAX_LOG_LINES": 0},
+                "no_candidates",
+                "truncated_before_evidence",
+                "valid",
+            ),
+            (
+                "xml_budget_truncated",
+                {"screenshots/a.xml": _xml(_node(**{"class": "android.view.View"})) * 10},
+                {"MAX_XML_BYTES": 50},
+                "partial",
+                "log_missing",
+                "valid",
+            ),
+        )
+        for name, files, patches, expected_status, expected_log_uncovered, expected_validation in cases:
+            with self.subTest(case=name):
+                root = self.tmp / name
+                root.mkdir()
+                repo = _make_repo(root)
+                source = _make_source(root)
+                for relative, content in files.items():
+                    path = source / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(content, encoding="utf-8")
+                stack = contextlib.ExitStack()
+                for key, value in (patches or {}).items():
+                    stack.enter_context(mock.patch.object(extract, key, value))
+                with stack:
+                    receipt = extract.run_extraction(
+                        source, repo / "data" / "private-regression"
+                    )
+                self.assertEqual(receipt["status"], expected_status)
+                self.assertEqual(
+                    receipt["log"]["uncovered_reason"], expected_log_uncovered
+                )
+                batch = repo / "data" / "private-regression" / receipt["batch_id"]
+                self.assertEqual(
+                    extract.validate_batch(batch)["status"], expected_validation
+                )
+
+    # ---------- 复审 B-2：日志发现期 stat 与 pre-open/结束复核 ----------
+
+    def test_log_content_change_after_discovery_sets_error_and_exit_two(self) -> None:
+        """日志在发现后增长/缩短/替换必须 source_changed、safety=false、退出 2。"""
+        mutations = {
+            "growth": lambda path: path.open("ab").write(
+                (json.dumps({"event": "read_incomplete"}) + "\n").encode("utf-8")
+            ),
+            "shrink": lambda path: path.write_bytes(b""),
+            "replacement": lambda path: (
+                path.write_text(
+                    json.dumps({"event": "executor_error", "reason": "timeout"}) + "\n",
+                    encoding="utf-8",
+                ),
+                os.utime(path, ns=(path.stat().st_mtime_ns + 1_000_000_000,) * 2),
+            ),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(case=name):
+                root = self.tmp / ("log-change-" + name)
+                root.mkdir()
+                repo = _make_repo(root)
+                source = _make_source(root)
+                log = source / "data" / "operations.log"
+                log.write_text(json.dumps({"event": "executor_error"}) + "\n", encoding="utf-8")
+                original = extract._read_log_events
+
+                def wrapper(path: Path, root_dir: Path, budget: extract.ReadBudget, mutate=mutate, original=original):
+                    """在读取窗口内改动日志，模拟发现后变化。"""
+                    if path == log:
+                        mutate(path)
+                    return original(path, root_dir, budget)
+
+                with mock.patch.object(extract, "_read_log_events", side_effect=wrapper):
+                    code, out, _ = _run_main(
+                        ["--source", str(source), "--output", str(repo / "data" / "private-regression")]
+                    )
+                receipt = json.loads(out)
+                self.assertEqual(code, 2)
+                self.assertEqual(receipt["status"], "error")
+                self.assertEqual(receipt["error_reason"], "source_changed")
+                self.assertFalse(receipt["safety"]["source_unchanged"])
+
+    def test_log_change_after_discovery_blocks_preopen_read(self) -> None:
+        """发现后 pre-open stat 不一致时不得再打开或读取日志。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        log = source / "data" / "operations.log"
+        log.write_text(json.dumps({"event": "executor_error"}) + "\n", encoding="utf-8")
+        original_discover = extract.discover_source
+
+        def discovering(source_root: Path) -> extract.DiscoveryStats:
+            """在发现返回后、pre-open 复核前改动日志。"""
+            stats = original_discover(source_root)
+            log.write_text(
+                json.dumps({"event": "executor_error"}) + "\n"
+                + json.dumps({"event": "read_incomplete"}) + "\n",
+                encoding="utf-8",
+            )
+            return stats
+
+        with mock.patch.object(extract, "discover_source", side_effect=discovering):
+            with mock.patch.object(
+                extract, "_read_log_events", side_effect=AssertionError("must not read")
+            ):
+                receipt = extract.run_extraction(
+                    source, repo / "data" / "private-regression"
+                )
+        self.assertEqual(receipt["status"], "error")
+        self.assertEqual(receipt["error_reason"], "source_changed")
+        self.assertFalse(receipt["safety"]["source_unchanged"])
+
+    # ---------- 复审 N-4：Unicode 元素名解析前预算 ----------
+
+    def test_prescan_blocks_unicode_deep_and_wide_before_parsing(self) -> None:
+        """Unicode 元素名深/宽树也必须在 ET.fromstring 前触发预算。"""
+        cases = (
+            ("unicode_deep", "<hierarchy>" + "<é>" * 5 + "</é>" * 5 + "</hierarchy>", "too_deep"),
+            ("unicode_wide", "<hierarchy>" + "<é/>" * 5 + "</hierarchy>", "too_many_nodes"),
+        )
+        for name, body, expected in cases:
+            with self.subTest(case=name):
+                calls: list[int] = []
+
+                def failing_parse(*args: object, **kwargs: object) -> None:
+                    """记录任何解析调用并立即失败。"""
+                    calls.append(1)
+                    raise AssertionError("must not parse before budget")
+
+                with mock.patch.object(extract, "MAX_XML_DEPTH", 2), mock.patch.object(
+                    extract, "MAX_XML_NODES", 2
+                ), mock.patch.object(extract.ET, "fromstring", side_effect=failing_parse):
+                    outcome = extract.sanitize_xml(
+                        body.encode("utf-8"), extract.AliasBook(_alias_factory())
+                    )
+                self.assertEqual(outcome.anomaly, expected)
+                self.assertEqual(calls, [])
+
+    def test_unicode_attribute_values_and_tags_still_sanitize(self) -> None:
+        """普通 node/hierarchy 的 Unicode 属性值仍按白名单合成，不整体拒绝。"""
+        raw = (
+            '<hierarchy rotation="0"><node class="android.widget.TextView" '
+            'text="你好" content-desc="说明" bounds="[0,0][10,10]"/></hierarchy>'
+        )
+        outcome = extract.sanitize_xml(raw.encode("utf-8"), extract.AliasBook(_alias_factory()))
+        self.assertIsNone(outcome.anomaly)
+        self.assertIn('text="TEXT"', outcome.xml_text)
+        self.assertIn('content-desc="DESC"', outcome.xml_text)
+        self.assertNotIn("你好", outcome.xml_text)
+        unknown = '<hierarchy><é class="android.view.View" text="你好"/></hierarchy>'
+        outcome = extract.sanitize_xml(
+            unknown.encode("utf-8"), extract.AliasBook(_alias_factory())
+        )
+        self.assertIsNone(outcome.anomaly)
+        self.assertEqual(outcome.faults["unknown_tag"], 1)
+        self.assertIn("<node", outcome.xml_text)
+        self.assertNotIn("你好", outcome.xml_text)
+
+    def test_unicode_deep_budget_sets_partial_fault_without_parsing(self) -> None:
+        """Unicode 深树在抽取回执中记 too_deep/partial，且不先完整解析。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        deep = "<hierarchy>" + "<é>" * 5 + "</é>" * 5 + "</hierarchy>"
+        (source / "screenshots" / "unicode-deep.xml").write_text(deep, encoding="utf-8")
+        with mock.patch.object(extract, "MAX_XML_DEPTH", 2), mock.patch.object(
+            extract.ET, "fromstring", side_effect=AssertionError("must not parse")
+        ):
+            receipt = extract.run_extraction(
+                source, repo / "data" / "private-regression"
+            )
+        self.assertEqual(receipt["status"], "partial")
+        self.assertTrue(receipt["xml"]["truncated"])
+        self.assertEqual(receipt["xml"]["faults"]["too_deep"], 1)
+
+    # ---------- 复审 N-2：未知空目录与目录总量边界 ----------
+
+    def test_validator_rejects_unknown_empty_directory(self) -> None:
+        """合法批次出现未知空目录也必须拒绝，不能以空目录绕过布局校验。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        (batch / "empty-dir").mkdir()
+        result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["batch_layout_ok"])
+
+    def test_validator_directory_budget_is_total(self) -> None:
+        """目录数量有限总量；合法 3 个目录通过，超限或额外目录拒绝。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        with mock.patch.object(extract, "MAX_VALIDATE_DIRS", 3):
+            self.assertEqual(extract.validate_batch(batch)["status"], "valid")
+        with mock.patch.object(extract, "MAX_VALIDATE_DIRS", 2):
+            self.assertEqual(extract.validate_batch(batch)["status"], "invalid")
+        (batch / "wide-a").mkdir()
+        (batch / "wide-b").mkdir()
+        with mock.patch.object(extract, "MAX_VALIDATE_DIRS", 4):
+            result = extract.validate_batch(batch)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["batch_layout_ok"])
+
 
 if __name__ == "__main__":
     unittest.main()
