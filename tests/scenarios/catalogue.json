@@ -17935,7 +17935,8 @@
         "wrong_task",
         "wrong_nonce",
         "wrong_hash",
-        "expired_nonce"
+        "expired_nonce",
+        "contract_expired_lease"
       ],
       "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
@@ -17956,7 +17957,9 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "校验通过但不自动授权",
+            "回显三标识"
           ],
           "acceptance": {
             "steps": [
@@ -18022,7 +18025,9 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "invalid_decision/blocked",
+            "不执行"
           ],
           "acceptance": {
             "steps": [
@@ -18076,7 +18081,9 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "拒绝额外键",
+            "不执行"
           ],
           "acceptance": {
             "steps": [
@@ -18130,7 +18137,9 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "拒绝非单 JSON",
+            "不执行"
           ],
           "acceptance": {
             "steps": [
@@ -18184,7 +18193,9 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "拒绝",
+            "不执行"
           ],
           "acceptance": {
             "steps": [
@@ -18238,7 +18249,8 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "拒绝 bool 当整数"
           ],
           "acceptance": {
             "steps": [
@@ -18292,7 +18304,8 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "不截断、记 invalid_decision"
           ],
           "acceptance": {
             "steps": [
@@ -18346,7 +18359,8 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "stale_evidence/blocked"
           ],
           "acceptance": {
             "steps": [
@@ -18400,7 +18414,8 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "stale_decision/blocked"
           ],
           "acceptance": {
             "steps": [
@@ -18454,7 +18469,8 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "stale_decision/blocked"
           ],
           "acceptance": {
             "steps": [
@@ -18508,7 +18524,8 @@
           "assertions": [
             "合法阳性必须通过但不自动授权",
             "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "真实 parse/render/validate 消费，零动作",
+            "stale_decision/blocked"
           ],
           "acceptance": {
             "steps": [
@@ -18549,6 +18566,36 @@
           "id": "expired_nonce",
           "label": "过期 nonce",
           "layer": "F",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
+          "steps": [],
+          "fixture": "fixtures/m4/probe/d02_expired_nonce.json",
+          "setup": "使用过期租约并准备从新租约重跑",
+          "required_api": "M4 Decision 校验与运行时租约重跑",
+          "expected_ref": "SC-D02/expired_nonce",
+          "device_gate": false,
+          "assertions": [
+            "stale_decision",
+            "从新租约重跑"
+          ],
+          "acceptance": null,
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": "M4c 运行时新租约重跑与 blocked 落库",
+          "module_evidence": null,
+          "shared_inputs": [],
+          "local_packs": {},
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "contract_expired_lease",
+          "label": "过期租约拒绝子证据",
+          "layer": "F",
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
@@ -18557,12 +18604,12 @@
           "fixture": "fixtures/m4/probe/d02_expired_nonce.json",
           "setup": null,
           "required_api": null,
-          "expected_ref": "SC-D02/expired_nonce",
+          "expected_ref": "SC-D02/contract_expired_lease",
           "device_gate": false,
           "assertions": [
-            "合法阳性必须通过但不自动授权",
-            "回显三标识与租约边界受控",
-            "真实 parse/render/validate 消费，零动作"
+            "过期租约只返回 stale_decision",
+            "零桥/零动作",
+            "不冒充从新租约重跑"
           ],
           "acceptance": {
             "steps": [
@@ -18576,6 +18623,10 @@
                   {
                     "path": "reason_code",
                     "equals": "stale_decision"
+                  },
+                  {
+                    "path": "bridge_calls",
+                    "equals": 0
                   }
                 ]
               }
@@ -18618,7 +18669,8 @@
       "offline_subscenarios": [
         "pre_submit_error",
         "post_submit_timeout",
-        "input_too_large"
+        "input_too_large",
+        "contract_input_too_large"
       ],
       "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
@@ -18639,7 +18691,8 @@
           "assertions": [
             "提交前仅一次重试，提交后不重试",
             "真实 decide 记录尝试/提交计数与固定诊断",
-            "超限不截断 inbound、零桥调用"
+            "最多重试一次",
+            "trace 记录提交/调用次数"
           ],
           "acceptance": {
             "steps": [
@@ -18705,7 +18758,9 @@
           "assertions": [
             "提交前仅一次重试，提交后不重试",
             "真实 decide 记录尝试/提交计数与固定诊断",
-            "超限不截断 inbound、零桥调用"
+            "decision_timeout",
+            "不重复调用",
+            "不推断模型处理结果"
           ],
           "acceptance": {
             "steps": [
@@ -18762,6 +18817,36 @@
           "id": "input_too_large",
           "label": "超过 2048 字节",
           "layer": "F",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
+          "steps": [],
+          "fixture": "fixtures/m4/probe/d03_input_too_large.json",
+          "setup": "合成 envelope 2048/2049 字节并准备待办",
+          "required_api": "M4 envelope 校验与待办持久化",
+          "expected_ref": "SC-D03/input_too_large",
+          "device_gate": false,
+          "assertions": [
+            "超限 input_too_large 转待办",
+            "不截断 inbound"
+          ],
+          "acceptance": null,
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": "M4c 超限待办持久化",
+          "module_evidence": null,
+          "shared_inputs": [],
+          "local_packs": {},
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "contract_input_too_large",
+          "label": "超限拒绝子证据",
+          "layer": "F",
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
@@ -18770,12 +18855,12 @@
           "fixture": "fixtures/m4/probe/d03_input_too_large.json",
           "setup": null,
           "required_api": null,
-          "expected_ref": "SC-D03/input_too_large",
+          "expected_ref": "SC-D03/contract_input_too_large",
           "device_gate": false,
           "assertions": [
-            "提交前仅一次重试，提交后不重试",
-            "真实 decide 记录尝试/提交计数与固定诊断",
-            "超限不截断 inbound、零桥调用"
+            "超限返回 input_too_large",
+            "零桥/不截断",
+            "不冒充待办已落库"
           ],
           "acceptance": {
             "steps": [
@@ -18789,6 +18874,10 @@
                   {
                     "path": "reason_code",
                     "equals": "input_too_large"
+                  },
+                  {
+                    "path": "bridge_calls",
+                    "equals": 0
                   }
                 ]
               }
@@ -19349,9 +19438,9 @@
         "unsafe_a",
         "disclosure_missing",
         "path_in_style",
-        "size_limits",
-        "encoding_and_nul",
         "contact_fact_conflict",
+        "encoding_and_nul",
+        "size_limits",
         "symlink_pack",
         "runtime_changed",
         "runtime_changed_decision"
@@ -19375,7 +19464,9 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "validate 通过",
+            "有效限制可计算"
           ],
           "acceptance": {
             "steps": [
@@ -19450,7 +19541,9 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "invalid_policy",
+            "启动前退出"
           ],
           "acceptance": {
             "steps": [
@@ -19517,7 +19610,8 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "拒绝额外键"
           ],
           "acceptance": {
             "steps": [
@@ -19584,7 +19678,8 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "整数不接受 bool"
           ],
           "acceptance": {
             "steps": [
@@ -19651,7 +19746,8 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "拒绝冲突"
           ],
           "acceptance": {
             "steps": [
@@ -19718,7 +19814,8 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "拒绝漏项"
           ],
           "acceptance": {
             "steps": [
@@ -19785,7 +19882,8 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "safety_floor 拒绝"
           ],
           "acceptance": {
             "steps": [
@@ -19852,7 +19950,8 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "拒绝"
           ],
           "acceptance": {
             "steps": [
@@ -19919,7 +20018,8 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "path 诊断，拒绝"
           ],
           "acceptance": {
             "steps": [
@@ -19970,140 +20070,6 @@
           "junctions": {}
         },
         {
-          "id": "size_limits",
-          "label": "16/32/64 KiB 边界",
-          "layer": "F",
-          "asset_status": "READY_FOR_APP",
-          "entry_state": "frozen",
-          "steps": [
-            "python -m app policy validate --pack prompts/local/size_tone"
-          ],
-          "fixture": null,
-          "setup": null,
-          "required_api": null,
-          "expected_ref": "SC-D05/size_limits",
-          "device_gate": false,
-          "assertions": [
-            "真实 policy validate 读取合成包",
-            "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
-          ],
-          "acceptance": {
-            "steps": [
-              {
-                "exit_code": 2,
-                "required_stdout_keys": [
-                  "schema_version",
-                  "status",
-                  "reason_code",
-                  "errors"
-                ],
-                "stdout_paths": [
-                  {
-                    "path": "schema_version",
-                    "equals": 1
-                  },
-                  {
-                    "path": "status",
-                    "equals": "failed"
-                  },
-                  {
-                    "path": "reason_code",
-                    "equals": "invalid_policy"
-                  },
-                  {
-                    "path": "errors",
-                    "type": "array"
-                  }
-                ]
-              }
-            ]
-          },
-          "forbidden": [
-            "不得以资产自检代替产品执行",
-            "未执行或 BLOCKED 时不得记 PASS"
-          ],
-          "expected_missing_inputs": [],
-          "observations_ref": null,
-          "deferred_to": null,
-          "module_evidence": null,
-          "shared_inputs": [
-            "prompts/base"
-          ],
-          "local_packs": {
-            "size_tone": "m4/policy/packs/size_tone"
-          },
-          "fixture_copies": {},
-          "junctions": {}
-        },
-        {
-          "id": "encoding_and_nul",
-          "label": "非 UTF-8/BOM/NUL",
-          "layer": "F",
-          "asset_status": "READY_FOR_APP",
-          "entry_state": "frozen",
-          "steps": [
-            "python -m app policy validate --pack prompts/local/encoding_nul"
-          ],
-          "fixture": null,
-          "setup": null,
-          "required_api": null,
-          "expected_ref": "SC-D05/encoding_and_nul",
-          "device_gate": false,
-          "assertions": [
-            "真实 policy validate 读取合成包",
-            "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
-          ],
-          "acceptance": {
-            "steps": [
-              {
-                "exit_code": 2,
-                "required_stdout_keys": [
-                  "schema_version",
-                  "status",
-                  "reason_code",
-                  "errors"
-                ],
-                "stdout_paths": [
-                  {
-                    "path": "schema_version",
-                    "equals": 1
-                  },
-                  {
-                    "path": "status",
-                    "equals": "failed"
-                  },
-                  {
-                    "path": "reason_code",
-                    "equals": "invalid_policy"
-                  },
-                  {
-                    "path": "errors",
-                    "type": "array"
-                  }
-                ]
-              }
-            ]
-          },
-          "forbidden": [
-            "不得以资产自检代替产品执行",
-            "未执行或 BLOCKED 时不得记 PASS"
-          ],
-          "expected_missing_inputs": [],
-          "observations_ref": null,
-          "deferred_to": null,
-          "module_evidence": null,
-          "shared_inputs": [
-            "prompts/base"
-          ],
-          "local_packs": {
-            "encoding_nul": "m4/policy/packs/encoding_nul"
-          },
-          "fixture_copies": {},
-          "junctions": {}
-        },
-        {
           "id": "contact_fact_conflict",
           "label": "联系方式/事实/披露冲突",
           "layer": "F",
@@ -20120,7 +20086,9 @@
           "assertions": [
             "真实 policy validate 读取合成包",
             "非法包启动前失败且不回显正文/绝对路径",
-            "合法包有效限制/硬下限/摘要可计算"
+            "合法包有效限制/硬下限/摘要可计算",
+            "sensitive/conflict 拒绝",
+            "不自动修正"
           ],
           "acceptance": {
             "steps": [
@@ -20171,6 +20139,406 @@
           "junctions": {}
         },
         {
+          "id": "encoding_and_nul",
+          "label": "非 UTF-8/BOM/NUL",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app policy validate --pack prompts/local/encoding_bad_utf8",
+            "python -m app policy validate --pack prompts/local/encoding_bom",
+            "python -m app policy validate --pack prompts/local/encoding_nul"
+          ],
+          "fixture": null,
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D05/encoding_and_nul",
+          "device_gate": false,
+          "assertions": [
+            "encoding 诊断",
+            "拒绝",
+            "三种编码边界分别验证"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 2,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "errors"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_policy"
+                  },
+                  {
+                    "path": "errors",
+                    "type": "array"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "errors"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_policy"
+                  },
+                  {
+                    "path": "errors",
+                    "type": "array"
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "errors"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_policy"
+                  },
+                  {
+                    "path": "errors",
+                    "type": "array"
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [
+            "prompts/base"
+          ],
+          "local_packs": {
+            "encoding_bad_utf8": "m4/policy/packs/encoding_bad_utf8",
+            "encoding_bom": "m4/policy/packs/encoding_bom",
+            "encoding_nul": "m4/policy/packs/encoding_nul"
+          },
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "size_limits",
+          "label": "16/32/64 KiB 边界",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app policy validate --pack prompts/local/size_toml_under",
+            "python -m app policy validate --pack prompts/local/size_toml_exact",
+            "python -m app policy validate --pack prompts/local/size_toml_over",
+            "python -m app policy validate --pack prompts/local/size_tone_under",
+            "python -m app policy validate --pack prompts/local/size_tone_exact",
+            "python -m app policy validate --pack prompts/local/size_tone_over",
+            "python -m app policy validate --pack prompts/local/size_total_under",
+            "python -m app policy validate --pack prompts/local/size_total_exact",
+            "python -m app policy validate --pack prompts/local/size_total_over"
+          ],
+          "fixture": null,
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D05/size_limits",
+          "device_gate": false,
+          "assertions": [
+            "超限拒绝，不截断后称合法",
+            "等于与低于上限的合成包分别验证",
+            "三个文件级/总量边界均覆盖"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "result"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": null
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "result"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": null
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "errors"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_policy"
+                  },
+                  {
+                    "path": "errors",
+                    "type": "array"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "result"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": null
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "result"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": null
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "errors"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_policy"
+                  },
+                  {
+                    "path": "errors",
+                    "type": "array"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "result"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": null
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "result"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": null
+                  }
+                ]
+              },
+              {
+                "exit_code": 2,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "errors"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_policy"
+                  },
+                  {
+                    "path": "errors",
+                    "type": "array"
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [
+            "prompts/base"
+          ],
+          "local_packs": {
+            "size_toml_under": "m4/policy/packs/size_toml_under",
+            "size_toml_exact": "m4/policy/packs/size_toml_exact",
+            "size_toml_over": "m4/policy/packs/size_toml_over",
+            "size_tone_under": "m4/policy/packs/size_tone_under",
+            "size_tone_exact": "m4/policy/packs/size_tone_exact",
+            "size_tone_over": "m4/policy/packs/size_tone_over",
+            "size_total_under": "m4/policy/packs/size_total_under",
+            "size_total_exact": "m4/policy/packs/size_total_exact",
+            "size_total_over": "m4/policy/packs/size_total_over"
+          },
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
           "id": "symlink_pack",
           "label": "包内链接/junction",
           "layer": "F",
@@ -20186,7 +20554,9 @@
           "device_gate": false,
           "assertions": [
             "先查 leaf/祖先链接再 resolve",
-            "path 诊断且不读取链接目标"
+            "path 诊断且不读取链接目标",
+            "path 诊断",
+            "不读取链接目标"
           ],
           "acceptance": {
             "steps": [
@@ -20557,7 +20927,10 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role.json"
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role_external.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role_job.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role_anomaly.json"
           ],
           "fixture": "fixtures/m4/probe/d07_role.json",
           "setup": null,
@@ -20565,9 +20938,12 @@
           "expected_ref": "SC-D07/role_partition",
           "device_gate": false,
           "assertions": [
-            "真实 LocalProcessBridge 捕获固定三角色",
+            "真实 Local/External 适配器捕获固定三角色",
             "工具/历史为空",
-            "无跨例历史"
+            "user 等于原始 envelope 投影且正文只在 user",
+            "原文只在 user JSON 字符串",
+            "不支持分区拒绝",
+            "无工具/无跨例历史"
           ],
           "acceptance": {
             "steps": [
@@ -20599,12 +20975,99 @@
                     "equals": true
                   },
                   {
+                    "path": "user_equals_rendered",
+                    "equals": true
+                  },
+                  {
+                    "path": "inbound_only_user",
+                    "equals": true
+                  },
+                  {
                     "path": "system_is_base",
                     "equals": true
                   },
                   {
                     "path": "bridge_attempts",
                     "equals": 1
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "roles",
+                    "equals": [
+                      "system",
+                      "developer",
+                      "user"
+                    ]
+                  },
+                  {
+                    "path": "tools",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "history",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "user_equals_rendered",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "roles",
+                    "equals": [
+                      "system",
+                      "developer",
+                      "user"
+                    ]
+                  },
+                  {
+                    "path": "tools",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "user_equals_rendered",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "roles",
+                    "equals": [
+                      "system",
+                      "developer",
+                      "user"
+                    ]
+                  },
+                  {
+                    "path": "tools",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "user_equals_rendered",
+                    "equals": true
                   }
                 ]
               }
@@ -20705,7 +21168,8 @@
           "device_gate": false,
           "assertions": [
             "HR 缺会话键拒绝",
-            "不调用桥"
+            "不调用桥",
+            "拒绝"
           ],
           "acceptance": {
             "steps": [
@@ -20795,15 +21259,23 @@
                     "equals": "ok"
                   },
                   {
+                    "path": "base_hash",
+                    "equals": "13859faefd03b3de5d3f0c9c1942a8bd8a26d277edd25cb55faacc17287ecdda"
+                  },
+                  {
+                    "path": "pack_hash",
+                    "equals": "093cf10348c826947791a43e1154456aee059f42e0e19d75b220b35632dcc27f"
+                  },
+                  {
+                    "path": "prompt_hash",
+                    "equals": "c337860380262f031f2f5283c845c2dfca18045fe6cadaa0375125e8d1e49fcf"
+                  },
+                  {
+                    "path": "input_hash",
+                    "equals": "d92316bab204899b94b33f3549a7cf1bd6be00616ef1d4e7556bd974a77a7dff"
+                  },
+                  {
                     "path": "prompt_hash_non_self",
-                    "equals": true
-                  },
-                  {
-                    "path": "base_hash_independent",
-                    "equals": true
-                  },
-                  {
-                    "path": "pack_hash_independent",
                     "equals": true
                   }
                 ]
@@ -20996,7 +21468,8 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d08_hash.json"
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d08_hash.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d08_render_size.json"
           ],
           "fixture": "fixtures/m4/probe/d08_hash.json",
           "setup": null,
@@ -21017,12 +21490,37 @@
                     "equals": "ok"
                   },
                   {
-                    "path": "envelope_2048_reached",
-                    "equals": true
+                    "path": "envelope_2048_bytes",
+                    "equals": 2048
+                  },
+                  {
+                    "path": "over_attempted_bytes",
+                    "equals": 2049
                   },
                   {
                     "path": "over_2048_reason",
                     "equals": "input_too_large"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "content_max_bytes",
+                    "equals": 65536
+                  },
+                  {
+                    "path": "over_reason",
+                    "equals": "input_too_large"
+                  },
+                  {
+                    "path": "bridge_calls",
+                    "equals": 0
                   }
                 ]
               }
@@ -21749,6 +22247,8 @@
       "offline_subscenarios": [
         "public_contract",
         "holdout_freeze",
+        "holdout_first_failure",
+        "holdout_io_failures",
         "no_provider",
         "unknown_case",
         "provider_error",
@@ -21773,7 +22273,9 @@
           "assertions": [
             "实际加载当前包",
             "metadata/expected 不入 transport",
-            "simulated 不生成验收凭证"
+            "simulated 不生成验收凭证",
+            "preview 不读黄金答案",
+            "metadata/expected 不入模型"
           ],
           "acceptance": {
             "steps": [
@@ -21799,6 +22301,10 @@
                   {
                     "path": "descriptor_simulated",
                     "equals": true
+                  },
+                  {
+                    "path": "transport_markers",
+                    "equals": 0
                   }
                 ]
               }
@@ -21835,7 +22341,9 @@
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_first.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_repeat.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_failed_access.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_audit.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_after_failed.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_audit.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_pack_edit.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_missing.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
@@ -21853,7 +22361,9 @@
             "重复访问 repeat_access=true 且 new_evidence=false",
             "整批退役写入实际 regression 准入",
             "read_suite('regression') 含原批全部样本且退役批不再冻结",
-            "不读取真实私有样本"
+            "不读取真实私有样本",
+            "查看调优即整批转回归",
+            "重复访问不算新证据"
           ],
           "acceptance": {
             "steps": [
@@ -21950,6 +22460,35 @@
                     "equals": "ok"
                   },
                   {
+                    "path": "round_count",
+                    "equals": 3
+                  },
+                  {
+                    "path": "outcomes",
+                    "equals": [
+                      "completed",
+                      "completed",
+                      "failed"
+                    ]
+                  },
+                  {
+                    "path": "repeat_access",
+                    "equals": [
+                      false,
+                      true,
+                      true
+                    ]
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
                     "path": "holdout.repeat_access",
                     "equals": true
                   },
@@ -21960,6 +22499,37 @@
                   {
                     "path": "acceptance",
                     "equals": false
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "round_count",
+                    "equals": 4
+                  },
+                  {
+                    "path": "outcomes",
+                    "equals": [
+                      "completed",
+                      "completed",
+                      "failed",
+                      "completed"
+                    ]
+                  },
+                  {
+                    "path": "repeat_access",
+                    "equals": [
+                      false,
+                      true,
+                      true,
+                      true
+                    ]
                   }
                 ]
               },
@@ -22033,6 +22603,20 @@
                     "equals": 2
                   },
                   {
+                    "path": "regression_case_ids",
+                    "equals": [
+                      "holdout-synthetic-1",
+                      "holdout-synthetic-2"
+                    ]
+                  },
+                  {
+                    "path": "regression_case_digests",
+                    "equals": [
+                      "9278293cbe4fb6cc3316b259afb61bf9c2d78ce5f1bcb40ce3191701eb566a41",
+                      "989bedd899d87f2e22996bc9d2600bad3f4af969b47b06a005ce9cf9149fd2d6"
+                    ]
+                  },
+                  {
                     "path": "registry_statuses",
                     "equals": [
                       "retired"
@@ -22067,6 +22651,313 @@
           "junctions": {}
         },
         {
+          "id": "holdout_first_failure",
+          "label": "首次失败访问仍消耗",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_failed_access.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_audit.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_after_failed.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_audit.json"
+          ],
+          "fixture": "fixtures/m4/eval/holdout/suite.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D11/holdout_first_failure",
+          "device_gate": false,
+          "assertions": [
+            "首次授权失败也持久化并收尾 failed",
+            "再次访问 repeat_access=true/new_evidence=false",
+            "旧失败访问不丢失"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "batch",
+                    "equals": "synthetic-batch"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "authorization_required"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "round_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "outcomes",
+                    "equals": [
+                      "failed"
+                    ]
+                  },
+                  {
+                    "path": "phases",
+                    "equals": [
+                      "completed"
+                    ]
+                  },
+                  {
+                    "path": "repeat_access",
+                    "equals": [
+                      false
+                    ]
+                  },
+                  {
+                    "path": "viewed",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "holdout.repeat_access",
+                    "equals": true
+                  },
+                  {
+                    "path": "holdout.new_evidence",
+                    "equals": false
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "round_count",
+                    "equals": 2
+                  },
+                  {
+                    "path": "outcomes",
+                    "equals": [
+                      "failed",
+                      "completed"
+                    ]
+                  },
+                  {
+                    "path": "repeat_access",
+                    "equals": [
+                      false,
+                      true
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [
+            "prompts/base"
+          ],
+          "local_packs": {
+            "eval": "m4/policy/packs/eval"
+          },
+          "fixture_copies": {
+            "evals/private/holdout": "m4/eval/holdout",
+            "data/evals": "m4/eval/attestation"
+          },
+          "junctions": {}
+        },
+        {
+          "id": "holdout_io_failures",
+          "label": "登记/准入写失败不污染旧状态",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_write_fail.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_admission_fail.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_registry_fail.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_audit.json"
+          ],
+          "fixture": "fixtures/m4/eval/holdout/suite.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D11/holdout_io_failures",
+          "device_gate": false,
+          "assertions": [
+            "registry/准入写失败旧登记字节语义不变",
+            "失败准入不进入实际 regression",
+            "失败不消耗访问"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "batch",
+                    "equals": "synthetic-batch"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "policy_io_error"
+                  },
+                  {
+                    "path": "registry_unchanged",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "policy_io_error"
+                  },
+                  {
+                    "path": "registry_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "regression_case_count",
+                    "equals": 0
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "policy_io_error"
+                  },
+                  {
+                    "path": "registry_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "regression_case_count",
+                    "equals": 0
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "regression_case_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "registry_statuses",
+                    "equals": [
+                      "frozen"
+                    ]
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "round_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "viewed",
+                    "equals": false
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [
+            "prompts/base"
+          ],
+          "local_packs": {
+            "eval": "m4/policy/packs/eval"
+          },
+          "fixture_copies": {
+            "evals/private/holdout": "m4/eval/holdout"
+          },
+          "junctions": {}
+        },
+        {
           "id": "no_provider",
           "label": "无本机 provider",
           "layer": "F",
@@ -22083,7 +22974,9 @@
           "assertions": [
             "缺套件零样本 N/A",
             "零桥调用",
-            "不声称测得能力"
+            "不声称测得能力",
+            "零样本 N/A",
+            "错误不外泄配置值"
           ],
           "acceptance": {
             "steps": [
@@ -22143,7 +23036,9 @@
           "device_gate": false,
           "assertions": [
             "unknown/invalid_provider 拒绝",
-            "不换参考回放"
+            "不换参考回放",
+            "unknown_case/invalid_provider",
+            "拒绝参考回放"
           ],
           "acceptance": {
             "steps": [
@@ -22183,29 +23078,99 @@
           "id": "provider_error",
           "label": "provider 认证/超时/额度错误",
           "layer": "F",
-          "asset_status": "DEFERRED",
-          "entry_state": "deferred",
-          "steps": [],
-          "fixture": null,
-          "setup": "假桥返回固定诊断",
-          "required_api": "M4 provider 错误映射",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_provider_auth.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_provider_timeout.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_provider_quota.json"
+          ],
+          "fixture": "fixtures/m4/probe/d11_provider_auth.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-D11/provider_error",
           "device_gate": false,
           "assertions": [
             "固定无原值诊断",
             "不换模型或改用 smoke"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  },
+                  {
+                    "path": "case_reasons",
+                    "equals": [
+                      "bridge_auth"
+                    ]
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  },
+                  {
+                    "path": "case_reasons",
+                    "equals": [
+                      "decision_timeout"
+                    ]
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  },
+                  {
+                    "path": "case_reasons",
+                    "equals": [
+                      "bridge_quota"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
           "observations_ref": null,
-          "deferred_to": "真实 provider 明确未测；模拟仅作子证据",
+          "deferred_to": null,
           "module_evidence": null,
-          "shared_inputs": [],
-          "local_packs": {},
+          "shared_inputs": [
+            "prompts/base",
+            "tests/fixtures/policy-preview",
+            "evals/policy-suite"
+          ],
+          "local_packs": {
+            "eval": "m4/policy/packs/eval"
+          },
           "fixture_copies": {},
           "junctions": {}
         },

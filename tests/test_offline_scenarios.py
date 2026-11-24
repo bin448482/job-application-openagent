@@ -76,6 +76,11 @@ def _make_m4_project(root: Path) -> None:
         root / "evals/private/regression",
         dirs_exist_ok=True,
     )
+    shutil.copytree(
+        SCENARIO_ROOT / "fixtures/m4/eval/attestation",
+        root / "data/evals",
+        dirs_exist_ok=True,
+    )
 
 
 class AssetCompletenessTests(unittest.TestCase):
@@ -1991,6 +1996,42 @@ class M1DriverBoundaryTests(unittest.TestCase):
             differences = compare_invocation(invocation, oracle)
             self.assertTrue(any("attempts" in item or "bridge_calls" in item for item in differences), differences)
 
+    def test_real_m4_constant_hash_mutant_is_caught_by_d08_oracle(self) -> None:
+        """真实摘要函数被常量替换时，D08 独立手算摘要 oracle 必须拒绝。"""
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D08/hash_order"]["acceptance"]["steps"][0]
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m4/probe/d08_hash.json").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root):
+                normal = m4_probe._hash_operation(request)
+                invocation = {
+                    "exit_code": 0,
+                    "stdout_json": {"schema_version": 1, "status": normal["status"], **{
+                        key: value for key, value in normal.items() if key != "status"
+                    }},
+                    "stdout_json_ok": True,
+                    "stdout_text": "",
+                    "stderr": "",
+                }
+                self.assertEqual(compare_invocation(invocation, oracle), [])
+                with mock.patch.object(m4_probe, "compute_base_hash", return_value="f" * 64):
+                    mutant = m4_probe._hash_operation(request)
+            broken = {
+                "exit_code": 0,
+                "stdout_json": {"schema_version": 1, "status": mutant["status"], **{
+                    key: value for key, value in mutant.items() if key != "status"
+                }},
+                "stdout_json_ok": True,
+                "stdout_text": "",
+                "stderr": "",
+            }
+            differences = compare_invocation(broken, oracle)
+            self.assertTrue(any("base_hash" in item for item in differences), differences)
+
     def test_real_m4_role_partition_mutant_is_caught_by_d07_oracle(self) -> None:
         """真实桥请求额外加入 tools 时，D07 角色/工具 oracle 必须拒绝。"""
         from app.adapters.llm import support as bridge_support
@@ -2027,6 +2068,81 @@ class M1DriverBoundaryTests(unittest.TestCase):
         }
         differences = compare_invocation(invocation, oracle)
         self.assertTrue(any("tools" in item for item in differences), differences)
+
+    def test_real_m4_holdout_failure_finish_mutant_is_caught_by_d11_audit(self) -> None:
+        """删除失败访问的 finish 收尾时，D11 首次失败审计 oracle 必须拒绝。"""
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D11/holdout_first_failure"]["acceptance"]["steps"][2]
+        from app.usecases import policy_eval as eval_usecases
+
+        requests = {
+            name: json.loads(
+                (SCENARIO_ROOT / f"fixtures/m4/probe/{name}.json").read_text(encoding="utf-8")
+            )
+            for name in ("d11_register", "d11_holdout_failed_access", "d11_holdout_audit")
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root):
+                m4_probe._eval_operation(requests["d11_register"])
+                with mock.patch.object(
+                    eval_usecases, "_finish_holdout", lambda *args, **kwargs: None
+                ):
+                    m4_probe._eval_operation(requests["d11_holdout_failed_access"])
+                actual = m4_probe._eval_operation(requests["d11_holdout_audit"])
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("outcomes" in item or "phases" in item for item in differences), differences)
+
+    def test_real_m4_regression_admission_tamper_is_caught_by_d11_oracle(self) -> None:
+        """真实 regression 准入样本被篡改时，D11 独立指纹 oracle 必须拒绝。"""
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D11/holdout_freeze"]["acceptance"]["steps"][-1]
+        requests = {
+            name: json.loads(
+                (SCENARIO_ROOT / f"fixtures/m4/probe/{name}.json").read_text(encoding="utf-8")
+            )
+            for name in ("d11_register", "d11_retire", "d11_regression_check")
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root):
+                m4_probe._eval_operation(requests["d11_register"])
+                m4_probe._eval_operation(requests["d11_retire"])
+                admissions = sorted((root / "data/evals/regression-admissions").glob("*/suite.json"))
+                self.assertTrue(admissions)
+                data = json.loads(admissions[0].read_text(encoding="utf-8"))
+                target = data["cases"][0]["input"]
+                target["case_id"] = "tampered-synthetic"
+                target["inbound"] = "被篡改的合成输入"
+                admissions[0].write_text(
+                    json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+                )
+                actual = m4_probe._eval_operation(requests["d11_regression_check"])
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(
+            any("regression_case_ids" in item or "regression_case_digests" in item for item in differences),
+            differences,
+        )
 
     def test_real_m4_simulated_acceptance_mutant_is_caught_by_d11_oracle(self) -> None:
         """模拟桥被伪装成非模拟并写验收凭证时，D11 public oracle 必须拒绝。"""

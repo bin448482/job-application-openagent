@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import shutil
 import sys
 import time
 from dataclasses import replace
@@ -22,6 +24,7 @@ if str(ROOT) not in sys.path:
 from app.adapters.files.evals import FileEvalStore
 from app.adapters.files.policy import FilePolicyRepository
 from app.adapters.llm import support as bridge_support
+from app.adapters.llm.bridge_a import ExternalAgentBridge
 from app.adapters.llm.bridge_b import LocalProcessBridge
 from app.domain.models import add_seconds
 from app.domain.policy import (
@@ -51,6 +54,7 @@ from app.ports.decision import (
     DecisionLeasePort,
     DecisionClockPort,
 )
+from app.ports.policy import PolicyError, PolicyIssue
 from app.usecases import policy as policy_usecases
 from app.usecases import policy_eval as eval_usecases
 from app.usecases.decision import DecisionRunError, decide
@@ -303,6 +307,8 @@ def _hash_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         tamper_reason = error.reason_code
     size_ok = False
     size_over_reason = None
+    envelope_2048_bytes = None
+    ok_envelope = None
     for length in range(1, 2600):
         try:
             candidate = build_envelope(
@@ -324,6 +330,13 @@ def _hash_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             raise
         if envelope_bytes(candidate) == 2048:
             size_ok = True
+            envelope_2048_bytes = 2048
+            ok_envelope = candidate
+    over_attempted_bytes = None
+    if ok_envelope is not None:
+        bigger = dict(ok_envelope)
+        bigger["inbound"] = str(ok_envelope["inbound"]) + "x"
+        over_attempted_bytes = envelope_bytes(bigger)
     if size_over_reason is None:
         try:
             build_envelope(
@@ -342,6 +355,10 @@ def _hash_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             size_over_reason = error.reason_code
     return {
         "status": "ok",
+        "base_hash": base_hash,
+        "pack_hash": pack_hash,
+        "prompt_hash": prompt_hash,
+        "input_hash": input_hash,
         "base_hash_independent": base_hash == compute_base_hash(base_files),
         "pack_hash_independent": pack_hash == second_pack_hash,
         "prompt_excludes_nonce": prompt_hash == nonce_prompt,
@@ -349,6 +366,8 @@ def _hash_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         "prompt_hash_non_self": prompt_hash not in (base_hash, pack_hash, input_hash),
         "tamper_reason": tamper_reason,
         "envelope_2048_reached": size_ok,
+        "envelope_2048_bytes": envelope_2048_bytes,
+        "over_attempted_bytes": over_attempted_bytes,
         "over_2048_reason": size_over_reason,
         "bridge_calls": 0,
     }
@@ -557,26 +576,28 @@ class _CapturingPopen:
     """在传输边界替代真实进程：记录请求字节并写入固定响应。"""
 
     last_request = b""
+    protocol = "m4b-local-v1"
+    response_key = "content"
 
     def __init__(self, argv, stdin=None, stdout=None, stderr=None, shell=None) -> None:
         """读取 stdin、保存请求并按固定协议写入 stdout。"""
         del argv, stderr, shell
         type(self).last_request = stdin.read() if stdin is not None else b""
         response = {
-            "protocol": "m4b-local-v1",
+            "protocol": type(self).protocol,
             "roles": ["system", "developer", "user"],
-            "content": json.dumps(
-                _valid_decision(
-                    {
-                        "task_id": "x",
-                        "nonce": "00000000-0000-4000-8000-000000000001",
-                        "input_hash": "0" * 64,
-                        "inbound": "合成",
-                    }
-                ),
-                ensure_ascii=False,
-            ),
         }
+        response[type(self).response_key] = json.dumps(
+            _valid_decision(
+                {
+                    "task_id": "x",
+                    "nonce": "00000000-0000-4000-8000-000000000001",
+                    "input_hash": "0" * 64,
+                    "inbound": "合成",
+                }
+            ),
+            ensure_ascii=False,
+        )
         stdout.write(json.dumps(response, ensure_ascii=False).encode("utf-8"))
         stdout.flush()
         self.returncode = 0
@@ -615,10 +636,19 @@ def _bridge_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             now=str(case["now"]),
         )
     rendered = render_request(base_files, pack, envelope, now=str(case["now"]))
+    provider = str(request.get("provider", "local-process"))
+    if provider == "external-agent":
+        _CapturingPopen.protocol = "m4b-agent-v1"
+        _CapturingPopen.response_key = "output"
+        bridge_class = ExternalAgentBridge
+    else:
+        _CapturingPopen.protocol = "m4b-local-v1"
+        _CapturingPopen.response_key = "content"
+        bridge_class = LocalProcessBridge
     original_popen = bridge_support.subprocess.Popen
     bridge_support.subprocess.Popen = _CapturingPopen
     try:
-        bridge = LocalProcessBridge(["synthetic-bridge"], model_id="synthetic-model")
+        bridge = bridge_class(["synthetic-bridge"], model_id="synthetic-model")
         text = bridge.complete(
             system_message=rendered.system_message,
             developer_message=rendered.developer_message,
@@ -649,7 +679,11 @@ def _bridge_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         "history": captured.get("history"),
         "echo_keys": sorted(captured.get("echo", {})),
         "user_is_json": isinstance(json.loads(captured["messages"][2]["content"]), dict),
+        "user_equals_rendered": captured["messages"][2]["content"] == rendered.user_message,
         "system_is_base": captured["messages"][0]["content"] == rendered.system_message,
+        "inbound_only_user": str(envelope["inbound"]) in captured["messages"][2]["content"]
+        and str(envelope["inbound"]) not in captured["messages"][0]["content"]
+        and str(envelope["inbound"]) not in captured["messages"][1]["content"],
         "response_content_object": isinstance(parsed_content, dict),
         "resolved_tier": run["resolved_tier"],
         "bridge_attempts": run["audit"]["bridge_attempts"],
@@ -857,6 +891,37 @@ def _restore_operation(request: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+class _FailingEvalStore(FileEvalStore):
+    """只在指定真实文件写入边界注入失败，读与其他写仍委托生产适配器。"""
+
+    def __init__(self, root: Path, boundary: str) -> None:
+        """保存项目根与失败边界名。"""
+        super().__init__(root)
+        self._boundary = boundary
+
+    def update_holdout_registry(self, mutate):
+        """registry 边界失败时抛出固定 policy_io_error。"""
+        if self._boundary == "registry":
+            raise PolicyError("policy_io_error", [PolicyIssue(None, None, None, "path")])
+        return super().update_holdout_registry(mutate)
+
+    def write_regression_admission(self, batch_id, suite):
+        """准入副本边界失败时抛出固定 policy_io_error。"""
+        if self._boundary == "admission":
+            raise PolicyError("policy_io_error", [PolicyIssue(None, None, None, "path")])
+        return super().write_regression_admission(batch_id, suite)
+
+
+def _registry_snapshot(store: FileEvalStore) -> str:
+    """返回当前真实 registry 的规范化摘要，用于比较失败前后未变。"""
+    registry = store.read_holdout_registry()
+    return hashlib.sha256(
+        json.dumps(registry, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
 def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
     """用真实 eval_pack/留出事务与模拟桥运行合成套件，不写真实凭证。"""
     repo = FilePolicyRepository(ROOT)
@@ -868,8 +933,11 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         if request.get("edit_tone"):
             tone = ROOT / "prompts/local/eval/tone.md"
             tone.write_text(tone.read_text(encoding="utf-8") + "\n合成调参。", encoding="utf-8")
-        bridge = _EvalBridge(str(request.get("surface", "public")))
+        bridge = _EvalBridge(
+            str(request.get("surface", "public")), request.get("bridge_error")
+        )
         confirmed = bool(request.get("authorize", True))
+        markers = [str(item) for item in request.get("forbidden_markers", [])]
         try:
             result = eval_usecases.eval_pack(
                 repo,
@@ -881,7 +949,34 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 now=str(request.get("now", "2026-11-24T00:00:00.000Z")),
             )
         except Exception as error:
-            return {"status": "error", "reason_code": getattr(error, "reason_code", None)}
+            reasons: list[str] = []
+            reports = sorted(
+                (ROOT / "data/evals").glob("eval-*/report.json"),
+                key=lambda item: item.stat().st_mtime,
+            )
+            if reports:
+                try:
+                    report = json.loads(reports[-1].read_text(encoding="utf-8"))
+                    reasons = sorted(
+                        {
+                            str(case.get("reason_code"))
+                            for case in report.get("cases", [])
+                            if case.get("reason_code")
+                        }
+                    )
+                except (OSError, ValueError):
+                    reasons = []
+            return {
+                "status": "error",
+                "reason_code": getattr(error, "reason_code", None),
+                "case_reasons": reasons,
+                "bridge_calls": bridge.calls,
+                "transport_markers": sum(
+                    message.count(marker)
+                    for message in bridge.user_messages
+                    for marker in markers
+                ),
+            }
         holdout = None
         report_path = result.get("report_path")
         if isinstance(report_path, str):
@@ -899,6 +994,11 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "case_count": (result.get("buckets") or {}).get("total"),
             "bridge_calls": bridge.calls,
             "descriptor_simulated": bridge.descriptor().simulated,
+            "transport_markers": sum(
+                message.count(marker)
+                for message in bridge.user_messages
+                for marker in markers
+            ),
             "holdout": holdout,
         }
     if mode == "register":
@@ -930,6 +1030,36 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "reason_code": None,
             "regression_ref_present": bool(result.get("regression_ref")),
         }
+    if mode == "holdout_audit":
+        try:
+            registry = store.read_holdout_registry()
+        except Exception as error:
+            return {"status": "error", "reason_code": getattr(error, "reason_code", None)}
+        batches = registry.get("batches") or []
+        if not isinstance(batches, list) or not batches:
+            return {"status": "error", "reason_code": "eval_failed"}
+        batch = next(
+            (
+                item
+                for item in batches
+                if isinstance(item, dict)
+                and item.get("batch_id") == str(request.get("batch_id", "synthetic-batch"))
+            ),
+            None,
+        )
+        if batch is None:
+            return {"status": "error", "reason_code": "eval_failed"}
+        rounds = batch.get("access_rounds") or []
+        return {
+            "status": "ok",
+            "reason_code": None,
+            "round_count": len(rounds),
+            "outcomes": [item.get("outcome") for item in rounds],
+            "phases": [item.get("phase") for item in rounds],
+            "repeat_access": [item.get("repeat_access") for item in rounds],
+            "viewed": batch.get("viewed"),
+            "batch_status": batch.get("status"),
+        }
     if mode == "regression_check":
         try:
             suite = store.read_suite("regression")
@@ -943,6 +1073,18 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             for case in (cases or [])
             if isinstance(case, dict)
         ]
+        case_digests = [
+            hashlib.sha256(
+                json.dumps(
+                    case.get("input"),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+            for case in (cases or [])
+            if isinstance(case, dict)
+        ]
         statuses = sorted(
             str(batch.get("status"))
             for batch in (batches or [])
@@ -952,20 +1094,56 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "status": "ok",
             "reason_code": None,
             "regression_case_ids": case_ids,
+            "regression_case_digests": case_digests,
             "regression_case_count": len(case_ids or []),
             "registry_statuses": statuses,
             "frozen_absent": "frozen" not in statuses,
         }
+    if mode in {"register_write_fail", "retire_admission_fail", "retire_registry_fail"}:
+        boundary = "admission" if mode == "retire_admission_fail" else "registry"
+        failing = _FailingEvalStore(ROOT, boundary)
+        before = _registry_snapshot(store)
+        try:
+            if mode == "register_write_fail":
+                eval_usecases.register_holdout(
+                    failing,
+                    batch_id=str(request.get("batch_id", "synthetic-failing")),
+                    version="2026-11-24",
+                    sample_count=2,
+                    annotator="synthetic-annotator",
+                    maintainer="synthetic-maintainer",
+                    frozen_at="2026-11-24T00:00:00.000Z",
+                    candidate_release="synthetic-release",
+                )
+            else:
+                eval_usecases.retire_holdout(
+                    failing,
+                    batch_id=str(request.get("batch_id", "synthetic-batch")),
+                    retired_at="2026-11-25T00:00:00.000Z",
+                )
+        except Exception as error:
+            after = _registry_snapshot(store)
+            suite = store.read_suite("regression")
+            cases = suite.get("cases") if isinstance(suite, dict) else []
+            return {
+                "status": "error",
+                "reason_code": getattr(error, "reason_code", None),
+                "registry_unchanged": before == after,
+                "regression_case_count": len(cases or []),
+            }
+        return {"status": "ok", "reason_code": None, "registry_unchanged": False}
     raise ProbeError("eval mode 非法")
 
 
 class _EvalBridge(DecisionBridgePort):
     """模拟 transport：按 inbound 关键词返回固定 Decision，不证明真实模型能力。"""
 
-    def __init__(self, surface: str) -> None:
-        """保存表面标签与调用计数。"""
+    def __init__(self, surface: str, error: str | None = None) -> None:
+        """保存表面标签、可选固定桥错误与调用计数。"""
         self._surface = surface
+        self._error = error
         self.calls = 0
+        self.user_messages: list[str] = []
 
     def descriptor(self) -> BridgeDescriptor:
         """返回 simulated 摘要，永不生成验收凭证。"""
@@ -981,6 +1159,9 @@ class _EvalBridge(DecisionBridgePort):
         """按输入关键词返回固定 Decision JSON。"""
         del system_message, developer_message
         self.calls += 1
+        self.user_messages.append(user_message)
+        if self._error:
+            raise BridgeError(self._error, submitted=True)
         data = json.loads(user_message)
         inbound = str(data.get("inbound", ""))
         facts = data.get("allowed_facts") or []
@@ -1037,6 +1218,84 @@ class _EvalBridge(DecisionBridgePort):
         return json.dumps(decision, ensure_ascii=False)
 
 
+def _canonical_bytes(value: Any) -> int:
+    """按契约 H 的规范化 JSON 计算 UTF-8 字节数，用于渲染上限观察。"""
+    return len(
+        json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    )
+
+
+def _render_size_operation(request: Mapping[str, Any]) -> dict[str, Any]:
+    """真实 pack/render 下二分定位渲染内容 65536/65537 字节边界。"""
+    repo = FilePolicyRepository(ROOT)
+    source = ROOT / "prompts/local/valid"
+    target = ROOT / "prompts/local/size_render"
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(source, target)
+    case = repo.read_preview_case("policy-greeting")
+    base_files = repo.read_base()
+    original_tone = (target / "tone.md").read_text(encoding="utf-8")
+    for name, desired in (("phrase-bank.md", 20000), ("never-say.md", 10000)):
+        original = (target / name).read_text(encoding="utf-8").rstrip("\n")
+        padding = max(0, desired - len(original.encode("utf-8")) - 1)
+        (target / name).write_text(original + "\n" + " " * padding + "\n", encoding="utf-8")
+
+    def attempt(tone_bytes: int) -> tuple[int | None, str | None]:
+        """写入指定 tone 大小并真实渲染，返回内容字节或固定超限原因。"""
+        text = original_tone.rstrip("\n") + "\n" + " " * max(0, tone_bytes - len(original_tone.encode("utf-8")) - 1)
+        (target / "tone.md").write_text(text + "\n", encoding="utf-8")
+        try:
+            _normalized, loaded_base, _files, _guides, pack = policy_usecases.load_active_pack(
+                repo, "prompts/local/size_render"
+            )
+            envelope = build_envelope(
+                task_id=str(case["task_id"]),
+                nonce=str(case["nonce"]),
+                kind=str(case["kind"]),
+                subject=case["subject"],
+                inbound=str(case["inbound"]),
+                context=list(case["context"]),
+                allowed_facts=list(case["allowed_facts"]),
+                base_files=loaded_base,
+                pack=pack,
+                now=str(case["now"]),
+            )
+            rendered = render_request(
+                loaded_base, pack, envelope, now=str(case["now"])
+            )
+            return _canonical_bytes(rendered.content), None
+        except DecisionError as error:
+            return None, error.reason_code
+        except PolicyError as error:
+            return None, error.reason_code
+
+    low, high = 20000, 32768
+    best_size = None
+    best_tone = None
+    while low <= high:
+        middle = (low + high) // 2
+        size, reason = attempt(middle)
+        if size is not None:
+            best_size = size
+            best_tone = middle
+            low = middle + 1
+        elif reason in {"input_too_large", "invalid_policy"}:
+            high = middle - 1
+        else:
+            return {"status": "error", "reason_code": reason or "invalid_policy"}
+    over_size, over_reason = attempt((best_tone or 0) + 1)
+    return {
+        "status": "ok",
+        "content_max_bytes": best_size,
+        "over_content_bytes": over_size,
+        "over_reason": over_reason,
+        "bridge_calls": 0,
+    }
+
+
 def run_request(request: Mapping[str, Any]) -> dict[str, Any]:
     """按 operation 分派到真实公开接口，并返回固定摘要。"""
     operation = request.get("operation")
@@ -1044,6 +1303,8 @@ def run_request(request: Mapping[str, Any]) -> dict[str, Any]:
         return _decision_operation(request)
     if operation == "hash":
         return _hash_operation(request)
+    if operation == "render_size":
+        return _render_size_operation(request)
     if operation == "facts":
         return _facts_operation(request)
     if operation == "render":

@@ -2981,7 +2981,9 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "拒绝",
+        "不执行"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3027,7 +3029,8 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "拒绝 bool 当整数"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3052,6 +3055,56 @@
       ],
       "variant_id": "bool_version"
     },
+    "SC-D02/contract_expired_lease": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "stale_decision",
+                "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "过期租约只返回 stale_decision",
+        "零桥/零动作",
+        "不冒充从新租约重跑"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "过期租约只返回 stale_decision",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 校验器已交付",
+        "合成 envelope"
+      ],
+      "scenario_id": "SC-D02",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "contract_expired_lease"
+    },
     "SC-D02/evidence_not_substring": {
       "acceptance": {
         "steps": [
@@ -3073,7 +3126,8 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "stale_evidence/blocked"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3099,31 +3153,14 @@
       "variant_id": "evidence_not_substring"
     },
     "SC-D02/expired_nonce": {
-      "acceptance": {
-        "steps": [
-          {
-            "exit_code": 0,
-            "stdout_paths": [
-              {
-                "equals": "error",
-                "path": "status"
-              },
-              {
-                "equals": "stale_decision",
-                "path": "reason_code"
-              }
-            ]
-          }
-        ]
-      },
+      "acceptance": null,
       "assertions": [
-        "合法阳性必须通过但不自动授权",
-        "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "stale_decision",
+        "从新租约重跑"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 运行时新租约重跑与 blocked 落库",
       "device_gate": false,
-      "expected_summary": "合法阳性必须通过但不自动授权",
+      "expected_summary": "stale_decision",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3165,7 +3202,9 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "拒绝额外键",
+        "不执行"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3211,7 +3250,9 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "拒绝非单 JSON",
+        "不执行"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3257,7 +3298,8 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "不截断、记 invalid_decision"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3303,7 +3345,9 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "invalid_decision/blocked",
+        "不执行"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3361,7 +3405,9 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "校验通过但不自动授权",
+        "回显三标识"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3407,7 +3453,8 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "stale_decision/blocked"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3453,7 +3500,8 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "stale_decision/blocked"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3499,7 +3547,8 @@
       "assertions": [
         "合法阳性必须通过但不自动授权",
         "回显三标识与租约边界受控",
-        "真实 parse/render/validate 消费，零动作"
+        "真实 parse/render/validate 消费，零动作",
+        "stale_decision/blocked"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3524,7 +3573,7 @@
       ],
       "variant_id": "wrong_task"
     },
-    "SC-D03/input_too_large": {
+    "SC-D03/contract_input_too_large": {
       "acceptance": {
         "steps": [
           {
@@ -3537,19 +3586,52 @@
               {
                 "equals": "input_too_large",
                 "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
               }
             ]
           }
         ]
       },
       "assertions": [
-        "提交前仅一次重试，提交后不重试",
-        "真实 decide 记录尝试/提交计数与固定诊断",
-        "超限不截断 inbound、零桥调用"
+        "超限返回 input_too_large",
+        "零桥/不截断",
+        "不冒充待办已落库"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "提交前仅一次重试，提交后不重试",
+      "expected_summary": "超限返回 input_too_large",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 桥超时契约",
+        "假桥不连接真实模型"
+      ],
+      "scenario_id": "SC-D03",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "contract_input_too_large"
+    },
+    "SC-D03/input_too_large": {
+      "acceptance": null,
+      "assertions": [
+        "超限 input_too_large 转待办",
+        "不截断 inbound"
+      ],
+      "deferred_to": "M4c 超限待办持久化",
+      "device_gate": false,
+      "expected_summary": "超限 input_too_large 转待办",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3607,7 +3689,9 @@
       "assertions": [
         "提交前仅一次重试，提交后不重试",
         "真实 decide 记录尝试/提交计数与固定诊断",
-        "超限不截断 inbound、零桥调用"
+        "decision_timeout",
+        "不重复调用",
+        "不推断模型处理结果"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -3665,7 +3749,8 @@
       "assertions": [
         "提交前仅一次重试，提交后不重试",
         "真实 decide 记录尝试/提交计数与固定诊断",
-        "超限不截断 inbound、零桥调用"
+        "最多重试一次",
+        "trace 记录提交/调用次数"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4159,7 +4244,8 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "整数不接受 bool"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4219,7 +4305,9 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "sensitive/conflict 拒绝",
+        "不自动修正"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4279,7 +4367,8 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "拒绝"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4333,17 +4422,71 @@
                 "type": "array"
               }
             ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
           }
         ]
       },
       "assertions": [
-        "真实 policy validate 读取合成包",
-        "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "encoding 诊断",
+        "拒绝",
+        "三种编码边界分别验证"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "真实 policy validate 读取合成包",
+      "expected_summary": "encoding 诊断",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -4399,7 +4542,8 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "拒绝额外键"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4459,7 +4603,9 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "invalid_policy",
+        "启动前退出"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4519,7 +4665,8 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "path 诊断，拒绝"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4631,6 +4778,198 @@
       "acceptance": {
         "steps": [
           {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
             "exit_code": 2,
             "required_stdout_keys": [
               "schema_version",
@@ -4660,13 +4999,13 @@
         ]
       },
       "assertions": [
-        "真实 policy validate 读取合成包",
-        "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "超限拒绝，不截断后称合法",
+        "等于与低于上限的合成包分别验证",
+        "三个文件级/总量边界均覆盖"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "真实 policy validate 读取合成包",
+      "expected_summary": "超限拒绝，不截断后称合法",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -4717,7 +5056,9 @@
       },
       "assertions": [
         "先查 leaf/祖先链接再 resolve",
-        "path 诊断且不读取链接目标"
+        "path 诊断且不读取链接目标",
+        "path 诊断",
+        "不读取链接目标"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4777,7 +5118,8 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "拒绝漏项"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4837,7 +5179,8 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "拒绝冲突"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4897,7 +5240,8 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "safety_floor 拒绝"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -4965,7 +5309,9 @@
       "assertions": [
         "真实 policy validate 读取合成包",
         "非法包启动前失败且不回显正文/绝对路径",
-        "合法包有效限制/硬下限/摘要可计算"
+        "合法包有效限制/硬下限/摘要可计算",
+        "validate 通过",
+        "有效限制可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -5240,6 +5586,14 @@
               },
               {
                 "equals": true,
+                "path": "user_equals_rendered"
+              },
+              {
+                "equals": true,
+                "path": "inbound_only_user"
+              },
+              {
+                "equals": true,
                 "path": "system_is_base"
               },
               {
@@ -5247,17 +5601,99 @@
                 "path": "bridge_attempts"
               }
             ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": [
+                  "system",
+                  "developer",
+                  "user"
+                ],
+                "path": "roles"
+              },
+              {
+                "length_equals": 0,
+                "path": "tools"
+              },
+              {
+                "length_equals": 0,
+                "path": "history"
+              },
+              {
+                "equals": true,
+                "path": "user_equals_rendered"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": [
+                  "system",
+                  "developer",
+                  "user"
+                ],
+                "path": "roles"
+              },
+              {
+                "length_equals": 0,
+                "path": "tools"
+              },
+              {
+                "equals": true,
+                "path": "user_equals_rendered"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": [
+                  "system",
+                  "developer",
+                  "user"
+                ],
+                "path": "roles"
+              },
+              {
+                "length_equals": 0,
+                "path": "tools"
+              },
+              {
+                "equals": true,
+                "path": "user_equals_rendered"
+              }
+            ]
           }
         ]
       },
       "assertions": [
-        "真实 LocalProcessBridge 捕获固定三角色",
+        "真实 Local/External 适配器捕获固定三角色",
         "工具/历史为空",
-        "无跨例历史"
+        "user 等于原始 envelope 投影且正文只在 user",
+        "原文只在 user JSON 字符串",
+        "不支持分区拒绝",
+        "无工具/无跨例历史"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "真实 LocalProcessBridge 捕获固定三角色",
+      "expected_summary": "真实 Local/External 适配器捕获固定三角色",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -5298,7 +5734,8 @@
       },
       "assertions": [
         "HR 缺会话键拒绝",
-        "不调用桥"
+        "不调用桥",
+        "拒绝"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -5379,16 +5816,24 @@
                 "path": "status"
               },
               {
+                "equals": "13859faefd03b3de5d3f0c9c1942a8bd8a26d277edd25cb55faacc17287ecdda",
+                "path": "base_hash"
+              },
+              {
+                "equals": "093cf10348c826947791a43e1154456aee059f42e0e19d75b220b35632dcc27f",
+                "path": "pack_hash"
+              },
+              {
+                "equals": "c337860380262f031f2f5283c845c2dfca18045fe6cadaa0375125e8d1e49fcf",
+                "path": "prompt_hash"
+              },
+              {
+                "equals": "d92316bab204899b94b33f3549a7cf1bd6be00616ef1d4e7556bd974a77a7dff",
+                "path": "input_hash"
+              },
+              {
                 "equals": true,
                 "path": "prompt_hash_non_self"
-              },
-              {
-                "equals": true,
-                "path": "base_hash_independent"
-              },
-              {
-                "equals": true,
-                "path": "pack_hash_independent"
               }
             ]
           }
@@ -5524,12 +5969,37 @@
                 "path": "status"
               },
               {
-                "equals": true,
-                "path": "envelope_2048_reached"
+                "equals": 2048,
+                "path": "envelope_2048_bytes"
+              },
+              {
+                "equals": 2049,
+                "path": "over_attempted_bytes"
               },
               {
                 "equals": "input_too_large",
                 "path": "over_2048_reason"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 65536,
+                "path": "content_max_bytes"
+              },
+              {
+                "equals": "input_too_large",
+                "path": "over_reason"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
               }
             ]
           }
@@ -6143,6 +6613,144 @@
       ],
       "variant_id": "three_hashes_equal"
     },
+    "SC-D11/holdout_first_failure": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "synthetic-batch",
+                "path": "batch"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 1,
+                "path": "round_count"
+              },
+              {
+                "equals": [
+                  "failed"
+                ],
+                "path": "outcomes"
+              },
+              {
+                "equals": [
+                  "completed"
+                ],
+                "path": "phases"
+              },
+              {
+                "equals": [
+                  false
+                ],
+                "path": "repeat_access"
+              },
+              {
+                "equals": true,
+                "path": "viewed"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "holdout.repeat_access"
+              },
+              {
+                "equals": false,
+                "path": "holdout.new_evidence"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 2,
+                "path": "round_count"
+              },
+              {
+                "equals": [
+                  "failed",
+                  "completed"
+                ],
+                "path": "outcomes"
+              },
+              {
+                "equals": [
+                  false,
+                  true
+                ],
+                "path": "repeat_access"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "首次授权失败也持久化并收尾 failed",
+        "再次访问 repeat_access=true/new_evidence=false",
+        "旧失败访问不丢失"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "首次授权失败也持久化并收尾 failed",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 eval 已交付",
+        "无合规本机 provider 即未测"
+      ],
+      "scenario_id": "SC-D11",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "holdout_first_failure"
+    },
     "SC-D11/holdout_freeze": {
       "acceptance": {
         "steps": [
@@ -6239,6 +6847,35 @@
                 "path": "status"
               },
               {
+                "equals": 3,
+                "path": "round_count"
+              },
+              {
+                "equals": [
+                  "completed",
+                  "completed",
+                  "failed"
+                ],
+                "path": "outcomes"
+              },
+              {
+                "equals": [
+                  false,
+                  true,
+                  true
+                ],
+                "path": "repeat_access"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
                 "equals": true,
                 "path": "holdout.repeat_access"
               },
@@ -6249,6 +6886,37 @@
               {
                 "equals": false,
                 "path": "acceptance"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 4,
+                "path": "round_count"
+              },
+              {
+                "equals": [
+                  "completed",
+                  "completed",
+                  "failed",
+                  "completed"
+                ],
+                "path": "outcomes"
+              },
+              {
+                "equals": [
+                  false,
+                  true,
+                  true,
+                  true
+                ],
+                "path": "repeat_access"
               }
             ]
           },
@@ -6323,6 +6991,20 @@
               },
               {
                 "equals": [
+                  "holdout-synthetic-1",
+                  "holdout-synthetic-2"
+                ],
+                "path": "regression_case_ids"
+              },
+              {
+                "equals": [
+                  "9278293cbe4fb6cc3316b259afb61bf9c2d78ce5f1bcb40ce3191701eb566a41",
+                  "989bedd899d87f2e22996bc9d2600bad3f4af969b47b06a005ce9cf9149fd2d6"
+                ],
+                "path": "regression_case_digests"
+              },
+              {
+                "equals": [
                   "retired"
                 ],
                 "path": "registry_statuses"
@@ -6341,7 +7023,9 @@
         "重复访问 repeat_access=true 且 new_evidence=false",
         "整批退役写入实际 regression 准入",
         "read_suite('regression') 含原批全部样本且退役批不再冻结",
-        "不读取真实私有样本"
+        "不读取真实私有样本",
+        "查看调优即整批转回归",
+        "重复访问不算新证据"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -6365,6 +7049,147 @@
         "场景方案 §8"
       ],
       "variant_id": "holdout_freeze"
+    },
+    "SC-D11/holdout_io_failures": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "synthetic-batch",
+                "path": "batch"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "policy_io_error",
+                "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "registry_unchanged"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "policy_io_error",
+                "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "registry_unchanged"
+              },
+              {
+                "equals": 0,
+                "path": "regression_case_count"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "policy_io_error",
+                "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "registry_unchanged"
+              },
+              {
+                "equals": 0,
+                "path": "regression_case_count"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 0,
+                "path": "regression_case_count"
+              },
+              {
+                "equals": [
+                  "frozen"
+                ],
+                "path": "registry_statuses"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 0,
+                "path": "round_count"
+              },
+              {
+                "equals": false,
+                "path": "viewed"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "registry/准入写失败旧登记字节语义不变",
+        "失败准入不进入实际 regression",
+        "失败不消耗访问"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "registry/准入写失败旧登记字节语义不变",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 eval 已交付",
+        "无合规本机 provider 即未测"
+      ],
+      "scenario_id": "SC-D11",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "holdout_io_failures"
     },
     "SC-D11/no_provider": {
       "acceptance": {
@@ -6395,7 +7220,9 @@
       "assertions": [
         "缺套件零样本 N/A",
         "零桥调用",
-        "不声称测得能力"
+        "不声称测得能力",
+        "零样本 N/A",
+        "错误不外泄配置值"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -6421,12 +7248,72 @@
       "variant_id": "no_provider"
     },
     "SC-D11/provider_error": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              },
+              {
+                "equals": [
+                  "bridge_auth"
+                ],
+                "path": "case_reasons"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              },
+              {
+                "equals": [
+                  "decision_timeout"
+                ],
+                "path": "case_reasons"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              },
+              {
+                "equals": [
+                  "bridge_quota"
+                ],
+                "path": "case_reasons"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "固定无原值诊断",
         "不换模型或改用 smoke"
       ],
-      "deferred_to": "真实 provider 明确未测；模拟仅作子证据",
+      "deferred_to": null,
       "device_gate": false,
       "expected_summary": "固定无原值诊断",
       "forbidden": [
@@ -6532,6 +7419,10 @@
               {
                 "equals": true,
                 "path": "descriptor_simulated"
+              },
+              {
+                "equals": 0,
+                "path": "transport_markers"
               }
             ]
           }
@@ -6540,7 +7431,9 @@
       "assertions": [
         "实际加载当前包",
         "metadata/expected 不入 transport",
-        "simulated 不生成验收凭证"
+        "simulated 不生成验收凭证",
+        "preview 不读黄金答案",
+        "metadata/expected 不入模型"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -6585,7 +7478,9 @@
       },
       "assertions": [
         "unknown/invalid_provider 拒绝",
-        "不换参考回放"
+        "不换参考回放",
+        "unknown_case/invalid_provider",
+        "拒绝参考回放"
       ],
       "deferred_to": null,
       "device_gate": false,
