@@ -10,7 +10,7 @@ import json
 import re
 import xml.etree.ElementTree as ElementTree
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 SCENARIO_ROOT = Path(__file__).resolve().parent.parent
@@ -83,6 +83,14 @@ def iter_variants(catalogue: dict[str, Any]):
             yield scenario, variant
 
 
+EXPECTED_FILE_NAMES = frozenset({"expected.json", "oracles.json"})
+
+
+def is_expected_name(path: Path) -> bool:
+    """识别不得进入 SUT 输入树或映射目标的答案文件。"""
+    return path.name in EXPECTED_FILE_NAMES or path.name.startswith("expected.")
+
+
 def _check_relative_path(value: str) -> list[str]:
     """确认资产路径是项目内相对路径，拒绝盘符、UNC 和用户目录。"""
     errors: list[str] = []
@@ -94,6 +102,28 @@ def _check_relative_path(value: str) -> list[str]:
         if pattern.search(value):
             errors.append(f"路径疑似本机绝对或用户目录: {value!r}")
     return errors
+
+
+def check_mapping_relative_path(
+    value: object,
+    *,
+    label: str,
+    allow_answer_name: bool = False,
+) -> list[str]:
+    """在 resolve 前按 Windows/POSIX 语义校验映射原始路径。
+
+    映射源/目标必须是相对路径：拒绝盘符、根路径、UNC、任何上跳段与约定
+    答案名；后续仍需由调用方做链接与解析后包含检查。
+    """
+    if not isinstance(value, str) or not value:
+        return [f"{label} 必须是非空字符串"]
+    windows = PureWindowsPath(value)
+    errors = [f"{label}: {item}" for item in _check_relative_path(value)]
+    if windows.drive or windows.root or windows.is_absolute():
+        errors.append(f"{label} 不得为绝对/盘符/UNC 路径: {value!r}")
+    if not allow_answer_name and is_expected_name(Path(value)):
+        errors.append(f"{label} 不得指向答案文件: {value!r}")
+    return list(dict.fromkeys(errors))
 
 
 def _scan_strings(value: Any, trail: str = "") -> list[tuple[str, str]]:
@@ -405,6 +435,42 @@ def _validate_fixture_files(root: Path, fixture: str) -> list[str]:
 
 
 
+def _validate_mapping_paths(root: Path, ref: str, variant: dict[str, Any]) -> list[str]:
+    """校验变体原始映射路径与显式 LF 入口，规则与隔离运行时一致。"""
+    errors: list[str] = []
+    mappings = variant.get("fixture_files") or {}
+    if not isinstance(mappings, dict):
+        errors.append(f"{ref}: fixture_files 必须是对象")
+    else:
+        fixtures_root = (root / "fixtures").resolve()
+        for destination, source in mappings.items():
+            errors.extend(
+                check_mapping_relative_path(
+                    destination, label=f"{ref}: fixture_files 目标"
+                )
+            )
+            source_errors = check_mapping_relative_path(
+                source, label=f"{ref}: fixture_files 来源"
+            )
+            errors.extend(source_errors)
+            if source_errors or not isinstance(source, str):
+                continue
+            resolved = (fixtures_root / source).resolve()
+            if not _within(resolved, fixtures_root):
+                errors.append(f"{ref}: fixture_files 来源解析后越出 fixtures")
+            elif not resolved.is_file():
+                errors.append(f"{ref}: fixture_files 来源不是普通文件")
+    lf_inputs = variant.get("lf_inputs") or []
+    if not isinstance(lf_inputs, list):
+        errors.append(f"{ref}: lf_inputs 必须是数组")
+    else:
+        for relative in lf_inputs:
+            errors.extend(
+                check_mapping_relative_path(relative, label=f"{ref}: lf_inputs")
+            )
+    return errors
+
+
 def validate_assets(assets: LoadedAssets) -> dict[str, Any]:
     """执行资产自检并返回结构化结果；不运行产品、不产生业务 PASS。"""
     errors: list[str] = []
@@ -520,6 +586,7 @@ def validate_assets(assets: LoadedAssets) -> dict[str, Any]:
             fixture = variant.get("fixture")
             if fixture:
                 errors.extend(_validate_fixture_files(root, fixture))
+            errors.extend(_validate_mapping_paths(root, ref, variant))
             missing_inputs = variant.get("expected_missing_inputs", [])
             if not isinstance(missing_inputs, list):
                 errors.append(f"{ref}: expected_missing_inputs 必须是数组")

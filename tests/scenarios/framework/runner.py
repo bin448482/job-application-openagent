@@ -27,6 +27,8 @@ from .model import (
     AssetError,
     LoadedAssets,
     SCENARIO_ROOT,
+    check_mapping_relative_path,
+    is_expected_name,
     iter_variants,
     load_assets,
     validate_assets,
@@ -186,12 +188,7 @@ M2_PROBE_PATH = "tests/scenarios/framework/m2_probe.py"
 M3_PROBE_PATH = "tests/scenarios/framework/m3_probe.py"
 M4_PROBE_PATH = "tests/scenarios/framework/m4_probe.py"
 M4C_PROBE_PATH = "tests/scenarios/framework/m4c_probe.py"
-EXPECTED_FILE_NAMES = {"expected.json", "oracles.json"}
 
-
-def _is_expected_name(path: Path) -> bool:
-    """识别不得进入 SUT 输入树的答案文件。"""
-    return path.name in EXPECTED_FILE_NAMES or path.name.startswith("expected.")
 
 
 def _iter_command_strings(variant: dict[str, Any]):
@@ -238,14 +235,14 @@ def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path
         seen.add(resolved)
         if resolved.is_dir():
             for item in sorted(resolved.rglob("*")):
-                if item.is_file() and not _is_expected_name(item):
+                if item.is_file() and not is_expected_name(item):
                     queue.append(item)
             continue
         if not resolved.is_file():
             if resolved in missing_allowed:
                 continue
             raise IsolationError("选定输入不存在")
-        if _is_expected_name(resolved):
+        if is_expected_name(resolved):
             continue
         selected.append(resolved)
         if resolved.parent.name == "probe" and resolved.suffix == ".json":
@@ -299,26 +296,26 @@ def _normalize_text_file(path: Path) -> None:
 
 
 def _normalize_lf_inputs(root: Path, values: object) -> None:
-    """把显式声明的合成 UTF-8 输入统一为 LF，消除检出换行差异。"""
+    """校验显式 LF 入口后复用唯一字节转换函数，不重复实现规范化。"""
     if values is None:
         return
     if not isinstance(values, list) or any(not isinstance(item, str) for item in values):
         raise IsolationError("lf_inputs 必须是相对路径数组")
     root_resolved = root.resolve()
     for relative in values:
-        candidate = Path(relative)
-        if candidate.is_absolute() or ".." in candidate.parts:
-            raise IsolationError("lf_inputs 不得绝对或包含 ..")
-        path = (root / candidate).resolve()
+        errors = check_mapping_relative_path(relative, label="lf_inputs")
+        if errors:
+            raise IsolationError(errors[0])
+        path = (root / relative).resolve()
         if not _within(path, root_resolved) or not path.is_file():
             raise IsolationError("lf_inputs 文件越界或不存在")
         if _is_link_like(path):
             raise IsolationError("lf_inputs 不得是链接")
         try:
-            text = path.read_bytes().decode("utf-8")
+            path.read_bytes().decode("utf-8")
         except (OSError, UnicodeError):
             raise IsolationError("lf_inputs 不是可读 UTF-8 文件") from None
-        path.write_bytes(text.replace("\r\n", "\n").encode("utf-8"))
+        _normalize_text_file(path)
 
 
 def _prepare_isolation(
@@ -422,7 +419,7 @@ def _prepare_isolation(
         source_root = target / relative
         _validate_source_tree(source_root, target, "共享输入")
         for source in sorted(source_root.rglob("*")):
-            if not source.is_file() or _is_expected_name(source):
+            if not source.is_file() or is_expected_name(source):
                 continue
             if _is_link_like(source):
                 raise IsolationError("共享输入含符号链接或 junction")
@@ -442,7 +439,7 @@ def _prepare_isolation(
         source_root = target / "tests" / "scenarios" / "fixtures" / relative
         _validate_source_tree(source_root, target, "复制夹具")
         for source in sorted(source_root.rglob("*")):
-            if not source.is_file() or _is_expected_name(source):
+            if not source.is_file() or is_expected_name(source):
                 continue
             if source.name in {"AGENTS.md", "CLAUDE.md"}:
                 continue
@@ -459,6 +456,16 @@ def _prepare_isolation(
     for destination_rel, relative in fixture_files.items():
         if not isinstance(destination_rel, str) or not isinstance(relative, str):
             raise IsolationError("fixture_files 必须是相对路径对象")
+        destination_errors = check_mapping_relative_path(
+            destination_rel, label="fixture_files 目标"
+        )
+        if destination_errors:
+            raise IsolationError(destination_errors[0])
+        source_errors = check_mapping_relative_path(
+            relative, label="fixture_files 来源"
+        )
+        if source_errors:
+            raise IsolationError(source_errors[0])
         destination = (root / destination_rel).resolve()
         if not _within(destination, root.resolve()):
             raise IsolationError("fixture_files 目标越界")
@@ -466,7 +473,7 @@ def _prepare_isolation(
         if not _within(source, source_fixtures.resolve()):
             raise IsolationError("fixture_files 源越界")
         _reject_link_ancestors(source, target, "单文件夹具")
-        if not source.is_file() or _is_link_like(source) or _is_expected_name(source):
+        if not source.is_file() or _is_link_like(source) or is_expected_name(source):
             raise IsolationError("fixture_files 源不是合法合成文件")
         if destination.exists() or _is_link_like(destination):
             raise IsolationError("fixture_files 目标已存在")
@@ -486,7 +493,7 @@ def _prepare_isolation(
             raise IsolationError("local 包目标重复")
         destination.mkdir(parents=True)
         for source in sorted(source_root.rglob("*")):
-            if not source.is_file() or _is_expected_name(source):
+            if not source.is_file() or is_expected_name(source):
                 continue
             if source.name in {"AGENTS.md", "CLAUDE.md"}:
                 continue

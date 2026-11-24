@@ -613,17 +613,101 @@ class AcceptanceBoundaryTests(unittest.TestCase):
             root = runner._prepare_isolation(target, "run-test", "SC-D11", "mapped", variant)
             destination = root / "data/evals/holdout-attestation.local.json"
             self.assertEqual(destination.read_bytes(), b'{"synthetic":true}\n')
+            in_root = (
+                target / "data/evals/scenario-runs/run-test/iso-SC-D11-mapped"
+                / "data/evals/contract.json"
+            )
             for bad in (
                 {"../escape.json": "m4/attestation/holdout-attestation.synthetic.json"},
                 {"data/evals/x.json": "../outside.json"},
                 {"data/evals/x.json": "m4/attestation/expected.json"},
                 {"data/evals/x.json": "m4/attestation/missing.json"},
+                {"data/evals/x.json": str(source)},
+                {str(in_root): "m4/attestation/holdout-attestation.synthetic.json"},
+                {"data/evals/x.json": "m4/attestation/../attestation/holdout-attestation.synthetic.json"},
+                {"data/evals/../contract.local.json": "m4/attestation/holdout-attestation.synthetic.json"},
+                {"data/expected.json": "m4/attestation/holdout-attestation.synthetic.json"},
+                {"data/oracles.json": "m4/attestation/holdout-attestation.synthetic.json"},
+                {"data/evals/x.json": "C:/absolute/synthetic.json"},
+                {"data/evals/x.json": "C:relative/synthetic.json"},
+                {"data/evals/x.json": r"\\server\share\synthetic.json"},
+                {r"\contract.json": "m4/attestation/holdout-attestation.synthetic.json"},
             ):
                 with self.assertRaises(runner.IsolationError):
                     runner._prepare_isolation(
                         target, "run-test", "SC-D11", "mapped",
                         {"steps": [], "fixture_files": bad},
                     )
+
+    def test_asset_validation_uses_same_mapping_path_rules(self) -> None:
+        """资产自检与运行时共享同一原始路径规则，拒绝绝对/上跳/答案目标。"""
+        assets = load_assets()
+        cases = (
+            {"data/evals/c.json": "C:/abs/synthetic.json"},
+            {"data/evals/c.json": "m4/eval/../eval/attestation/holdout-attestation.synthetic.json"},
+            {"data/evals/../contract.local.json": "m4/eval/attestation/holdout-attestation.synthetic.json"},
+            {"data/expected.json": "m4/eval/attestation/holdout-attestation.synthetic.json"},
+            {r"\contract.json": "m4/eval/attestation/holdout-attestation.synthetic.json"},
+        )
+        for mapping in cases:
+            catalogue = copy.deepcopy(assets.catalogue)
+            variant = next(
+                item
+                for scenario in catalogue["scenarios"]
+                if scenario["id"] == "SC-D11"
+                for item in scenario["variants"]
+                if item["id"] == "holdout_freeze"
+            )
+            variant["fixture_files"] = mapping
+            report = model.validate_assets(
+                model.LoadedAssets(catalogue, assets.oracles, assets.root)
+            )
+            self.assertFalse(report["ok"], mapping)
+            self.assertTrue(
+                any("fixture_files" in error for error in report["errors"]),
+                report["errors"],
+            )
+
+    def test_fixture_files_and_lf_inputs_share_one_byte_contract(self) -> None:
+        """完整 prepare 中普通 CRLF 转换，BOM/NUL 自动与显式 LF 均原样。"""
+        samples = {
+            "plain": (b'{"synthetic":true}\r\n', b'{"synthetic":true}\n'),
+            "bom": (b"\xef\xbb\xbfa\r\nb\r\n", b"\xef\xbb\xbfa\r\nb\r\n"),
+            "nul": (b"a\r\n\x00b\r\n", b"a\r\n\x00b\r\n"),
+            "bad": (b"\xff\r\n", b"\xff\r\n"),
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary)
+            (target / "app").mkdir()
+            (target / "app" / "__main__.py").write_text("", encoding="utf-8")
+            fixtures = target / "tests" / "scenarios" / "fixtures" / "m4" / "bytes"
+            fixtures.mkdir(parents=True)
+            for name, (raw, _) in samples.items():
+                (fixtures / f"{name}.json").write_bytes(raw)
+            for name, (raw, expected) in samples.items():
+                mapping = {f"data/evals/{name}.json": f"m4/bytes/{name}.json"}
+                for declare in (False, True):
+                    variant = {"steps": [], "fixture_files": mapping}
+                    if declare:
+                        variant["lf_inputs"] = list(mapping)
+                    label = f"SC-D11-{name}-{'lf' if declare else 'auto'}"
+                    try:
+                        root = runner._prepare_isolation(
+                            target, "run-bytes", "SC-D11", label, variant
+                        )
+                    except runner.IsolationError:
+                        self.assertEqual((name, declare), ("bad", True))
+                        continue
+                    self.assertEqual(
+                        (root / f"data/evals/{name}.json").read_bytes(),
+                        expected if name != "bad" else raw,
+                    )
+                    if name == "bad":
+                        self.assertFalse(declare)
+                    if name == "plain":
+                        self.assertNotEqual(expected, raw)
+                    elif name in ("bom", "nul"):
+                        self.assertEqual(expected, raw)
 
     def test_expected_and_unselected_fixtures_are_not_copied(self) -> None:
         """只复制选定合成输入；expected.json 与未引用案例不得进入 SUT 树。"""
