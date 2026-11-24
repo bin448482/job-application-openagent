@@ -18,6 +18,7 @@ from app.adapters.sqlite.session import ProfileSessionLease
 from app.domain.models import Owner
 from app.domain.policy import build_envelope, render_request
 from app.ports.profile import ProfileError
+from app.ports.store import StoreError
 from app.usecases import policy as policy_usecases
 from app.usecases.decision import DecisionRunError, FixedClock, decide
 from app.usecases.policy_eval import RepositorySnapshot
@@ -46,6 +47,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         profile_store.close()
         self.path = profile_runtime_path(self.root, "demo")
         self.clock = m1_helpers.FakeClock()
+        self.owner = Owner(id=OWNER_ID, pid=4242, host=m1_helpers.HOST_A)
         self.store = SqliteStore(
             self.path,
             profile_id="demo",
@@ -59,12 +61,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
                 snapshot_id="00000000-0000-4000-8000-000000000b01",
             )
         )
-        claimed = self.store.claim(
-            "boss",
-            "unread",
-            Owner(id=OWNER_ID, pid=4242, host=m1_helpers.HOST_A),
-            NOW,
-        )
+        claimed = self.store.claim("boss", "unread", self.owner, NOW)
         assert claimed is not None
         self.lease = self.store.start(claimed, NOW)
         self.gate = SharedDeviceGate(
@@ -75,7 +72,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         self.gate.acquire(
             profile_id="demo",
             profile_db_path=str(self.path),
-            owner=Owner(id=OWNER_ID_2, pid=5151, host=m1_helpers.HOST_B),
+            owner=self.owner,
             now=NOW,
         )
 
@@ -124,7 +121,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         """真实租约允许一次决策；过期或共享门禁失配后桥前拒绝且不重发。"""
         lease = ProfileSessionLease(
             self.store,
-            self.lease.nonce,
+            self.lease,
             profile_id="demo",
             gate=self.gate,
             profile_db_path=self.path,
@@ -138,7 +135,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
 
         expired = ProfileSessionLease(
             self.store,
-            self.lease.nonce,
+            self.lease,
             profile_id="demo",
             gate=self.gate,
             profile_db_path=self.path,
@@ -153,7 +150,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         self.gate.release(now=LATER, converged=True)
         detached = ProfileSessionLease(
             self.store,
-            self.lease.nonce,
+            self.lease,
             profile_id="demo",
             gate=self.gate,
             profile_db_path=self.path,
@@ -162,6 +159,183 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         self.assertIsNone(detached.current_expiry())
         with self.assertRaises(DecisionRunError):
             self._decide(detached, bridge, NOW)
+        self.assertEqual(bridge.calls, 1)
+
+    def _mutate_task_owner_pair(self) -> None:
+        """把任务与设备两行 owner 同步改成另一合法且彼此相等的 owner。"""
+        connection = sqlite3.connect(str(self.path))
+        try:
+            for table in ("hr_discoveries", "device_lease"):
+                connection.execute(
+                    f"UPDATE {table} SET lease_owner = ?, owner_pid = ?, "
+                    "owner_host = ? WHERE nonce = ?",
+                    (
+                        OWNER_ID_2,
+                        5151,
+                        m1_helpers.HOST_B,
+                        self.lease.nonce,
+                    ),
+                )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def test_cross_gate_profile_library_and_owner_are_rejected_before_bridge(self) -> None:
+        """门禁 profile/原库/owner 与取得时任务不一致时桥前零调用拒绝。"""
+        self.gate.release(now=NOW, converged=True)
+        other_path = profile_runtime_path(self.root, "other")
+        other_gate = SharedDeviceGate(
+            profile_id="other",
+            profile_db_path=other_path,
+            os_root=Path(self.root) / "appdata",
+        )
+        other_gate.acquire(
+            profile_id="other",
+            profile_db_path=str(other_path),
+            owner=self.owner,
+            now=NOW,
+        )
+        bridge = _PreviewBridge()
+        port = ProfileSessionLease(
+            self.store,
+            self.lease,
+            profile_id="demo",
+            gate=other_gate,
+            profile_db_path=self.path,
+            clock=FixedClock(NOW),
+        )
+        self.assertIsNone(port.current_expiry())
+        with self.assertRaises(DecisionRunError):
+            self._decide(port, bridge, NOW)
+        self.assertEqual(bridge.calls, 0)
+        other_gate.release(now=NOW, converged=True)
+
+        clone_path = (self.root / "other-clone" / "runtime.sqlite3").resolve()
+        clone_gate = SharedDeviceGate(
+            profile_id="demo",
+            profile_db_path=clone_path,
+            os_root=Path(self.root) / "appdata",
+        )
+        clone_gate.acquire(
+            profile_id="demo",
+            profile_db_path=str(clone_path),
+            owner=self.owner,
+            now=NOW,
+        )
+        port = ProfileSessionLease(
+            self.store,
+            self.lease,
+            profile_id="demo",
+            gate=clone_gate,
+            profile_db_path=self.path,
+            clock=FixedClock(NOW),
+        )
+        self.assertIsNone(port.current_expiry())
+        with self.assertRaises(DecisionRunError):
+            self._decide(port, bridge, NOW)
+        self.assertEqual(bridge.calls, 0)
+        clone_gate.release(now=NOW, converged=True)
+
+        owner_gate = SharedDeviceGate(
+            profile_id="demo",
+            profile_db_path=self.path,
+            os_root=Path(self.root) / "appdata",
+        )
+        owner_gate.acquire(
+            profile_id="demo",
+            profile_db_path=str(self.path),
+            owner=Owner(id=OWNER_ID_2, pid=5151, host=m1_helpers.HOST_B),
+            now=NOW,
+        )
+        port = ProfileSessionLease(
+            self.store,
+            self.lease,
+            profile_id="demo",
+            gate=owner_gate,
+            profile_db_path=self.path,
+            clock=FixedClock(NOW),
+        )
+        self.assertIsNone(port.current_expiry())
+        with self.assertRaises(DecisionRunError):
+            self._decide(port, bridge, NOW)
+        self.assertEqual(bridge.calls, 0)
+        owner_gate.release(now=NOW, converged=True)
+
+    def test_copied_store_with_copied_path_still_requires_original_gate(self) -> None:
+        """复制 profile 库且适配器参数也指向副本时，原门禁仍拒绝。"""
+        copy_path = self.root / "copied-profile.sqlite3"
+        shutil.copy2(self.path, copy_path)
+        copy_store = SqliteStore(
+            copy_path,
+            profile_id="demo",
+            local_host=m1_helpers.HOST_A,
+            monotonic=self.clock.monotonic,
+            stop_checker=lambda pid: "stopped",
+        )
+        try:
+            port = ProfileSessionLease(
+                copy_store,
+                self.lease,
+                profile_id="demo",
+                gate=self.gate,
+                profile_db_path=copy_path,
+                clock=FixedClock(NOW),
+            )
+            bridge = _PreviewBridge()
+            self.assertIsNone(port.current_expiry())
+            with self.assertRaises(DecisionRunError):
+                self._decide(port, bridge, NOW)
+            self.assertEqual(bridge.calls, 0)
+        finally:
+            copy_store.close()
+
+    def test_task_owner_pair_change_is_rejected_even_if_rows_match(self) -> None:
+        """任务/设备 owner 同步改成另一合法值时，仍不等于取得时 Lease。"""
+        self._mutate_task_owner_pair()
+        port = ProfileSessionLease(
+            self.store,
+            self.lease,
+            profile_id="demo",
+            gate=self.gate,
+            profile_db_path=self.path,
+            clock=FixedClock(NOW),
+        )
+        bridge = _PreviewBridge()
+        self.assertIsNone(port.current_expiry())
+        with self.assertRaises(DecisionRunError):
+            self._decide(port, bridge, NOW)
+        self.assertEqual(bridge.calls, 0)
+
+    def test_bridge_period_owner_change_is_rejected_after_submission(self) -> None:
+        """桥调用期间同步更换两行 owner 后，桥后拒绝且不重发。"""
+
+        class _MutatingBridge(_PreviewBridge):
+            """在返回决策前同步改两行 owner。"""
+
+            def __init__(self, mutate: object) -> None:
+                """保存变异回调。"""
+                super().__init__()
+                self.mutate = mutate
+
+            def complete(self, **kwargs: object) -> str:
+                """先产生决策，再修改任务/设备 owner。"""
+                text = super().complete(**kwargs)
+                self.mutate()
+                return text
+
+        port = ProfileSessionLease(
+            self.store,
+            self.lease,
+            profile_id="demo",
+            gate=self.gate,
+            profile_db_path=self.path,
+            clock=FixedClock(NOW),
+        )
+        bridge = _MutatingBridge(self._mutate_task_owner_pair)
+        with self.assertRaises(DecisionRunError) as caught:
+            self._decide(port, bridge, NOW)
+        self.assertEqual(caught.exception.reason_code, "stale_decision")
+        self.assertTrue(caught.exception.submitted)
         self.assertEqual(bridge.calls, 1)
 
     def test_bridge_crossing_expiry_is_rejected_after_submission(self) -> None:
@@ -199,7 +373,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         clock = _MutableClock(NOW)
         lease = ProfileSessionLease(
             self.store,
-            self.lease.nonce,
+            self.lease,
             profile_id="demo",
             gate=self.gate,
             profile_db_path=self.path,
@@ -218,7 +392,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         renewed = self.store.renew(self.lease, self.clock.now())
         lease = ProfileSessionLease(
             self.store,
-            renewed.nonce,
+            renewed,
             profile_id="demo",
             gate=self.gate,
             profile_db_path=self.path,
@@ -227,13 +401,53 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         self.assertEqual(lease.current_expiry(), renewed.expires_at)
         after = ProfileSessionLease(
             self.store,
-            renewed.nonce,
+            renewed,
             profile_id="demo",
             gate=self.gate,
             profile_db_path=self.path,
             clock=FixedClock("2026-11-24T00:01:31.000Z"),
         )
         self.assertIsNone(after.current_expiry())
+
+    def test_profile_store_rejects_other_profile_snapshot_before_write(self) -> None:
+        """profile=demo 的仓储拒绝 profile=other 的合法快照且表/事件不变。"""
+        connection = sqlite3.connect(str(self.path))
+        try:
+            before_events = int(
+                connection.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+            )
+            before_discoveries = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM hr_discoveries"
+                ).fetchone()[0]
+            )
+        finally:
+            connection.close()
+        with self.assertRaises(StoreError) as caught:
+            self.store.upsert_snapshot(
+                m1_helpers.make_result(
+                    profile_id="other",
+                    contact="另一合成联系人",
+                    snapshot_id="00000000-0000-4000-8000-000000000c02",
+                )
+            )
+        self.assertEqual(caught.exception.reason_code, "invalid_input")
+        connection = sqlite3.connect(str(self.path))
+        try:
+            self.assertEqual(
+                int(connection.execute("SELECT COUNT(*) FROM events").fetchone()[0]),
+                before_events,
+            )
+            self.assertEqual(
+                int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM hr_discoveries"
+                    ).fetchone()[0]
+                ),
+                before_discoveries,
+            )
+        finally:
+            connection.close()
 
     def test_profile_store_rejects_other_profile_and_tampered_task_owner(self) -> None:
         """合法 profile 库不能以另一 ID 打开；任务 owner 篡改后租约拒绝。"""
@@ -248,7 +462,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "profile_mismatch")
         lease = ProfileSessionLease(
             self.store,
-            self.lease.nonce,
+            self.lease,
             profile_id="demo",
             gate=self.gate,
             profile_db_path=self.path,
@@ -277,7 +491,7 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         try:
             copied = ProfileSessionLease(
                 copy_store,
-                self.lease.nonce,
+                self.lease,
                 profile_id="demo",
                 gate=self.gate,
                 profile_db_path=self.path,

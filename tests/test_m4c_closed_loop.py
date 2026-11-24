@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sqlite3
 import sys
@@ -10,6 +11,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from app.adapters.files.evals import FileEvalStore
 from app.adapters.files.policy import FilePolicyRepository
@@ -392,6 +394,53 @@ class M4cClosedLoopTests(unittest.TestCase):
         code, payload, stderr = policy_helpers.run_cli(
             self.root, argv, os_root=self.os_root
         )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(payload["reason_code"], "policy_changed")
+        self.assertFalse((self.root / "prompts/local/rollback").exists())
+
+    def test_permission_error_paths_never_publish_restore(self) -> None:
+        """精确 gate/profile 路径 lstat 权限错误按 unknown 拒绝发布。"""
+        code, snapshot, stderr = policy_helpers.run_cli(
+            self.root, ["policy", "snapshot", "--pack", "prompts/local/demo"]
+        )
+        self.assertEqual((code, stderr), (0, ""), snapshot)
+        argv = [
+            "policy",
+            "restore",
+            "--snapshot",
+            snapshot["result"]["snapshot_path"],
+            "--dest",
+            "prompts/local/rollback",
+        ]
+        gate_path = (
+            self.os_root / "job-application-openagent" / "device-guard.sqlite3"
+        )
+        real_lstat = os.lstat
+
+        def gate_lstat(path: object) -> object:
+            if Path(path) == gate_path:
+                raise PermissionError("synthetic")
+            return real_lstat(path)
+
+        with patch("app.adapters.path_state.os.lstat", side_effect=gate_lstat):
+            code, payload, stderr = policy_helpers.run_cli(
+                self.root, argv, os_root=self.os_root
+            )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(payload["reason_code"], "policy_changed")
+        self.assertFalse((self.root / "prompts/local/rollback").exists())
+
+        profile_db = profile_runtime_path(self.root, PROFILE_ID)
+
+        def profile_lstat(path: object) -> object:
+            if Path(path) == profile_db:
+                raise PermissionError("synthetic")
+            return real_lstat(path)
+
+        with patch("app.adapters.path_state.os.lstat", side_effect=profile_lstat):
+            code, payload, stderr = policy_helpers.run_cli(
+                self.root, argv, os_root=self.os_root
+            )
         self.assertEqual((code, stderr), (2, ""))
         self.assertEqual(payload["reason_code"], "policy_changed")
         self.assertFalse((self.root / "prompts/local/rollback").exists())

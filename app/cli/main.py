@@ -15,6 +15,7 @@ from typing import NoReturn
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
 from app.adapters.boss.list import load_and_parse_snapshot
 from app.adapters.boss.read import load_and_read_fixture
+from app.adapters.path_state import PATH_FILE, PATH_MISSING, probe_path
 from app.adapters.files.evals import FileEvalStore
 from app.adapters.files.policy import FilePolicyRepository
 from app.adapters.llm.bridge_a import ExternalAgentBridge
@@ -33,6 +34,7 @@ from app.ports.store import StoreError
 from app.domain.json_input import load_json_object as _load_json_object
 from app.domain.policy import FACT_KEYS, PolicyIssue, utc_now
 from app.process_log import ProcessLog, elapsed_ms
+from app.profile_open import open_profile_store
 from app.usecases import acceptance as acceptance_usecases
 from app.usecases import facts as facts_usecases
 from app.usecases import policy as policy_usecases
@@ -1157,7 +1159,8 @@ def _run_facts(
         if pack is not None and pack.profile_id != args.profile:
             raise ProfileError("profile_mismatch")
         path = profile_runtime_path(PROJECT_ROOT, args.profile)
-        if operation == "show" and not os.path.lexists(path):
+        path_state = probe_path(path)
+        if operation == "show" and path_state == PATH_MISSING:
             result: dict[str, object] = {
                 "profile_id": args.profile,
                 "facts": [],
@@ -1168,9 +1171,9 @@ def _run_facts(
                 "scoped_by_pack": pack is not None,
             }
         else:
-            if operation != "set" and not os.path.lexists(path):
+            if operation != "set" and path_state == PATH_MISSING:
                 raise ProfileError("fact_not_found")
-            if os.path.lexists(path) and not path.is_file():
+            if path_state not in (PATH_MISSING, PATH_FILE):
                 raise ProfileError("profile_io_error")
             store = SqliteProfileStore(
                 PROJECT_ROOT,
@@ -1178,7 +1181,7 @@ def _run_facts(
                 create=operation == "set",
                 now=now,
             )
-            store.open()
+            open_profile_store(store, log)
             if operation == "set":
                 if args.confirm:
                     result = facts_usecases.apply_set(

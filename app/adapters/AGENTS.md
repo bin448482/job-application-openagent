@@ -7,6 +7,7 @@
 ## 二、当前文件与子目录
 
 - `__init__.py`：声明适配器包。
+- `path_state.py`：M4c 明确路径查询边界；只有 `FileNotFoundError` 是 missing，普通文件是 file，目录/非普通文件是 other，权限或其它 OSError 是 unknown；gate/activity/profile/facts 共用，不把不可判定吞成缺失。
 - `adb/`：真实 ADB 探针与 M3 层级/截图采集；见 `adb/AGENTS.md`。
 - `boss/`：M2 合成 profile/manifest、XML、四源判定与分页合并，以及 M3 页面/职位/未读/会话读取、像素纯解析与共享夹具 IO；见 `boss/AGENTS.md`。
 - `files/`：M4a 本机策略包/base/preview 读取、点前缀暂存、同卷发布与受控清理；M4b 套件读取、本机报告/凭证与留出登记；见 `files/AGENTS.md`。

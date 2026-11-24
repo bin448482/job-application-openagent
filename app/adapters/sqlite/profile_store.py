@@ -7,6 +7,7 @@ import sqlite3
 import uuid
 from pathlib import Path
 
+from app.adapters.path_state import PATH_FILE, PATH_MISSING, PATH_UNKNOWN, probe_path
 from app.adapters.sqlite.profile_schema import (
     PROFILE_SCHEMA_VERSION,
     connect_profile_database,
@@ -62,10 +63,15 @@ class SqliteProfileStore:
 
     def open(self) -> dict[str, object]:
         """打开或创建本 profile 独立库，并核验库元数据绑定。"""
+        state = probe_path(self.path)
+        if state == PATH_UNKNOWN:
+            raise ProfileError("profile_io_error")
         try:
             if self._create:
+                if state not in (PATH_MISSING, PATH_FILE):
+                    raise ProfileError("profile_io_error")
                 initialize_profile_database(self.path, self.profile_id, now=self._now)
-            elif not self.path.is_file():
+            elif state != PATH_FILE:
                 raise ProfileError("profile_io_error")
             self._connection = connect_profile_database(self.path, self.profile_id)
         except ProfileError:

@@ -13,6 +13,7 @@
 - `ports/`：能力端口与领域快照/租约类型；见 `ports/AGENTS.md`。
 - `usecases/`：单次用例的校验、持久化编排、唯一业务结果组装与判定；见 `usecases/AGENTS.md`。
 - `adapters/`：具体平台通道；见 `adapters/AGENTS.md`。
+- `profile_open.py`：facts/run/restore 共用的唯一 profile 打开日志边界；`open_profile_store` 在实际 `store.open()` 前后记录 `profile/open_profile` started 与唯一 ok/failed，原因只取固定 reason_code，不写事实值/路径/原异常。
 - `process_log.py`：每次运行创建独立的固定字段本机 JSON Lines 过程日志，默认写到被忽略的 `data/logs/m0-process-<运行 UUID>.jsonl`；显式路径也只作命名基础，不共享追加。写失败或白名单拒绝都设置降级标记并返回 `False`，不抛出、不打印原值；唯一 `emit_degraded_warning` 每次运行只写一次固定 stderr 标记，CLI 与仓储 API 共用。阶段已扩展到 `store/sense/read/policy/facts/profile/device_gate/run/eval/decision/adb_hierarchy/adb_screen/adb_evidence`，结果含 `started/ok/undetermined/failed`，并以 `operation` 记录 M0–M4c 固定操作（含 eval/verify/bridge/suite/authorize/case/report/acceptance/holdout、facts set/show/revoke/forget、device_gate acquire/verify/release/quarantine、profile open_profile、run check、current_lease_expiry 等），`case_index` 只作安全序号；仍复用唯一日志器。
 
 ## 三、依赖与边界

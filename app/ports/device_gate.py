@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 
 from app.domain.models import Owner
@@ -29,6 +30,17 @@ class DeviceGateError(Exception):
         self.reason_code = reason_code
 
 
+@dataclass(frozen=True)
+class DeviceSessionIdentity:
+    """表示共享门禁当前 held 会话的固定白名单身份。"""
+
+    profile_id: str
+    profile_db_path: str
+    owner: Owner
+    nonce: str
+    state: str
+
+
 class SharedDeviceGatePort(Protocol):
     """抽象整个真实会话共享唯一 primary 设备占用的取得/复核/释放。"""
 
@@ -48,4 +60,8 @@ class SharedDeviceGatePort(Protocol):
 
     def inspect(self) -> dict[str, object] | None:
         """只读返回固定白名单占用行；无行返回 None，不自动释放。"""
+        ...
+
+    def session_identity(self) -> DeviceSessionIdentity:
+        """复核本会话并返回 profile/原库/owner/nonce 的完整可信身份。"""
         ...

@@ -181,8 +181,14 @@ class SqliteStore:
 
     @_store_operation("upsert_snapshot")
     def upsert_snapshot(self, result: ReadResult) -> list[str]:
-        """保存完整未读快照；未知行不落库，返回写后仍 queued 的发现键。"""
+        """保存完整未读快照；profile 模式先核对快照 profile_id 与本库绑定。"""
         observed_at, snapshot_id, records = _prepare_upsert(result)
+        if self.profile_id is not None:
+            if (
+                not isinstance(result.value, UnreadSnapshot)
+                or result.value.profile_id != self.profile_id
+            ):
+                raise StoreError("invalid_input")
         changed = False
         inserted = 0
         queued: set[str] = set()
@@ -569,14 +575,17 @@ class SqliteStore:
         return [str(row["conversation_key"]) for row in rows]
 
     @_store_operation("current_lease_expiry")
-    def current_lease_expiry(self, nonce: str, *, now: str) -> str | None:
-        """只读重核任务与设备租约的完整身份/绑定/到期；不匹配返回 None。"""
-        if not is_uuid(nonce):
+    def current_lease_expiry(self, lease: Lease, *, now: str) -> str | None:
+        """只读重核任务/设备租约与取得时 Lease/Owner/nonce/到期；不匹配返回 None。"""
+        if not isinstance(lease, Lease):
+            raise StoreError("invalid_input")
+        if not is_uuid(lease.nonce):
             raise StoreError("invalid_input")
         try:
             now_dt = parse_utc(now)
         except ValueError:
             raise StoreError("invalid_input") from None
+        nonce = lease.nonce
         try:
             row = self._connection.execute(
                 "SELECT d.lease_owner AS task_owner, d.owner_pid AS task_pid, "
@@ -603,9 +612,12 @@ class SqliteStore:
                 row["dev_state"] == "held"
                 and row["task_nonce"] == nonce
                 and row["dev_nonce"] == nonce
-                and row["task_owner"] == row["dev_owner"]
-                and int(row["task_pid"]) == int(row["dev_pid"])
-                and row["task_host"] == row["dev_host"]
+                and row["task_owner"] == lease.owner.id
+                and row["dev_owner"] == lease.owner.id
+                and int(row["task_pid"]) == lease.owner.pid
+                and int(row["dev_pid"]) == lease.owner.pid
+                and row["task_host"] == lease.owner.host
+                and row["dev_host"] == lease.owner.host
                 and task_expiry == device_expiry
                 and now_dt < parse_utc(task_expiry)
                 and now_dt < parse_utc(device_expiry)

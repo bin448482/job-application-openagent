@@ -9,10 +9,16 @@ import time
 import uuid
 from pathlib import Path
 
+from app.adapters.path_state import (
+    PATH_FILE,
+    PATH_MISSING,
+    PATH_UNKNOWN,
+    probe_path,
+)
 from app.adapters.sqlite.schema import BUSY_TIMEOUT_MS, _normalize_sql
 from app.domain.models import Owner, is_hash, is_uuid, parse_utc
 from app.domain.policy import is_profile_id
-from app.ports.device_gate import DeviceGateError
+from app.ports.device_gate import DeviceGateError, DeviceSessionIdentity
 from app.process_log import ProcessLog, elapsed_ms
 
 GATE_SCHEMA_VERSION = 1
@@ -220,10 +226,31 @@ class SharedDeviceGate:
             raise
         self._record(operation, "ok", started)
 
+    def session_identity(self) -> DeviceSessionIdentity:
+        """复核本会话后返回 profile/原库/owner/nonce 的完整可信身份。"""
+        self.verify()
+        row = self.inspect()
+        if row is None:
+            raise DeviceGateError("device_gate_mismatch")
+        return DeviceSessionIdentity(
+            profile_id=str(row["profile_id"]),
+            profile_db_path=str(row["profile_db_path"]),
+            owner=Owner(
+                id=str(row["owner_id"]),
+                pid=int(row["owner_pid"]),
+                host=str(row["owner_host"]),
+            ),
+            nonce=str(row["nonce"]),
+            state=str(row["state"]),
+        )
+
     def inspect(self) -> dict[str, object] | None:
         """只读返回固定白名单占用行；明确不存在返回 None，其它异常状态拒绝。"""
-        if not os.path.lexists(self._path):
+        state = probe_path(self._path)
+        if state == PATH_MISSING:
             return None
+        if state != PATH_FILE:
+            raise DeviceGateError("device_gate_io_error")
         connection = self._connect(create=False)
         try:
             row = self._read_row(connection)
@@ -304,7 +331,12 @@ class SharedDeviceGate:
 
     def _connect_once(self, *, create: bool) -> sqlite3.Connection:
         """实际执行一次打开与建表/核验，失败关闭连接并映射固定错误。"""
-        if not create and not os.path.lexists(self._path):
+        state = probe_path(self._path)
+        if state == PATH_UNKNOWN:
+            raise DeviceGateError("device_gate_io_error")
+        if not create and state != PATH_FILE:
+            raise DeviceGateError("device_gate_io_error")
+        if create and state not in (PATH_MISSING, PATH_FILE):
             raise DeviceGateError("device_gate_io_error")
         try:
             if create:

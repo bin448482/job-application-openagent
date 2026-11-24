@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
 from app.adapters.sqlite.schema import initialize_database
@@ -212,6 +214,71 @@ class ProfileFactsCliTests(unittest.TestCase):
             payload["result"]["result"]["source_id"],
             payload["result"]["result"]["source_id"].strip(),
         )
+
+    def test_facts_open_profile_logs_success_and_failure(self) -> None:
+        """facts 成功/坏库失败均有 profile/open_profile started 与唯一终态。"""
+        value = "合成日志城市"
+        success = ProcessLog(
+            self.root / "facts-open-ok.jsonl", correlation_id="corr-facts-ok"
+        )
+        code, payload, _ = self._run(
+            [
+                "facts",
+                "set",
+                "--profile",
+                "demo",
+                "--key",
+                "work_location",
+                "--value",
+                value,
+                "--confirm",
+            ],
+            log=success,
+        )
+        self.assertEqual(code, 0)
+        events = _events(success)
+        opens = [
+            event
+            for event in events
+            if event["stage"] == "profile"
+            and event["operation"] == "open_profile"
+        ]
+        self.assertEqual([event["result"] for event in opens], ["started", "ok"])
+        self.assertNotIn(value, success.path.read_text(encoding="utf-8"))
+
+        path = profile_runtime_path(self.root, "demo")
+        path.write_bytes(b"not-a-profile-database")
+        failure = ProcessLog(
+            self.root / "facts-open-fail.jsonl", correlation_id="corr-facts-fail"
+        )
+        code, payload, _ = self._run(
+            [
+                "facts",
+                "set",
+                "--profile",
+                "demo",
+                "--key",
+                "work_location",
+                "--value",
+                value,
+                "--confirm",
+            ],
+            log=failure,
+        )
+        self.assertEqual(code, 2)
+        self.assertIn(payload["reason_code"], {"profile_mismatch", "profile_io_error"})
+        events = _events(failure)
+        opens = [
+            event
+            for event in events
+            if event["stage"] == "profile"
+            and event["operation"] == "open_profile"
+        ]
+        self.assertEqual(
+            [event["result"] for event in opens], ["started", "failed"]
+        )
+        self.assertEqual(opens[-1]["reason_code"], payload["reason_code"])
+        self.assertNotIn(value, failure.path.read_text(encoding="utf-8"))
 
     def test_pack_profile_must_match_selected_profile(self) -> None:
         """指定包时 profile 身份必须与 --profile 一致，不能交叉组合。"""
@@ -433,6 +500,23 @@ class ProfileFactsCliTests(unittest.TestCase):
         self.assertEqual((code, stderr), (2, ""))
         self.assertEqual(payload["reason_code"], "profile_io_error")
 
+    def test_permission_error_on_profile_path_is_not_missing(self) -> None:
+        """精确 profile 路径 lstat 权限错误不伪造空结果。"""
+        path = profile_runtime_path(self.root, "demo")
+        real_lstat = os.lstat
+
+        def denied(target: object) -> object:
+            if Path(target) == path:
+                raise PermissionError("synthetic")
+            return real_lstat(target)
+
+        with patch("app.adapters.path_state.os.lstat", side_effect=denied):
+            code, payload, stderr = self._run(
+                ["facts", "show", "--profile", "demo"]
+            )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(payload["reason_code"], "profile_io_error")
+
     def test_invalid_fact_value_is_rejected_without_echo(self) -> None:
         """非法事实值只返回 invalid_fact，不回显原值。"""
         value = "含换行\n的值"
@@ -530,6 +614,15 @@ class ProfileStoreBindingTests(unittest.TestCase):
             profile_runtime_path(self.root, "alpha"),
             profile_runtime_path(self.root, "beta"),
         )
+
+
+def _events(log: ProcessLog) -> list[dict[str, object]]:
+    """读取本次运行唯一日志文件的事件。"""
+    return [
+        json.loads(line)
+        for line in log.path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 if __name__ == "__main__":

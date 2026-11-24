@@ -308,7 +308,8 @@ python -m app facts forget --profile demo --key work_location --confirm
 - `set` 未带 `--confirm` 只返回 `confirmation_required` 提案，不写事实；确认后由程序生成来源 ID、记录确认时间并**再次从库中重读显示**该值。同键多个 active 来源不按较新时间自动择一，`show --pack` 将其列为 `conflict` 待办；显式 `--replace` 才把旧来源置 `superseded` 并写入新来源。
 - 有效期为空或晚于当前 UTC；到期、缺失、冲突分别转 `expired/missing/conflict` 待办，不进入 envelope 的 `allowed_facts`。`revoke` 只把当前 active 来源置 `revoked`，保留历史；`forget` 删除当前事实行并只保留来源 ID/无值审计事件，且明确 `secure_erase_claimed=false`：SQLite WAL 页面和既有本机备份不能因此宣称已安全擦除。
 - 事实与 profile 元数据绑定 `data/runtime/profiles/<profile_id>/runtime.sqlite3`；未来 M5 的额度/冷却/动作历史也绑定同一库，但 M4c 不预建这些表。不同 profile 不复制；旧 `data/runtime/runtime.sqlite3` 不自动导入，已有 M1 v1 五表结构不改、不虚构 1→2 迁移。带 `--pack` 时 pack.profile_id 必须等于 `--profile`，否则 `profile_mismatch`；profile 路径存在但为目录/非普通文件时 `profile_io_error`，不返回空事实冒充成功。
-- 合法 profile 库在完整 profile schema/绑定校验后可由唯一 `SqliteStore` 复用 M1 任务能力；普通 M1 库仍走精确五表验证，不放宽旧库。`ProfileSessionLease` 每次从该 profile 库任务/设备租约和共享门禁重读完整 owner/pid/host/nonce/到期，并比较 store 路径与调用方给定 profile 库路径；不存在、失配或过期不返回租约，由 `decide` 桥前/桥后 `stale_decision` 拒绝。
+- 合法 profile 库在完整 profile schema/绑定校验后可由唯一 `SqliteStore` 复用 M1 任务能力；普通 M1 库仍走精确五表验证，不放宽旧库。profile 模式写入前还核对 `UnreadSnapshot.profile_id` 必须等于本库绑定，另一 profile 的合法快照固定 `invalid_input`，所有表/事件不变。
+- `ProfileSessionLease` 保存取得时 `Lease/Owner/nonce`；每次读取比较 store.profile_id/path、门禁 `session_identity` 的 profile/原库/owner，并重核任务/设备两行 owner/pid/host/nonce 与取得时 Lease 一致及未过期。跨 profile、另一 clone 路径、复制库且参数也指向副本、门禁 owner 不符或任务两行 owner 同步变化均不返回租约；`decide` 桥前/桥后 `stale_decision` 拒绝且不重发。
 - 临时偏好只属于本轮运行上下文，不写入长期事实；M4c 没有运行上下文入口，因此不提供“临时值改长期库”的按钮。
 
 共享设备门禁固定在 Windows `LOCALAPPDATA/job-application-openagent/device-guard.sqlite3`，不随仓库、worktree、clone、`--pack` 或 `--config` 改变；非 Windows 或缺失固定 OS 根时拒绝真实占用。唯一 `primary` 行保存 profile_id、原 profile 库规范路径、owner/pid/host/nonce 与 `held/quarantined`，不存事实、聊天或序列号。
@@ -316,9 +317,9 @@ python -m app facts forget --profile demo --key work_location --confirm
 - acquire 保存完整 owner_id/pid/host、nonce、profile 与库路径；verify 和 release 写事务共用同一完整身份复核。只改 owner 任一字段或 profile/路径都会拒绝，release 不删除原占用；nonce 篡改也拒绝。
 - 只有 user_version=0 且无用户对象的明确新空库可初始化；已有库核验版本、完整对象集合与 DDL，未知版本、额外对象或旧占用表固定失败且不改写/覆盖版本。
 - 每个真实会话（含 read_only）先 `BEGIN IMMEDIATE` 条件插入；存在 held 返 `device_busy`，存在 quarantined 返 `device_quarantined`，都不覆盖、不因 TTL/PID 消失/重启自动释放。
-- 启动、续租与每条设备子命令前复核完整身份、profile 绑定与 held 状态；库不可读、目录路径或其它不可判定状态停止新动作并保留原绑定。只有能确认门禁库/profile 库不存在才走无状态正例；存在但是目录时 restore 返回 unknown 并拒绝发布。
+- 启动、续租与每条设备子命令前复核完整身份、profile 绑定与 held 状态；库不可读、目录路径、权限查询错误或其它不可判定状态停止新动作并保留原绑定。路径判断复用 `probe_path`：只有 `FileNotFoundError` 是明确缺失，目录/非普通文件/权限或其它 OSError 都不是缺失；存在但是目录或权限错误时 restore 返回 unknown 并拒绝发布，facts 同类路径返回固定错误而不是空结果。
 - 正常释放只在该次操作明确收敛、无 pending/unknown 且全部子命令已退出时删除；异常、未知或库不可读保留行并置 `quarantined`。M4c 不提供伪授权开锁，M5 的真实对账入口尚未实现。
-- 门禁适配器唯一记录 acquire/verify/release/quarantine 的 started/终态；run/restore 的 profile 打开记录 started/终态。CLI 不重复记录同一门禁操作；失败终态结束对应 started，不写事实值、owner 原值、库绝对路径或异常原文。
+- 门禁适配器唯一记录 acquire/verify/release/quarantine 的 started/终态；facts/run/restore 统一经 `open_profile_store` 记录 `profile/open_profile` started/终态。CLI 不重复记录同一门禁操作；失败终态结束对应 started，不写事实值、owner 原值、库绝对路径或异常原文。
 - M0 `doctor --device` 与 M3 真实采集适配器都接同一门禁；适配器缺 gate 时在零子进程处拒绝，`doctor` 必须带本轮 `--confirm-device`，未确认时任何 ADB 子进程都不启动。M4c 仍不提供 `read --device` 真实入口（真实 profile 未标定）。
 
 验收凭证复核：

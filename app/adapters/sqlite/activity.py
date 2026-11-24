@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import os
-import time
 from pathlib import Path
 from typing import Callable
 
+from app.adapters.path_state import PATH_FILE, PATH_MISSING, probe_path
 from app.adapters.sqlite.device_gate import SharedDeviceGate
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
 from app.domain.policy import utc_now
 from app.ports.device_gate import DeviceGateError
 from app.ports.profile import ProfileError
-from app.process_log import ProcessLog, elapsed_ms
+from app.process_log import ProcessLog
+from app.profile_open import open_profile_store
 
 
 class ProfilePolicyActivity:
@@ -56,39 +56,23 @@ class ProfilePolicyActivity:
             return "active" if occupied["state"] == "held" else "unknown"
 
         path = profile_runtime_path(self._root, profile_id)
-        if not os.path.lexists(path):
+        state = probe_path(path)
+        if state == PATH_MISSING:
             return "stopped"
+        if state != PATH_FILE:
+            return "unknown"
         store = SqliteProfileStore(
             self._root, profile_id, create=False, now=now
         )
-        started = time.perf_counter()
-        self._record("open_profile", "started")
         try:
-            store.open()
+            open_profile_store(store, self._process_log)
             pending = store.pending_activity()
         except (ProfileError, ValueError):
-            self._record("open_profile", "failed", started)
             return "unknown"
         finally:
             store.close()
-        self._record("open_profile", "ok", started)
         if pending["leased"] or pending["running"] or pending["device_lease"]:
             return "active"
         if pending["blocked"]:
             return "unknown"
         return "stopped"
-
-    def _record(self, operation: str, result: str, started: float | None = None) -> None:
-        """记录 restore 活动检查的 profile 打开步骤，不写路径或异常。"""
-        if self._process_log is None:
-            return
-        try:
-            self._process_log.record(
-                stage="profile",
-                operation=operation,
-                result=result,
-                error_category="profile" if result == "failed" else None,
-                duration_ms=elapsed_ms(started) if started is not None else 0,
-            )
-        except Exception:
-            return

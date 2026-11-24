@@ -70,6 +70,6 @@ class StorePort(Protocol):
         """只读返回未关闭发现涉及的会话键（升序去重）。"""
         ...
 
-    def current_lease_expiry(self, nonce: str, *, now: str) -> str | None:
-        """只读重核任务/设备租约完整身份与到期；不匹配或过期返回 None。"""
+    def current_lease_expiry(self, lease: Lease, *, now: str) -> str | None:
+        """只读重核任务/设备租约与取得时 Lease/Owner/nonce/到期。"""
         ...
