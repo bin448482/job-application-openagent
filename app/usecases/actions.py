@@ -169,6 +169,7 @@ def perform_action(
     anchor_label: str | None,
     ime_component: str | None,
     tap_points: tuple[tuple[int, int], ...],
+    identity_labels: tuple[str, ...] = (),
     current_base_hash: str,
     current_pack_hash: str,
     daily_sends: int,
@@ -240,6 +241,10 @@ def perform_action(
         if not is_action_key(action_kind, action_key):
             raise ActionError("invalid_action")
         validate_action_target(action_kind, action_key, target_key)
+        if not isinstance(identity_labels, tuple) or not identity_labels or any(
+            not isinstance(label, str) or not label for label in identity_labels
+        ):
+            raise ActionError("precondition_failed")
         if action_kind != "send_text" and target_key != conversation_key:
             raise ActionError("invalid_action")
         guard()
@@ -267,6 +272,7 @@ def perform_action(
         ime_original=None,
         irreversible_tap_index=len(tap_points) - 1 if tap_points else 0,
         tap_points=tap_points,
+        identity_labels=identity_labels,
     )
 
     _log(process_log, "action_admit", "started")

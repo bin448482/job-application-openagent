@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 import uuid
@@ -239,6 +240,7 @@ class ActionUseCaseTests(unittest.TestCase):
         reload_snapshot=None,
         ime_component: str | None = None,
         process_log: ProcessLog | None = None,
+        identity_labels: tuple[str, ...] = ("合成职位",),
     ):
         """调用生产 perform 用例。"""
         return perform_action(
@@ -256,6 +258,7 @@ class ActionUseCaseTests(unittest.TestCase):
             anchor_label=None,
             ime_component=ime_component,
             tap_points=((10, 20),),
+            identity_labels=identity_labels,
             current_base_hash=DIGEST,
             current_pack_hash=DIGEST,
             daily_sends=10,
@@ -285,6 +288,102 @@ class ActionUseCaseTests(unittest.TestCase):
             self._perform(executor)
         self.assertEqual(executor.calls, 0)
         self.assertEqual(self.store.pending_actions(), [])
+
+    def test_missing_target_identity_is_rejected_before_pending(self) -> None:
+        """公共入口缺少完整目标身份时零执行、不写 pending。"""
+        executor = CountingExecutor()
+        with self.assertRaises(ActionError) as caught:
+            self._perform(executor, identity_labels=())
+        self.assertEqual(caught.exception.reason_code, "precondition_failed")
+        self.assertEqual(executor.calls, 0)
+        self.assertEqual(self.store.pending_actions(), [])
+
+    def test_public_path_rejects_wrong_job_before_irreversible_tap(self) -> None:
+        """公共 perform + 真实 ADB 适配器：错职位不可逆点击为 0。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+
+        wrong_job = (
+            '<hierarchy><node text="合成联系人"><node text="合成职位" />'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        calls: list[list[str]] = []
+
+        def run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            """记录命令并按 cat 返回合成层级。"""
+            calls.append(list(args))
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout=wrong_job, stderr=""
+            )
+
+        executor = AdbActionExecutor(serial="<serial>", gate=self.gate)
+        with patch("subprocess.run", side_effect=run):
+            result = perform_action(
+                store=self.store,
+                gate=self.gate,
+                authorization=self._authorization(),
+                lease=self.lease,
+                action_kind="send_text",
+                action_key=TEXT_KEY,
+                target_key=MESSAGE,
+                conversation_key=CONVERSATION,
+                body_text="合成回复正文",
+                attachment_name=None,
+                target_label="合成联系人",
+                anchor_label="消息",
+                ime_component=None,
+                tap_points=((10, 20),),
+                identity_labels=("错误职位",),
+                current_base_hash=DIGEST,
+                current_pack_hash=DIGEST,
+                daily_sends=10,
+                reply_cooldown_seconds=0,
+                profile_db_path=str(self.path),
+                executor=executor,
+                now=self.clock.now(),
+                clock=lambda: self.clock.now(),
+            )
+        self.assertEqual([c for c in calls if "input" in c or "tap" in c], [])
+        self.assertIn(result["state"], {"not_performed", "unknown"})
+        self.assertNotEqual(result["evidence"]["outcome"], "performed")
+
+    def test_public_path_missing_identity_rejects_before_subprocess(self) -> None:
+        """公共 perform 缺完整身份时不启动任何设备子进程。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+
+        executor = AdbActionExecutor(serial="<serial>", gate=self.gate)
+        with patch("subprocess.run") as run:
+            with self.assertRaises(ActionError) as caught:
+                perform_action(
+                    store=self.store,
+                    gate=self.gate,
+                    authorization=self._authorization(),
+                    lease=self.lease,
+                    action_kind="send_text",
+                    action_key=TEXT_KEY,
+                    target_key=MESSAGE,
+                    conversation_key=CONVERSATION,
+                    body_text="合成回复正文",
+                    attachment_name=None,
+                    target_label="合成联系人",
+                    anchor_label="消息",
+                    ime_component=None,
+                    tap_points=((10, 20),),
+                    identity_labels=(),
+                    current_base_hash=DIGEST,
+                    current_pack_hash=DIGEST,
+                    daily_sends=10,
+                    reply_cooldown_seconds=0,
+                    profile_db_path=str(self.path),
+                    executor=executor,
+                    now=self.clock.now(),
+                    clock=lambda: self.clock.now(),
+                )
+        self.assertEqual(caught.exception.reason_code, "precondition_failed")
+        run.assert_not_called()
 
     def test_leased_without_start_has_zero_device_calls(self) -> None:
         """leased 未 start 时，即使需要 IME 也不读设备、不写 pending。"""
@@ -345,6 +444,7 @@ class ActionUseCaseTests(unittest.TestCase):
                         anchor_label=None,
                         ime_component="com.example/.Ime",
                         tap_points=((10, 20),),
+                        identity_labels=("合成职位",),
                         current_base_hash=DIGEST,
                         current_pack_hash=DIGEST,
                         daily_sends=10,
@@ -567,6 +667,7 @@ class ActionUseCaseTests(unittest.TestCase):
                 anchor_label=None,
                 ime_component=None,
                 tap_points=((10, 20),),
+                identity_labels=("合成职位",),
                 current_base_hash=DIGEST,
                 current_pack_hash=DIGEST,
                 daily_sends=10,
@@ -806,6 +907,7 @@ class ActionUseCaseTests(unittest.TestCase):
                 anchor_label=None,
                 ime_component=None,
                 tap_points=((10, 20),),
+                identity_labels=("合成职位",),
                 current_base_hash=DIGEST,
                 current_pack_hash=DIGEST,
                 daily_sends=10,

@@ -942,27 +942,66 @@ class CommandStopCheckerTests(unittest.TestCase):
             self.assertEqual(repo_module.default_command_stop_checker(1), "stopped")
 
 
+    def test_command_identity_store_missing_or_corrupt_is_unknown(self) -> None:
+        """没有可信命令记录或记录损坏时不得返回 stopped。"""
+        from app.adapters.adb.command import CommandIdentityStore
+
+        with tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-cmd2-") as directory:
+            store = CommandIdentityStore(Path(directory))
+            self.assertEqual(
+                store.check("boss:conv:test:resume", 1, lambda pid: "stopped"),
+                "unknown",
+            )
+            path = Path(directory) / (store._path("boss:conv:test:resume").name)
+            path.write_text("{bad json", encoding="utf-8")
+            self.assertEqual(
+                store.check("boss:conv:test:resume", 1, lambda pid: "stopped"),
+                "unknown",
+            )
+
     def test_command_identity_store_checks_saved_descendants(self) -> None:
-        """已保存的脱离子孙 PID 仍参与恢复检查，非 stopped 拒绝。"""
+        """实际回调记录的子孙 PID 仍参与恢复检查，末端存活拒绝。"""
         from app.adapters.adb.command import CommandIdentityStore
 
         with tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-cmd-") as directory:
             store = CommandIdentityStore(Path(directory))
-            for pid in (4100, 4200, 4300):
-                store.record("boss:conv:test:resume", pid)
-            states = {4100: "stopped", 4200: "stopped", 4300: "alive"}
+            tree = {4100: [4200], 4200: [4300], 4300: [4400], 4400: []}
+            store.record_tree(
+                "boss:conv:test:resume", 4100, lambda pid: list(tree.get(pid, []))
+            )
+            self.assertEqual(
+                store.identities("boss:conv:test:resume"),
+                [4100, 4200, 4300, 4400],
+            )
+            states = {4100: "stopped", 4200: "stopped", 4300: "stopped", 4400: "alive"}
             self.assertEqual(
                 store.check(
                     "boss:conv:test:resume", 4100, lambda pid: states.get(pid, "unknown")
                 ),
                 "alive",
             )
-            states[4300] = "stopped"
+            states[4400] = "stopped"
             self.assertEqual(
                 store.check(
                     "boss:conv:test:resume", 4100, lambda pid: states.get(pid, "unknown")
                 ),
                 "stopped",
+            )
+
+    def test_command_identity_store_unresolved_enumeration_is_unknown(self) -> None:
+        """命令族枚举失败写不可证明标记，之后不得返回 stopped。"""
+        from app.adapters.adb.command import CommandIdentityStore
+
+        with tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-cmd3-") as directory:
+            store = CommandIdentityStore(Path(directory))
+            store.record_tree(
+                "boss:conv:test:resume", 4100, lambda pid: None
+            )
+            self.assertEqual(
+                store.check(
+                    "boss:conv:test:resume", 4100, lambda pid: "stopped"
+                ),
+                "unknown",
             )
 
 

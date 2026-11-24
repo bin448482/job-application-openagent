@@ -22,26 +22,40 @@ class CommandIdentityStore:
         """追加一个命令 PID，供同一动作恢复时核对。"""
         if type(pid) is not int or pid <= 0:
             raise ValueError("pid is invalid")
-        self._directory.mkdir(parents=True, exist_ok=True)
-        with self._path(action_key).open(
-            "a", encoding="utf-8", newline="\n"
-        ) as handle:
-            handle.write(json.dumps({"pid": pid}, separators=(",", ":")) + "\n")
+        self._append(action_key, {"pid": pid})
+
+    def record_unresolved(self, action_key: str) -> None:
+        """标记该动作命令族无法完整枚举；恢复时必须保持 unknown。"""
+        self._append(action_key, {"unresolved": True})
+
+    def record_tree(
+        self,
+        action_key: str,
+        pid: int,
+        child_scan: Callable[[int], list[int] | None],
+    ) -> None:
+        """记录命令 PID 及其当前可见后代；枚举失败写不可证明标记。"""
+        seen: set[int] = set()
+        pending = [pid]
+        while pending:
+            current = pending.pop()
+            if current in seen or current <= 0:
+                continue
+            seen.add(current)
+            self.record(action_key, current)
+            try:
+                children = child_scan(current)
+            except Exception:
+                children = None
+            if children is None:
+                self.record_unresolved(action_key)
+                continue
+            pending.extend(children)
 
     def identities(self, action_key: str) -> list[int]:
-        """只读返回动作已记录的 PID 去重列表；缺失返回空。"""
-        path = self._path(action_key)
-        if not path.is_file():
-            return []
-        try:
-            pids = [
-                int(json.loads(line)["pid"])
-                for line in path.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
-        except (OSError, ValueError, KeyError, TypeError):
-            return []
-        return sorted(set(pid for pid in pids if pid > 0))
+        """只读返回动作已记录的 PID 去重列表；缺失/损坏返回空。"""
+        pids, _unresolved = self._load(action_key)
+        return pids
 
     def check(
         self,
@@ -49,12 +63,54 @@ class CommandIdentityStore:
         owner_pid: int,
         checker: Callable[[int], str],
     ) -> str:
-        """对 owner 与已记录命令 PID 逐个检查；任一非 stopped 即返回该状态。"""
-        for pid in [owner_pid, *self.identities(action_key)]:
+        """核对 owner 与已记录命令族；无记录/损坏/不可枚举或任一存活均拒绝。"""
+        pids, unresolved = self._load(action_key)
+        if unresolved or not pids:
+            return "unknown"
+        for pid in [owner_pid, *pids]:
             state = checker(pid)
             if state != "stopped":
                 return state
         return "stopped"
+
+    def _load(self, action_key: str) -> tuple[list[int], bool]:
+        """解析账本为 PID 列表与不可证明标志；缺失/坏行按不可证明处理。"""
+        path = self._path(action_key)
+        if not path.is_file():
+            return [], True
+        pids: set[int] = set()
+        unresolved = False
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return [], True
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except ValueError:
+                return [], True
+            if not isinstance(item, dict):
+                return [], True
+            if item.get("unresolved") is True:
+                unresolved = True
+            elif "pid" in item:
+                pid = item["pid"]
+                if type(pid) is not int or pid <= 0:
+                    return [], True
+                pids.add(pid)
+            else:
+                return [], True
+        return sorted(pids), unresolved
+
+    def _append(self, action_key: str, item: dict[str, object]) -> None:
+        """追加一条固定形状记录；写入失败向上抛出，不伪造记录。"""
+        self._directory.mkdir(parents=True, exist_ok=True)
+        with self._path(action_key).open(
+            "a", encoding="utf-8", newline="\n"
+        ) as handle:
+            handle.write(json.dumps(item, separators=(",", ":")) + "\n")
 
     def _path(self, action_key: str) -> Path:
         """把动作键映射为固定文件名，不把原键写入文件名。"""
@@ -126,12 +182,23 @@ def run_adb(
         raise AdbCommandFailure("adb_missing") from None
     except OSError:
         raise AdbCommandFailure("adb_oserror") from None
-    on_pid(process.pid)
+    try:
+        on_pid(process.pid)
+    except Exception:
+        process.kill()
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+        raise AdbCommandFailure("adb_oserror") from None
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         process.kill()
-        process.communicate()
+        try:
+            process.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            process.wait(timeout=1)
         raise AdbCommandFailure("adb_timeout") from None
     completed = subprocess.CompletedProcess(
         args=args, returncode=process.returncode, stdout=stdout, stderr=stderr

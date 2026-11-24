@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -125,6 +126,8 @@ class ActionCliTests(unittest.TestCase):
         seed_rel = self.seed if seed is None else seed
         if seed_rel is not False:
             args += ["--seed-fixture", str(seed_rel)]
+        for value in helpers.IDENTITY[1:]:
+            args += ["--identity-label", value]
         for value in authorize if authorize is not None else [kind]:
             args += ["--authorize", value]
         if expires_at is not None:
@@ -597,6 +600,97 @@ class ActionCliTests(unittest.TestCase):
         self.assertTrue(payload["result"]["gate_converged"])
         self.assertIsNone(self._gate().inspect())
         self.assertEqual(self._rows("SELECT * FROM device_lease"), [])
+
+    def test_reconcile_device_observer_reads_scene_once_and_rejects_bad_xml(self) -> None:
+        """设备对账用现有观察器一次读取现场；坏 XML 收敛失败后再正例成功。"""
+        fixture = self._fixture(
+            "device-unknown",
+            {"observation": helpers.observation(error="device_disconnected")},
+        )
+        code, payload, _ = self._run(self._perform_args("send_text", fixture))
+        self.assertEqual(code, 0, payload)
+        key = payload["result"]["action_key"]
+        performed = self._fixture(
+            "device-performed",
+            {
+                "observation": {
+                    "evidence": {
+                        "outcome": "performed",
+                        "effect": "sent",
+                        "reason_code": None,
+                        "before_snapshot_id": helpers.BEFORE,
+                        "after_snapshot_id": helpers.AFTER,
+                        "observed_at": helpers.NOW,
+                    },
+                    "command_quiet": True,
+                    "scene_settled": True,
+                    "confirmation_open": False,
+                    "ime_original": None,
+                    "ime_current": "synthetic-ime-default",
+                    "matched_action_key": key,
+                    "confirmed": True,
+                }
+            },
+        )
+        args = [
+            "action",
+            "reconcile",
+            "--profile",
+            "demo",
+            "--pack",
+            "prompts/local/demo",
+            "--action-key",
+            key,
+            "--resolution",
+            "confirm_performed",
+            "--fixture",
+            performed,
+            "--device",
+            "--serial",
+            "<serial>",
+            "--mode",
+            "draft_only",
+            "--confirm-action",
+            "--confirm-device",
+            "--confirm-recovery",
+        ]
+
+        def make_runner(xml: str):
+            """按 ADB 命令返回合成层级或 IME，不启动真实进程。"""
+            calls: list[list[str]] = []
+
+            def run(cmd: list[str], **kwargs: object):
+                """返回符合命令形状的合成输出。"""
+                calls.append(list(cmd))
+                if "settings" in cmd:
+                    out = "synthetic-ime-default\n"
+                elif "cat" in cmd:
+                    out = xml
+                else:
+                    out = ""
+                return subprocess.CompletedProcess(
+                    args=cmd, returncode=0, stdout=out, stderr=""
+                )
+
+            return run, calls
+
+        bad_runner, bad_calls = make_runner("not-xml")
+        with patch("subprocess.run", side_effect=bad_runner):
+            code, payload, _ = self._run(args, stop_checker=lambda pid: "stopped")
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["reason_code"], "scene_unsettled")
+        self.assertTrue(bad_calls)
+
+        good_runner, good_calls = make_runner(
+            '<hierarchy><node text="消息" />'
+            '<node class="android.widget.EditText" text="" /></hierarchy>'
+        )
+        with patch("subprocess.run", side_effect=good_runner):
+            code, payload, stderr = self._run(args, stop_checker=lambda pid: "stopped")
+        self.assertEqual((code, stderr), (0, ""), payload)
+        self.assertEqual(payload["result"]["state"], "performed")
+        self.assertTrue(payload["result"]["gate_converged"])
+        self.assertTrue(any("uiautomator" in cmd for cmd in good_calls))
 
     def test_abandon_keeps_lock_device_isolation_and_restore_unknown(self) -> None:
         """abandon 只关任务；卡、锁、设备隔离保留，restore 仍 unknown。"""

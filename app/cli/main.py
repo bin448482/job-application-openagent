@@ -10,10 +10,13 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import NoReturn
+from typing import Callable, NoReturn
 
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
+from app.adapters.adb.actions import AdbActionExecutor
 from app.adapters.adb.command import CommandIdentityStore
+from app.adapters.adb.recovery import AdbRecoveryObserver
+from app.adapters.adb.screen import AdbScreenReader
 from app.adapters.boss.list import load_and_parse_snapshot
 from app.adapters.boss.read import load_and_read_fixture
 from app.adapters.path_state import PATH_FILE, PATH_MISSING, probe_path
@@ -504,6 +507,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--target-label", action=_UniqueStore, metavar="<合成目标标签>", default=None
     )
     action_perform.add_argument(
+        "--identity-label",
+        action="append",
+        default=[],
+        metavar="<合成身份标签>",
+        help="可重复；姓名/公司/职位等完整目标身份，适配器逐阶段核对。",
+    )
+    action_perform.add_argument(
         "--anchor-label", action=_UniqueStore, metavar="<合成锚点标签>", default="消息"
     )
     action_perform.add_argument(
@@ -601,6 +611,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     action_reconcile.add_argument(
         "--fixture", action=_UniqueStore, required=True, metavar="<合成对账脚本>"
+    )
+    action_reconcile.add_argument(
+        "--device",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="用显式 serial 一次性读取实际层级/IME 作为现场；仍需 fixture 提供证据。",
+    )
+    action_reconcile.add_argument(
+        "--serial", action=_UniqueStore, default=None, metavar="<serial>"
     )
     action_reconcile.add_argument(
         "--mode",
@@ -1825,6 +1844,7 @@ def _run_action(
                 anchor_label=args.anchor_label or "消息",
                 ime_component=args.ime_component,
                 tap_points=_parse_taps(args.tap),
+                identity_labels=tuple(args.identity_label),
                 current_base_hash=str(acceptance["base_hash"]),
                 current_pack_hash=str(acceptance["pack_hash"]),
                 daily_sends=daily_sends,
@@ -1885,7 +1905,7 @@ def _run_action(
             process_log=log,
         )
         fixture = _load_json_object(_resolve_project_path(args.fixture).read_text("utf-8"))
-        observation = _reconciliation_observation(
+        base_observation = _reconciliation_observation(
             fixture=fixture,
             action_key=args.action_key,
             resolution=args.resolution,
@@ -1902,6 +1922,17 @@ def _run_action(
                 return tracker.check(args.action_key, pid, default_command_stop_checker)
 
             command_checker = tracker_checker
+        observation = base_observation
+        if args.device:
+            observation = _device_reconciliation_observation(
+                args=args,
+                gate=gate,
+                store=store,
+                evidence=base_observation.evidence,
+                command_checker=command_checker,
+                now=now,
+                log=log,
+            )
         result = action_usecases.reconcile_action(
             store=store,
             gate=gate,
@@ -2008,6 +2039,53 @@ def _action_card(args: argparse.Namespace, log: ProcessLog) -> dict[str, object]
         store.close()
     cards = [human_card(record) for record in records]
     return {"profile_id": args.profile, "cards": cards, "count": len(cards)}
+
+
+def _device_reconciliation_observation(
+    *,
+    args: argparse.Namespace,
+    gate: SharedDeviceGate,
+    store: SqliteStore,
+    evidence: Evidence | None,
+    command_checker: Callable[[int], str],
+    now: str,
+    log: ProcessLog,
+) -> ReconciliationObservation:
+    """用实际 serial 一次读取层级/IME 作为恢复现场；命令停止仍需真实账本。"""
+    serial = args.serial
+    if not isinstance(serial, str) or not serial.strip():
+        raise ActionError("precondition_failed")
+    record = store.get_action(args.action_key)
+    if record is None:
+        raise ActionError("action_not_found")
+    owner_pid = int(record["owner_pid"])
+    command_stopped = command_checker(owner_pid) == "stopped"
+    ime_original: str | None = None
+    ime_state = store.load_ime_state()
+    if (
+        ime_state is not None
+        and ime_state.get("action_key") == args.action_key
+        and isinstance(ime_state.get("original_ime"), str)
+        and ime_state["original_ime"]
+    ):
+        ime_original = str(ime_state["original_ime"])
+    screen = AdbScreenReader(evidence_dir=None, process_log=log, gate=gate)
+    actions = AdbActionExecutor(
+        serial=serial, gate=gate, process_log=log, screen_reader=screen
+    )
+    observer = AdbRecoveryObserver(
+        serial=serial, gate=gate, screen_reader=screen, action_reader=actions
+    )
+    return observer.observe(
+        action_key=args.action_key,
+        action_kind=str(record["action_kind"]),
+        resolution=args.resolution,
+        evidence=evidence,
+        ime_original=ime_original,
+        command_stopped=command_stopped,
+        confirmed=bool(args.confirm_action),
+        observed_at=now,
+    )
 
 
 def _reconciliation_observation(

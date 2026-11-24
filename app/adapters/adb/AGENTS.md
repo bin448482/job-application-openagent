@@ -8,10 +8,10 @@
 
 - `__init__.py`：声明 ADB 适配器包。
 - `device.py`：`AdbDeviceProbe`、`DeviceProbeError`、设备清单解析、`isKeyguardShowing` 判定与 `mCurrentFocus` 前台判定。
-- `command.py`：M3/M5 共用 ADB 有界子进程边界；参数数组、`shell=False`、5 秒超时、单次 attempt、可选每命令 before 复核与共享门禁 verify，失败只返回固定类别；`CommandIdentityStore` 按动作键保存命令 PID；`save_evidence` 只在调用方指定本机目录时落盘。
-- `screen.py`：`AdbScreenReader`；每次 dump/cat 或 screencap 复用 `command.py`，层级 XML 与原始 RGBA 保存到调用方指定的本机证据目录，文件名含独立 UUID，返回受控证据名与内存内容。
-- `recovery.py`：M5 `AdbRecoveryObserver`；在共享门禁下一次读取层级与当前 IME，输出 `ReconciliationObservation` 的现场/命令/IME 字段，复用既有采集器与 `read_current_ime`，不自行宣告动作效果或进程停止。
-- `actions.py`：M5 `AdbActionExecutor`；先解析 before 层级锁定唯一姓名+职位目标、非滚动完整列表、保护项、唯一 EditText 正文、附件名与可点未处理联系方式槽位，再发不可逆点击；同一目标子树计算前后新增差分，既有提示/无关子树/同名重复/单 tap 计划不证明执行。每一命令前由调用方 guard 复核当前包/验收/租约/门禁，单次 attempt 不重试；输入前实际切换并读回目标 IME，早退/动作后恢复并读回原 IME；原始 before/readback/dialog/after XML 与内容 UUID/动作索引写入可选本机证据目录；命令日志使用固定步骤标签。当前 CLI 不暴露真实动作入口，只由 mock subprocess 测试。
+- `command.py`：M3/M5 共用 ADB 有界子进程边界；参数数组、`shell=False`、5 秒超时、单次 attempt、可选每命令 before 复核与共享门禁 verify，失败只返回固定类别；`CommandIdentityStore` 按动作记录实际命令 PID 及其可见后代，枚举失败写不可证明标记，缺失/坏行/故障都不返回 stopped；`on_pid` 持久化失败有界 kill/回收，超时后的 kill 与回收都带预算；`save_evidence` 只在调用方指定本机目录时落盘。
+- `screen.py`：`AdbScreenReader`；每次 dump/cat 或 screencap 复用 `command.py`，层级 XML 与原始 RGBA 保存到调用方指定的本机证据目录，文件名含独立 UUID，返回受控证据名与内存内容；证据保存记一次 `started` 与单一 `ok/failed`，before guard 拒绝记固定 `action_guard` 类别后再按原语义传播。
+- `recovery.py`：M5 `AdbRecoveryObserver`；在共享门禁下一次读取层级与当前 IME，输出 `ReconciliationObservation` 的现场/命令/IME 字段，复用既有采集器与 `read_current_ime`；坏 XML 不解析出收敛现场，不自行宣告动作效果或进程停止。
+- `actions.py`：M5 `AdbActionExecutor`；先解析 before 层级锁定唯一姓名+完整身份标签目标、显式非滚动完整列表、保护项、唯一 EditText 正文、附件名与可点未处理联系方式槽位，再发不可逆点击；同一目标子树计算前后新增差分，联系方式效果只统计本动作类型槽位，确认阶段重核 dialog 同类型槽位与删除覆盖；既有提示/无关子树/同名重复/单 tap 计划不证明执行。每一命令前由调用方 guard 复核当前包/验收/租约/门禁，单次 attempt 不重试；输入前实际切换并读回目标 IME，早退/动作后恢复并读回原 IME；原始 before/readback/dialog/after XML 与内容 UUID/动作索引写入可选本机证据目录；命令日志使用固定步骤标签。当前 CLI 动作仍只接合成执行器，真实原语由 mock subprocess 测试。
 
 ## 三、命令与安全契约
 
@@ -23,7 +23,7 @@
 - 前台要求唯一的 `mCurrentFocus` 字段行只允许前置缩进，字段名必须是该行开头 token；拒绝 `notmCurrentFocus`/`prefixmCurrentFocus` 等粘连前缀、`prefix mCurrentFocus` 等行内前缀和 `mCurrentFocusExtra` 等后缀字段，任一 line 含该名字却非合法字段即保守 `unknown`。字段值（允许首尾空白）必须恰好是一个完整 `Window{...}` 结构，内部恰好一个 `包名/Activity` token；前后附加文本/组件、同一行或同一 Window 内多个组件、畸形/混合组件、缺失/多值均为 `unknown`。包名 `com.hpbr.bosszhipin` 为 `boss`，其它单一包为 `other`。
 - 本模块不得在 fixture 模式或其他离线测试中实际执行；测试只 mock `subprocess.run`。模块导入必须零副作用。
 - `AdbScreenReader` 的 dump 后 cat 固定为两条命令；`exec-out screencap` 以二进制捕获。缺失/超时/OSError/非零退出统一 `ScreenReadError('device_disconnected')`，单次 attempt 不重放；证据落盘失败为 `ScreenReadError('invalid_fixture')`，不声称已保存。
-- 过程日志 `stage=adb_hierarchy/adb_screen/adb_evidence`、`command=adb_hierarchy_dump/adb_hierarchy_cat/adb_screencap`，只写固定结果、耗时和 `adb_missing/adb_timeout/adb_oserror/adb_nonzero/evidence` 类别；证据保存成功/失败记 `adb_evidence`，失败原因 `invalid_fixture`；不写 serial、设备临时路径、XML、截图或异常文本。
+- 过程日志 `stage=adb_hierarchy/adb_screen/adb_evidence`、`command=adb_hierarchy_dump/adb_hierarchy_cat/adb_screencap`，只写固定结果、耗时和 `adb_missing/adb_timeout/adb_oserror/adb_nonzero/evidence/action_guard` 类别；每条命令先记 `started` 再记单一 `ok/failed`，调用方 guard 拒绝记 `action_guard` 与固定原因码；证据保存成功/失败记 `adb_evidence` 的一次 `started` 与单一 `ok/failed`，失败原因 `invalid_fixture`；不写 serial、设备临时路径、XML、截图或异常文本。
 - M4c 已交付固定 OS 共享设备门禁；真实 `read` 仍不暴露 `--device` 入口，但采集适配器无 gate 直接拒绝且每条子命令前复核，`read_from_device` 也在采集前要求门禁。不得以 profile 内任务锁代替共享占用。M0 `doctor --device` 必须先取得占用且带 `--confirm-device`，异常保留并隔离。
 
 ## 四、测试

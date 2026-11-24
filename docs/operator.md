@@ -377,9 +377,10 @@ python -m app action reconcile --profile demo --pack prompts/local/demo --mode d
 - 文本额度/冷却是唯一持久化护栏：UTC 日期内跨 app 合计 performed+sent 文本；按 profile/app/会话冷却；任一文本 pending/unknown 阻断新发送。额度检查与本次 pending/键锁在同一事务。换包、restore、重启或调低额度不清零历史；未决文本、附件 `sent`/`request_sent`、`not_performed` 不充当成功文本；同一动作键已有记录时资格返回 `action_conflict`/`text_send_blocked`。
 - 证据：`performed` 必须前后快照非空且不同（真实适配器由层级内容派生快照身份），并由动作特有变化证明。未点击/点击前断连为 `not_performed`；点击后断连/异常/坏观察为 `unknown`。输入框不空、确认框仍开、IME 未恢复或在途命令未退出时，即使已证明未点击也保持 pending 与共享隔离。
 - `pending/unknown/cancelled` 生成固定人工卡 `{task_id,action_key,reason_code,snapshot_ids,allowed_resolutions}`，处置固定 `confirm_performed/confirm_not_performed/abandon`。confirm 需本轮显式确认、当前证据、原 host、原父子命令停止检查器与现场/IME 收敛；成功文本 `confirm_performed` 只计一次额度。`abandon` 只把任务置 cancelled，动作锁与共享/profile 设备隔离保留；之后仍可对 cancelled 动作受控 confirm 清锁，但不重开任务。
-- 受控接管隔离占用必须在原 profile/原库身份下，显式 `--confirm-recovery`，并由原 PID 停止检查器确认；生产默认父子命令检查器返回 unknown，不用单 PID 猜测解锁。原 IME 在输入前实际切换并读回，动作后恢复并读回；恢复失败保持未知，完成/对账事务更新 IME 恢复账本。
+- 受控接管隔离占用必须在原 profile/原库身份下，显式 `--confirm-recovery`，并由原 PID 停止检查器确认；生产恢复优先使用按动作记录的命令族账本，缺失/损坏/枚举失败保持 unknown，不用单 PID 或空账本猜测解锁。`--device --serial` 时用 `AdbRecoveryObserver` 一次读取实际层级与当前 IME，坏 XML 或错 IME 不收敛。原 IME 在输入前实际切换并读回，动作后恢复并读回；恢复失败保持未知，完成/对账事务更新 IME 恢复账本。
 - `action eligibility` 只计算拟执行资格：有效本轮授权 + 无同动作历史/未决 + 未到冷却为 `eligible=true`，同时 `policy_tier="C"`、`production_auto_send=false`、`actions_performed=0`。合成资格为真不代表真实 A 档或发送授权。
 - 第3轮返修补充：公开 guard 要求当前快照四个验收字段都存在且为有效摘要，缺字段/None/坏类型不拿包摘要补齐；目标定位支持并校验姓名+职位标签，文本只认可目标子树内唯一 editor，联系方式要求对应类型 enabled/clickable 未处理槽位，确认阶段重核目标/保护，删除要求显式非滚动完整覆盖及删除后覆盖；已切换 IME 的所有早退/输入非零/超时进入一个有界原 IME 恢复并读回；命令身份按动作保存供恢复检查原父子/已脱离子孙；同一真实阶段只记一次 started 与一个终态，冻结使用独立 `action_freeze`；动作层级采集/保存复用 `AdbScreenReader`，仅追加动作相位索引。
+- 第4轮返修补充：`perform_action` 要求非空完整身份标签并写入计划，缺失在 validate 阶段拒绝、执行器 0 调用；联系方式效果只统计本动作类型槽位，确认阶段重新核对同类型槽位状态；删除的 before/dialog/after 分别以目标/锚点祖先链的显式非滚动容器证明覆盖。命令账本按动作记录实际命令族后代，缺失/坏记录/枚举失败/写入失败保持 unknown；`on_pid` 失败与超时 kill 都有有界回收。`action reconcile --device --serial` 复用 `AdbRecoveryObserver` 读取实际现场/IME，坏 XML 或错 IME 拒绝；采集保存、guard 拒绝均记 started 与单一终态。
 
 ## 八、显式真实设备模式
 只有同时给出 `--device`、`--serial` 与 `--confirm-device` 才启用真实探针：

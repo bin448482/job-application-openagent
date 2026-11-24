@@ -18,6 +18,7 @@ from app.adapters.adb.command import (
     run_adb,
 )
 from app.adapters.adb.screen import AdbScreenReader
+from app.adapters.sqlite.repo import _child_processes
 from app.domain.actions import ActionObservation
 from app.ports.actions import ActionExecutionError, ActionPlan
 from app.ports.device_gate import DeviceGateError
@@ -45,6 +46,7 @@ class AdbActionExecutor:
         evidence_dir: Path | None = None,
         screen_reader: AdbScreenReader | None = None,
         command_store: CommandIdentityStore | None = None,
+        child_scan: Callable[[int], list[int]] | None = None,
     ) -> None:
         """保存 serial、共享门禁、adb 名、日志、超时、证据目录、采集器与命令账本。"""
         if not isinstance(serial, str) or not serial.strip():
@@ -56,6 +58,7 @@ class AdbActionExecutor:
         self._timeout = timeout
         self._evidence_dir = Path(evidence_dir) if evidence_dir is not None else None
         self._command_store = command_store
+        self._child_scan = child_scan or _child_processes
         self._current_action_key: str | None = None
         self._screen = screen_reader or AdbScreenReader(
             evidence_dir=self._evidence_dir,
@@ -123,7 +126,7 @@ class AdbActionExecutor:
             for text in _target_scope_texts(before_xml, target, labels)
             for marker in PROTECTION_MARKERS
         )
-        list_complete = _list_complete(before_xml)
+        list_complete = _list_complete(before_xml, target)
         contact_slot_available = _slot_available(
             before_xml, target, plan.action_kind, labels
         )
@@ -259,6 +262,9 @@ class AdbActionExecutor:
                             )
                             is not None
                         )
+                        dialog_list_complete = _list_complete(
+                            dialog_xml, target
+                        )
                         if plan.action_kind == "send_resume":
                             if (
                                 not dialog_identity
@@ -294,6 +300,7 @@ class AdbActionExecutor:
                             if not (
                                 dialog_identity
                                 and list_complete
+                                and dialog_list_complete
                                 and protections_clear
                                 and dialog_protections_clear
                             ):
@@ -317,7 +324,15 @@ class AdbActionExecutor:
                         elif plan.action_kind in {
                             "change_wechat",
                             "change_phone",
-                        } and not dialog_identity:
+                        } and not (
+                            dialog_identity
+                            and _slot_available(
+                                dialog_xml,
+                                target,
+                                plan.action_kind,
+                                plan.identity_labels,
+                            )
+                        ):
                             return self._observation(
                                 plan,
                                 clicked=False,
@@ -368,7 +383,7 @@ class AdbActionExecutor:
 
         after_texts = _node_texts(after_xml)
         if plan.action_kind == "delete_conversation":
-            list_complete = list_complete and _list_complete(after_xml)
+            list_complete = list_complete and _list_complete(after_xml, anchor)
             protections_clear = protections_clear and not any(
                 marker in text
                 for text in _target_scope_texts(
@@ -493,8 +508,12 @@ class AdbActionExecutor:
         request_after = after_scope.count(RESUME_REQUEST_MARKER)
         delivered_before = before_scope.count(RESUME_DELIVERED_MARKER)
         delivered_after = after_scope.count(RESUME_DELIVERED_MARKER)
-        contact_before = before_scope.count(CONTACT_REQUEST_MARKER)
-        contact_after = after_scope.count(CONTACT_REQUEST_MARKER)
+        contact_before = _slot_scope_texts(
+            before_xml, target, plan.action_kind, plan.identity_labels
+        ).count(CONTACT_REQUEST_MARKER) if before_xml is not None else 0
+        contact_after = _slot_scope_texts(
+            after_xml, target, plan.action_kind, plan.identity_labels
+        ).count(CONTACT_REQUEST_MARKER)
         if force_input_box_empty is not None:
             input_box_empty = force_input_box_empty
         elif plan.action_kind == "send_text":
@@ -699,10 +718,9 @@ class AdbActionExecutor:
         """把本动作命令 PID 写入本机命令身份账本；不写命令参数。"""
         if self._command_store is None or self._current_action_key is None:
             return
-        try:
-            self._command_store.record(self._current_action_key, pid)
-        except (OSError, ValueError):
-            return
+        self._command_store.record_tree(
+            self._current_action_key, pid, self._child_scan
+        )
 
     def _index_evidence(
         self,
@@ -836,16 +854,53 @@ def _target_scope_texts(
     ]
 
 
-def _list_complete(xml_text: str) -> bool:
-    """要求显式非滚动列表且无任何可滚动容器，不能以属性缺失猜完整。"""
+def _list_complete(xml_text: str, label: str) -> bool:
+    """要求目标/锚点祖先链存在显式非滚动容器且没有可滚动视口。"""
     try:
         root = ET.fromstring(xml_text)
     except (ET.ParseError, ValueError):
         return False
-    nodes = list(root.iter("node"))
-    if any(node.get("scrollable") == "true" for node in nodes):
-        return False
-    return any(node.get("scrollable") == "false" for node in nodes)
+    stack: list[tuple[ET.Element, list[ET.Element]]] = [(root, [])]
+    while stack:
+        node, ancestors = stack.pop()
+        if node.get("text") == label:
+            chain = [*ancestors, node]
+            scrollables = [
+                item.get("scrollable")
+                for item in chain
+                if item.get("scrollable") is not None
+            ]
+            return bool(scrollables) and all(
+                value == "false" for value in scrollables
+            )
+        if len(node):
+            stack.extend((child, [*ancestors, node]) for child in node)
+    return False
+
+
+def _slot_scope_texts(
+    xml_text: str,
+    target: str,
+    action_kind: str,
+    identity_labels: tuple[str, ...] = (),
+) -> list[str]:
+    """返回目标子树中对应类型联系方式槽位节点内的文本。"""
+    node = _target_node(xml_text, target, identity_labels)
+    if node is None or action_kind not in {"change_wechat", "change_phone"}:
+        return []
+    marker = "微信" if action_kind == "change_wechat" else "电话"
+    matches = [
+        child
+        for child in node.iter("node")
+        if marker in (child.get("text") or "")
+    ]
+    if len(matches) != 1:
+        return []
+    return [
+        child.get("text") or ""
+        for child in matches[0].iter("node")
+        if child.get("text")
+    ] or [matches[0].get("text") or ""]
 
 
 def _slot_available(

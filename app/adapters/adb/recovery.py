@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
+
 from app.adapters.adb.actions import _editor_texts, _node_texts
 from app.domain.actions import ReconciliationObservation
 from app.domain.models import Evidence
@@ -43,9 +45,14 @@ class AdbRecoveryObserver:
         """一次有界采集后构造对账观察；命令未证明停止时 command_quiet=False。"""
         self._gate.verify()
         capture: HierarchyCapture = self._screen.dump_hierarchy(self._serial)
-        texts = _node_texts(capture.xml_text)
+        try:
+            root = ET.fromstring(capture.xml_text)
+        except (ET.ParseError, ValueError):
+            root = None
+        valid_xml = root is not None and root.tag == "hierarchy"
+        texts = _node_texts(capture.xml_text) if valid_xml else []
         confirmation_open = "确认" in texts and "取消" in texts
-        editors = _editor_texts(capture.xml_text)
+        editors = _editor_texts(capture.xml_text) if valid_xml else None
         input_box_empty = (
             editors is not None and all(not value for value in editors)
             if action_kind == "send_text"
@@ -58,7 +65,7 @@ class AdbRecoveryObserver:
             observed_at=observed_at,
             evidence=evidence,
             command_quiet=command_stopped,
-            scene_settled=not confirmation_open and input_box_empty,
+            scene_settled=valid_xml and not confirmation_open and input_box_empty,
             confirmation_open=confirmation_open,
             ime_original=ime_original,
             ime_current=ime_current,

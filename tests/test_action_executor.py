@@ -387,6 +387,150 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         self.assertEqual([c for c in calls if "tap" in c], [])
         self.assertEqual(derive_action_outcome(observation).evidence.outcome, "not_performed")
 
+    def test_contact_effect_is_type_specific(self) -> None:
+        """另一类型新增请求不算本类型效果，点击后保持 unknown。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        before = (
+            '<hierarchy><node text="合成联系人">'
+            '<node text="微信" clickable="true" enabled="true" />'
+            '<node text="电话" clickable="true" enabled="true" />'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node text="合成联系人">'
+            '<node text="微信" clickable="true" enabled="true">'
+            '<node text="请求中" /></node>'
+            '<node text="电话" clickable="true" enabled="true" />'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        phone = ActionPlan(
+            action_key=f"{CONVERSATION}:phone",
+            action_kind="change_phone",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=1,
+            tap_points=((10, 20), (30, 40)),
+        )
+        runner, calls = self._custom_run((before, before, after))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(phone)
+        self.assertEqual(len([c for c in calls if "tap" in c]), 2)
+        self.assertNotEqual(
+            derive_action_outcome(observation).evidence.outcome, "performed"
+        )
+
+    def test_dialog_disabled_slot_is_not_confirmed(self) -> None:
+        """打开槽位后 dialog 同类型槽位变 disabled 时不再确认点击。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        before = (
+            '<hierarchy><node text="合成联系人">'
+            '<node text="电话" clickable="true" enabled="true" />'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        dialog = (
+            '<hierarchy><node text="合成联系人">'
+            '<node text="电话" clickable="true" enabled="false" />'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        phone = ActionPlan(
+            action_key=f"{CONVERSATION}:phone",
+            action_kind="change_phone",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=1,
+            tap_points=((10, 20), (30, 40)),
+        )
+        runner, calls = self._custom_run((before, dialog, dialog))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(phone)
+        self.assertEqual(len([c for c in calls if "tap" in c]), 1)
+        self.assertFalse(observation.clicked)
+        self.assertEqual(
+            derive_action_outcome(observation).evidence.outcome, "not_performed"
+        )
+
+    def test_delete_incomplete_after_viewport_is_not_performed(self) -> None:
+        """删除后只看到可滚动不完整视口时不得判为已删除。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        before = (
+            '<hierarchy><node scrollable="false">'
+            '<node text="合成联系人"><node text="消息" /></node></node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node scrollable="true">'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+        runner, calls = self._custom_run((before, before, after))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(delete)
+        self.assertEqual(len([c for c in calls if "tap" in c]), 3)
+        self.assertNotEqual(
+            derive_action_outcome(observation).evidence.outcome, "performed"
+        )
+
+    def test_delete_complete_list_removal_is_performed(self) -> None:
+        """完整列表内目标消失且锚点仍在时为 deleted 正例。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        before = (
+            '<hierarchy><node scrollable="false">'
+            '<node text="合成联系人"><node text="消息" /></node></node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node scrollable="false">'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+        runner, calls = self._custom_run((before, before, after))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(delete)
+        self.assertEqual(len([c for c in calls if "tap" in c]), 3)
+        outcome = derive_action_outcome(observation)
+        self.assertEqual(outcome.evidence.outcome, "performed")
+        self.assertEqual(outcome.evidence.effect, "deleted")
+
     def test_delete_scrollable_viewport_and_single_tap_resume_do_not_tap(self) -> None:
         """可滚动不完整列表与单 tap 简历均在不可逆点击前拒绝。"""
         gate = FakeGate()
@@ -461,6 +605,33 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             observation = executor.execute(labeled)
         self.assertEqual([c for c in calls if "tap" in c], [])
         self.assertFalse(observation.clicked)
+
+    def test_delete_requires_target_list_coverage_not_unrelated_button(self) -> None:
+        """任意节点 scrollable=false 不能替代目标列表覆盖。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        incomplete = (
+            '<hierarchy><node text="无关按钮" scrollable="false" />'
+            '<node text="合成联系人"><node text="消息" /></node></hierarchy>'
+        )
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+        runner, calls = self._custom_run((incomplete, incomplete, incomplete))
+        with patch("subprocess.run", side_effect=runner):
+            executor.execute(delete)
+        self.assertEqual([c for c in calls if "tap" in c], [])
 
     def test_failure_before_click_does_not_retry(self) -> None:
         """首条命令非零退出即停止，只调用一次并标记未点击。"""
@@ -572,10 +743,12 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         """真实证据目录保存原始 XML 与 UUID/动作索引，且不含正文。"""
         gate = FakeGate()
         with tempfile.TemporaryDirectory() as directory:
+            log = ProcessLog(path=Path(directory) / "action-evidence.jsonl")
             executor = AdbActionExecutor(
                 serial="<serial>",
                 gate=gate,
                 evidence_dir=Path(directory),
+                process_log=log,
             )
             runner, _calls = self._runner()
             with patch("subprocess.run", side_effect=runner):
@@ -588,6 +761,187 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             self.assertIn('"phase":"before"', index_text)
             self.assertIn('"phase":"after"', index_text)
             self.assertNotIn("您好", index_text)
+            records = [
+                __import__("json").loads(line)
+                for line in log.path.read_text("utf-8").splitlines()
+                if line.strip()
+            ]
+            evidence = [
+                item for item in records if item["stage"] == "adb_evidence"
+            ]
+            self.assertEqual(
+                [item["result"] for item in evidence],
+                ["started", "ok", "started", "ok", "started", "ok"],
+            )
+
+    def test_run_adb_records_descendant_tree_through_pid_callback(self) -> None:
+        """实际 Popen 回调记录命令族子孙，末端口活时恢复检查拒绝。"""
+        import tempfile
+        from pathlib import Path
+
+        from app.adapters.adb.command import CommandIdentityStore, run_adb
+
+        class Proc:
+            """最小 Popen 替身，只提供 run_adb 使用的属性。"""
+
+            def __init__(self) -> None:
+                """固定 PID 与成功返回。"""
+                self.pid = 4100
+                self.returncode = 0
+
+            def communicate(self, timeout: float | None = None):
+                """返回成功输出。"""
+                return "ok", ""
+
+            def kill(self) -> None:
+                """无 kill。"""
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = CommandIdentityStore(Path(directory))
+            tree = {4100: [4200], 4200: [4300], 4300: [4400], 4400: []}
+
+            def on_pid(pid: int) -> None:
+                """按生产回调记录命令族。"""
+                store.record_tree(
+                    "boss:conv:test:resume", pid, lambda p: list(tree.get(p, []))
+                )
+
+            with patch("subprocess.Popen", return_value=Proc()):
+                run_adb(["adb"], gate=FakeGate(), on_pid=on_pid)
+            self.assertEqual(
+                store.identities("boss:conv:test:resume"),
+                [4100, 4200, 4300, 4400],
+            )
+            states = {4100: "stopped", 4200: "stopped", 4300: "stopped", 4400: "alive"}
+            self.assertEqual(
+                store.check(
+                    "boss:conv:test:resume", 4100, lambda pid: states.get(pid, "unknown")
+                ),
+                "alive",
+            )
+
+    def test_run_adb_pid_record_failure_is_bounded(self) -> None:
+        """Popen 成功后身份持久化失败时有界收尾并返回固定错误。"""
+        from app.adapters.adb.command import AdbCommandFailure, run_adb
+
+        class Proc:
+            """记录 kill 与等待预算。"""
+
+            def __init__(self) -> None:
+                """初始化成功 PID 与预算。"""
+                self.pid = 4100
+                self.returncode = 0
+                self.killed = False
+                self.wait_budget: float | None = None
+
+            def communicate(self, timeout: float | None = None):
+                """不应被调用。"""
+                raise AssertionError
+
+            def kill(self) -> None:
+                """记录 kill。"""
+                self.killed = True
+
+            def wait(self, timeout: float | None = None) -> int:
+                """记录有界等待。"""
+                self.wait_budget = timeout
+                return 0
+
+        process = Proc()
+
+        def fail(pid: int) -> None:
+            """模拟身份写入失败。"""
+            raise OSError("synthetic")
+
+        with patch("subprocess.Popen", return_value=process):
+            with self.assertRaises(AdbCommandFailure) as caught:
+                run_adb(["adb"], gate=FakeGate(), on_pid=fail)
+        self.assertEqual(caught.exception.category, "adb_oserror")
+        self.assertTrue(process.killed)
+        self.assertEqual(process.wait_budget, 1)
+
+    def test_run_adb_timeout_kill_and_reap_are_bounded(self) -> None:
+        """超时后 kill 与回收都带预算，不使用无限等待。"""
+        from app.adapters.adb.command import AdbCommandFailure, run_adb
+
+        class Proc:
+            """首次 communicate 超时，后续立即返回。"""
+
+            def __init__(self) -> None:
+                """初始化预算记录。"""
+                self.pid = 4100
+                self.returncode = 0
+                self.budgets: list[float | None] = []
+                self.killed = False
+
+            def communicate(self, timeout: float | None = None):
+                """记录每次等待预算并模拟首次超时。"""
+                self.budgets.append(timeout)
+                if len(self.budgets) == 1:
+                    raise subprocess.TimeoutExpired(["adb"], timeout or 0)
+                return "", ""
+
+            def kill(self) -> None:
+                """记录 kill。"""
+                self.killed = True
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        process = Proc()
+        with patch("subprocess.Popen", return_value=process):
+            with self.assertRaises(AdbCommandFailure) as caught:
+                run_adb(["adb"], gate=FakeGate(), on_pid=lambda pid: None)
+        self.assertEqual(caught.exception.category, "adb_timeout")
+        self.assertTrue(process.killed)
+        self.assertEqual(process.budgets, [5, 1])
+
+    def test_recovery_observer_rejects_malformed_xml(self) -> None:
+        """坏层级不能得到 scene_settled 收敛。"""
+        class BadScreen:
+            """返回非 XML。"""
+
+            def dump_hierarchy(self, serial: str) -> HierarchyCapture:
+                """返回坏文本。"""
+                return HierarchyCapture("not-xml", "bad.xml", 7)
+
+            def capture_screen(self, serial: str) -> object:
+                """未使用。"""
+                raise AssertionError
+
+        class ActionReader:
+            """返回固定 IME。"""
+
+            def read_current_ime(self, *, before_command=None) -> str:
+                """返回原 IME。"""
+                return "ime"
+
+            def execute(self, plan, *, before_command=None):
+                """未使用。"""
+                raise AssertionError
+
+        observer = AdbRecoveryObserver(
+            serial="<serial>",
+            gate=FakeGate(),
+            screen_reader=BadScreen(),
+            action_reader=ActionReader(),
+        )
+        observation = observer.observe(
+            action_key=f"{CONVERSATION}:resume",
+            action_kind="send_resume",
+            resolution="confirm_not_performed",
+            evidence=None,
+            ime_original="ime",
+            command_stopped=True,
+            confirmed=True,
+            observed_at=helpers.NOW,
+        )
+        self.assertFalse(observation.scene_settled)
 
     def test_recovery_observer_reads_scene_and_ime(self) -> None:
         """生产恢复观察一次读取层级与 IME，命令未停止时不标 command_quiet。"""

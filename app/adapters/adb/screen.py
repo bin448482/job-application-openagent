@@ -20,7 +20,7 @@ from app.ports.screen import (
     ScreenCapture,
     ScreenReadError,
 )
-from app.process_log import ProcessLog, elapsed_ms
+from app.process_log import REASON_CODES, ProcessLog, elapsed_ms
 
 DEVICE_TMP_XML = "/data/local/tmp/m3-ui.xml"
 
@@ -141,12 +141,19 @@ class AdbScreenReader:
         except DeviceGateError:
             self._record_failure(stage, command, started, "adb_gate")
             raise ScreenReadError("device_disconnected") from None
+        except Exception as error:
+            reason = getattr(error, "reason_code", "invalid_input")
+            if not isinstance(reason, str) or reason not in REASON_CODES:
+                reason = "invalid_input"
+            self._record_guard_failure(stage, command, started, reason)
+            raise
         self._record(stage, command, "ok", elapsed_ms(started))
         return completed
 
     def _save(self, name: str, payload: bytes) -> None:
         """把证据写到调用方指定的本机目录；失败不伪造已保存。"""
         started = time.perf_counter()
+        self._record_evidence("started", 0)
         try:
             if self._evidence_dir is not None:
                 save_evidence(self._evidence_dir, name, payload)
@@ -197,6 +204,25 @@ class AdbScreenReader:
                 result="failed",
                 reason_code="device_disconnected",
                 error_category=error_category,
+                duration_ms=elapsed_ms(started),
+                command=command,
+                mode="device",
+            )
+        except Exception:
+            return
+
+    def _record_guard_failure(
+        self, stage: str, command: str, started: float, reason_code: str
+    ) -> None:
+        """记录调用方 guard 的固定拒绝类别，再按原语义传播，不写异常原文。"""
+        if self._process_log is None:
+            return
+        try:
+            self._process_log.record(
+                stage=stage,
+                result="failed",
+                reason_code=reason_code,
+                error_category="action_guard",
                 duration_ms=elapsed_ms(started),
                 command=command,
                 mode="device",
