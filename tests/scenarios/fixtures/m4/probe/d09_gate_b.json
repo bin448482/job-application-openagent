@@ -1,0 +1,7 @@
+{
+  "operation": "gate_race",
+  "profile_id": "synthetic-beta",
+  "owner_id": "00000000-0000-4000-8000-000000000082",
+  "owner_pid": 2,
+  "os_root": "data/runtime/os-gate"
+}

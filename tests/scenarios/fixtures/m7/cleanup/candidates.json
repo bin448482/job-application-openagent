@@ -1,0 +1,46 @@
+{
+  "description": "合成清理候选、保护项与身份歧义输入",
+  "cases": {
+    "rejected_without_keep": {
+      "eligible": true
+    },
+    "keeps_contact": {
+      "eligible": false
+    },
+    "expiry_days_unset": {
+      "eligible": false
+    },
+    "last_activity_unknown": {
+      "eligible": false
+    },
+    "model_only_rejected": {
+      "eligible": false
+    },
+    "has_unread": {
+      "eligible": false
+    },
+    "unread_unknown": {
+      "eligible": false
+    },
+    "has_draft": {
+      "eligible": false
+    },
+    "has_pending_action": {
+      "eligible": false
+    },
+    "identity_ambiguous": {
+      "eligible": false
+    },
+    "unique_with_anchor": {
+      "eligible": true,
+      "delete_allowed": true
+    }
+  },
+  "expected": {
+    "model_cannot_delete": true,
+    "protection_precedes_rule": true,
+    "ledger_before_delete": true,
+    "success_requires_target_gone_and_anchor_present": true,
+    "failure_not_retried": true
+  }
+}

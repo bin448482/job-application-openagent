@@ -1,0 +1,34 @@
+{
+  "description": "各层原始计数与零分母输入",
+  "buckets": {
+    "F": {
+      "unread_present_total": 4,
+      "unread_present_false_absent": 0,
+      "unknown": 2,
+      "actions_total": 0,
+      "actions_unknown": 0
+    },
+    "T": {
+      "unread_present_total": 0,
+      "unread_present_false_absent": 0,
+      "unknown": 0,
+      "actions_total": 0,
+      "actions_unknown": 0
+    },
+    "O": {
+      "unread_present_total": 0,
+      "unknown": 3,
+      "not_triggered": 2
+    },
+    "W": {
+      "actions_total": 0,
+      "actions_unknown": 0
+    }
+  },
+  "expected": {
+    "zero_denominator": "N/A (not_measured)",
+    "not_triggered_is_not_pass": true,
+    "layers_not_mixed": true,
+    "unknown_not_counted_as_detected": true
+  }
+}

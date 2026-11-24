@@ -1,0 +1,8 @@
+{
+  "operation": "eval",
+  "pack": "prompts/local/eval",
+  "mode": "register_alt",
+  "batch_id": "synthetic-alt-other",
+  "sample_count": 2,
+  "candidate_release": "synthetic-alt-release"
+}

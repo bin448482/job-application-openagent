@@ -1,0 +1,11 @@
+{
+  "operation": "render",
+  "pack": "prompts/local/valid",
+  "subject_mutation": {
+    "op": "delete",
+    "path": [
+      "subject",
+      "conversation_key"
+    ]
+  }
+}

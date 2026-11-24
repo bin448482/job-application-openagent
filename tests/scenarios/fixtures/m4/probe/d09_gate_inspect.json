@@ -1,0 +1,6 @@
+{
+  "operation": "gate_inspect",
+  "profile_id": "synthetic-abandon",
+  "expected_profile_id": "synthetic-abandon",
+  "os_root": "data/runtime/os-gate"
+}

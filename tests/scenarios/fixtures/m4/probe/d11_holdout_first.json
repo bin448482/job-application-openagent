@@ -1,0 +1,6 @@
+{
+  "operation": "eval",
+  "pack": "prompts/local/eval",
+  "suite": "holdout",
+  "mode": "eval"
+}

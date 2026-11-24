@@ -1,0 +1,10 @@
+{
+  "invalid_manifest.json": {
+    "exit_code": 2,
+    "result_status": "failed",
+    "unread_state": null,
+    "stop_reason": "invalid_fixture",
+    "candidate_kinds": [],
+    "discovery_count": 0
+  }
+}

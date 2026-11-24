@@ -1,0 +1,15 @@
+{
+  "conditions": {
+    "returned_to_list": true,
+    "input_empty": true,
+    "no_confirmation_dialog": true,
+    "no_inflight_device_command": true,
+    "last_action_not_pending_or_unknown": true,
+    "action_state_committed": true,
+    "checkpoint_committed": true
+  },
+  "expected": {
+    "all_conditions_required": true,
+    "single_false_blocks_switch": true
+  }
+}

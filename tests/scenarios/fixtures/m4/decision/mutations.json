@@ -1,0 +1,63 @@
+{
+  "description": "对合法 envelope 的显式负例，字段名不是产品实现接口",
+  "mutations": {
+    "missing_key": {
+      "op": "delete",
+      "path": [
+        "subject"
+      ]
+    },
+    "extra_key": {
+      "op": "set",
+      "path": [
+        "extra"
+      ],
+      "value": 1
+    },
+    "bool_version": {
+      "op": "set",
+      "path": [
+        "schema_version"
+      ],
+      "value": true
+    },
+    "wrong_kind": {
+      "op": "set",
+      "path": [
+        "kind"
+      ],
+      "value": "free_text"
+    },
+    "hr_without_conversation": {
+      "op": "set",
+      "path": [
+        "subject",
+        "conversation_key"
+      ],
+      "value": null
+    },
+    "max_bytes_changed": {
+      "op": "set",
+      "path": [
+        "constraints",
+        "max_bytes"
+      ],
+      "value": 4096
+    },
+    "expired_fact": {
+      "op": "set",
+      "path": [
+        "allowed_facts",
+        0,
+        "expires_at"
+      ],
+      "value": "2000-01-01T00:00:00.000Z"
+    }
+  },
+  "expected": {
+    "all_negative_variants_rejected": true,
+    "device_calls": 0,
+    "send": false,
+    "fact_write": false
+  }
+}

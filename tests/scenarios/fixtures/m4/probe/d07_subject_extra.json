@@ -1,0 +1,12 @@
+{
+  "operation": "render",
+  "pack": "prompts/local/valid",
+  "subject_mutation": {
+    "op": "set",
+    "path": [
+      "subject",
+      "extra"
+    ],
+    "value": "x"
+  }
+}

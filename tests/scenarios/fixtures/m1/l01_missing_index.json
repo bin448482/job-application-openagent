@@ -1,0 +1,15 @@
+{
+  "start_at": "2026-11-24T00:00:00.000Z",
+  "steps": [
+    {
+      "op": "init"
+    },
+    {
+      "op": "prepare",
+      "mode": "drop_index"
+    },
+    {
+      "op": "init"
+    }
+  ]
+}

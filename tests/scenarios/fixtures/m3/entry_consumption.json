@@ -1,0 +1,39 @@
+{
+  "description": "合成进入会话消耗角标，验证发现先落库且不因角标消失关闭",
+  "discovery": {
+    "conversation_key": "boss:conv:3ba32ab9dd8b0a512b78558807275e2b58f588e75cb0de59a6427961cd261d8f",
+    "fingerprint": "d438cbcd76c83cafd81dfe60135b1ebe188e1ee7f89e76200a83caca8b6ed0ad",
+    "source_names": [
+      "row_badge"
+    ],
+    "preopened_at": "2026-11-24T00:00:00.000Z"
+  },
+  "events": [
+    {
+      "seq": 1,
+      "virtual_ms": 0,
+      "event": "discovery_persisted"
+    },
+    {
+      "seq": 2,
+      "virtual_ms": 1000,
+      "event": "conversation_opened_once"
+    },
+    {
+      "seq": 3,
+      "virtual_ms": 2000,
+      "event": "badge_disappeared"
+    },
+    {
+      "seq": 4,
+      "virtual_ms": 3000,
+      "event": "read_interrupted"
+    }
+  ],
+  "expected": {
+    "discovery_remains_unresolved": true,
+    "task_not_done": true,
+    "no_second_open": true,
+    "no_send": true
+  }
+}

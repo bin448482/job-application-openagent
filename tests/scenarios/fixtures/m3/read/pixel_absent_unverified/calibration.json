@@ -1,0 +1,27 @@
+{
+  "calibration_id": "synthetic-scenario-calibration",
+  "app": "boss",
+  "profile_id": "synthetic-scenario-m3",
+  "version": "scenario-1",
+  "calibrated": true,
+  "absent_state_verified": false,
+  "resolution": [
+    100,
+    100
+  ],
+  "badge_region": [
+    0.0,
+    0.0,
+    1.0,
+    1.0
+  ],
+  "target_color": [
+    255,
+    0,
+    0
+  ],
+  "tolerance": 0,
+  "threshold_pixels": 10,
+  "source": "synthetic",
+  "calibrated_on": "2026-11-24"
+}

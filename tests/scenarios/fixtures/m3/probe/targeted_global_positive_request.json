@@ -1,0 +1,9 @@
+{
+  "mode": "targeted",
+  "initial_fixture": "tests/scenarios/fixtures/m2/sensor/global_count_no_target/manifest.json",
+  "targeted_fixture": "tests/scenarios/fixtures/m2/sensor/global_count_no_target/manifest.json",
+  "initial_snapshot_id": "00000000-0000-4000-8000-000000000416",
+  "targeted_snapshot_id": "00000000-0000-4000-8000-000000000417",
+  "queued_keys": [],
+  "now": "2026-11-24T00:00:01.000Z"
+}

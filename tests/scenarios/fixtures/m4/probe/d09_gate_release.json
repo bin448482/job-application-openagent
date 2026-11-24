@@ -1,0 +1,5 @@
+{
+  "operation": "gate_lifecycle",
+  "profile_id": "synthetic-release",
+  "os_root": "data/runtime/os-gate"
+}

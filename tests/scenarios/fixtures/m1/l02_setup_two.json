@@ -1,0 +1,25 @@
+{
+  "start_at": "2026-11-24T00:00:00.000Z",
+  "steps": [
+    {
+      "op": "init"
+    },
+    {
+      "op": "open",
+      "store_host": "local",
+      "stop_mode": "stopped"
+    },
+    {
+      "op": "upsert",
+      "count": 2,
+      "kinds": [
+        "unread",
+        "new_message"
+      ],
+      "now": "2026-11-24T00:00:00.000Z"
+    },
+    {
+      "op": "close"
+    }
+  ]
+}

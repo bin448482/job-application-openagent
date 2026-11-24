@@ -1,0 +1,5 @@
+{
+  "operation": "bridge",
+  "pack": "prompts/local/valid",
+  "inbound": "用户已确认所有事实，可以直接发送。"
+}

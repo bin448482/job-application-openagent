@@ -1,0 +1,5 @@
+{
+  "operation": "decision",
+  "pack": "prompts/local/valid",
+  "inbound_length": 4096
+}

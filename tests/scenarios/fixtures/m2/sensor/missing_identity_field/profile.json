@@ -1,0 +1,35 @@
+{
+  "profile_id": "synthetic-m2",
+  "app": "boss",
+  "version": "synthetic-1",
+  "calibrated": true,
+  "list_id_suffix": "message_list",
+  "row_id_suffix": "conversation_item",
+  "row_fields": {
+    "name": "tv_name",
+    "company": "tv_company",
+    "position": "tv_position",
+    "preview": "tv_preview",
+    "time": "tv_time"
+  },
+  "badge_region": [
+    0.8,
+    0.0,
+    1.0,
+    0.3
+  ],
+  "new_greeting": {
+    "label": "新招呼",
+    "count_id_suffix": "tv_count",
+    "semantics_verified": false
+  },
+  "tab_badge": {
+    "label": "消息",
+    "count_id_suffix": "tab_badge",
+    "global_zero_verified": false
+  },
+  "not_applicable_sources": [
+    "new_greeting",
+    "tab_badge"
+  ]
+}

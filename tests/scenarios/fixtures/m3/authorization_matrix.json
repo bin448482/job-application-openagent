@@ -1,0 +1,19 @@
+{
+  "description": "三种授权范围下设备调用与进入次数的独立预期",
+  "variants": {
+    "none": {
+      "device_calls": 0,
+      "opens": 0,
+      "result": "BLOCKED"
+    },
+    "list_only": {
+      "device_calls": "allowed_list_reads",
+      "opens": 0,
+      "result": "partial"
+    },
+    "enter_once": {
+      "opens": 1,
+      "result": "permitted_scope"
+    }
+  }
+}

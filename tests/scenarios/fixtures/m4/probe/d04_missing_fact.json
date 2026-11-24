@@ -1,0 +1,6 @@
+{
+  "operation": "facts",
+  "pack": "prompts/local/valid",
+  "facts": [],
+  "uncertain": true
+}

@@ -1,0 +1,20 @@
+{
+  "hierarchy": {
+    "direction": "incoming",
+    "confidence": "high"
+  },
+  "pixel": {
+    "direction": "outgoing",
+    "confidence": "medium"
+  },
+  "vision": {
+    "direction": "unknown",
+    "confidence": "low"
+  },
+  "expected": {
+    "decision": "undetermined",
+    "human_review": true,
+    "send": false,
+    "delete": false
+  }
+}

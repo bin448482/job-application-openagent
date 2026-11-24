@@ -1,0 +1,33 @@
+{
+  "mode": "ladder",
+  "hierarchy": {
+    "field": "unread_badges",
+    "app": "boss",
+    "profile_id": "synthetic-scenario-m3",
+    "profile_version": "scenario-1",
+    "snapshot_id": "00000000-0000-4000-8000-000000000431",
+    "observed_at": "2026-11-24T00:00:00.000Z",
+    "layout_context": "7dbea26009ae381ff7942c2e854636784945a78063fe7c4979a8f705cc2b637e",
+    "source": "hierarchy",
+    "confidence": "low",
+    "state": "failed",
+    "count": null,
+    "reason_code": "invalid_xml"
+  },
+  "pixel": {
+    "field": "unread_badges",
+    "app": "boss",
+    "profile_id": "synthetic-scenario-m3",
+    "profile_version": "scenario-1",
+    "snapshot_id": "00000000-0000-4000-8000-000000000431",
+    "observed_at": "2026-11-24T00:00:00.000Z",
+    "layout_context": "7dbea26009ae381ff7942c2e854636784945a78063fe7c4979a8f705cc2b637e",
+    "source": "pixel",
+    "confidence": "medium",
+    "state": "present",
+    "count": null,
+    "reason_code": null
+  },
+  "vision": null,
+  "human": null
+}

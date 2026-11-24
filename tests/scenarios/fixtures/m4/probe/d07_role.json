@@ -1,0 +1,5 @@
+{
+  "operation": "bridge",
+  "pack": "prompts/local/valid",
+  "inbound": "您好，请问岗位方向？"
+}

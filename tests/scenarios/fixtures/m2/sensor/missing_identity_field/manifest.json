@@ -1,0 +1,20 @@
+{
+  "profile_path": "profile.json",
+  "xml_paths": [
+    "list.xml"
+  ],
+  "app_version": "synthetic-1",
+  "observed_at": "2026-11-24T00:00:00.000Z",
+  "baseline_rows": [
+    {
+      "conversation_key": "boss:conv:5265d6d5bbbd6e2cb1e6c0a5ed45d1845b549854271e67f6e593324877f5d9d1",
+      "preview_hash": "4884c62d4450fa24dcabc2c8d1523c4241fd4572674e7ed212c1375dbfff1b62",
+      "time_hint": "10:00"
+    }
+  ],
+  "coverage_proof": {
+    "kind": "full_traversal",
+    "top_proven": true,
+    "bottom_proven": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "operation": "decision_run",
+  "pack": "prompts/local/valid",
+  "bridge_modes": [
+    "start_failed",
+    "ok"
+  ],
+  "snapshot_change_at": 2
+}

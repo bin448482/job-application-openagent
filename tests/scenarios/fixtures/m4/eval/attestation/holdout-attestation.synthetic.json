@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "scope": "holdout_local_no_upload",
+  "provider_id": "local-process",
+  "model_id": "synthetic-model",
+  "model_config_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "no_upload": true,
+  "no_cache": true,
+  "no_share": true,
+  "no_telemetry": true,
+  "cloud_fallback_disabled": true,
+  "host_scope": "local",
+  "operator": "synthetic-operator",
+  "attested_at": "2026-11-24T00:00:00.000Z"
+}

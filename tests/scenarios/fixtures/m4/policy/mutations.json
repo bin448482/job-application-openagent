@@ -1,0 +1,53 @@
+{
+  "description": "对合法合成包的文本替换型负例，避免复制真实包",
+  "mutations": {
+    "missing_limits": {
+      "file": "pack.toml",
+      "replace": "[limits]\nmax_chars = 300\nreply_cooldown_seconds = 86400\ndaily_sends = 10\n",
+      "with": ""
+    },
+    "extra_key": {
+      "file": "pack.toml",
+      "append": "\n[extra]\nvalue = 1\n"
+    },
+    "bool_max_chars": {
+      "file": "pack.toml",
+      "replace": "max_chars = 300",
+      "with": "max_chars = true"
+    },
+    "tier_overlap": {
+      "file": "pack.toml",
+      "replace": "A = []",
+      "with": "A = [\"interested.greeting\"]",
+      "then": {
+        "replace": "B = []",
+        "with": "B = [\"interested.greeting\"]"
+      }
+    },
+    "tier_gap": {
+      "file": "pack.toml",
+      "replace": "C = [\"interested.*\", \"rejected.*\", \"declined.*\", \"needs_human.*\", \"uncertain.*\"]",
+      "with": "C = [\"rejected.*\", \"declined.*\", \"needs_human.*\", \"uncertain.*\"]"
+    },
+    "unsafe_a": {
+      "file": "pack.toml",
+      "replace": "A = []",
+      "with": "A = [\"interested.salary\"]"
+    },
+    "missing_disclosure_marker": {
+      "file": "pack.toml",
+      "replace": "text = \"个人开发AI助手\"",
+      "with": "text = \"自动回复\""
+    },
+    "path_in_style": {
+      "file": "pack.toml",
+      "replace": "tone = \"tone.md\"",
+      "with": "tone = \"../tone.md\""
+    }
+  },
+  "expected": {
+    "invalid_before_device": true,
+    "no_truncation_to_valid": true,
+    "no_device_or_model_calls": true
+  }
+}

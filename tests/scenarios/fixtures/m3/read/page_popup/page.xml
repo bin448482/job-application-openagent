@@ -1,0 +1,1 @@
+<hierarchy rotation="0"><node class="android.widget.FrameLayout" package="com.hpbr.bosszhipin" bounds="[0,0][1080,2400]"><node text="温馨提示" class="android.widget.TextView" bounds="[0,2200][180,2260]"/><node text="手机号登录" class="android.widget.TextView" bounds="[200,2200][380,2260]"/></node></hierarchy>

@@ -1,0 +1,31 @@
+{
+  "description": "两个合成 profile 争同一共享设备门禁的声明式场景",
+  "actors": [
+    "profile-a",
+    "profile-b"
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "actor": "profile-a",
+      "event": "acquire_shared"
+    },
+    {
+      "seq": 2,
+      "actor": "profile-b",
+      "event": "acquire_shared"
+    },
+    {
+      "seq": 3,
+      "actor": "profile-a",
+      "event": "business_db_io_error"
+    }
+  ],
+  "expected": {
+    "single_primary": true,
+    "profile_b_rejected": true,
+    "failure_keeps_occupancy": true,
+    "profile_local_primary_cannot_replace": true,
+    "only_original_owner_releases_after_reconcile": true
+  }
+}

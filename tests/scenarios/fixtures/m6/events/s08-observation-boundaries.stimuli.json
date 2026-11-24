@@ -1,0 +1,25 @@
+{
+  "script_id": "SC-S08/three-hooks",
+  "role": "driver_stimuli_only",
+  "clock_start_ms": 0,
+  "events": [
+    {
+      "seq": 1,
+      "virtual_ms": 0,
+      "event": "arrival_before_safe_point",
+      "arrival_at": 0
+    },
+    {
+      "seq": 2,
+      "virtual_ms": 1000,
+      "event": "arrival_after_checkpoint_visible_at_refresh",
+      "arrival_at": 900
+    },
+    {
+      "seq": 3,
+      "virtual_ms": 2000,
+      "event": "arrival_after_refresh_not_yet_observed",
+      "arrival_at": 1900
+    }
+  ]
+}

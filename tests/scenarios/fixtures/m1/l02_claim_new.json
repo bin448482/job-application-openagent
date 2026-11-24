@@ -1,0 +1,19 @@
+{
+  "start_at": "2026-11-24T00:00:00.000Z",
+  "steps": [
+    {
+      "op": "barrier"
+    },
+    {
+      "op": "open",
+      "store_host": "local",
+      "stop_mode": "stopped"
+    },
+    {
+      "op": "claim",
+      "kind": "new_message",
+      "owner_id": "00000000-0000-4000-8000-000000000022",
+      "now": "2026-11-24T00:00:00.000Z"
+    }
+  ]
+}

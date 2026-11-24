@@ -1,0 +1,63 @@
+{
+  "profile_id": "synthetic-scenario-m3",
+  "app": "boss",
+  "version": "scenario-1",
+  "calibrated": true,
+  "selectors": {
+    "bottom_labels": [
+      "职位",
+      "消息",
+      "发现",
+      "我的"
+    ],
+    "popup_markers": [
+      "温馨提示"
+    ],
+    "login_markers": [
+      "手机号登录"
+    ],
+    "recommend_markers": [
+      "综合推荐"
+    ],
+    "chat_list_suffix": "recyclerView",
+    "chat_detail_suffixes": [
+      "mRecycleView",
+      "et_msg"
+    ],
+    "job_description_suffix": "tv_description",
+    "job_chat_suffixes": [
+      "btn_chat",
+      "btn_continue_chat"
+    ],
+    "job_title_suffix": "tv_position_name",
+    "job_salary_suffix": "tv_salary_statue",
+    "job_company_suffix": "tv_company_name",
+    "job_recruiter_suffix": "tv_recruiter",
+    "job_location_suffix": "tv_location",
+    "conversation_list_suffix": "mRecycleView",
+    "conversation_title_suffix": "tv_title",
+    "conversation_subtitle_suffix": "tv_sub_title",
+    "conversation_row_suffix": "chat_message_row",
+    "conversation_text_suffix": "tv_content_text",
+    "conversation_time_suffix": "tv_time",
+    "conversation_system_suffix": "tv_system_tip",
+    "conversation_card_suffix": "job_card_container",
+    "conversation_avatar_suffix": "iv_avatar",
+    "conversation_bubble_suffix": "bubble",
+    "conversation_status_suffix": "tv_sent_status",
+    "conversation_stable_id_suffix": "msg_uid",
+    "conversation_stable_id_verified": true,
+    "unread_list_suffix": "recyclerView",
+    "unread_row_suffix": "message_row",
+    "unread_name_suffix": "tv_name",
+    "unread_company_suffix": "tv_company",
+    "unread_position_suffix": "tv_position",
+    "unread_badge_region": [
+      0.0,
+      0.0,
+      0.2,
+      1.0
+    ],
+    "unread_badge_class": "android.widget.TextView"
+  }
+}

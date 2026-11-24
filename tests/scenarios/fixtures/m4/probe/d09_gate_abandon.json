@@ -1,0 +1,6 @@
+{
+  "operation": "gate_abandon",
+  "profile_id": "synthetic-abandon",
+  "owner_pid": 999999,
+  "os_root": "data/runtime/os-gate"
+}

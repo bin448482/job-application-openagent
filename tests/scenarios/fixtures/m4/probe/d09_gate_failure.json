@@ -1,0 +1,5 @@
+{
+  "operation": "gate_failure",
+  "pack": "prompts/local/valid",
+  "os_root": "data/runtime/os-gate"
+}

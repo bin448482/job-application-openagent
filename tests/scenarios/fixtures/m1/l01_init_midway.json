@@ -1,0 +1,12 @@
+{
+  "start_at": "2026-11-24T00:00:00.000Z",
+  "steps": [
+    {
+      "op": "init",
+      "fault_at": 2
+    },
+    {
+      "op": "inspect_raw"
+    }
+  ]
+}

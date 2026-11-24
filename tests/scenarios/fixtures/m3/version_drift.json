@@ -1,0 +1,10 @@
+{
+  "profile_version": "synthetic-1",
+  "observed_app_version": "synthetic-2",
+  "control_changed": true,
+  "expected": {
+    "read_result": "undetermined/uncalibrated_profile",
+    "reuse_old_coordinates": false,
+    "new_action": false
+  }
+}

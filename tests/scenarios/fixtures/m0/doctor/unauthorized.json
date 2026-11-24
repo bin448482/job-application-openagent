@@ -1,0 +1,11 @@
+{
+  "devices": [
+    {
+      "alias": "primary",
+      "state": "unauthorized"
+    }
+  ],
+  "selected_alias": "primary",
+  "unlocked": null,
+  "foreground_app": "unknown"
+}

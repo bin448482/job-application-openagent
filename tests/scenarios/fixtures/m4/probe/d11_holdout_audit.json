@@ -1,0 +1,6 @@
+{
+  "operation": "eval",
+  "pack": "prompts/local/eval",
+  "mode": "holdout_audit",
+  "batch_id": "synthetic-batch"
+}

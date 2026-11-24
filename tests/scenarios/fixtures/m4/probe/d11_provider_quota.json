@@ -1,0 +1,7 @@
+{
+  "operation": "eval",
+  "pack": "prompts/local/eval",
+  "suite": "public",
+  "mode": "eval",
+  "bridge_error": "bridge_quota"
+}

@@ -1,0 +1,19 @@
+{
+  "start_at": "2026-11-24T00:00:00.000Z",
+  "steps": [
+    {
+      "op": "init"
+    },
+    {
+      "op": "prepare",
+      "mode": "set_user_version",
+      "value": 99
+    },
+    {
+      "op": "init"
+    },
+    {
+      "op": "inspect_raw"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "manifest.json": {
+    "exit_code": 0,
+    "result_status": "ok",
+    "unread_state": "present",
+    "stop_reason": null,
+    "candidate_kinds": [
+      "new_message"
+    ],
+    "discovery_count": 1
+  }
+}

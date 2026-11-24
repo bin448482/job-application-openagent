@@ -1,0 +1,15 @@
+{
+  "operation": "render",
+  "pack": "prompts/local/valid",
+  "envelope_mutation": {
+    "op": "set",
+    "path": [
+      "context"
+    ],
+    "value": [
+      "a",
+      "b",
+      "c"
+    ]
+  }
+}

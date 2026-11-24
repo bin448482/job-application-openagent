@@ -1,0 +1,5 @@
+{
+  "operation": "facts_negative",
+  "profile_id": "synthetic-facts-neg",
+  "pack": "prompts/local/eval"
+}

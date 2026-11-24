@@ -1,0 +1,5 @@
+{
+  "operation": "decision",
+  "pack": "prompts/local/valid",
+  "serialization": "array"
+}

@@ -1,0 +1,18 @@
+{
+  "description": "快照/恢复三值摘要与中断负例",
+  "cases": [
+    "missing_manifest",
+    "manifest_hash_mismatch",
+    "snapshot_hash_mismatch",
+    "target_exists",
+    "base_mismatch",
+    "interrupted_copy"
+  ],
+  "expected": {
+    "three_hashes_equal": true,
+    "base_matches": true,
+    "no_overwrite": true,
+    "no_half_pack_loaded": true,
+    "same_profile_quota_preserved": true
+  }
+}

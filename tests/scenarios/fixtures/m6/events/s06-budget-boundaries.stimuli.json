@@ -1,0 +1,26 @@
+{
+  "script_id": "SC-S06/budget-boundaries",
+  "role": "driver_stimuli_only",
+  "limits": {
+    "round_seconds": [
+      899.999,
+      900,
+      900.001
+    ],
+    "device_calls": [
+      199,
+      200,
+      201
+    ],
+    "candidates": [
+      19,
+      20,
+      21
+    ],
+    "job_seconds": [
+      29.999,
+      30,
+      30.001
+    ]
+  }
+}

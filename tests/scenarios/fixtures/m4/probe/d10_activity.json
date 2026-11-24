@@ -1,0 +1,5 @@
+{
+  "operation": "activity",
+  "profile_id": "synthetic-activity",
+  "os_root": "data/runtime/os-gate"
+}

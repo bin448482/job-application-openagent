@@ -1,0 +1,6 @@
+{
+  "operation": "bridge",
+  "pack": "prompts/local/valid",
+  "provider": "local-process",
+  "case_id": "policy-job-card"
+}

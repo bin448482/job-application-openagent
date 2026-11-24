@@ -1,0 +1,11 @@
+{
+  "operation": "decision",
+  "pack": "prompts/local/valid",
+  "envelope_mutation": {
+    "op": "set",
+    "path": [
+      "schema_version"
+    ],
+    "value": true
+  }
+}

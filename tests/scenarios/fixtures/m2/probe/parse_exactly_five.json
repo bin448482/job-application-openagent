@@ -1,0 +1,5 @@
+{
+  "mode": "parse",
+  "fixture": "tests/scenarios/fixtures/m2/sensor/positive/manifest.json",
+  "now": "2026-11-24T00:00:05.000Z"
+}
