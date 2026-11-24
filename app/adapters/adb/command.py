@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 ADB_TIMEOUT_SECONDS = 5
+_REAL_POPEN = subprocess.Popen
 
 
 class ProcessFamilyBound:
@@ -59,7 +60,7 @@ class ProcessFamilyBound:
             kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
             kernel32.CloseHandle.restype = wintypes.BOOL
             process = kernel32.OpenProcess(
-                0x0100 | 0x0200, False, int(pid)
+                0x0100 | 0x0001, False, int(pid)
             )  # SET_QUOTA | TERMINATE
             if not process:
                 return False
@@ -70,6 +71,85 @@ class ProcessFamilyBound:
             finally:
                 kernel32.CloseHandle(process)
             return bool(assigned)
+        except Exception:
+            return False
+
+    def resume(self, pid: int) -> bool:
+        """恢复由 CREATE_SUSPENDED 启动的进程主线程；失败返回 False。"""
+        if os.name != "nt":
+            return False
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class ThreadEntry(ctypes.Structure):
+                """THREADENTRY32 固定字段，用于定位进程主线程。"""
+
+                _fields_ = [
+                    ("dwSize", wintypes.DWORD),
+                    ("cntUsage", wintypes.DWORD),
+                    ("th32ThreadID", wintypes.DWORD),
+                    ("th32OwnerProcessID", wintypes.DWORD),
+                    ("tpBasePri", ctypes.c_long),
+                    ("tpDeltaPri", ctypes.c_long),
+                    ("dwFlags", wintypes.DWORD),
+                ]
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.CreateToolhelp32Snapshot.argtypes = (
+                wintypes.DWORD,
+                wintypes.DWORD,
+            )
+            kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+            kernel32.Thread32First.argtypes = (
+                wintypes.HANDLE,
+                ctypes.POINTER(ThreadEntry),
+            )
+            kernel32.Thread32First.restype = wintypes.BOOL
+            kernel32.Thread32Next.argtypes = (
+                wintypes.HANDLE,
+                ctypes.POINTER(ThreadEntry),
+            )
+            kernel32.Thread32Next.restype = wintypes.BOOL
+            kernel32.OpenThread.argtypes = (
+                wintypes.DWORD,
+                wintypes.BOOL,
+                wintypes.DWORD,
+            )
+            kernel32.OpenThread.restype = wintypes.HANDLE
+            kernel32.ResumeThread.argtypes = (wintypes.HANDLE,)
+            kernel32.ResumeThread.restype = wintypes.DWORD
+            kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+            kernel32.CloseHandle.restype = wintypes.BOOL
+            snapshot = kernel32.CreateToolhelp32Snapshot(0x00000004, 0)
+            if not snapshot or snapshot == -1:
+                return False
+            entry = ThreadEntry()
+            entry.dwSize = ctypes.sizeof(ThreadEntry)
+            resumed = False
+            try:
+                more = kernel32.Thread32First(snapshot, ctypes.byref(entry))
+                while more:
+                    if entry.th32OwnerProcessID == int(pid):
+                        thread = kernel32.OpenThread(
+                            0x0002, False, entry.th32ThreadID
+                        )
+                        if thread:
+                            try:
+                                if (
+                                    kernel32.ResumeThread(thread)
+                                    != 0xFFFFFFFF
+                                ):
+                                    resumed = True
+                            finally:
+                                kernel32.CloseHandle(thread)
+                    entry.dwSize = ctypes.sizeof(ThreadEntry)
+                    more = kernel32.Thread32Next(
+                        snapshot, ctypes.byref(entry)
+                    )
+            finally:
+                kernel32.CloseHandle(snapshot)
+            return resumed
         except Exception:
             return False
 
@@ -330,6 +410,7 @@ def run_adb(
     on_pid: Callable[[int], None] | None = None,
     on_done: Callable[[int, bool, bool], None] | None = None,
     bound_factory: Callable[[], ProcessFamilyBound | None] | None = None,
+    real_process_check: Callable[[object], bool] | None = None,
 ) -> subprocess.CompletedProcess:
     """在共享门禁复核后执行一次有界命令；可选记录进程身份，失败不重试。"""
     if before is not None:
@@ -356,6 +437,8 @@ def run_adb(
         if completed.returncode != 0:
             raise AdbCommandFailure("adb_nonzero")
         return completed
+    bound = (bound_factory or ProcessFamilyBound.create)()
+    creationflags = 0x00000004 if bound is not None else 0  # CREATE_SUSPENDED
     try:
         process = subprocess.Popen(
             args,
@@ -365,11 +448,35 @@ def run_adb(
             text=not binary,
             encoding=None if binary else "utf-8",
             errors=None if binary else "replace",
+            creationflags=creationflags,
         )
     except FileNotFoundError:
+        if bound is not None:
+            bound.close()
         raise AdbCommandFailure("adb_missing") from None
     except OSError:
+        if bound is not None:
+            bound.close()
         raise AdbCommandFailure("adb_oserror") from None
+    real_process = (real_process_check or _is_real_process)(process)
+    if bound is not None:
+        if not real_process:
+            bound.close()
+            bound = None
+        else:
+            assigned = bound.assign(process.pid)
+            resumed = bound.resume(process.pid)
+            if not resumed:
+                process.kill()
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    pass
+                bound.close()
+                raise AdbCommandFailure("adb_oserror") from None
+            if not assigned:
+                bound.close()
+                bound = None
     try:
         on_pid(process.pid)
     except Exception:
@@ -378,11 +485,10 @@ def run_adb(
             process.wait(timeout=1)
         except subprocess.TimeoutExpired:
             pass
+        if bound is not None:
+            bound.terminate()
+            bound.close()
         raise AdbCommandFailure("adb_oserror") from None
-    bound = (bound_factory or ProcessFamilyBound.create)()
-    if bound is not None and not bound.assign(process.pid):
-        bound.close()
-        bound = None
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -400,6 +506,15 @@ def run_adb(
     if completed.returncode != 0:
         raise AdbCommandFailure("adb_nonzero")
     return completed
+
+
+def _is_real_process(process: object) -> bool:
+    """只在真实 Windows Popen（含真实 _handle）上启用 Job 约束，避免 mock/fake PID。"""
+    try:
+        real_class = isinstance(process, _REAL_POPEN)
+    except TypeError:
+        return False
+    return real_class and isinstance(getattr(process, "_handle", None), int)
 
 
 def _finalize(

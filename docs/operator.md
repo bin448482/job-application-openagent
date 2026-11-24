@@ -383,6 +383,7 @@ python -m app action reconcile --profile demo --pack prompts/local/demo --mode d
 - 第4轮返修补充：`perform_action` 要求非空完整身份标签并写入计划，缺失在 validate 阶段拒绝、执行器 0 调用；联系方式效果只统计本动作类型槽位，确认阶段重新核对同类型槽位状态；删除的 before/dialog/after 分别以目标/锚点祖先链的显式非滚动容器证明覆盖。命令账本按动作记录实际命令族后代，缺失/坏记录/枚举失败/写入失败保持 unknown；`on_pid` 失败与超时 kill 都有有界回收。`action reconcile --device --serial` 复用 `AdbRecoveryObserver` 读取实际现场/IME，坏 XML 或错 IME 拒绝；采集保存、guard 拒绝均记 started 与单一终态。
 - 第5轮返修补充：`action perform` 必填 `--contact/--company/--position`，三元组重算的会话键必须与持久任务一致，缩减/冲突身份在 pending 与设备调用前 `precondition_failed`；计划目标与标签只由该身份派生。联系方式由唯一槽位定位（可点按钮上溯到仅含本类型的最外层容器）统一可用性、dialog 复核与效果差分；另一类型已处理不影响本类型。删除覆盖只认可真正列表容器（RecyclerView/ListView/GridView/ScrollView/ViewPager）的显式 `scrollable=false` 与 bounds 覆盖，行/锚点自身 false 不算。命令账本改为 begin→PID/后代→complete 分段，公开入口在首次原 IME 前绑定，点击/输入/IME 与共享采集命令都接入；结束再展开记录晚生后代，部分写/枚举失败/未闭合都 unknown，等待与回收均有预算且不重发。
 - 第6轮返修补充：列表覆盖要求容器内全部可见行/后代都在容器范围内、容器未被外层可见区域裁剪，缺失/坏/零面积/自相矛盾 bounds 不默认成功；同分组两个独立同类型槽位保留歧义并零点击，效果定位不要求按钮动作后仍 enabled，本类型精确新状态仍可证明 `request_sent`。命令族使用 Windows Job Object 做有限有界终止/核验，无平台有界或未证明族停止时保持 unknown 与隔离；`store.task_conversation` 读取故障在 validate 阶段记录 started→单一固定失败终态并保持 `store_io_error`、零设备、零 pending。
+- 第7轮返修补充：列表覆盖对容器内所有有可见意义的后代强制可解析 bounds，并逐层核验全部祖先的 bounds 与滚动事实（不再遇首个合法祖先即停止）。命令族在 Popen 前先建 Job，进程以 `CREATE_SUSPENDED` 启动、加入 Job 后恢复主线程，权限为 `PROCESS_SET_QUOTA|PROCESS_TERMINATE`；任一命令未证明族停止时公开观察 `command_quiet=false`，保留已证动作效果但不报 `gate_converged`、不释放共享占用，生成人工卡；本机自有合成 Python 子孙的真实 Job 正常停止正例单独验证。
 
 ## 八、显式真实设备模式
 只有同时给出 `--device`、`--serial` 与 `--confirm-device` 才启用真实探针：

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
+import sys
 import tempfile
 import unittest
 from dataclasses import replace
@@ -827,6 +830,182 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             self.assertEqual(outcome.evidence.outcome, "performed")
             self.assertEqual(outcome.evidence.effect, "request_sent")
 
+    def test_delete_visible_leaf_bad_bounds_blocks_each_phase(self) -> None:
+        """行内可见叶节点缺失/坏/零面积 bounds 在三阶段分别拒绝。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+
+        def page(row: str) -> str:
+            """把行放入合法 RecyclerView 容器。"""
+            return (
+                '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+                ' scrollable="false" bounds="[0,0][1000,1800]">'
+                + row
+                + '</node></hierarchy>'
+            )
+
+        leaf_variants = {
+            "missing": "<node text=\"叶\" />",
+            "bad": '<node text="叶" bounds="bad" />',
+            "zero": '<node text="叶" bounds="[10,10][10,10]" />',
+        }
+        for name, leaf in leaf_variants.items():
+            with self.subTest(phase="before", leaf=name):
+                row = (
+                    '<node text="合成联系人" bounds="[0,0][1000,200]">'
+                    '<node text="消息" bounds="[10,10][500,60]" />'
+                    + leaf
+                    + '</node>'
+                )
+                invalid = page(row)
+                runner, calls = self._custom_run(
+                    (invalid, invalid, invalid)
+                )
+                with patch("subprocess.run", side_effect=runner):
+                    executor.execute(delete)
+                self.assertEqual([c for c in calls if "tap" in c], [])
+
+            with self.subTest(phase="dialog", leaf=name):
+                complete = page(
+                    '<node text="合成联系人" bounds="[0,0][1000,200]">'
+                    '<node text="消息" bounds="[10,10][500,60]" />'
+                    '<node text="叶" bounds="[10,60][200,100]" /></node>'
+                )
+                dialog = page(
+                    '<node text="合成联系人" bounds="[0,0][1000,200]">'
+                    '<node text="消息" bounds="[10,10][500,60]" />'
+                    + leaf
+                    + '</node>'
+                )
+                runner, calls = self._custom_run(
+                    (complete, dialog, complete)
+                )
+                with patch("subprocess.run", side_effect=runner):
+                    observation = executor.execute(delete)
+                self.assertEqual(len([c for c in calls if "tap" in c]), 2)
+                self.assertNotEqual(
+                    derive_action_outcome(observation).evidence.outcome,
+                    "performed",
+                )
+
+            with self.subTest(phase="after", leaf=name):
+                complete = page(
+                    '<node text="合成联系人" bounds="[0,0][1000,200]">'
+                    '<node text="消息" bounds="[10,10][500,60]" />'
+                    '<node text="叶" bounds="[10,60][200,100]" /></node>'
+                )
+                after = page(
+                    '<node text="消息" bounds="[10,10][500,60]" />'
+                    + leaf
+                )
+                runner, calls = self._custom_run(
+                    (complete, complete, after)
+                )
+                with patch("subprocess.run", side_effect=runner):
+                    observation = executor.execute(delete)
+                self.assertEqual(len([c for c in calls if "tap" in c]), 3)
+                self.assertNotEqual(
+                    derive_action_outcome(observation).evidence.outcome,
+                    "performed",
+                )
+
+    def test_delete_outer_clip_or_scroll_blocks_each_phase(self) -> None:
+        """更外层祖先裁剪或 scrollable=true 在三阶段分别拒绝。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+
+        def page(row: str, outer: str = "") -> str:
+            """把行放入合法容器，可选更外层包裹。"""
+            inner = (
+                '<node class="androidx.recyclerview.widget.RecyclerView"'
+                ' scrollable="false" bounds="[0,0][1000,1800]">'
+                + row
+                + '</node>'
+            )
+            return (
+                '<hierarchy>'
+                + (outer.replace("INNER", inner) if outer else inner)
+                + '</hierarchy>'
+            )
+
+        row = (
+            '<node text="合成联系人" bounds="[0,0][1000,200]">'
+            '<node text="消息" bounds="[10,10][500,60]" /></node>'
+        )
+        after_row = '<node text="消息" bounds="[10,10][500,60]" />'
+        clip = (
+            '<node class="android.widget.FrameLayout" bounds="[0,0][500,1800]">'
+            'INNER</node>'
+        )
+        scroll = (
+            '<node class="android.widget.ScrollView" scrollable="true"'
+            ' bounds="[0,0][1000,2000]">INNER</node>'
+        )
+        complete = page(row)
+        for name, outer in (("clip", clip), ("scroll", scroll)):
+            with self.subTest(phase="before", case=name):
+                invalid = page(row, outer)
+                runner, calls = self._custom_run(
+                    (invalid, invalid, invalid)
+                )
+                with patch("subprocess.run", side_effect=runner):
+                    executor.execute(delete)
+                self.assertEqual([c for c in calls if "tap" in c], [])
+
+            with self.subTest(phase="dialog", case=name):
+                dialog = page(row, outer)
+                runner, calls = self._custom_run(
+                    (complete, dialog, complete)
+                )
+                with patch("subprocess.run", side_effect=runner):
+                    observation = executor.execute(delete)
+                self.assertEqual(len([c for c in calls if "tap" in c]), 2)
+                self.assertNotEqual(
+                    derive_action_outcome(observation).evidence.outcome,
+                    "performed",
+                )
+
+            with self.subTest(phase="after", case=name):
+                after = page(after_row, outer)
+                runner, calls = self._custom_run(
+                    (complete, complete, after)
+                )
+                with patch("subprocess.run", side_effect=runner):
+                    observation = executor.execute(delete)
+                self.assertEqual(len([c for c in calls if "tap" in c]), 3)
+                self.assertNotEqual(
+                    derive_action_outcome(observation).evidence.outcome,
+                    "performed",
+                )
+
     def test_delete_complete_list_removal_is_performed(self) -> None:
         """完整列表内目标消失且锚点仍在时为 deleted 正例。"""
         gate = FakeGate()
@@ -1148,6 +1327,10 @@ class AdbActionPrimitiveTests(unittest.TestCase):
                 """记录加入结果。"""
                 return self._assign
 
+            def resume(self, pid: int) -> bool:
+                """替身进程无需真实恢复。"""
+                return True
+
             def terminate(self) -> bool:
                 """记录终止。"""
                 self.terminated = True
@@ -1185,6 +1368,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
                         on_pid=on_pid,
                         on_done=on_done,
                         bound_factory=lambda: bound,
+                        real_process_check=lambda process: True,
                     )
                 state = store.check(key, 4100, lambda pid: "stopped")
                 return state, bound
@@ -1230,6 +1414,10 @@ class AdbActionPrimitiveTests(unittest.TestCase):
                 """返回失败。"""
                 return False
 
+            def resume(self, pid: int) -> bool:
+                """替身进程无需真实恢复。"""
+                return True
+
             def close(self) -> None:
                 """无关闭。"""
 
@@ -1258,6 +1446,7 @@ class AdbActionPrimitiveTests(unittest.TestCase):
                     on_pid=on_pid,
                     on_done=on_done,
                     bound_factory=lambda: Bound(),
+                    real_process_check=lambda process: True,
                 )
             self.assertIn(4200, store.identities(key))
             states = {4100: "stopped", 4200: "alive"}
@@ -1265,6 +1454,50 @@ class AdbActionPrimitiveTests(unittest.TestCase):
                 store.check(key, 4100, lambda pid: states.get(pid, "unknown")),
                 "unknown",
             )
+
+    def test_real_windows_job_bounds_synthetic_child(self) -> None:
+        """真实本机 Job 正常约束自有合成 Python 子孙并在有界收尾后全停。"""
+        if os.name != "nt":
+            self.skipTest("Windows Job Object only")
+        from app.adapters.adb.command import ProcessFamilyBound, run_adb
+        from app.adapters.sqlite.repo import default_stop_checker
+
+        probe = ProcessFamilyBound.create()
+        if probe is None:
+            self.skipTest("native Job unavailable")
+        probe.close()
+        script = (
+            "import subprocess,sys\n"
+            "c=subprocess.Popen([sys.executable,'-c',"
+            "'import time; time.sleep(30)'],"
+            "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
+            "print(c.pid, flush=True)\n"
+        )
+        results: list[tuple[bool, bool]] = []
+        completed = run_adb(
+            [sys.executable, "-c", script],
+            gate=FakeGate(),
+            on_pid=lambda pid: None,
+            on_done=lambda pid, bounded, proven: results.append(
+                (bounded, proven)
+            ),
+        )
+        self.assertEqual(results, [(True, True)])
+        child = int(completed.stdout.strip().splitlines()[0])
+        state = "unknown"
+        for _ in range(40):
+            state = default_stop_checker(child)
+            if state == "stopped":
+                break
+            import time
+
+            time.sleep(0.05)
+        if state != "stopped":
+            try:
+                os.kill(child, signal.SIGTERM)
+            except OSError:
+                pass
+        self.assertEqual(state, "stopped")
 
     def test_run_adb_records_descendant_tree_through_pid_callback(self) -> None:
         """实际 Popen 回调记录命令族子孙，末端口活时恢复检查拒绝。"""

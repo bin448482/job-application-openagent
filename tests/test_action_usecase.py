@@ -600,6 +600,91 @@ class ActionUseCaseTests(unittest.TestCase):
         self.assertEqual(validate[-1]["error_category"], "store")
         self.assertFalse(log.degraded)
 
+    def test_command_family_unknown_keeps_public_scene_unconverged(self) -> None:
+        """账本未证明命令全停时保留已证效果，但不报 gate_converged/不释放。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore
+
+        ime = "com.example.default/.Ime"
+        body = "合成回复正文"
+        before = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" /></node></hierarchy>'
+        )
+        readback = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" />'
+            '<node class="android.widget.EditText" text="合成回复正文" />'
+            '</node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" />'
+            '<node text="合成回复正文" />'
+            '<node class="android.widget.EditText" text="" /></node></hierarchy>'
+        )
+        state = {"cat": 0, "ime": ime}
+
+        class Proc:
+            """合成 Popen：按参数返回 IME 或 before/readback/after。"""
+
+            def __init__(self, args: list[str]) -> None:
+                """保存命令参数与成功返回码。"""
+                self.args = args
+                self.pid = 9000
+                self.returncode = 0
+
+            def communicate(self, timeout: float | None = None):
+                """返回合成输出。"""
+                if "ime" in self.args and "set" in self.args:
+                    state["ime"] = self.args[-1]
+                    return "", ""
+                if "settings" in self.args:
+                    return state["ime"], ""
+                if "cat" in self.args:
+                    index = state["cat"]
+                    state["cat"] = index + 1
+                    return (before, readback, after)[min(index, 2)], ""
+                return "", ""
+
+            def kill(self) -> None:
+                """无 kill。"""
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-prop-"
+        ) as directory:
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=self.gate,
+                command_store=CommandIdentityStore(Path(directory)),
+                child_scan=lambda pid: [],
+            )
+            with (
+                patch(
+                    "subprocess.Popen",
+                    side_effect=lambda args, **kwargs: Proc(args),
+                ),
+                patch(
+                    "app.adapters.adb.actions._utc_now",
+                    return_value=self.clock.now(),
+                ),
+            ):
+                result = self._perform(
+                    executor,
+                    ime_component="com.example/.Ime",
+                )
+        self.assertEqual(result["evidence"]["outcome"], "performed")
+        self.assertEqual(result["evidence"]["effect"], "sent")
+        self.assertEqual(result["state"], "unknown")
+        self.assertFalse(result["gate_converged"])
+        self.assertIsNotNone(result["card"])
+
     def test_leased_without_start_has_zero_device_calls(self) -> None:
         """leased 未 start 时，即使需要 IME 也不读设备、不写 pending。"""
         other_tmp = tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-leased-")

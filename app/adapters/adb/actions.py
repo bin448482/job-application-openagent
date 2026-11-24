@@ -62,6 +62,7 @@ class AdbActionExecutor:
         self._command_store = command_store
         self._child_scan = child_scan or _child_processes
         self._current_action_key: str | None = None
+        self._family_unproven = False
         self._screen = screen_reader or AdbScreenReader(
             evidence_dir=self._evidence_dir,
             adb=adb,
@@ -74,6 +75,7 @@ class AdbActionExecutor:
         if not isinstance(action_key, str) or not action_key:
             raise ValueError("action key is invalid")
         self._current_action_key = action_key
+        self._family_unproven = False
 
     def read_current_ime(
         self, *, before_command: Callable[[], None] | None = None
@@ -114,6 +116,8 @@ class AdbActionExecutor:
         before_command: Callable[[], None] | None = None,
     ) -> ActionObservation:
         """先验证动作前置，再执行一次；只接受动作目标对应的前后新增变化。"""
+        if self._current_action_key != plan.action_key:
+            self._family_unproven = False
         self._current_action_key = plan.action_key
         before_xml = self._read_hierarchy(
             plan.action_key,
@@ -546,7 +550,7 @@ class AdbActionExecutor:
             clicked=clicked,
             error=None,
             scene_settled=not confirmation_open and input_box_empty,
-            command_quiet=True,
+            command_quiet=not self._family_unproven,
             confirmation_open=confirmation_open,
             input_box_empty=input_box_empty,
             ime_original=plan.ime_original,
@@ -741,9 +745,11 @@ class AdbActionExecutor:
         )
 
     def _record_command_end(self, pid: int, bounded: bool, proven: bool) -> None:
-        """命令结束后闭合命令族；平台有界时以核验结果为准，否则有界枚举。"""
+        """命令结束后闭合命令族；未证明全停时让公开观察保持现场未收敛。"""
         if self._command_store is None or self._current_action_key is None:
             return
+        if not bounded or not proven:
+            self._family_unproven = True
         self._command_store.finish_family(
             self._current_action_key,
             pid,
@@ -938,7 +944,16 @@ def _list_complete(xml_text: str, label: str) -> bool:
         if node is container:
             continue
         rect = _support_parse_bounds(node)
-        if rect is not None and not _support_rect_inside(rect, container_rect):
+        visible = bool(
+            node.get("text")
+            or node.get("clickable") == "true"
+            or node.get("resource-id")
+        )
+        if rect is None:
+            if visible or node.get("bounds") is not None:
+                return False
+            continue
+        if not _support_rect_inside(rect, container_rect):
             return False
     current = parents.get(container)
     while current is not None:
@@ -953,7 +968,6 @@ def _list_complete(xml_text: str, label: str) -> bool:
                 container_rect, outer_rect
             ):
                 return False
-            break
         current = parents.get(current)
     return True
 
