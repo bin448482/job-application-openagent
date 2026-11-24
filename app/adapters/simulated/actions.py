@@ -27,6 +27,8 @@ _OBSERVATION_FIELDS = (
     "contact_slot_available",
     "contact_slot_status",
     "identity_unique",
+    "list_complete",
+    "protections_clear",
     "target_present_before",
     "target_present_after",
     "anchor_present_after",
@@ -79,12 +81,22 @@ class ScriptedActionExecutor:
                 if name in self._raise and type(self._raise[name]) is not bool:
                     raise ValueError("raise directive is invalid")
 
-    def read_current_ime(self) -> str:
+    def read_current_ime(self, *, before_command=None) -> str:
         """返回合成当前 IME；不执行设备命令。"""
+        if before_command is not None:
+            try:
+                before_command()
+            except Exception:
+                raise ActionExecutionError("executor_interrupted", clicked=True) from None
         return self._current_ime
 
-    def execute(self, plan: ActionPlan) -> ActionObservation:
+    def execute(self, plan: ActionPlan, *, before_command=None) -> ActionObservation:
         """按脚本返回一次观察；脚本声明失败时抛出固定执行错误。"""
+        if before_command is not None:
+            try:
+                before_command()
+            except Exception:
+                raise ActionExecutionError("executor_interrupted", clicked=True) from None
         if self._raise is not None:
             clicked = bool(self._raise["clicked"])
             if clicked:
@@ -120,6 +132,7 @@ class ScriptedActionExecutor:
             if value is not None and not is_uuid(value):
                 raise ValueError(f"{name} is invalid")
         parse_utc(data["observed_at"])
+        data["observed_at"] = _utc_now()
         if data["ime_original"] is None:
             data["ime_original"] = self._current_ime
         return ActionObservation(
@@ -127,3 +140,14 @@ class ScriptedActionExecutor:
             action_kind=plan.action_kind,
             **{name: data[name] for name in _OBSERVATION_FIELDS},
         )
+
+
+def _utc_now() -> str:
+    """返回本次合成观察的毫秒 UTC 时间。"""
+    from datetime import datetime, timezone
+
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )

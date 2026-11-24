@@ -170,7 +170,7 @@ M5 的五类不可逆动作是发文本、发简历、换微信、换电话、�
 
 文本额度/冷却直接由 `action_records` 计算：UTC 日期内跨 app 合计 performed+sent 文本，按 profile/app/会话冷却；任一文本 pending/unknown 阻断新发送。额度检查与本次 pending/键锁同一事务，换包、restore、重启或调低额度不清零历史；附件 `request_sent`、`not_performed`、`unknown` 不充当成功文本。`pending/unknown/cancelled` 生成固定人工卡，`confirm_performed`/`confirm_not_performed` 需本轮显式确认、当前证据与原命令停止/现场/IME 收敛，`abandon` 只关任务且不解锁。受控接管隔离占用必须在原 profile/原库身份下带 `--confirm-recovery` 并确认原 PID 已停止；正常 acquire/TTL/PID 消失不会开锁。profile 库从严格 v1 迁移到 v2 时先写不覆盖 SQLite 备份，再单事务追加动作三表；普通 M1 库、额外对象或未知版本不宽放。
 
-`action perform` 只接受 `draft_only`、当前验收、本轮 `--authorize` 与合成动作脚本；CLI 不提供真实 ADB 动作入口，真实动作原语只由 mock subprocess 测试。合成资格为真、`policy_tier="C"` 与 `production_auto_send=false` 并列，不代表真实 A 档或发送授权。真实手机、ADB 坐标/输入法/附件名/联系方式/删除保护/恢复时序、真实 provider 与 M6–M8 调度/清理/灰度仍未验证。
+`action perform` 只接受 `draft_only`、当前验收、本轮 `--authorize` 与合成动作脚本；CLI 不提供真实 ADB 动作入口，真实动作原语只由 mock subprocess 测试。合成资格为真、`policy_tier="C"` 与 `production_auto_send=false` 并列，不代表真实 A 档或发送授权。第1轮审核返修后，动作键与实际目标、实际 store/profile/共享身份、running 租约、每条命令/提交前的当前包与验收、持久化 IME 和原父子命令停止均纳入复核；abandon 后仍可对 cancelled 动作受控确认但不重开任务。真实手机、ADB 坐标/输入法/附件名/联系方式/删除保护/恢复时序、真实 provider 与 M6–M8 调度/清理/灰度仍未验证。
 
 ## 开发环境
 

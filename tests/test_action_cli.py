@@ -148,6 +148,17 @@ class ActionCliTests(unittest.TestCase):
             seed_path.write_text(
                 json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
             )
+        if "--fixture" in argv:
+            import json
+
+            fixture_path = self.root / argv[argv.index("--fixture") + 1]
+            if fixture_path.is_file() and "reconcile" not in argv:
+                fixture = json.loads(fixture_path.read_text("utf-8"))
+                if isinstance(fixture.get("observation"), dict):
+                    fixture["observation"]["observed_at"] = utc_now()
+                    fixture_path.write_text(
+                        json.dumps(fixture, ensure_ascii=False), encoding="utf-8"
+                    )
         return helpers.run_action_cli(
             self.root,
             argv,
@@ -484,8 +495,16 @@ class ActionCliTests(unittest.TestCase):
         code, payload, _ = self._run(base_args)
         self.assertEqual(code, 0, payload)
         self.assertFalse(payload["result"]["eligible"])
-        self.assertEqual(payload["result"]["reason"], "cooldown_active")
+        self.assertEqual(payload["result"]["reason"], "action_conflict")
+        self.assertEqual(payload["result"]["history_state"], "performed")
         self.assertEqual(payload["result"]["quota"]["daily_count"], 1)
+        other_message = "boss:msg:" + canonical_hash({"eligibility": "other"})
+        other_args = list(base_args)
+        other_args[other_args.index("--target-key") + 1] = other_message
+        code, payload, _ = self._run(other_args)
+        self.assertEqual(code, 0, payload)
+        self.assertFalse(payload["result"]["eligible"])
+        self.assertEqual(payload["result"]["reason"], "cooldown_active")
 
     def test_reconcile_confirm_performed_and_not_performed(self) -> None:
         """未决动作经本轮确认与真实证据收敛；核对不足不解锁。"""

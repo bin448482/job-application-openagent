@@ -123,6 +123,7 @@ class StorePort(Protocol):
         confirmation_open: bool,
         ime_restored: bool,
         explicit_confirm: bool,
+        command_stopped: bool,
         now: str,
     ) -> dict[str, object]:
         """经本轮确认与现场收敛后收敛 pending/unknown 动作。"""
@@ -151,6 +152,14 @@ class StorePort(Protocol):
         """只读返回切换前持久化的原 IME 状态；不存在返回 None。"""
         ...
 
+    def save_ime_state(self, action_key: str, original_ime: str, *, now: str) -> None:
+        """在切换 IME 前持久化原值，只允许当前 pending 动作写入。"""
+        ...
+
     def task_conversation(self, lease: Lease, *, now: str) -> str | None:
         """只读返回 running 任务的会话键；租约不符返回 None。"""
+        ...
+
+    def require_running(self, lease: Lease, *, now: str) -> bool:
+        """只读确认任务已 start 为 running 且任务/设备租约完整有效。"""
         ...

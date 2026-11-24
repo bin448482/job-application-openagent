@@ -8,12 +8,13 @@
 
 - `__init__.py`：声明 ADB 适配器包。
 - `device.py`：`AdbDeviceProbe`、`DeviceProbeError`、设备清单解析、`isKeyguardShowing` 判定与 `mCurrentFocus` 前台判定。
-- `screen.py`：`AdbScreenReader`；每次 dump/cat 或 screencap 只用参数数组、`shell=False`、5 秒超时、不重试；层级 XML 与原始 RGBA 保存到调用方指定的本机证据目录，文件名含独立 UUID，返回受控证据名与内存内容。
-- `actions.py`：M5 `AdbActionExecutor`；读取当前 IME、输入文本与前序点击使用参数数组、`shell=False`、5 秒超时；每条子命令前复核共享门禁，单次 attempt 不重试；`clicked` 只表示是否已发出不可逆点击；动作特有观察由前后层级文本差异构造，IME 恢复失败保持未知。当前 CLI 不暴露真实动作入口，只由 mock subprocess 测试。
+- `command.py`：M3/M5 共用 ADB 有界子进程边界；参数数组、`shell=False`、5 秒超时、单次 attempt、可选每命令 before 复核与共享门禁 verify，失败只返回固定类别；`save_evidence` 只在调用方指定本机目录时落盘。
+- `screen.py`：`AdbScreenReader`；每次 dump/cat 或 screencap 复用 `command.py`，层级 XML 与原始 RGBA 保存到调用方指定的本机证据目录，文件名含独立 UUID，返回受控证据名与内存内容。
+- `actions.py`：M5 `AdbActionExecutor`；先解析 before 层级验证唯一身份、列表完整/保护项、编辑器正文、附件名与联系方式槽位，再执行不可逆点击；每一命令前由调用方 guard 复核当前包/验收/租约/门禁，单次 attempt 不重试；输入前实际切换并读回目标 IME，动作后恢复并读回原 IME；`clicked` 只表示是否已发出不可逆点击；动作特有变化只按目标节点的前后新增差分推导，坏 XML 无差分则保持 unknown。当前 CLI 不暴露真实动作入口，只由 mock subprocess 测试。
 
 ## 三、命令与安全契约
 
-- 只用 subprocess 参数数组，`shell=False`；每条命令超时 `5` 秒，不重试。M4c 起 `AdbDeviceProbe`/`AdbScreenReader` 必须接收共享 `DeviceGate`：缺失时在零 subprocess 处抛 `device_not_held`，取得后在每条 `subprocess.run` 之前调用 `verify`；测试用 fake gate，生产 CLI 必须注入。
+- 只用 subprocess 参数数组，`shell=False`；每条命令超时 `5` 秒，不重试。M4c 起 `AdbDeviceProbe`/`AdbScreenReader` 必须接收共享 `DeviceGate`：缺失时在零 subprocess 处抛 `device_not_held`，取得后在每条 `subprocess.run` 之前调用 `verify`；测试用 fake gate，生产 CLI 必须注入。M5 起 `AdbActionExecutor` 还接收调用方 `before_command`，在每条命令前重核当前包/验收/租约/共享身份；动作不可逆点击前先完成前置验证。
 - 未安装 ADB、超时或非零退出归一为 `device_disconnected`；过程日志分别用固定 `adb_missing/adb_timeout/adb_oserror/adb_nonzero` 错误类别，不扩业务原因码。每条命令在 `subprocess.run` 前记录同 `correlation_id` 的 `started`，完成后记录 `ok` 或 `failed`；中断/未归一异常保留 `started` 便于定位。
 - 设备清单只接受 tab 分隔的确定记录；`adb: no devices/emulators found` 等提示行、标题和守护进程行不计入设备数。serial 不在清单也报断连；清单未知状态保守视为 `offline`。
 - 显式 serial 只在本机内存精确匹配，输出逻辑别名固定为 `primary`，不输出真实序列号或窗口原文。

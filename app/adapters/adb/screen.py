@@ -7,6 +7,12 @@ import time
 import uuid
 from pathlib import Path
 
+from app.adapters.adb.command import (
+    ADB_TIMEOUT_SECONDS,
+    AdbCommandFailure,
+    run_adb,
+    save_evidence,
+)
 from app.ports.device_gate import DeviceGateError
 from app.ports.screen import (
     DeviceGate,
@@ -16,7 +22,6 @@ from app.ports.screen import (
 )
 from app.process_log import ProcessLog, elapsed_ms
 
-ADB_TIMEOUT_SECONDS = 5
 DEVICE_TMP_XML = "/data/local/tmp/m3-ui.xml"
 
 
@@ -95,35 +100,21 @@ class AdbScreenReader:
         command: str,
         binary: bool,
     ) -> subprocess.CompletedProcess:
-        """每条 ADB 子命令前要求并复核共享门禁，再执行一次有界子进程。"""
+        """复用共享 ADB 边界；每条命令前复核门禁，单次 attempt 不重试。"""
         self._require_gate()
         assert self._gate is not None
-        self._gate.verify()
         started = time.perf_counter()
         self._record(stage, command, "started", 0)
         try:
-            completed = subprocess.run(
+            completed = run_adb(
                 args,
-                shell=False,
-                capture_output=True,
-                text=not binary,
-                encoding=None if binary else "utf-8",
-                errors=None if binary else "replace",
+                gate=self._gate,
                 timeout=ADB_TIMEOUT_SECONDS,
-                check=False,
+                binary=binary,
             )
-        except FileNotFoundError:
-            self._record_failure(stage, command, started, "adb_missing")
+        except AdbCommandFailure as error:
+            self._record_failure(stage, command, started, error.category)
             raise ScreenReadError("device_disconnected") from None
-        except subprocess.TimeoutExpired:
-            self._record_failure(stage, command, started, "adb_timeout")
-            raise ScreenReadError("device_disconnected") from None
-        except OSError:
-            self._record_failure(stage, command, started, "adb_oserror")
-            raise ScreenReadError("device_disconnected") from None
-        if completed.returncode != 0:
-            self._record_failure(stage, command, started, "adb_nonzero")
-            raise ScreenReadError("device_disconnected")
         self._record(stage, command, "ok", elapsed_ms(started))
         return completed
 
@@ -131,8 +122,7 @@ class AdbScreenReader:
         """把证据写到调用方指定的本机目录；失败不伪造已保存。"""
         started = time.perf_counter()
         try:
-            self._evidence_dir.mkdir(parents=True, exist_ok=True)
-            (self._evidence_dir / name).write_bytes(payload)
+            save_evidence(self._evidence_dir, name, payload)
         except OSError:
             self._record_evidence_failure(started)
             raise ScreenReadError("invalid_fixture") from None

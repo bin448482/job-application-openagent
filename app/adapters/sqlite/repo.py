@@ -28,6 +28,7 @@ from app.domain.actions import (
     UNRESOLVED_ACTION_STATES,
     expected_effect,
     is_action_key,
+    validate_action_target,
 )
 from app.domain.models import (
     APP,
@@ -641,6 +642,53 @@ class SqliteStore:
             return None
         return task_expiry if valid else None
 
+    @_store_operation("require_running")
+    def require_running(self, lease: Lease, *, now: str) -> bool:
+        """只读确认任务已 start 为 running 且任务/设备租约完整有效。"""
+        if not isinstance(lease, Lease):
+            raise StoreError("invalid_input")
+        try:
+            validate_lease(lease)
+            now_dt = parse_utc(now)
+        except ValueError:
+            raise StoreError("invalid_input") from None
+        try:
+            row = self._connection.execute(
+                "SELECT d.state AS task_state, d.lease_owner AS task_owner, "
+                "d.owner_pid AS task_pid, d.owner_host AS task_host, "
+                "d.nonce AS task_nonce, d.lease_expires_at AS task_expiry, "
+                "dl.lease_owner AS dev_owner, dl.owner_pid AS dev_pid, "
+                "dl.owner_host AS dev_host, dl.nonce AS dev_nonce, "
+                "dl.lease_expires_at AS dev_expiry, dl.reservation_state AS dev_state "
+                "FROM hr_discoveries d JOIN device_lease dl ON d.nonce = dl.nonce "
+                "WHERE d.app = ? AND d.key = ? AND d.nonce = ?",
+                (lease.app, lease.key, lease.nonce),
+            ).fetchone()
+        except sqlite3.OperationalError as error:
+            raise map_locked_error(error) from None
+        except sqlite3.Error:
+            raise StoreError("store_io_error") from None
+        if row is None:
+            return False
+        try:
+            expiry = str(row["task_expiry"])
+            return (
+                row["task_state"] == "running"
+                and row["dev_state"] == "held"
+                and row["task_owner"] == lease.owner.id
+                and row["dev_owner"] == lease.owner.id
+                and int(row["task_pid"]) == lease.owner.pid
+                and int(row["dev_pid"]) == lease.owner.pid
+                and row["task_host"] == lease.owner.host
+                and row["dev_host"] == lease.owner.host
+                and row["task_nonce"] == lease.nonce
+                and row["dev_nonce"] == lease.nonce
+                and expiry == str(row["dev_expiry"])
+                and now_dt < parse_utc(expiry)
+            )
+        except (TypeError, ValueError):
+            return False
+
     @_store_operation("task_conversation")
     def task_conversation(self, lease: Lease, *, now: str) -> str | None:
         """只读返回 running 任务绑定会话键；租约任何不符返回 None。"""
@@ -692,7 +740,7 @@ class SqliteStore:
                 action_kind, action_key
             ):
                 raise StoreError("invalid_action_key")
-            _validate_target_key(action_kind, target_key)
+            validate_action_target(action_kind, action_key, target_key)
             _validate_conversation_key(conversation_key)
             if action_kind != "send_text" and target_key != conversation_key:
                 raise StoreError("invalid_action_key")
@@ -839,6 +887,13 @@ class SqliteStore:
             evidence = outcome.evidence
             if evidence.action_key != action_key:
                 raise StoreError("invalid_observation")
+            try:
+                created_at = parse_utc(str(record["created_at"]))
+                observed_at = parse_utc(evidence.observed_at)
+            except ValueError:
+                raise StoreError("invalid_observation") from None
+            if observed_at < created_at or observed_at > now_dt:
+                raise StoreError("invalid_observation")
             if evidence.outcome == "performed":
                 allowed = {expected_effect(action_kind)}
                 allowed.add(expected_effect(action_kind, delivered=True))
@@ -908,6 +963,13 @@ class SqliteStore:
             )
             if cursor.rowcount != 1:
                 raise StoreError("action_not_ready")
+            if outcome.ime_restored:
+                self._connection.execute(
+                    "UPDATE action_ime_state SET restored = 1, "
+                    "current_ime = original_ime, updated_at = ? "
+                    "WHERE singleton = 1 AND action_key = ?",
+                    (now, action_key),
+                )
             self._run_fault_hook("action_before_task_update")
             self._apply_task_terminal(
                 task_row,
@@ -958,6 +1020,7 @@ class SqliteStore:
         confirmation_open: bool,
         ime_restored: bool,
         explicit_confirm: bool,
+        command_stopped: bool,
         now: str,
     ) -> dict[str, object]:
         """人工确认/放弃固定三项；abandon 只关任务，未决锁与设备隔离保留。"""
@@ -972,6 +1035,8 @@ class SqliteStore:
             raise StoreError("invalid_input")
         if explicit_confirm is not True:
             raise StoreError("recovery_not_confirmed")
+        if type(command_stopped) is not bool:
+            raise StoreError("invalid_input")
         for name, value in (
             ("command_quiet", command_quiet),
             ("scene_settled", scene_settled),
@@ -1004,18 +1069,25 @@ class SqliteStore:
             if record is None:
                 raise StoreError("action_not_found")
             from_state = str(record["state"])
-            if from_state not in {"pending", "unknown"}:
+            if from_state not in {"pending", "unknown", "cancelled"}:
                 raise StoreError("action_not_ready")
+            if from_state == "cancelled" and resolution == "abandon":
+                raise StoreError("action_not_ready")
+            if str(record["owner_host"]) != self._local_host:
+                raise StoreError("owner_not_stopped")
             action_kind = str(record["action_kind"])
             task = self._connection.execute(
                 "SELECT * FROM hr_discoveries WHERE app = ? AND \"key\" = ?",
                 (APP, str(record["task_key"])),
             ).fetchone()
-            if task is None or str(task["state"]) not in {
+            if task is None:
+                raise StoreError("action_not_ready")
+            allowed_task_states = {"blocked", "cancelled"} if from_state == "cancelled" else {
                 "leased",
                 "running",
                 "blocked",
-            }:
+            }
+            if str(task["state"]) not in allowed_task_states:
                 raise StoreError("action_not_ready")
             if str(task["state"]) in {"leased", "running"} and (
                 task["nonce"] != record["nonce"]
@@ -1042,22 +1114,30 @@ class SqliteStore:
                     raise StoreError("invalid_observation")
                 if self._stop_checker(int(record["owner_pid"])) != "stopped":
                     raise StoreError("owner_not_stopped")
+                if not command_stopped:
+                    raise StoreError("owner_not_stopped")
 
             if resolution == "confirm_performed":
                 new_record_state = "performed"
                 record_outcome: str | None = "performed"
                 record_effect: str | None = None if evidence is None else evidence.effect
                 record_reason: str | None = None
-                task_state = "done"
-                task_reason: str | None = None
+                task_state = "cancelled" if from_state == "cancelled" else "done"
+                task_reason: str | None = (
+                    "cancelled_before_action" if from_state == "cancelled" else None
+                )
                 keep_device = False
             elif resolution == "confirm_not_performed":
                 new_record_state = "not_performed"
                 record_outcome = "not_performed"
                 record_effect = "none"
                 record_reason = None if evidence is None else evidence.reason_code
-                task_state = "not_sent"
-                task_reason = record_reason
+                task_state = "cancelled" if from_state == "cancelled" else "not_sent"
+                task_reason = (
+                    "cancelled_before_action"
+                    if from_state == "cancelled"
+                    else record_reason
+                )
                 keep_device = False
             else:
                 new_record_state = "cancelled"
@@ -1099,14 +1179,26 @@ class SqliteStore:
             )
             if cursor.rowcount != 1:
                 raise StoreError("action_not_ready")
+            if ime_restored:
+                self._connection.execute(
+                    "UPDATE action_ime_state SET restored = 1, "
+                    "current_ime = original_ime, updated_at = ? "
+                    "WHERE singleton = 1 AND action_key = ?",
+                    (now, action_key),
+                )
             self._run_fault_hook("reconcile_before_task")
-            self._apply_reconciled_task(
-                task,
-                now=now,
-                task_state=task_state,
-                reason_code=task_reason,
-                keep_device=keep_device,
-            )
+            if from_state == "cancelled":
+                self._connection.execute(
+                    "DELETE FROM device_lease WHERE device_key = 'primary'"
+                )
+            else:
+                self._apply_reconciled_task(
+                    task,
+                    now=now,
+                    task_state=task_state,
+                    reason_code=task_reason,
+                    keep_device=keep_device,
+                )
             self._run_fault_hook("reconcile_before_event")
             self._insert_action_event(
                 action_key=action_key,
@@ -1161,6 +1253,36 @@ class SqliteStore:
         except sqlite3.Error:
             raise StoreError("store_io_error") from None
         return [_action_row_payload(row) for row in rows]
+
+    @_store_operation("save_ime", stage="action")
+    def save_ime_state(
+        self, action_key: str, original_ime: str, *, now: str
+    ) -> None:
+        """在切换 IME 前持久化原值；只允许当前 pending 动作写入。"""
+        if self.profile_id is None:
+            raise StoreError("action_not_ready")
+        if not isinstance(action_key, str) or not isinstance(original_ime, str):
+            raise StoreError("invalid_input")
+        if not original_ime.strip():
+            raise StoreError("invalid_input")
+        self._prepare_now(now)
+        with self._write():
+            record = self._connection.execute(
+                "SELECT state FROM action_records WHERE action_key = ?",
+                (action_key,),
+            ).fetchone()
+            if record is None or str(record["state"]) != "pending":
+                raise StoreError("action_not_ready")
+            self._connection.execute(
+                "INSERT INTO action_ime_state (singleton, action_key, original_ime, "
+                "current_ime, saved_at, restored, updated_at) "
+                "VALUES (1, ?, ?, ?, ?, 0, ?) "
+                "ON CONFLICT(singleton) DO UPDATE SET action_key = excluded.action_key, "
+                "original_ime = excluded.original_ime, "
+                "current_ime = excluded.current_ime, saved_at = excluded.saved_at, "
+                "restored = 0, updated_at = excluded.updated_at",
+                (action_key, original_ime, original_ime, now, now),
+            )
 
     @_store_operation("text_admission", stage="action")
     def text_admission_status(
@@ -1869,4 +1991,6 @@ def _action_row_payload(row: sqlite3.Row) -> dict[str, object]:
         "created_at": str(row["created_at"]),
         "updated_at": str(row["updated_at"]),
         "attempt": int(row["attempt"]),
+        "owner_pid": int(row["owner_pid"]),
+        "owner_host": str(row["owner_host"]),
     }

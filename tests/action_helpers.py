@@ -116,7 +116,7 @@ def observation(**overrides: object) -> dict[str, object]:
     data: dict[str, object] = {
         "before_snapshot_id": BEFORE,
         "after_snapshot_id": AFTER,
-        "observed_at": NOW,
+        "observed_at": utc_now(),
         "clicked": True,
         "error": None,
         "scene_settled": True,
@@ -133,7 +133,9 @@ def observation(**overrides: object) -> dict[str, object]:
         "delivery_observed": False,
         "contact_slot_available": False,
         "contact_slot_status": None,
-        "identity_unique": False,
+        "identity_unique": True,
+        "list_complete": True,
+        "protections_clear": True,
         "target_present_before": False,
         "target_present_after": False,
         "anchor_present_after": False,
@@ -177,6 +179,7 @@ def run_action_cli(
     *,
     os_root: Path,
     stop_checker: object | None = None,
+    command_stop_checker: object | None = None,
 ):
     """在临时项目根运行 CLI，可注入测试 OS 根与合成停止判据。"""
     import io
@@ -190,6 +193,8 @@ def run_action_cli(
     kwargs: dict[str, object] = {"os_root": os_root}
     if stop_checker is not None:
         kwargs["stop_checker"] = stop_checker
+    if command_stop_checker is not None:
+        kwargs["command_stop_checker"] = command_stop_checker
     with patch("app.cli.main.PROJECT_ROOT", root), redirect_stdout(out), redirect_stderr(err):
         code = main(argv, **kwargs)  # type: ignore[arg-type]
     text = out.getvalue().strip()

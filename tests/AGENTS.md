@@ -25,11 +25,11 @@
 - `test_run_guard.py`：M4c `run check`：read_only 本轮确认、draft 当前验收、A 档固定拒绝、预检零子进程、跨库故障隔离与门禁/profile 打开日志 started/终态配对。
 - `test_profile_session_lease.py`：M4c 真实 profile 租约：合法 profile 库经唯一 SqliteStore 领取/续租/失效、`ProfileSessionLease` 与 decide 桥前后拒绝、跨门禁 profile/原库/owner、复制库且参数指向副本、任务两行 owner 同改、门禁 nonce 桥前/桥中变化、错误任务 key/app、任务 owner 篡改与错误 profile ID。
 - `test_m4c_closed_loop.py`：M4c 闭环：真实活动 restore、目录路径不发布、三值一致、同 profile 事实/任务审计不重置、旧凭证摘要变化拒绝、唯一仓储快照重核、实际受控合成桥 CLI eval→snapshot→restore→validate/preview→eval 串行。
-- `test_action_domain.py`：M5 动作键精确规则、观察→三态证据、前后快照/目标已存在/简历请求与交付/联系方式/删除锚点、现场与 IME 未收敛 pause、授权种类/摘要/期限/确认、人工卡。
-- `test_action_store.py`：M5 唯一仓储边界：pending 先落库、重复/同任务未决、leased 未 start 零准入、performed/unknown/pending/not_sent、设备隔离、事件/任务/设备故障回滚、过期租约、崩溃 pending、UTC 跨日/额度/冷却/调低/重启、人工确认/放弃与 v1→v2 备份迁移。
-- `test_action_usecase.py`：M5 生产用例：授权精确 target/action、unknown 只调用一次且不重放、performed 不改事实、同动作键新任务拒绝、人工确认要求当前证据。
-- `test_action_executor.py`：M5 ADB 原语参数数组/`shell=False`/5 秒/不重试/每命令门禁复核、点击前后失败事实、IME 恢复读回、合成执行器严格观察。
-- `test_action_cli.py`：M5 实际 CLI 组合根：五动作正例、read_only/未确认/未授权/包漂移拒绝、not_performed 与未收敛、unknown 不重放、资格正例与冷却负例、confirm/abandon 对账、人工卡与 restore unknown。
+- `test_action_domain.py`：M5 动作键精确规则、目标/动作绑定、观察→三态证据、前后快照/目标已存在/简历请求与交付/联系方式/删除锚点/列表完整/保护项、坏观察、现场与 IME 未收敛 pause、授权种类/摘要/期限/确认、人工卡。
+- `test_action_store.py`：M5 唯一仓储边界：pending 先落库、动作键-目标错配、leased 未 start 零准入、三态与设备处置、事件/任务/设备故障回滚、过期租约、崩溃 pending、旧证据时间、UTC 跨日/额度/冷却/调低/重启、confirm/abandon/取消后受控 confirm、IME restored 账本、异 host 拒绝与 v1→v2 备份迁移。
+- `test_action_usecase.py`：M5 生产用例：实际 store/profile/gate 绑定、leased 未 start 零设备调用、执行中/提交前包漂移 unknown、unknown 单次调用且不重放、performed 不改事实、同动作键新任务拒绝、完整七字段证据、坏观察 unknown、持久化 IME/原命令停止恢复门禁、成对 safe 日志。
+- `test_action_executor.py`：M5 ADB 原语参数数组/`shell=False`/5 秒/不重试/每命令门禁复核、唯一身份/附件名前置、既有提示不算新变化、点击前后失败事实、IME 实际切换/恢复读回、固定命令标签与合成执行器严格观察。
+- `test_action_cli.py`：M5 实际 CLI 组合根：五动作正例、read_only/未确认/未授权/包漂移拒绝、not_performed 与未收敛、unknown 不重放、资格正例/同动作历史/冷却负例、confirm/abandon 对账、人工卡与 restore unknown。
 - `action_helpers.py`：M5 测试共用的临时项目根、策略包/验收凭证、profile 匹配 seed、动作/对账脚本、合成观察与 CLI 运行辅助。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。
 - `policy_helpers.py`：M4a/M4b 测试共用仓库原文读取、临时项目根（含公开套件）、CLI 运行、合成包写入与有效 envelope/decision/租约截止构造；不调用模型、设备或网络。

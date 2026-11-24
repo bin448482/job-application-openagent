@@ -371,13 +371,14 @@ python -m app action reconcile --profile demo --pack prompts/local/demo --mode d
   --fixture <合成对账脚本> --confirm-action --confirm-device --confirm-recovery
 ```
 
-- `perform` 只接受 `draft_only`，且必须 `--confirm-device`、`--confirm-action` 与至少一个 `--authorize`；每次授权只覆盖列出的动作类型，文本授权不能覆盖附件、联系方式或删除。执行前再复核当前 base/pack 验收、任务 running 租约、共享门禁身份、动作键/任务/摘要/期限/ nonce；任一不符不写 pending、不调用执行器。
+- `perform` 只接受 `draft_only`，且必须 `--confirm-device`、`--confirm-action` 与至少一个 `--authorize`；每次授权只覆盖列出的动作类型，文本授权不能覆盖附件、联系方式或删除。执行前及每条设备命令/提交前再复核实际 store/profile/原库、running 租约、共享门禁身份与当前 base/pack/验收；动作键必须由同一 `action_key_for` 与实际消息/会话目标一致，任一不符不写 pending、不调用执行器。
+- 五动作前置在不可逆点击前独立验证：文本要求唯一会话身份与 EditText 正文回读；简历要求附件名在确认框匹配；微信/电话要求槽位可用；删除要求唯一姓名+职位、列表完整、保护项为空且目标存在。动作后只接受目标节点的新增差分：文本新增回显、简历新增请求/交付行、联系方式新增“请求中”、删除目标消失且锚点仍在；既有提示、坏 XML、同内容快照或无关变化都不证明 performed。
 - `--seed-fixture` 只读合成 M2 未读夹具并向当前 profile 库 upsert；`--fixture` 只作为 `ScriptedActionExecutor` 的合成观察/失败脚本，不接受 `outcome/effect` 等 Evidence 字段。真实 ADB 动作原语只存在于适配器并由 mock subprocess 测试，CLI 不提供真实设备动作入口。
-- 文本额度/冷却是唯一持久化护栏：UTC 日期内跨 app 合计 performed+sent 文本；按 profile/app/会话冷却；任一文本 pending/unknown 阻断新发送。额度检查与本次 pending/键锁在同一事务。换包、restore、重启或调低额度不清零历史；未决文本、附件 `request_sent`、`not_performed` 不充当成功文本。
-- 证据：`performed` 必须前后快照非空且不同，并由动作特有变化证明；同快照、删除目标早已不存在、简历仅请求或联系方式槽位未变“请求中”都不证明执行。未点击/点击前断连为 `not_performed`；点击后断连/异常/坏观察为 `unknown`。输入框不空、确认框仍开、IME 未恢复或在途命令未退出时，即使已证明未点击也保持 pending 与共享隔离。
-- `pending/unknown/cancelled` 生成固定人工卡 `{task_id,action_key,reason_code,snapshot_ids,allowed_resolutions}`，处置固定 `confirm_performed/confirm_not_performed/abandon`。confirm 需本轮显式确认、当前证据、原命令停止与现场/IME 收敛；成功文本 `confirm_performed` 只计一次额度。`abandon` 只把任务置 cancelled，动作锁与共享/profile 设备隔离保留，restore/run check 仍视为未决。
-- 受控接管隔离占用必须在原 profile/原库身份下，显式 `--confirm-recovery`，并由停止检查器确认原 PID 已停止；正常 acquire、TTL、PID 消失或新 profile 不会自动开锁。原 IME 在切换前持久化，恢复失败保持未知，不假称恢复。
-- `action eligibility` 只计算拟执行资格：有效本轮授权 + 无已发送/未决 + 未到冷却为 `eligible=true`，同时 `policy_tier="C"`、`production_auto_send=false`、`actions_performed=0`。合成资格为真不代表真实 A 档或发送授权。
+- 文本额度/冷却是唯一持久化护栏：UTC 日期内跨 app 合计 performed+sent 文本；按 profile/app/会话冷却；任一文本 pending/unknown 阻断新发送。额度检查与本次 pending/键锁在同一事务。换包、restore、重启或调低额度不清零历史；未决文本、附件 `sent`/`request_sent`、`not_performed` 不充当成功文本；同一动作键已有记录时资格返回 `action_conflict`/`text_send_blocked`。
+- 证据：`performed` 必须前后快照非空且不同（真实适配器由层级内容派生快照身份），并由动作特有变化证明。未点击/点击前断连为 `not_performed`；点击后断连/异常/坏观察为 `unknown`。输入框不空、确认框仍开、IME 未恢复或在途命令未退出时，即使已证明未点击也保持 pending 与共享隔离。
+- `pending/unknown/cancelled` 生成固定人工卡 `{task_id,action_key,reason_code,snapshot_ids,allowed_resolutions}`，处置固定 `confirm_performed/confirm_not_performed/abandon`。confirm 需本轮显式确认、当前证据、原 host、原父子命令停止检查器与现场/IME 收敛；成功文本 `confirm_performed` 只计一次额度。`abandon` 只把任务置 cancelled，动作锁与共享/profile 设备隔离保留；之后仍可对 cancelled 动作受控 confirm 清锁，但不重开任务。
+- 受控接管隔离占用必须在原 profile/原库身份下，显式 `--confirm-recovery`，并由原 PID 停止检查器确认；生产默认父子命令检查器返回 unknown，不用单 PID 猜测解锁。原 IME 在输入前实际切换并读回，动作后恢复并读回；恢复失败保持未知，完成/对账事务更新 IME 恢复账本。
+- `action eligibility` 只计算拟执行资格：有效本轮授权 + 无同动作历史/未决 + 未到冷却为 `eligible=true`，同时 `policy_tier="C"`、`production_auto_send=false`、`actions_performed=0`。合成资格为真不代表真实 A 档或发送授权。
 
 ## 八、显式真实设备模式
 只有同时给出 `--device`、`--serial` 与 `--confirm-device` 才启用真实探针：

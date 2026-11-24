@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
+from typing import Callable
 
 from app.domain.actions import (
     ActionAuthorization,
@@ -16,10 +18,11 @@ from app.domain.actions import (
     human_card,
     is_action_key,
     reconciliation_converged,
+    validate_action_target,
     validate_reconciliation_observation,
 )
 from app.domain.models import Lease, Owner, parse_utc
-from app.domain.policy import v1_policy_tier
+from app.domain.policy import utc_now, v1_policy_tier
 from app.ports.actions import ActionExecutionError, ActionPlan, DeviceActionPort
 from app.ports.device_gate import SharedDeviceGatePort
 from app.ports.store import StorePort
@@ -46,6 +49,43 @@ def _authorization_projection(authorization: ActionAuthorization) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
+
+
+def _log(
+    process_log: ProcessLog | None,
+    operation: str,
+    result: str,
+    *,
+    reason_code: str | None = None,
+    error_category: str | None = None,
+) -> None:
+    """写固定动作阶段事件；日志失败不影响业务结果。"""
+    if process_log is None:
+        return
+    try:
+        process_log.record(
+            stage="action",
+            operation=operation,
+            result=result,
+            reason_code=reason_code,
+            error_category=error_category,
+        )
+    except Exception:
+        return
+
+
+def _store_binding_matches(
+    store: StorePort, *, profile_id: str, profile_db_path: str
+) -> bool:
+    """核对实际仓储 profile 身份与固定库路径，不只比较调用参数字符串。"""
+    actual_profile = getattr(store, "profile_id", None)
+    actual_path = getattr(store, "path", None)
+    if actual_profile != profile_id or actual_path is None:
+        return False
+    try:
+        return Path(actual_path).resolve() == Path(profile_db_path).resolve()
+    except (OSError, ValueError):
+        return False
 
 
 def _identity_matches(
@@ -105,10 +145,26 @@ def _failed_observation(
         contact_slot_available=False,
         contact_slot_status=None,
         identity_unique=False,
+        list_complete=False,
+        protections_clear=False,
         target_present_before=False,
         target_present_after=False,
         anchor_present_after=False,
     )
+
+
+def _evidence_payload(outcome: ActionOutcome) -> dict[str, object]:
+    """按唯一七字段 Evidence 契约投影，避免顶层同名替代嵌套对象。"""
+    evidence = outcome.evidence
+    return {
+        "action_key": evidence.action_key,
+        "outcome": evidence.outcome,
+        "effect": evidence.effect,
+        "reason_code": evidence.reason_code,
+        "before_snapshot_id": evidence.before_snapshot_id,
+        "after_snapshot_id": evidence.after_snapshot_id,
+        "observed_at": evidence.observed_at,
+    }
 
 
 def perform_action(
@@ -135,39 +191,68 @@ def perform_action(
     executor: DeviceActionPort,
     now: str,
     process_log: ProcessLog | None = None,
+    clock: Callable[[], str] | None = None,
+    reload_snapshot: Callable[[], dict[str, str]] | None = None,
 ) -> dict[str, object]:
     """在共享占用与运行中租约下原子 pending、执行一次并提交三态证据。"""
-    authorize(
-        authorization,
-        action_kind=action_kind,
-        action_key=action_key,
-        task_key=lease.key,
-        profile_id=authorization.profile_id,
-        base_hash=current_base_hash,
-        pack_hash=current_pack_hash,
-        now=now,
-    )
-    if not is_action_key(action_kind, action_key):
-        raise ActionError("invalid_action")
-    if not _identity_matches(
-        gate,
-        profile_id=authorization.profile_id,
-        profile_db_path=profile_db_path,
-        owner=lease.owner,
-        require_owner=True,
-    ):
-        raise ActionError("authorization_required")
-    if store.current_lease_expiry(lease, now=now) is None:
-        raise ActionError("authorization_required")
+    active_clock = clock if clock is not None else (lambda: now)
+    current = {
+        "base_hash": current_base_hash,
+        "pack_hash": current_pack_hash,
+        "acceptance_base_hash": current_base_hash,
+        "acceptance_pack_hash": current_pack_hash,
+    }
 
-    ime_original: str | None = None
-    if ime_component is not None:
-        try:
-            ime_original = executor.read_current_ime()
-        except ActionExecutionError:
-            raise ActionError("precondition_failed") from None
-        if not isinstance(ime_original, str) or not ime_original:
-            raise ActionError("precondition_failed")
+    def guard() -> None:
+        """在每个设备调用与提交前重核当前包/验收/仓储/共享/租约条件。"""
+        current_now = active_clock()
+        snapshot = reload_snapshot() if reload_snapshot is not None else current
+        authorize(
+            authorization,
+            action_kind=action_kind,
+            action_key=action_key,
+            task_key=lease.key,
+            profile_id=authorization.profile_id,
+            base_hash=snapshot["base_hash"],
+            pack_hash=snapshot["pack_hash"],
+            now=current_now,
+        )
+        if not _store_binding_matches(
+            store,
+            profile_id=authorization.profile_id,
+            profile_db_path=profile_db_path,
+        ):
+            raise ActionError("authorization_required")
+        if not store.require_running(lease, now=current_now):
+            raise ActionError("authorization_required")
+        gate.verify(now=current_now)
+        if not _identity_matches(
+            gate,
+            profile_id=authorization.profile_id,
+            profile_db_path=profile_db_path,
+            owner=lease.owner,
+            require_owner=True,
+        ):
+            raise ActionError("authorization_required")
+
+    _log(process_log, "action_validate", "started")
+    try:
+        if not is_action_key(action_kind, action_key):
+            raise ActionError("invalid_action")
+        validate_action_target(action_kind, action_key, target_key)
+        if action_kind != "send_text" and target_key != conversation_key:
+            raise ActionError("invalid_action")
+        guard()
+    except ActionError as error:
+        _log(
+            process_log,
+            "action_validate",
+            "failed",
+            reason_code=error.reason_code,
+            error_category="action",
+        )
+        raise
+    _log(process_log, "action_validate", "ok")
 
     plan = ActionPlan(
         action_key=action_key,
@@ -179,38 +264,97 @@ def perform_action(
         target_label=target_label,
         anchor_label=anchor_label,
         ime_component=ime_component,
-        ime_original=ime_original,
+        ime_original=None,
         irreversible_tap_index=len(tap_points) - 1 if tap_points else 0,
         tap_points=tap_points,
     )
-    # 唯一准入边界：额度/冷却/pending/键锁与本次 pending 同一事务提交。
-    store.begin_action(
-        lease,
-        action_kind=action_kind,
-        action_key=action_key,
-        target_key=target_key,
-        conversation_key=conversation_key,
-        authorization_json=_authorization_projection(authorization),
-        daily_sends=daily_sends,
-        reply_cooldown_seconds=reply_cooldown_seconds,
-        ime_original=ime_original,
-        now=now,
-    )
 
-    observation: ActionObservation
+    _log(process_log, "action_admit", "started")
     try:
-        observation = executor.execute(plan)
+        # 唯一准入边界：额度/冷却/pending/键锁同一事务；此处先不读设备。
+        store.begin_action(
+            lease,
+            action_kind=action_kind,
+            action_key=action_key,
+            target_key=target_key,
+            conversation_key=conversation_key,
+            authorization_json=_authorization_projection(authorization),
+            daily_sends=daily_sends,
+            reply_cooldown_seconds=reply_cooldown_seconds,
+            ime_original=None,
+            now=now,
+        )
+    except Exception as error:
+        reason = getattr(error, "reason_code", "store_io_error")
+        _log(
+            process_log,
+            "action_admit",
+            "failed",
+            reason_code=reason,
+            error_category="action",
+        )
+        raise
+    _log(process_log, "action_admit", "ok")
+
+    ime_original: str | None = None
+    if ime_component is not None:
+        _log(process_log, "action_execute", "started")
+        try:
+            ime_original = executor.read_current_ime(before_command=guard)
+            if not isinstance(ime_original, str) or not ime_original:
+                raise ActionExecutionError(
+                    "device_disconnected",
+                    clicked=False,
+                    scene_settled=True,
+                    input_box_empty=True,
+                    command_quiet=True,
+                    ime_restored=True,
+                )
+            store.save_ime_state(action_key, ime_original, now=now)
+            plan = replace(plan, ime_original=ime_original)
+        except ActionExecutionError as error:
+            observation = _failed_observation(
+                plan=plan,
+                reason_code=error.reason_code,
+                clicked=False,
+                now=now,
+                ime_original=None,
+                scene_settled=error.scene_settled,
+                input_box_empty=error.input_box_empty,
+                command_quiet=error.command_quiet,
+                ime_restored=error.ime_restored,
+            )
+            _log(
+                process_log,
+                "action_execute",
+                "failed",
+                reason_code=error.reason_code,
+                error_category="action",
+            )
+            return _commit(
+                store=store,
+                lease=lease,
+                action_key=action_key,
+                observation=observation,
+                now=active_clock(),
+                process_log=process_log,
+            )
+        _log(process_log, "action_execute", "ok")
+
+    try:
+        guard()
+        _log(process_log, "action_execute", "started")
+        observation = executor.execute(plan, before_command=guard)
         if (
             observation.action_key != action_key
             or observation.action_kind != action_kind
         ):
-            observation = _failed_observation(
-                plan=plan,
-                reason_code="executor_interrupted",
-                clicked=True,
-                now=now,
-                ime_original=ime_original,
-            )
+            raise ValueError("observation identity mismatch")
+        # 观察时间必须落在本次 pending 与可信当前时间之间。
+        observed = parse_utc(observation.observed_at)
+        current_now = parse_utc(active_clock())
+        if observed > current_now or observed < parse_utc(now):
+            raise ValueError("observation time is not trusted")
     except ActionExecutionError as error:
         observation = _failed_observation(
             plan=plan,
@@ -223,6 +367,29 @@ def perform_action(
             command_quiet=error.command_quiet,
             ime_restored=error.ime_restored,
         )
+        _log(
+            process_log,
+            "action_execute",
+            "failed",
+            reason_code=error.reason_code,
+            error_category="action",
+        )
+    except ActionError as error:
+        # 执行中条件漂移：不再发命令，按已尝试动作保留未决。
+        observation = _failed_observation(
+            plan=plan,
+            reason_code="executor_interrupted",
+            clicked=True,
+            now=now,
+            ime_original=ime_original,
+        )
+        _log(
+            process_log,
+            "action_execute",
+            "failed",
+            reason_code=error.reason_code,
+            error_category="action",
+        )
     except Exception:
         observation = _failed_observation(
             plan=plan,
@@ -231,18 +398,111 @@ def perform_action(
             now=now,
             ime_original=ime_original,
         )
+        _log(
+            process_log,
+            "action_execute",
+            "failed",
+            reason_code="executor_interrupted",
+            error_category="internal",
+        )
 
-    outcome = derive_action_outcome(observation)
-    completed = store.complete_action(
-        lease, action_key=action_key, outcome=outcome, now=now
+    if observation.error is None:
+        _log(process_log, "action_execute", "ok")
+    try:
+        guard()
+    except ActionError as error:
+        observation = _failed_observation(
+            plan=plan,
+            reason_code="executor_interrupted",
+            clicked=True,
+            now=now,
+            ime_original=ime_original,
+        )
+        _log(
+            process_log,
+            "action_commit",
+            "failed",
+            reason_code=error.reason_code,
+            error_category="action",
+        )
+    return _commit(
+        store=store,
+        lease=lease,
+        action_key=action_key,
+        observation=observation,
+        now=active_clock(),
+        process_log=process_log,
     )
+
+
+def _commit(
+    *,
+    store: StorePort,
+    lease: Lease,
+    action_key: str,
+    observation: ActionObservation,
+    now: str,
+    process_log: ProcessLog | None,
+) -> dict[str, object]:
+    """由唯一纯域规则派生 Evidence 并原子提交；坏观察保持未知未决。"""
+    _log(process_log, "action_derive", "started")
+    try:
+        outcome = derive_action_outcome(observation)
+    except ValueError:
+        outcome = derive_action_outcome(
+            _failed_observation(
+                plan=ActionPlan(
+                    action_key=action_key,
+                    action_kind=observation.action_kind,
+                    target_key=observation.action_key,
+                    conversation_key=observation.action_key,
+                    body_text=None,
+                    attachment_name=None,
+                    target_label=None,
+                    anchor_label=None,
+                    ime_component=None,
+                    ime_original=None,
+                    irreversible_tap_index=0,
+                    tap_points=(),
+                ),
+                reason_code="executor_interrupted",
+                clicked=True,
+                now=now,
+                ime_original=None,
+            )
+        )
+        _log(
+            process_log,
+            "action_derive",
+            "failed",
+            reason_code="invalid_observation",
+            error_category="action",
+        )
+    else:
+        _log(process_log, "action_derive", "ok")
+    _log(process_log, "action_commit", "started")
+    try:
+        completed = store.complete_action(
+            lease, action_key=action_key, outcome=outcome, now=now
+        )
+    except Exception as error:
+        reason = getattr(error, "reason_code", "store_io_error")
+        _log(
+            process_log,
+            "action_commit",
+            "failed",
+            reason_code=reason,
+            error_category="action",
+        )
+        raise
+    _log(process_log, "action_commit", "ok")
     record = store.get_action(action_key)
     card = None
-    if record is not None and record["state"] in {"pending", "unknown"}:
+    if record is not None and record["state"] in {"pending", "unknown", "cancelled"}:
         card = human_card(record)
     result = dict(completed)
     result["card"] = card
-    result["evidence"] = completed["evidence"]
+    result["evidence"] = _evidence_payload(outcome)
     result["requested_effect"] = outcome.evidence.effect
     return result
 
@@ -260,6 +520,7 @@ def evaluate_text_eligibility(
     current_pack_hash: str,
     daily_sends: int,
     reply_cooldown_seconds: int,
+    profile_db_path: str,
     now: str,
 ) -> dict[str, object]:
     """只计算文本拟执行资格；固定 C 与真实执行开关保持独立。"""
@@ -270,6 +531,13 @@ def evaluate_text_eligibility(
         authorization_reason = "invalid_action"
     else:
         try:
+            validate_action_target(action_kind, action_key, target_key)
+            if not _store_binding_matches(
+                store,
+                profile_id=authorization.profile_id,
+                profile_db_path=profile_db_path,
+            ):
+                raise ActionError("authorization_required")
             authorize(
                 authorization,
                 action_kind=action_kind,
@@ -289,14 +557,31 @@ def evaluate_text_eligibility(
         reply_cooldown_seconds=reply_cooldown_seconds,
         conversation_key=conversation_key,
     )
-    eligible = authorization_valid and bool(usage["eligible"])
+    history = store.get_action(action_key)
+    history_state = None if history is None else str(history["state"])
+    history_reason: str | None = None
+    if history_state is not None:
+        history_reason = (
+            "text_send_blocked"
+            if history_state in {"pending", "unknown", "cancelled"}
+            else "action_conflict"
+        )
+    eligible = (
+        authorization_valid
+        and bool(usage["eligible"])
+        and history_state is None
+    )
+    reason = authorization_reason if not authorization_valid else (
+        history_reason if history_reason is not None else usage["reason"]
+    )
     return {
         "eligible": eligible,
-        "reason": authorization_reason if not authorization_valid else usage["reason"],
+        "reason": reason,
         "authorization_valid": authorization_valid,
         "target_key": target_key,
         "conversation_key": conversation_key,
         "quota": usage,
+        "history_state": history_state,
         "policy_tier": v1_policy_tier(),
         "production_auto_send": False,
         "actions_performed": 0,
@@ -311,47 +596,97 @@ def reconcile_action(
     profile_id: str,
     profile_db_path: str,
     explicit_confirm: bool,
+    command_stop_checker: Callable[[int], str] | None,
     now: str,
+    process_log: ProcessLog | None = None,
 ) -> dict[str, object]:
-    """经原 profile 共享占用与本轮显式确认收敛人工卡三项处置。"""
-    if explicit_confirm is not True:
-        raise ActionError("recovery_not_confirmed")
-    if not _identity_matches(
-        gate,
-        profile_id=profile_id,
-        profile_db_path=profile_db_path,
-        owner=Owner(id="", pid=1, host=""),
-        require_owner=False,
-    ):
-        raise ActionError("authorization_required")
-    record = store.get_action(observation.action_key)
-    if record is None:
-        raise ActionError("action_not_found")
-    action_kind = str(record["action_kind"])
+    """经原 profile 共享占用、持久化 IME 与本轮确认收敛人工处置。"""
+    _log(process_log, "action_reconcile_validate", "started")
     try:
+        if explicit_confirm is not True or observation.confirmed is not True:
+            raise ActionError("recovery_not_confirmed")
+        if not _store_binding_matches(
+            store, profile_id=profile_id, profile_db_path=profile_db_path
+        ):
+            raise ActionError("authorization_required")
+        if not _identity_matches(
+            gate,
+            profile_id=profile_id,
+            profile_db_path=profile_db_path,
+            owner=Owner(id="", pid=1, host=""),
+            require_owner=False,
+        ):
+            raise ActionError("authorization_required")
+        record = store.get_action(observation.action_key)
+        if record is None:
+            raise ActionError("action_not_found")
+        action_kind = str(record["action_kind"])
         validate_reconciliation_observation(observation, action_kind=action_kind)
-    except ActionError:
+        ime_state = store.load_ime_state()
+        authoritative_ime: str | None = None
+        if (
+            ime_state is not None
+            and ime_state["action_key"] == observation.action_key
+        ):
+            authoritative_ime = str(ime_state["original_ime"])
+            if (
+                observation.ime_original != authoritative_ime
+                or observation.ime_current != authoritative_ime
+            ):
+                raise ActionError("scene_unsettled")
+        observation = replace(
+            observation,
+            ime_original=authoritative_ime,
+            ime_current=authoritative_ime,
+        )
+        if observation.resolution != "abandon" and not reconciliation_converged(
+            observation
+        ):
+            raise ActionError("scene_unsettled")
+        if observation.evidence is not None:
+            if parse_utc(observation.evidence.observed_at) != parse_utc(now):
+                raise ActionError("invalid_observation")
+        commands_stopped = False
+        if observation.resolution != "abandon":
+            owner_pid = int(record["owner_pid"])
+            if command_stop_checker is None:
+                raise ActionError("recovery_not_confirmed")
+            commands_stopped = command_stop_checker(owner_pid) == "stopped"
+            if not commands_stopped:
+                raise ActionError("recovery_not_confirmed")
+        result = store.reconcile_action(
+            action_key=observation.action_key,
+            resolution=observation.resolution,
+            evidence=observation.evidence,
+            command_quiet=observation.command_quiet,
+            scene_settled=observation.scene_settled,
+            confirmation_open=observation.confirmation_open,
+            ime_restored=(
+                observation.ime_original is None
+                or observation.ime_current == observation.ime_original
+            ),
+            explicit_confirm=explicit_confirm,
+            command_stopped=commands_stopped,
+            now=now,
+        )
+    except ActionError as error:
+        _log(
+            process_log,
+            "action_reconcile_validate",
+            "failed",
+            reason_code=error.reason_code,
+            error_category="action",
+        )
         raise
-    except ValueError:
-        raise ActionError("invalid_observation") from None
-    if observation.resolution != "abandon" and not reconciliation_converged(
-        observation
-    ):
-        raise ActionError("scene_unsettled")
-    if observation.evidence is not None:
-        if parse_utc(observation.evidence.observed_at) != parse_utc(now):
-            raise ActionError("invalid_observation")
-    return store.reconcile_action(
-        action_key=observation.action_key,
-        resolution=observation.resolution,
-        evidence=observation.evidence,
-        command_quiet=observation.command_quiet,
-        scene_settled=observation.scene_settled,
-        confirmation_open=observation.confirmation_open,
-        ime_restored=(
-            observation.ime_original is None
-            or observation.ime_current == observation.ime_original
-        ),
-        explicit_confirm=explicit_confirm,
-        now=now,
-    )
+    except Exception as error:
+        _log(
+            process_log,
+            "action_reconcile_validate",
+            "failed",
+            reason_code=getattr(error, "reason_code", "store_io_error"),
+            error_category="action",
+        )
+        raise
+    _log(process_log, "action_reconcile_validate", "ok")
+    _log(process_log, "action_reconcile_commit", "ok")
+    return result

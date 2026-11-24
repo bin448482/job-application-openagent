@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
 
 from app.domain.actions import ActionObservation, ACTION_KIND_SET
 
@@ -103,10 +103,17 @@ class ActionExecutionError(Exception):
 class DeviceActionPort(Protocol):
     """抽象只读当前 IME 与一次有界动作执行，不重试也不决定三态。"""
 
-    def read_current_ime(self) -> str:
-        """读取当前输入法标识；失败抛出 ActionExecutionError。"""
+    def read_current_ime(
+        self, *, before_command: Callable[[], None] | None = None
+    ) -> str:
+        """读取当前输入法标识；每条命令前可要求调用方复核当前条件。"""
         ...
 
-    def execute(self, plan: ActionPlan) -> ActionObservation:
+    def execute(
+        self,
+        plan: ActionPlan,
+        *,
+        before_command: Callable[[], None] | None = None,
+    ) -> ActionObservation:
         """执行一次动作并返回可信前后观察；不得自行宣告 performed。"""
         ...

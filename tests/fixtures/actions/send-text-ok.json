@@ -20,7 +20,9 @@
     "delivery_observed": false,
     "contact_slot_available": false,
     "contact_slot_status": null,
-    "identity_unique": false,
+    "identity_unique": true,
+    "list_complete": true,
+    "protections_clear": true,
     "target_present_before": false,
     "target_present_after": false,
     "anchor_present_after": false

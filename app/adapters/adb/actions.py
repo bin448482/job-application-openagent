@@ -1,23 +1,33 @@
-"""实现 M5 真实 ADB 动作原语与一次有界执行，不重试且每条命令前复核共享门禁。"""
+"""实现 M5 真实 ADB 动作原语：前置验证、一次有界执行、动作特有差分与 IME 闭环。"""
 
 from __future__ import annotations
 
-import subprocess
+import re
 import time
 import uuid
-import re
+import xml.etree.ElementTree as ET
+from typing import Callable
 
+from app.adapters.adb.command import (
+    ADB_TIMEOUT_SECONDS,
+    AdbCommandFailure,
+    run_adb,
+)
 from app.domain.actions import ActionObservation
 from app.ports.actions import ActionExecutionError, ActionPlan
 from app.ports.device_gate import DeviceGateError
 from app.ports.screen import DeviceGate
 from app.process_log import ProcessLog, elapsed_ms
 
-ADB_ACTION_TIMEOUT_SECONDS = 5
+DEVICE_TMP_XML = "/data/local/tmp/m5-action-ui.xml"
+PROTECTION_MARKERS = ("草稿", "未读", "待处理", "待发送")
+RESUME_REQUEST_MARKER = "附件简历请求已发送"
+RESUME_DELIVERED_MARKER = "附件简历已发送"
+CONTACT_REQUEST_MARKER = "请求中"
 
 
 class AdbActionExecutor:
-    """通过参数数组、shell=false 与单次 attempt 执行动作原语并构造观察。"""
+    """通过共享 ADB 边界执行动作原语，前置不成立时不发不可逆命令。"""
 
     def __init__(
         self,
@@ -26,7 +36,7 @@ class AdbActionExecutor:
         gate: DeviceGate,
         adb: str = "adb",
         process_log: ProcessLog | None = None,
-        timeout: float = ADB_ACTION_TIMEOUT_SECONDS,
+        timeout: float = ADB_TIMEOUT_SECONDS,
     ) -> None:
         """保存 serial、共享门禁、adb 名、日志与固定超时；构造不启动子进程。"""
         if not isinstance(serial, str) or not serial.strip():
@@ -37,47 +47,212 @@ class AdbActionExecutor:
         self._process_log = process_log
         self._timeout = timeout
 
-    def read_current_ime(self) -> str:
+    def read_current_ime(
+        self, *, before_command: Callable[[], None] | None = None
+    ) -> str:
         """读取当前输入法标识；失败不重试并归为断连。"""
         text = self._run(
-            [self._adb, "-s", self._serial, "shell", "settings", "get", "secure", "default_input_method"],
+            [
+                self._adb,
+                "-s",
+                self._serial,
+                "shell",
+                "settings",
+                "get",
+                "secure",
+                "default_input_method",
+            ],
             clicked=False,
+            phase="idle",
+            command="adb_action_ime_get",
+            before_command=before_command,
         )
         value = text.strip()
         if not value:
-            raise ActionExecutionError("device_disconnected", clicked=False, scene_settled=True, input_box_empty=True, command_quiet=True, ime_restored=True)
+            raise ActionExecutionError(
+                "device_disconnected",
+                clicked=False,
+                scene_settled=True,
+                input_box_empty=True,
+                command_quiet=True,
+                ime_restored=True,
+            )
         return value
 
-    def execute(self, plan: ActionPlan) -> ActionObservation:
-        """顺序执行输入与点击一次，之后读取现场并尽力恢复原 IME。"""
-        before_xml = self._read_hierarchy(clicked=False)
+    def execute(
+        self,
+        plan: ActionPlan,
+        *,
+        before_command: Callable[[], None] | None = None,
+    ) -> ActionObservation:
+        """先验证动作前置，再执行一次；只接受动作目标对应的前后新增变化。"""
+        before_xml = self._read_hierarchy(
+            clicked=False, before_command=before_command
+        )
+        before_texts = _node_texts(before_xml)
+        target = plan.target_label or ""
+        anchor = plan.anchor_label or ""
+        identity_unique = bool(target) and before_texts.count(target) == 1
+        target_present_before = bool(target) and target in before_texts
+        protections_clear = not any(
+            marker in text for text in before_texts for marker in PROTECTION_MARKERS
+        )
+        list_complete = bool(anchor) and anchor in before_texts
+        contact_slot_available = bool(target) and target in before_texts
+
+        ime_current = plan.ime_original
+        if plan.ime_component is not None:
+            switched = self._switch_ime(
+                plan.ime_component, before_command=before_command
+            )
+            if switched is None:
+                return self._preflight_failure(
+                    plan,
+                    before_texts,
+                    ime_current=None,
+                    input_box_empty=True,
+                )
+            ime_current = switched
+
+        if plan.action_kind == "send_text":
+            text_readback_verified = False
+            if plan.body_text is None:
+                raise ActionExecutionError("executor_interrupted", clicked=False)
+            if not identity_unique:
+                return self._preflight_failure(
+                    plan, before_texts, ime_current=ime_current
+                )
+            self._run(
+                [
+                    self._adb,
+                    "-s",
+                    self._serial,
+                    "shell",
+                    "input",
+                    "text",
+                    _escape_input_text(plan.body_text),
+                ],
+                clicked=False,
+                phase="input",
+                command="adb_action_input",
+                before_command=before_command,
+            )
+            readback_xml = self._read_hierarchy(
+                clicked=False, before_command=before_command, phase="input"
+            )
+            readback_texts = _node_texts(readback_xml)
+            body = plan.body_text
+            body_readback = body in (_editor_texts(readback_xml) or [])
+            text_readback_verified = body_readback
+            if not body_readback:
+                return self._observation(
+                    plan,
+                    clicked=False,
+                    before_texts=before_texts,
+                    after_texts=readback_texts,
+                    after_xml=readback_xml,
+                    ime_current=ime_current,
+                    body_readback_matches=False,
+                    identity_unique=identity_unique,
+                    list_complete=list_complete,
+                    protections_clear=protections_clear,
+                    target_present_before=target_present_before,
+                    target_present_after=target_present_before,
+                    attachment_name_matched=False,
+                    contact_slot_available=contact_slot_available,
+                )
+        else:
+            if not identity_unique:
+                return self._preflight_failure(
+                    plan, before_texts, ime_current=ime_current
+                )
+            if plan.action_kind == "delete_conversation" and not (
+                list_complete and protections_clear and target_present_before
+            ):
+                return self._preflight_failure(
+                    plan, before_texts, ime_current=ime_current
+                )
+            if plan.action_kind in {"change_wechat", "change_phone"} and not (
+                contact_slot_available
+            ):
+                return self._preflight_failure(
+                    plan, before_texts, ime_current=ime_current
+                )
+            if plan.action_kind == "send_resume" and not plan.attachment_name:
+                raise ActionExecutionError("executor_interrupted", clicked=False)
+
         clicked = False
+        attachment_verified = False
         try:
             if plan.action_kind == "send_text":
-                if plan.body_text is None:
-                    raise ActionExecutionError("executor_interrupted", clicked=False)
-                self._run(
-                    [
-                        self._adb,
-                        "-s",
-                        self._serial,
-                        "shell",
-                        "input",
-                        "text",
-                        _escape_input_text(plan.body_text),
-                    ],
-                    clicked=False,
-                    phase="input",
-                )
-            for index, (x, y) in enumerate(plan.tap_points):
-                is_irreversible = index >= plan.irreversible_tap_index
-                clicked = clicked or is_irreversible
-                self._run(
-                    [self._adb, "-s", self._serial, "shell", "input", "tap", str(x), str(y)],
-                    clicked=is_irreversible,
-                    phase="clicked" if is_irreversible else "input",
-                )
-            after_xml = self._read_hierarchy(clicked=clicked)
+                self._tap(plan, 0, before_command=before_command)
+                clicked = True
+            else:
+                for index in range(len(plan.tap_points)):
+                    is_irreversible = index >= plan.irreversible_tap_index
+                    self._tap(
+                        plan,
+                        index,
+                        before_command=before_command,
+                        clicked_before=clicked,
+                    )
+                    if is_irreversible:
+                        clicked = True
+                        break
+                    if index == plan.irreversible_tap_index - 1:
+                        dialog_xml = self._read_hierarchy(
+                            clicked=False,
+                            before_command=before_command,
+                            phase="dialog",
+                        )
+                        dialog_texts = _node_texts(dialog_xml)
+                        if plan.action_kind == "send_resume":
+                            if not plan.attachment_name or plan.attachment_name not in dialog_texts:
+                                return self._observation(
+                                    plan,
+                                    clicked=False,
+                                    before_texts=before_texts,
+                                    after_texts=dialog_texts,
+                                    after_xml=dialog_xml,
+                                    ime_current=ime_current,
+                                    body_readback_matches=False,
+                                    identity_unique=identity_unique,
+                                    list_complete=list_complete,
+                                    protections_clear=protections_clear,
+                                    target_present_before=target_present_before,
+                                    target_present_after=target_present_before,
+                                    attachment_name_matched=False,
+                                    contact_slot_available=contact_slot_available,
+                                    force_input_box_empty=True,
+                                )
+                            attachment_verified = True
+                        elif plan.action_kind == "delete_conversation":
+                            if not (
+                                list_complete
+                                and protections_clear
+                                and bool(target)
+                                and target in dialog_texts
+                            ):
+                                return self._observation(
+                                    plan,
+                                    clicked=False,
+                                    before_texts=before_texts,
+                                    after_texts=dialog_texts,
+                                    after_xml=dialog_xml,
+                                    ime_current=ime_current,
+                                    body_readback_matches=False,
+                                    identity_unique=identity_unique,
+                                    list_complete=list_complete,
+                                    protections_clear=protections_clear,
+                                    target_present_before=target_present_before,
+                                    target_present_after=target_present_before,
+                                    attachment_name_matched=False,
+                                    contact_slot_available=contact_slot_available,
+                                    force_input_box_empty=True,
+                                )
+            after_xml = self._read_hierarchy(
+                clicked=clicked, before_command=before_command
+            )
         except DeviceGateError:
             raise ActionExecutionError(
                 "device_disconnected",
@@ -88,65 +263,202 @@ class AdbActionExecutor:
                 ime_restored=not clicked,
             ) from None
 
-        ime_current = plan.ime_original
-        if plan.ime_component is not None and plan.ime_original is not None:
-            try:
-                self._run(
-                    [
-                        self._adb,
-                        "-s",
-                        self._serial,
-                        "shell",
-                        "ime",
-                        "set",
-                        plan.ime_original,
-                    ],
-                    clicked=clicked,
-                    phase="clicked" if clicked else "idle",
-                )
-                ime_current = self.read_current_ime()
-            except (ActionExecutionError, DeviceGateError):
-                ime_current = None
+        after_texts = _node_texts(after_xml)
+        if plan.action_kind == "send_resume":
+            attachment_name_matched = attachment_verified
+        else:
+            attachment_name_matched = False
+        return self._observation(
+            plan,
+            clicked=clicked,
+            before_texts=before_texts,
+            after_texts=after_texts,
+            after_xml=after_xml,
+            ime_current=self._restore_ime(
+                plan.ime_original, before_command=before_command
+            ),
+            before_xml=before_xml,
+            body_readback_matches=(
+                plan.action_kind == "send_text" and text_readback_verified
+            ),
+            identity_unique=identity_unique,
+            list_complete=list_complete,
+            protections_clear=protections_clear,
+            target_present_before=target_present_before,
+            target_present_after=bool(target) and target in after_texts,
+            attachment_name_matched=attachment_name_matched,
+            contact_slot_available=contact_slot_available,
+        )
 
-        confirmation_open = "确认" in after_xml and "取消" in after_xml
+    def _preflight_failure(
+        self,
+        plan: ActionPlan,
+        before_texts: list[str],
+        *,
+        ime_current: str | None,
+        input_box_empty: bool = True,
+    ) -> ActionObservation:
+        """前置不成立时不发不可逆命令，返回可推导 not_performed 的观察。"""
+        xml_empty = "<hierarchy />"
+        return self._observation(
+            plan,
+            clicked=False,
+            before_texts=before_texts,
+            after_texts=before_texts,
+            after_xml=xml_empty,
+            ime_current=ime_current,
+            body_readback_matches=False,
+            identity_unique=False,
+            list_complete=False,
+            protections_clear=False,
+            target_present_before=False,
+            target_present_after=False,
+            attachment_name_matched=False,
+            contact_slot_available=False,
+            force_input_box_empty=input_box_empty,
+        )
+
+    def _observation(
+        self,
+        plan: ActionPlan,
+        *,
+        clicked: bool,
+        before_texts: list[str],
+        after_texts: list[str],
+        after_xml: str,
+        ime_current: str | None,
+        before_xml: str | None = None,
+        body_readback_matches: bool,
+        identity_unique: bool,
+        list_complete: bool,
+        protections_clear: bool,
+        target_present_before: bool,
+        target_present_after: bool,
+        attachment_name_matched: bool,
+        contact_slot_available: bool,
+        force_input_box_empty: bool | None = None,
+    ) -> ActionObservation:
+        """构造只含动作目标差分事实的观察，不使用全局提示当本次效果。"""
+        confirmation_open = "确认" in after_texts and "取消" in after_texts
         body = plan.body_text or ""
-        target = plan.target_label or ""
-        anchor = plan.anchor_label or ""
+        request_before = before_texts.count(RESUME_REQUEST_MARKER)
+        request_after = after_texts.count(RESUME_REQUEST_MARKER)
+        delivered_before = before_texts.count(RESUME_DELIVERED_MARKER)
+        delivered_after = after_texts.count(RESUME_DELIVERED_MARKER)
+        contact_before = before_texts.count(CONTACT_REQUEST_MARKER)
+        contact_after = after_texts.count(CONTACT_REQUEST_MARKER)
+        if force_input_box_empty is not None:
+            input_box_empty = force_input_box_empty
+        elif plan.action_kind == "send_text":
+            editors = _editor_texts(after_xml)
+            input_box_empty = editors is not None and all(
+                not value for value in editors
+            )
+        else:
+            input_box_empty = True
         return ActionObservation(
             action_key=plan.action_key,
             action_kind=plan.action_kind,
-            before_snapshot_id=str(uuid.uuid4()),
-            after_snapshot_id=str(uuid.uuid4()),
+            before_snapshot_id=(
+                _snapshot_id(before_xml)
+                if before_xml is not None
+                else str(uuid.uuid4())
+            ),
+            after_snapshot_id=_snapshot_id(after_xml),
             observed_at=_utc_now(),
             clicked=clicked,
             error=None,
-            scene_settled=not confirmation_open,
+            scene_settled=not confirmation_open and input_box_empty,
             command_quiet=True,
             confirmation_open=confirmation_open,
-            input_box_empty=_edit_text_empty(after_xml),
+            input_box_empty=input_box_empty,
             ime_original=plan.ime_original,
             ime_current=ime_current,
-            body_readback_matches=bool(body) and body in after_xml,
-            echo_count_before=before_xml.count(body) if body else 0,
-            echo_count_after=after_xml.count(body) if body else 0,
-            attachment_name_matched=bool(plan.attachment_name)
-            and plan.attachment_name in after_xml,
-            attachment_request_observed="附件简历请求已发送" in after_xml,
-            delivery_observed="附件简历已发送" in after_xml,
-            contact_slot_available=bool(target) and target in before_xml,
+            body_readback_matches=body_readback_matches,
+            echo_count_before=before_texts.count(body) if body else 0,
+            echo_count_after=after_texts.count(body) if body else 0,
+            attachment_name_matched=attachment_name_matched,
+            attachment_request_observed=request_after > request_before,
+            delivery_observed=delivered_after > delivered_before,
+            contact_slot_available=contact_slot_available,
             contact_slot_status=(
-                "requested" if "请求中" in after_xml else "none"
+                "requested" if contact_after > contact_before else "none"
             )
             if plan.action_kind in {"change_wechat", "change_phone"}
             else None,
-            identity_unique=bool(target) and before_xml.count(target) == 1,
-            target_present_before=bool(target) and target in before_xml,
-            target_present_after=bool(target) and target in after_xml,
-            anchor_present_after=bool(anchor) and anchor in after_xml,
+            identity_unique=identity_unique,
+            list_complete=list_complete,
+            protections_clear=protections_clear,
+            target_present_before=target_present_before,
+            target_present_after=target_present_after,
+            anchor_present_after=bool(plan.anchor_label)
+            and plan.anchor_label in after_texts,
         )
 
-    def _read_hierarchy(self, *, clicked: bool) -> str:
-        """执行一次 dump 后 cat；两步都复核门禁且不重试。"""
+    def _switch_ime(
+        self, component: str, *, before_command: Callable[[], None] | None
+    ) -> str | None:
+        """在输入前实际切到目标 IME 并读回确认；失败返回 None。"""
+        try:
+            self._run(
+                [self._adb, "-s", self._serial, "shell", "ime", "set", component],
+                clicked=False,
+                phase="idle",
+                command="adb_action_ime_set",
+                before_command=before_command,
+            )
+            current = self.read_current_ime(before_command=before_command)
+        except (ActionExecutionError, DeviceGateError):
+            return None
+        return current if current == component else None
+
+    def _restore_ime(
+        self, original: str | None, *, before_command: Callable[[], None] | None
+    ) -> str | None:
+        """动作后恢复原 IME 并读回；任何失败保持未知而不是假称恢复。"""
+        if original is None:
+            return None
+        try:
+            self._run(
+                [self._adb, "-s", self._serial, "shell", "ime", "set", original],
+                clicked=True,
+                phase="clicked",
+                command="adb_action_ime_set",
+                before_command=before_command,
+            )
+            current = self.read_current_ime(before_command=before_command)
+        except (ActionExecutionError, DeviceGateError):
+            return None
+        return current if current == original else None
+
+    def _tap(
+        self,
+        plan: ActionPlan,
+        index: int,
+        *,
+        before_command: Callable[[], None] | None,
+        clicked_before: bool = False,
+    ) -> None:
+        """执行一个点击原语；不可逆序号由计划固定。"""
+        x, y = plan.tap_points[index]
+        is_irreversible = index >= plan.irreversible_tap_index
+        self._run(
+            [self._adb, "-s", self._serial, "shell", "input", "tap", str(x), str(y)],
+            clicked=clicked_before or is_irreversible,
+            phase="clicked" if is_irreversible else "input",
+            command="adb_action_tap",
+            before_command=before_command,
+        )
+
+    def _read_hierarchy(
+        self,
+        *,
+        clicked: bool,
+        before_command: Callable[[], None] | None,
+        phase: str | None = None,
+    ) -> str:
+        """执行一次 dump 后 cat；两步共享有界边界且不重试。"""
+        active_phase = phase or ("clicked" if clicked else "idle")
         self._run(
             [
                 self._adb,
@@ -155,63 +467,60 @@ class AdbActionExecutor:
                 "shell",
                 "uiautomator",
                 "dump",
-                "/data/local/tmp/m5-action-ui.xml",
+                DEVICE_TMP_XML,
             ],
             clicked=clicked,
+            phase=active_phase,
+            command="adb_action_dump",
+            before_command=before_command,
         )
         return self._run(
-            [
-                self._adb,
-                "-s",
-                self._serial,
-                "shell",
-                "cat",
-                "/data/local/tmp/m5-action-ui.xml",
-            ],
+            [self._adb, "-s", self._serial, "shell", "cat", DEVICE_TMP_XML],
             clicked=clicked,
+            phase=active_phase,
+            command="adb_action_cat",
+            before_command=before_command,
         )
 
-    def _run(self, args: list[str], *, clicked: bool, phase: str = "idle") -> str:
-        """每条子命令前复核共享门禁，单次有界执行；失败立即停止且不重发。"""
-        self._gate.verify()
+    def _run(
+        self,
+        args: list[str],
+        *,
+        clicked: bool,
+        phase: str,
+        command: str,
+        before_command: Callable[[], None] | None,
+    ) -> str:
+        """每条命令前重核条件，单次有界执行；失败立即停止且不重发。"""
         started = time.perf_counter()
-        self._record("started", 0)
+        self._record(command, "started", 0)
         try:
-            completed = subprocess.run(
+            completed = run_adb(
                 args,
-                shell=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
+                gate=self._gate,
                 timeout=self._timeout,
-                check=False,
+                before=before_command,
             )
-        except FileNotFoundError:
-            self._record_failure(started, "adb_missing")
+        except AdbCommandFailure as error:
+            self._record_failure(command, started, error.category)
             raise ActionExecutionError(
                 "device_disconnected", clicked=clicked, **_phase_flags(phase)
             ) from None
-        except subprocess.TimeoutExpired:
-            self._record_failure(started, "adb_timeout")
+        except DeviceGateError:
+            self._record_failure(command, started, "adb_gate")
             raise ActionExecutionError(
                 "device_disconnected", clicked=clicked, **_phase_flags(phase)
             ) from None
-        except OSError:
-            self._record_failure(started, "adb_oserror")
+        except Exception:
+            self._record_failure(command, started, "action_guard")
             raise ActionExecutionError(
-                "device_disconnected", clicked=clicked, **_phase_flags(phase)
+                "executor_interrupted", clicked=clicked, **_phase_flags(phase)
             ) from None
-        if completed.returncode != 0:
-            self._record_failure(started, "adb_nonzero")
-            raise ActionExecutionError(
-                "device_disconnected", clicked=clicked, **_phase_flags(phase)
-            )
-        self._record("ok", elapsed_ms(started))
+        self._record(command, "ok", elapsed_ms(started))
         return completed.stdout
 
-    def _record(self, result: str, duration_ms: int) -> None:
-        """写固定 action/adb_action 事件，不写 serial、命令参数或现场原文。"""
+    def _record(self, command: str, result: str, duration_ms: int) -> None:
+        """写固定 action 事件与有限步骤标签，不写 serial/参数/现场原文。"""
         if self._process_log is None:
             return
         try:
@@ -220,12 +529,12 @@ class AdbActionExecutor:
                 result=result,
                 operation="perform",
                 duration_ms=duration_ms,
-                command="adb_action",
+                command=command,
             )
         except Exception:
             return
 
-    def _record_failure(self, started: float, category: str) -> None:
+    def _record_failure(self, command: str, started: float, category: str) -> None:
         """记录固定 ADB 错误类别，业务原因仍由调用方收敛为断连。"""
         if self._process_log is None:
             return
@@ -237,36 +546,68 @@ class AdbActionExecutor:
                 reason_code="device_disconnected",
                 error_category=category,
                 duration_ms=elapsed_ms(started),
-                command="adb_action",
+                command=command,
             )
         except Exception:
             return
 
 
+def _snapshot_id(xml_text: str) -> str:
+    """由层级原文内容派生稳定 UUID；相同内容不能伪装成不同前后快照。"""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, "m5-action:" + xml_text))
+
+
+def _parse_texts(xml_text: str) -> list[str]:
+    """用标准库解析层级全部节点文本；畸形 XML 返回空列表。"""
+    try:
+        root = ET.fromstring(xml_text)
+    except (ET.ParseError, ValueError):
+        return []
+    return [
+        node.get("text") or ""
+        for node in root.iter("node")
+        if node.get("text")
+    ]
+
+
+def _node_texts(xml_text: str) -> list[str]:
+    """返回可读节点文本列表，供唯一身份与动作差分使用。"""
+    return _parse_texts(xml_text)
+
+
+def _editor_texts(xml_text: str) -> list[str] | None:
+    """返回 EditText 节点文本；无编辑器或畸形时返回 None，不证明输入框为空。"""
+    try:
+        root = ET.fromstring(xml_text)
+    except (ET.ParseError, ValueError):
+        return None
+    result: list[str] = []
+    found = False
+    for node in root.iter("node"):
+        if node.get("class") != "android.widget.EditText":
+            continue
+        found = True
+        result.append(node.get("text") or "")
+    return result if found else None
+
+
 def _phase_flags(phase: str) -> dict[str, bool]:
     """按命令阶段给出可证明的现场标志；无法证明的收敛保持 False。"""
-    if phase not in {"idle", "input", "clicked"}:
+    if phase not in {"idle", "input", "dialog", "clicked"}:
         raise ValueError("phase is invalid")
+    if phase == "dialog":
+        return {
+            "scene_settled": False,
+            "input_box_empty": True,
+            "command_quiet": False,
+            "ime_restored": True,
+        }
     return {
         "scene_settled": phase == "idle",
         "input_box_empty": phase == "idle",
         "command_quiet": False,
         "ime_restored": phase == "idle",
     }
-
-
-def _edit_text_empty(after_xml: str) -> bool:
-    """从层级文本判断输入框是否为空；无法判断时保守为 False。"""
-    nodes = re.findall(
-        r'<node[^>]*class="android\.widget\.EditText"[^>]*>', after_xml
-    )
-    if not nodes:
-        return True
-    for node in nodes:
-        match = re.search(r'text="([^"]*)"', node)
-        if match is not None and match.group(1):
-            return False
-    return True
 
 
 def _escape_input_text(value: str) -> str:

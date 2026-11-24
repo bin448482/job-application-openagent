@@ -207,6 +207,12 @@ class EvidenceDerivationTests(unittest.TestCase):
         self.assertEqual(pending.evidence.outcome, "not_performed")
         self.assertTrue(pending.pause)
 
+    def test_performed_with_open_confirmation_still_pauses(self) -> None:
+        """已证明发送但确认框仍开时不得直接收敛释放门禁。"""
+        result = derive_action_outcome(observe(confirmation_open=True))
+        self.assertEqual(result.evidence.outcome, "performed")
+        self.assertTrue(result.pause)
+
     def test_not_performed_with_unsettled_scene_pauses(self) -> None:
         """输入框/IME/在途命令未收敛时不能仅凭 not_performed 结束。"""
         settled = derive_action_outcome(

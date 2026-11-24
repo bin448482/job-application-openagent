@@ -208,7 +208,7 @@ def _initialize_or_migrate(
     if version == PROFILE_SCHEMA_VERSION and set(objects) == set(
         PROFILE_EXPECTED_OBJECTS
     ):
-        _verify_existing(connection, profile_id, PROFILE_SCHEMA_VERSION)
+        _verify_objects(connection, profile_id, PROFILE_SCHEMA_VERSION)
         return None
     if version == 1 and set(objects) == set(PROFILE_V1_EXPECTED_OBJECTS):
         backup = _backup_profile(connection, path, backup_root)
@@ -235,7 +235,7 @@ def _create_v2(
             (profile_id, PROFILE_META_SCHEMA_VERSION, now),
         )
         connection.execute(f"PRAGMA user_version = {PROFILE_SCHEMA_VERSION}")
-        _verify_existing(connection, profile_id, PROFILE_SCHEMA_VERSION)
+        _verify_objects(connection, profile_id, PROFILE_SCHEMA_VERSION)
         connection.execute("COMMIT")
     except ProfileError:
         rollback_quietly(connection)
@@ -259,7 +259,7 @@ def _migrate_v1_to_v2(connection: sqlite3.Connection, profile_id: str) -> None:
         ):
             connection.execute(statement)
         connection.execute(f"PRAGMA user_version = {PROFILE_SCHEMA_VERSION}")
-        _verify_existing(connection, profile_id, PROFILE_SCHEMA_VERSION)
+        _verify_objects(connection, profile_id, PROFILE_SCHEMA_VERSION)
         connection.execute("COMMIT")
     except ProfileError:
         rollback_quietly(connection)
@@ -353,23 +353,6 @@ def _verify_any(connection: sqlite3.Connection, profile_id: str) -> int:
         _verify_objects(connection, profile_id, PROFILE_SCHEMA_VERSION)
         return PROFILE_SCHEMA_VERSION
     raise ProfileError("profile_mismatch")
-
-
-def _verify_existing(
-    connection: sqlite3.Connection, profile_id: str, version: int
-) -> None:
-    """核验刚创建/迁移后的完整版本与身份绑定。"""
-    expected = profile_expected_objects(version)
-    actual_version, objects = _read_schema(connection)
-    if actual_version != version or set(objects) != set(expected):
-        raise ProfileError("profile_mismatch")
-    for name, (expected_type, expected_sql) in expected.items():
-        actual_type, actual_sql = objects[name]
-        if actual_type != expected_type or _normalize_sql(actual_sql) != _normalize_sql(
-            expected_sql
-        ):
-            raise ProfileError("profile_mismatch")
-    _verify_identity(connection, profile_id)
 
 
 def _verify_objects(

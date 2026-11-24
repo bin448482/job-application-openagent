@@ -16,10 +16,10 @@ from app.profile_open import open_profile_store
 
 
 class ProfilePolicyActivity:
-    """只读检查共享设备占用与 profile 库现有任务状态，不解除占用或改库。
+    """只读检查共享设备占用、profile 任务与 M5 未决动作，不解除占用或改库。
 
-    M4c 只核对现有 M1 任务/设备行；M5 动作账本尚未实现，因此本检查不构成
-    完整 MVP 恢复对账，也不得被表述为完整恢复入口。
+    M5 动作账本已经实现；本检查把 pending/unknown/cancelled 动作视为未决，
+    但仍不执行动作对账或自动解锁。
     """
 
     def __init__(

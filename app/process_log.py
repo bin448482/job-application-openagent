@@ -172,6 +172,12 @@ COMMANDS = frozenset(
         "adb_hierarchy_cat",
         "adb_screencap",
         "adb_action",
+        "adb_action_dump",
+        "adb_action_cat",
+        "adb_action_input",
+        "adb_action_tap",
+        "adb_action_ime_get",
+        "adb_action_ime_set",
     }
 )
 MODES = frozenset({"fixture", "device"})
@@ -235,11 +241,20 @@ OPERATIONS = frozenset(
         "pending_actions",
         "text_admission",
         "load_ime",
+        "save_ime",
         "task_conversation",
+        "require_running",
         "perform",
         "eligibility",
         "card",
         "reconcile",
+        "action_validate",
+        "action_admit",
+        "action_execute",
+        "action_derive",
+        "action_commit",
+        "action_reconcile_validate",
+        "action_reconcile_commit",
     }
 )
 EVENT_KEYS = (

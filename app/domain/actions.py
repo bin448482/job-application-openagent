@@ -115,6 +115,8 @@ class ActionObservation:
     contact_slot_available: bool
     contact_slot_status: str | None
     identity_unique: bool
+    list_complete: bool
+    protections_clear: bool
     target_present_before: bool
     target_present_after: bool
     anchor_present_after: bool
@@ -230,6 +232,26 @@ def validate_action_identity(action_kind: object, action_key: object) -> None:
         raise ActionError("invalid_action")
 
 
+def validate_action_target(
+    action_kind: str, action_key: object, target_key: object
+) -> None:
+    """按唯一 action_key_for 算法核对动作键与实际目标，拒绝错配。"""
+    if action_kind == "send_text":
+        if not is_message_key(target_key):
+            raise ActionError("invalid_action")
+        expected = action_key_for(
+            action_kind, app=APP, message_key=str(target_key)
+        )
+    else:
+        if not is_conversation_key(APP, target_key):
+            raise ActionError("invalid_action")
+        expected = action_key_for(
+            action_kind, app=APP, conversation_key=str(target_key)
+        )
+    if expected != action_key:
+        raise ActionError("invalid_action")
+
+
 def expected_effect(action_kind: str, *, delivered: bool = False) -> str:
     """返回该动作在 performed 时唯一允许的效果；简历交付与请求分开。"""
     if action_kind not in ACTION_KIND_SET:
@@ -266,6 +288,8 @@ def validate_observation(observation: object) -> None:
         "delivery_observed",
         "contact_slot_available",
         "identity_unique",
+        "list_complete",
+        "protections_clear",
         "target_present_before",
         "target_present_after",
         "anchor_present_after",
@@ -288,13 +312,18 @@ def _precondition_ok(observation: ActionObservation) -> bool:
     """按动作类型判断点击前的前置证据是否成立。"""
     kind = observation.action_kind
     if kind == "send_text":
-        return observation.body_readback_matches
+        return observation.identity_unique and observation.body_readback_matches
     if kind == "send_resume":
-        return observation.attachment_name_matched
+        return observation.identity_unique and observation.attachment_name_matched
     if kind in {"change_wechat", "change_phone"}:
-        return observation.contact_slot_available
+        return observation.identity_unique and observation.contact_slot_available
     if kind == "delete_conversation":
-        return observation.identity_unique and observation.target_present_before
+        return (
+            observation.identity_unique
+            and observation.list_complete
+            and observation.protections_clear
+            and observation.target_present_before
+        )
     return False
 
 
@@ -326,7 +355,10 @@ def _performed_effect(observation: ActionObservation) -> str | None:
         return None
     if kind == "delete_conversation":
         if (
-            observation.target_present_before
+            observation.identity_unique
+            and observation.list_complete
+            and observation.protections_clear
+            and observation.target_present_before
             and not observation.target_present_after
             and observation.anchor_present_after
         ):
@@ -399,6 +431,7 @@ def derive_action_outcome(observation: ActionObservation) -> ActionOutcome:
         evidence.outcome == "performed"
         and (
             not observation.scene_settled
+            or observation.confirmation_open
             or not observation.input_box_empty
             or not observation.command_quiet
             or not ime_restored

@@ -318,6 +318,7 @@ class ActionStoreTests(unittest.TestCase):
         action_key = self._begin(lease, conversation, "fault")
 
         def hook(name: str, connection: sqlite3.Connection) -> None:
+            """在指定动作写入边界注入一次合成故障。"""
             self.faults.append(name)
             if name == "action_before_task_update":
                 raise RuntimeError("synthetic fault")
@@ -499,6 +500,7 @@ class ActionStoreTests(unittest.TestCase):
         action_key = self._begin(lease, conversation, "event-fault")
 
         def hook(name: str, connection: sqlite3.Connection) -> None:
+            """在动作审计写入前注入一次合成故障。"""
             if name == "action_before_event":
                 raise RuntimeError("synthetic event fault")
 
@@ -573,6 +575,162 @@ class ActionStoreTests(unittest.TestCase):
         self.assertEqual(status["daily_count"], 0)
         self.assertEqual(status["reason"], "text_send_blocked")
 
+    def test_cancelled_action_can_be_reconciled_later_without_reopening_task(self) -> None:
+        """abandon 后仍可受控确认未执行，清锁/设备但任务保持 cancelled。"""
+        lease, conversation = self._run_task()
+        action_key = self._begin(lease, conversation, "abandon-then-confirm")
+        self.store.complete_action(
+            lease,
+            action_key=action_key,
+            outcome=derive_action_outcome(
+                _text_observation(
+                    action_key, self.clock.now(), error="device_disconnected"
+                )
+            ),
+            now=self.clock.now(),
+        )
+        self.store.reconcile_action(
+            action_key=action_key,
+            resolution="abandon",
+            evidence=None,
+            command_quiet=False,
+            scene_settled=False,
+            confirmation_open=True,
+            ime_restored=False,
+            explicit_confirm=True,
+            command_stopped=False,
+            now=self.clock.now(),
+        )
+        evidence = m1_helpers.make_evidence(
+            outcome="not_performed",
+            effect="none",
+            reason_code="cancelled_before_action",
+            observed_at=self.clock.now(),
+            action_key=action_key,
+        )
+        result = self.store.reconcile_action(
+            action_key=action_key,
+            resolution="confirm_not_performed",
+            evidence=evidence,
+            command_quiet=True,
+            scene_settled=True,
+            confirmation_open=False,
+            ime_restored=True,
+            explicit_confirm=True,
+            command_stopped=True,
+            now=self.clock.now(),
+        )
+        self.assertEqual(result["state"], "not_performed")
+        self.assertTrue(result["gate_converged"])
+        self.assertEqual(result["task_state"], "cancelled")
+        self.assertEqual(self.store.pending_actions(), [])
+        self.assertIsNone(
+            m1_helpers.fetch_one(self.path, "SELECT * FROM device_lease")
+        )
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path, 'SELECT state FROM hr_discoveries WHERE "key" = ?', (lease.key,)
+            )["state"],
+            "cancelled",
+        )
+
+    def test_old_observed_time_is_rejected_without_clearing_quota(self) -> None:
+        """完成证据早于本次 pending 时拒绝，不能按错误日期清额度。"""
+        lease, conversation = self._run_task()
+        action_key = self._begin(lease, conversation, "old-time")
+        observation = _text_observation(
+            action_key, "2026-11-23T23:59:59.000Z"
+        )
+        with self.assertRaises(StoreError) as caught:
+            self.store.complete_action(
+                lease,
+                action_key=action_key,
+                outcome=derive_action_outcome(observation),
+                now=self.clock.now(),
+            )
+        self.assertEqual(caught.exception.reason_code, "invalid_observation")
+        self.assertEqual(self.store.get_action(action_key)["state"], "pending")
+        status = self.store.text_admission_status(
+            now=self.clock.now(),
+            daily_sends=10,
+            reply_cooldown_seconds=0,
+            conversation_key=conversation,
+        )
+        self.assertEqual(status["daily_count"], 0)
+
+    def test_complete_updates_persisted_ime_restored_state(self) -> None:
+        """IME 恢复后同一账本标记 restored，重启读取仍为已恢复。"""
+        lease, conversation = self._run_task()
+        action_key = self._begin(
+            lease, conversation, "ime-restored", ime_original="original-ime"
+        )
+        observation = _text_observation(
+            action_key,
+            self.clock.now(),
+            ime_original="original-ime",
+            ime_current="original-ime",
+        )
+        self.store.complete_action(
+            lease,
+            action_key=action_key,
+            outcome=derive_action_outcome(observation),
+            now=self.clock.now(),
+        )
+        state = self.store.load_ime_state()
+        self.assertTrue(state["restored"])
+        self.assertEqual(state["current_ime"], "original-ime")
+        self.store.close()
+        self.store = self._open()
+        self.assertTrue(self.store.load_ime_state()["restored"])
+
+    def test_reconcile_rejects_other_host_owner(self) -> None:
+        """不同本机 host 的 owner PID stopped 不能作为原命令停止证明。"""
+        lease, conversation = self._run_task()
+        action_key = self._begin(lease, conversation, "host-mismatch")
+        self.store.complete_action(
+            lease,
+            action_key=action_key,
+            outcome=derive_action_outcome(
+                _text_observation(
+                    action_key, self.clock.now(), error="device_disconnected"
+                )
+            ),
+            now=self.clock.now(),
+        )
+        other_store = SqliteStore(
+            self.path,
+            profile_id="demo",
+            local_host=m1_helpers.HOST_B,
+            monotonic=self.clock.monotonic,
+            stop_checker=lambda pid: "stopped",
+            process_log=ProcessLog(path=self.root / "other-host.jsonl"),
+        )
+        try:
+            evidence = m1_helpers.make_evidence(
+                outcome="performed",
+                effect="sent",
+                before_snapshot_id=helpers.BEFORE,
+                after_snapshot_id=helpers.AFTER,
+                observed_at=self.clock.now(),
+                action_key=action_key,
+            )
+            with self.assertRaises(StoreError) as caught:
+                other_store.reconcile_action(
+                    action_key=action_key,
+                    resolution="confirm_performed",
+                    evidence=evidence,
+                    command_quiet=True,
+                    scene_settled=True,
+                    confirmation_open=False,
+                    ime_restored=True,
+                    explicit_confirm=True,
+                    command_stopped=True,
+                    now=self.clock.now(),
+                )
+            self.assertEqual(caught.exception.reason_code, "owner_not_stopped")
+        finally:
+            other_store.close()
+
     def test_confirm_performed_counts_once(self) -> None:
         """unknown 文本经人工 confirm_performed 只计一次成功额度。"""
         lease, conversation = self._run_task()
@@ -611,6 +769,7 @@ class ActionStoreTests(unittest.TestCase):
             confirmation_open=False,
             ime_restored=True,
             explicit_confirm=True,
+            command_stopped=True,
             now=self.clock.now(),
         )
         self.assertEqual(result["state"], "performed")
@@ -632,6 +791,7 @@ class ActionStoreTests(unittest.TestCase):
                 confirmation_open=False,
                 ime_restored=True,
                 explicit_confirm=True,
+                command_stopped=True,
                 now=self.clock.now(),
             )
         self.assertEqual(caught.exception.reason_code, "action_not_ready")
@@ -659,6 +819,7 @@ class ActionStoreTests(unittest.TestCase):
             confirmation_open=True,
             ime_restored=False,
             explicit_confirm=True,
+            command_stopped=True,
             now=self.clock.now(),
         )
         self.assertEqual(result["state"], "cancelled")
@@ -708,6 +869,7 @@ class ActionStoreTests(unittest.TestCase):
                 confirmation_open=False,
                 ime_restored=True,
                 explicit_confirm=True,
+                command_stopped=True,
                 now=self.clock.now(),
             )
         self.assertEqual(caught.exception.reason_code, "scene_unsettled")
@@ -721,6 +883,7 @@ class ActionStoreTests(unittest.TestCase):
                 confirmation_open=False,
                 ime_restored=True,
                 explicit_confirm=False,
+                command_stopped=True,
                 now=self.clock.now(),
             )
         self.assertEqual(caught.exception.reason_code, "recovery_not_confirmed")

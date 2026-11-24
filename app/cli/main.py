@@ -40,7 +40,13 @@ from app.ports.policy import PolicyError
 from app.ports.profile import ProfileError
 from app.ports.store import StoreError
 from app.domain.json_input import load_json_object as _load_json_object
-from app.domain.policy import FACT_KEYS, PolicyIssue, effective_limits, utc_now
+from app.domain.policy import (
+    FACT_KEYS,
+    PolicyIssue,
+    compute_base_hash,
+    effective_limits,
+    utc_now,
+)
 from app.process_log import ProcessLog, elapsed_ms
 from app.profile_open import open_profile_store
 from app.usecases import acceptance as acceptance_usecases
@@ -1619,12 +1625,19 @@ def _open_action_guard(
         profile_store.close()
 
 
+def _unknown_command_stop(pid: int) -> str:
+    """生产默认无法证明原动作父子命令已停止，恢复保持拒绝。"""
+    del pid
+    return "unknown"
+
+
 def _run_action(
     log: ProcessLog,
     started: float,
     args: argparse.Namespace,
     os_root: Path | None,
     stop_checker: object | None,
+    command_stop_checker: object | None,
 ) -> int:
     """执行 action perform/eligibility/card/reconcile；默认零设备零网络。"""
     operation = args.action_command
@@ -1673,6 +1686,11 @@ def _run_action(
             PROJECT_ROOT, pack.profile_id, create=args.mode == "draft_only", now=now
         )
         checker = stop_checker or default_stop_checker
+        command_checker = (
+            command_stop_checker
+            if command_stop_checker is not None
+            else (stop_checker if stop_checker is not None else _unknown_command_stop)
+        )
 
         if operation == "eligibility":
             open_profile_store(profile_store, log)
@@ -1705,6 +1723,7 @@ def _run_action(
                 current_pack_hash=str(acceptance["pack_hash"]),
                 daily_sends=daily_sends,
                 reply_cooldown_seconds=cooldown,
+                profile_db_path=str(profile_path),
                 now=now,
             )
             return _action_success(log, started, stage_started, result, operation)
@@ -1758,6 +1777,28 @@ def _run_action(
                 action_key=action_key,
                 now=now,
             )
+
+            def reload_snapshot() -> dict[str, str]:
+                """在每条命令与提交前重读当前包/base 与当前验收摘要。"""
+                _, base_now, _, _, pack_now = policy_usecases.load_active_pack(
+                    repo, _pack_rel, process_log=log
+                )
+                acceptance_now = acceptance_usecases.check_acceptance(
+                    FileEvalStore(PROJECT_ROOT),
+                    args.credential,
+                    base_files=base_now,
+                    pack=pack_now,
+                    provider_id=args.provider,
+                    model_id=args.model_id,
+                    model_config_hash=args.model_config_hash,
+                )
+                return {
+                    "base_hash": compute_base_hash(base_now),
+                    "pack_hash": pack_now.pack_hash,
+                    "acceptance_base_hash": str(acceptance_now["base_hash"]),
+                    "acceptance_pack_hash": str(acceptance_now["pack_hash"]),
+                }
+
             fixture = _load_json_object(_resolve_project_path(args.fixture).read_text("utf-8"))
             executor = ScriptedActionExecutor(fixture)
             body_text = (
@@ -1793,6 +1834,8 @@ def _run_action(
                 executor=executor,
                 now=now,
                 process_log=log,
+                clock=utc_now,
+                reload_snapshot=reload_snapshot,
             )
             converged = bool(result.get("gate_converged"))
             gate.release(now=now, converged=converged)
@@ -1857,7 +1900,9 @@ def _run_action(
             profile_id=pack.profile_id,
             profile_db_path=str(profile_path),
             explicit_confirm=bool(args.confirm_action),
+            command_stop_checker=command_checker,
             now=now,
+            process_log=log,
         )
         gate.release(
             now=now, converged=bool(result.get("gate_converged"))
@@ -2514,11 +2559,13 @@ def main(
     process_log: ProcessLog | None = None,
     os_root: Path | None = None,
     stop_checker: object | None = None,
+    command_stop_checker: object | None = None,
 ) -> int:
     """执行一次 CLI 命令并返回 0 或 2，不向 stderr 回显输入或异常。
 
-    `os_root` 与 `stop_checker` 只供测试注入临时应用数据根与合成停止判据；
-    生产 CLI 固定使用 LOCALAPPDATA 下的共享设备门禁位置与真实本机检查器。
+    `os_root`/`stop_checker`/`command_stop_checker` 只供测试注入临时应用数据根、
+    合成本机停止判据与合成父子命令停止判据；生产 CLI 固定使用本机位置与
+    保守未知命令检查器。
     """
     log = process_log if process_log is not None else ProcessLog()
     started = time.perf_counter()
@@ -2627,7 +2674,14 @@ def main(
     if args.command == "facts":
         return _run_facts(log, started, args)
     if args.command == "action":
-        return _run_action(log, started, args, os_root, stop_checker)
+        return _run_action(
+            log,
+            started,
+            args,
+            os_root,
+            stop_checker,
+            command_stop_checker,
+        )
     if args.command == "run":
         return _run_run(log, started, args, os_root)
     if args.command == "policy":
