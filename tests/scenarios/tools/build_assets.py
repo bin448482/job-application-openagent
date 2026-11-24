@@ -1410,9 +1410,17 @@ def build_support_fixtures() -> None:
     size_toml_under = padded_toml(public_pack["pack.toml"], 16 * 1024 - 1)
     size_toml_exact = padded_toml(public_pack["pack.toml"], 16 * 1024)
     size_toml_over = padded_toml(public_pack["pack.toml"], 16 * 1024 + 1)
-    size_tone_under = padded(public_pack["tone.md"], 32 * 1024 - 1, " ")
-    size_tone_exact = padded(public_pack["tone.md"], 32 * 1024, " ")
-    size_tone_over = padded(public_pack["tone.md"], 32 * 1024 + 1, " ")
+    def padded_md(text: str, target: int, prefix: str = "") -> str:
+        """用合法非空白文本补齐 Markdown 到目标字节，避免行尾空白。"""
+        base = text.rstrip("\n") + "\n" + prefix
+        missing = target - 1 - len(base.encode("utf-8"))
+        if missing < 0:
+            raise ValueError("padding target is too small")
+        return base + "x" * missing
+
+    size_tone_under = padded_md(public_pack["tone.md"], 32 * 1024 - 1)
+    size_tone_exact = padded_md(public_pack["tone.md"], 32 * 1024)
+    size_tone_over = padded_md(public_pack["tone.md"], 32 * 1024 + 1)
     write_pack("size_toml_under", {**public_pack, "pack.toml": size_toml_under})
     write_pack("size_toml_exact", {**public_pack, "pack.toml": size_toml_exact})
     write_pack("size_toml_over", {**public_pack, "pack.toml": size_toml_over})
@@ -1420,9 +1428,9 @@ def build_support_fixtures() -> None:
     write_pack("size_tone_exact", {**public_pack, "tone.md": size_tone_exact})
     write_pack("size_tone_over", {**public_pack, "tone.md": size_tone_over})
     total_pack = padded_toml(public_pack["pack.toml"], 532)
-    total_phrase = padded(public_pack["phrase-bank.md"], 20001, " ")
-    total_never = padded(public_pack["never-say.md"], 15002, " ")
-    total_tone = padded(public_pack["tone.md"], 30000, " ")
+    total_phrase = padded_md(public_pack["phrase-bank.md"], 20001, "## rejected.greeting\n- ")
+    total_never = padded_md(public_pack["never-say.md"], 15002, "- ")
+    total_tone = padded_md(public_pack["tone.md"], 30000)
     total_under = {
         **public_pack,
         "pack.toml": total_pack,
@@ -1433,11 +1441,11 @@ def build_support_fixtures() -> None:
     write_pack("size_total_under", total_under)
     write_pack(
         "size_total_exact",
-        {**total_under, "never-say.md": total_never + " "},
+        {**total_under, "never-say.md": total_never + "x"},
     )
     write_pack(
         "size_total_over",
-        {**total_under, "never-say.md": total_never + "  "},
+        {**total_under, "never-say.md": total_never + "xx"},
     )
     write_bytes(
         "fixtures/m4/policy/packs/encoding_nul/pack.toml",

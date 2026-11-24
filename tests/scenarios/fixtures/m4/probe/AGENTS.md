@@ -32,8 +32,12 @@
 - `d05_symlink.json`：合成输入文件。
 - `d07_injection.json`：合成输入文件。
 - `d07_role.json`：合成输入文件。
+- `d07_role_anomaly.json`：合成输入文件。
+- `d07_role_external.json`：合成输入文件。
+- `d07_role_job.json`：合成输入文件。
 - `d07_subject.json`：合成输入文件。
 - `d08_hash.json`：合成输入文件。
+- `d08_render_size.json`：合成输入文件。
 - `d10_restore_active.json`：合成输入文件。
 - `d10_restore_stopped.json`：合成输入文件。
 - `d10_restore_unknown.json`：合成输入文件。
@@ -41,15 +45,22 @@
 - `d11_eval_missing.json`：合成输入文件。
 - `d11_eval_public.json`：合成输入文件。
 - `d11_holdout_after_failed.json`：合成输入文件。
+- `d11_holdout_audit.json`：合成输入文件。
 - `d11_holdout_failed_access.json`：合成输入文件。
 - `d11_holdout_first.json`：合成输入文件。
 - `d11_holdout_pack_edit.json`：合成输入文件。
 - `d11_holdout_repeat.json`：合成输入文件。
+- `d11_provider_auth.json`：合成输入文件。
+- `d11_provider_quota.json`：合成输入文件。
+- `d11_provider_timeout.json`：合成输入文件。
 - `d11_register.json`：合成输入文件。
 - `d11_register_duplicate.json`：合成输入文件。
+- `d11_register_write_fail.json`：合成输入文件。
 - `d11_regression_check.json`：合成输入文件。
 - `d11_retire.json`：合成输入文件。
+- `d11_retire_admission_fail.json`：合成输入文件。
 - `d11_retire_missing.json`：合成输入文件。
+- `d11_retire_registry_fail.json`：合成输入文件。
 - `d11_unknown_suite.json`：合成输入文件。
 
 ## 三、维护要求
