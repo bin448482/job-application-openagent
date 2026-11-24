@@ -543,6 +543,36 @@ class ActionStoreTests(unittest.TestCase):
             {"total": 0},
         )
 
+    def test_performed_but_unsettled_stays_unknown_and_does_not_count(self) -> None:
+        """已观察到发送但 IME/现场未收敛时保留 unknown 锁，不提前计成功额度。"""
+        lease, conversation = self._run_task()
+        action_key = self._begin(lease, conversation, "performed-unsettled")
+        observation = _text_observation(
+            action_key, self.clock.now(), ime_current="other-ime"
+        )
+        outcome = derive_action_outcome(observation)
+        self.assertEqual(outcome.evidence.outcome, "performed")
+        self.assertTrue(outcome.pause)
+        result = self.store.complete_action(
+            lease, action_key=action_key, outcome=outcome, now=self.clock.now()
+        )
+        self.assertEqual(result["state"], "unknown")
+        self.assertFalse(result["gate_converged"])
+        self.assertEqual(
+            m1_helpers.fetch_one(
+                self.path, 'SELECT state, reason_code FROM hr_discoveries WHERE "key" = ?', (lease.key,)
+            ),
+            {"state": "blocked", "reason_code": "result_unverified"},
+        )
+        status = self.store.text_admission_status(
+            now=self.clock.now(),
+            daily_sends=10,
+            reply_cooldown_seconds=0,
+            conversation_key=conversation,
+        )
+        self.assertEqual(status["daily_count"], 0)
+        self.assertEqual(status["reason"], "text_send_blocked")
+
     def test_confirm_performed_counts_once(self) -> None:
         """unknown 文本经人工 confirm_performed 只计一次成功额度。"""
         lease, conversation = self._run_task()

@@ -868,6 +868,13 @@ class SqliteStore:
                 record_reason = "result_unverified"
                 task_state = "blocked"
                 task_reason = "result_unverified"
+            elif evidence.outcome == "performed":
+                record_state = "unknown"
+                record_outcome = "unknown"
+                record_effect = "none"
+                record_reason = "result_unverified"
+                task_state = "blocked"
+                task_reason = "result_unverified"
             else:
                 record_state = "unknown"
                 record_outcome = "unknown"
