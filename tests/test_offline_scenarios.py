@@ -2781,8 +2781,15 @@ class P2M4CProbeBoundaryTests(unittest.TestCase):
             root = Path(temporary).resolve()
             target = root / "copy.txt"
             target.write_bytes(b"a\r\nb\r\n")
+            runner._normalize_text_file(target)
+            self.assertEqual(target.read_bytes(), b"a\nb\n")
+            target.write_bytes(b"a\r\nb\r\n")
             runner._normalize_lf_inputs(root, ["copy.txt"])
             self.assertEqual(target.read_bytes(), b"a\nb\n")
+            binary = root / "binary.bin"
+            binary.write_bytes(b"\xff\r\n")
+            runner._normalize_text_file(binary)
+            self.assertEqual(binary.read_bytes(), b"\xff\r\n")
             for invalid in ("../outside.txt", str(root / "copy.txt")):
                 with self.assertRaises(runner.IsolationError):
                     runner._normalize_lf_inputs(root, [invalid])

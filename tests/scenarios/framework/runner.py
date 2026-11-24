@@ -285,6 +285,17 @@ def _collect_selected_inputs(target: Path, variant: dict[str, Any]) -> list[Path
     return selected
 
 
+def _normalize_text_file(path: Path) -> None:
+    """把可解码的合成文本夹具副本统一为 LF；不可解码字节保持不变。"""
+    try:
+        data = path.read_bytes()
+        text = data.decode("utf-8")
+    except (OSError, UnicodeError):
+        return
+    if b"\r\n" in data:
+        path.write_bytes(text.replace("\r\n", "\n").encode("utf-8"))
+
+
 def _normalize_lf_inputs(root: Path, values: object) -> None:
     """把显式声明的合成 UTF-8 输入统一为 LF，消除检出换行差异。"""
     if values is None:
@@ -399,6 +410,7 @@ def _prepare_isolation(
         destination = root / "tests" / "scenarios" / "fixtures" / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+        _normalize_text_file(destination)
     shared_inputs = variant.get("shared_inputs") or []
     if not isinstance(shared_inputs, list) or any(
         not isinstance(item, str) for item in shared_inputs
@@ -415,6 +427,7 @@ def _prepare_isolation(
             destination = root / relative / source.relative_to(source_root)
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
+            _normalize_text_file(destination)
     fixture_copies = variant.get("fixture_copies") or {}
     if not isinstance(fixture_copies, dict):
         raise IsolationError("fixture_copies 必须是对象")
@@ -436,6 +449,7 @@ def _prepare_isolation(
             target_file = destination_root / source.relative_to(source_root)
             target_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target_file)
+            _normalize_text_file(target_file)
     local_packs = variant.get("local_packs") or {}
     if not isinstance(local_packs, dict):
         raise IsolationError("local_packs 必须是对象")
@@ -458,6 +472,7 @@ def _prepare_isolation(
             target_file = destination / source.relative_to(source_root)
             target_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target_file)
+            _normalize_text_file(target_file)
     _normalize_lf_inputs(root, variant.get("lf_inputs"))
     junctions = variant.get("junctions") or {}
     if not isinstance(junctions, dict):
