@@ -137,7 +137,7 @@ M4b 交付架构 A 外部 agent 与 B 本机进程两个参数数组桥：固定
 ## M4c profile 事实、共享设备门禁与 M4 闭环（已实现，未接真机/真实 provider）
 
 ```powershell
-python -m unittest tests.test_profile_facts tests.test_device_gate tests.test_run_guard tests.test_m4c_closed_loop
+python -m unittest tests.test_profile_facts tests.test_device_gate tests.test_run_guard tests.test_profile_session_lease tests.test_m4c_closed_loop
 python -m app facts set --profile demo --key work_location --value "<合成值>"
 python -m app facts set --profile demo --key work_location --value "<合成值>" --confirm
 python -m app facts show --profile demo --pack prompts/local/demo
@@ -147,11 +147,11 @@ python -m app policy acceptance check --pack prompts/local/demo --credential dat
 python -m app run check --pack prompts/local/demo --mode read_only --confirm-device
 ```
 
-`facts` 使用本机交互 CLI 逐字段录入长期事实：未带 `--confirm` 只输出提案，不写事实；确认后从库中重读并再次显示值。每条事实由程序生成来源 ID、记录确认时间与有效期；同键多个 active 来源不按较新时间自动择一，而是转 `conflict` 待办；显式 `--replace` 才作废旧来源。撤销保留历史来源，`forget` 删除当前事实行并只保留来源 ID/无值审计，明确不宣称擦除 SQLite WAL 或既有本机备份。事实值只写 `data/runtime/profiles/<profile_id>/runtime.sqlite3`，不进入策略包、过程日志、公开报告或错误文本；不读取 HR 文本、旧合成库、根 `config.json` 或凭据。旧 `data/runtime/runtime.sqlite3` 不自动导入。
+`facts` 使用本机交互 CLI 逐字段录入长期事实：未带 `--confirm` 只输出提案，不写事实；确认后从库中重读并再次显示值。每条事实由程序生成来源 ID、记录确认时间与有效期；同键多个 active 来源不按较新时间自动择一，而是转 `conflict` 待办；显式 `--replace` 才作废旧来源。撤销保留历史来源，`forget` 删除当前事实行并只保留来源 ID/无值审计，明确不宣称擦除 SQLite WAL 或既有本机备份。事实值只写 `data/runtime/profiles/<profile_id>/runtime.sqlite3`，不进入策略包、过程日志、公开报告或错误文本；带 `--pack` 时 pack.profile_id 必须等于 `--profile`，否则固定 `profile_mismatch`；路径存在但非普通文件时报 `profile_io_error`，不伪造空结果。不读取 HR 文本、旧合成库、根 `config.json` 或凭据。旧 `data/runtime/runtime.sqlite3` 不自动导入；合法 profile 库在完整校验后由唯一 `SqliteStore` 复用 M1 任务能力，旧普通 M1 库验证不放宽。
 
-共享设备门禁固定在 Windows `LOCALAPPDATA/job-application-openagent/device-guard.sqlite3`，不随仓库、worktree、clone、`--pack` 或配置改变；其它平台在支持前拒绝真实运行。整个真实会话（含 read_only）先 `BEGIN IMMEDIATE` 条件插入唯一 `primary` 行，存在任何状态即拒绝；启动、续租与每条设备命令前复核 owner/nonce/profile 绑定。崩溃、PID 消失、TTL、库不可读、nonce 篡改或换 profile 都不自动解锁；正常释放只在该次操作明确收敛且无在途子命令时删除，异常保留原绑定并置 `quarantined`。M0 `doctor --device` 已纳入同一占用；M3 真实采集适配器也在每条子命令前复核，未取得门禁或未确认时任何 ADB 子进程都不启动。
+共享设备门禁固定在 Windows `LOCALAPPDATA/job-application-openagent/device-guard.sqlite3`，不随仓库、worktree、clone、`--pack` 或配置改变；其它平台在支持前拒绝真实运行。整个真实会话（含 read_only）先 `BEGIN IMMEDIATE` 条件插入唯一 `primary` 行，存在任何状态即拒绝；acquire 保存完整 owner/pid/host/nonce/profile/路径，启动、续租与每条设备命令前复核完整身份与绑定。release 在写事务内再次比较同一完整身份，任一 owner/profile/路径变化都不删除原占用。只允许明确新空库初始化；未知版本、额外对象或旧占用表不改写，保留原内容。崩溃、PID 消失、TTL、库不可读、nonce 篡改或换 profile 都不自动解锁；正常释放只在该次操作明确收敛且无在途子命令时删除，异常保留原绑定并置 `quarantined`。目录/不可读等存在但不可判定路径返回 unknown，只有确认不存在才走无状态正例。M0 `doctor --device` 已纳入同一占用；M3 真实采集适配器缺 gate 时在零子进程处拒绝，并在每条子命令前复核，未取得门禁或未确认时任何 ADB 子进程都不启动。
 
-`policy acceptance check` 只读比较 M4b 验收凭证与当前 base/pack（可选 provider/model 摘要），任何变化以 `policy_changed` 拒绝旧凭证，不授予设备或发送权限。`run check` 是预检而非完整运行：read_only 要求本轮 `--confirm-device`，draft_only 另要求当前验收，`auto_send_tier_a` 在 v1 固定 C 且缺独立前置判据时始终 `authorization_required`；它不探测设备、不调用模型、不执行 M5 动作，跨库失败会隔离共享占用。M5–M8 的动作、调度、真机执行与真实 provider 仍未实现，完整 MVP 运行不可声称完成。
+`policy acceptance check` 只读比较 M4b 验收凭证与当前 base/pack（可选 provider/model 摘要），任何变化以 `policy_changed` 拒绝旧凭证，不授予设备或发送权限。`run check` 是预检而非完整运行：read_only 要求本轮 `--confirm-device`，draft_only 另要求当前验收（provider/model/model_config 齐全），`auto_send_tier_a` 在 v1 固定 C 且缺独立前置判据时始终 `authorization_required`；它不探测设备、不调用模型、不执行 M5 动作，跨库失败会保留占用并隔离。门禁适配器唯一记录 acquire/verify/release/quarantine 的 started/终态，run/restore 的 profile 打开也有唯一 started/终态。真实 `ProfileSessionLease` 每次从 profile 库任务/设备租约与共享门禁重读到期，失效/失配/过期由 `decide` 桥前拒绝。实际 CLI 合成桥 eval→snapshot→restore→validate/preview→eval 串行闭环已验证，三摘要一致且同 profile 既有事实/任务审计不变。M5–M8 的动作、调度、真机执行与真实 provider 仍未实现，完整 MVP 运行不可声称完成。
 
 ## 开发环境
 

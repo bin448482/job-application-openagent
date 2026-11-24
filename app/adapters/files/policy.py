@@ -381,19 +381,3 @@ class FilePolicyRepository:
         """把清单按固定紧凑 JSON 写入暂存文件，再由调用方同卷发布。"""
         text = json.dumps(manifest, ensure_ascii=False, separators=(",", ":")) + "\n"
         self.write_text_exact(staging_rel, text)
-
-
-class PolicyFileSnapshot:
-    """为 M4b/M5 决策边界提供每次重读 base 与活动四载荷的真实文件适配。"""
-
-    def __init__(self, repository: FilePolicyRepository, pack_rel: str) -> None:
-        """保存项目内策略仓储与显式活动包路径，构造阶段不读取文件。"""
-        self._repository = repository
-        self._pack_rel = pack_rel
-
-    def reload(self) -> tuple[dict[str, str], dict[str, str]]:
-        """重读当前 base 与活动包四载荷；读取失败由仓储抛固定策略错误。"""
-        return (
-            self._repository.read_base(),
-            self._repository.read_pack(self._pack_rel),
-        )

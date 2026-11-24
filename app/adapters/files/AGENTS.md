@@ -8,7 +8,7 @@
 
 - `__init__.py`：声明文件适配器包。
 - `support.py`：共用 `is_link_like`（symlink/Windows reparse/junction）、`normalize_project_relative`、`resolve_project_relative` 与 `read_bounded_bytes(max+1)`，供 policy/eval 文件适配器复用，避免第二套路径安全算法。
-- `policy.py`：`FilePolicyRepository(root)`。路径只接受项目内相对 POSIX/反斜杠形式，拒绝绝对路径、盘符、`~`、`..`、链接/junction 与越界；活动包只允许 `prompts/local/<profile>` 直接子目录，快照只允许 `prompts/local/history/<snapshot-id>`，preview 只允许 `tests/fixtures/policy-preview/<case>.json`。`PolicyFileSnapshot` 是 M4c 决策边界的 `DecisionSnapshotPort` 文件实现，每次 `reload` 重读 base 与活动四载荷，不复制摘要/校验逻辑。
+- `policy.py`：`FilePolicyRepository(root)`。路径只接受项目内相对 POSIX/反斜杠形式，拒绝绝对路径、盘符、`~`、`..`、链接/junction 与越界；活动包只允许 `prompts/local/<profile>` 直接子目录，快照只允许 `prompts/local/history/<snapshot-id>`，preview 只允许 `tests/fixtures/policy-preview/<case>.json`。决策边界的 `DecisionSnapshotPort` 统一使用 `app/usecases/policy_eval.py` 的 `RepositorySnapshot`；本适配器不另建快照包装。
 - `evals.py`：`FileEvalStore(root)`。公开套件固定 `evals/policy-suite/public.json`，私有回归/留出固定 `evals/private/{regression,holdout}/suite.json`；报告/凭证写 `data/evals/eval-<run-id>/`，留出登记写 `data/evals/holdout-registry.local.json`，无上传合同写 `data/evals/holdout-attestation.local.json`，退役准入写 `data/evals/regression-admissions/<batch-id>/suite.json`。`read_acceptance` 只读 `data/evals/eval-<32hex>/acceptance.json` 固定形状，拒绝其它位置。只有 regression 读取/合并准入，且仅纳入 registry 已确认 retired 且 regression_ref 匹配的副本；public/holdout 不因无关坏准入失败，registry 未确认的准入不暴露。读取有界，报告/凭证同卷临时完整写入后原子链接、目标存在不覆盖，登记在独占锁内读-改-原子替换，链接/junction 拒绝；退役登记失败时保留未确认准入本机残留，由 registry 过滤使其不可运行，不删除其它 owner 文件。
 - `AGENTS.md`、`CLAUDE.md`：本目录索引与入口。
 

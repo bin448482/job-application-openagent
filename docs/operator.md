@@ -307,15 +307,19 @@ python -m app facts forget --profile demo --key work_location --confirm
 - 只接受 `work_location`、`salary_expectation`、`years_experience` 三个注册键；值 1–200 个单行字符，拒绝控制字符、孤立代理和联系方式模式。值只在本机 CLI stdout、本机 profile 库与 `select_profile_facts` 的请求内存中；不写策略包、过程日志、公开报告或错误文本。`--value` 仍会作为本机命令行参数出现，可能进入本机 shell 历史或进程列表；请在本机受控环境运行，程序不把它写入其它产物。
 - `set` 未带 `--confirm` 只返回 `confirmation_required` 提案，不写事实；确认后由程序生成来源 ID、记录确认时间并**再次从库中重读显示**该值。同键多个 active 来源不按较新时间自动择一，`show --pack` 将其列为 `conflict` 待办；显式 `--replace` 才把旧来源置 `superseded` 并写入新来源。
 - 有效期为空或晚于当前 UTC；到期、缺失、冲突分别转 `expired/missing/conflict` 待办，不进入 envelope 的 `allowed_facts`。`revoke` 只把当前 active 来源置 `revoked`，保留历史；`forget` 删除当前事实行并只保留来源 ID/无值审计事件，且明确 `secure_erase_claimed=false`：SQLite WAL 页面和既有本机备份不能因此宣称已安全擦除。
-- 事实与 profile 元数据绑定 `data/runtime/profiles/<profile_id>/runtime.sqlite3`；未来 M5 的额度/冷却/动作历史也绑定同一库，但 M4c 不预建这些表。不同 profile 不复制；旧 `data/runtime/runtime.sqlite3` 不自动导入，已有 M1 v1 五表结构不改、不虚构 1→2 迁移。
+- 事实与 profile 元数据绑定 `data/runtime/profiles/<profile_id>/runtime.sqlite3`；未来 M5 的额度/冷却/动作历史也绑定同一库，但 M4c 不预建这些表。不同 profile 不复制；旧 `data/runtime/runtime.sqlite3` 不自动导入，已有 M1 v1 五表结构不改、不虚构 1→2 迁移。带 `--pack` 时 pack.profile_id 必须等于 `--profile`，否则 `profile_mismatch`；profile 路径存在但为目录/非普通文件时 `profile_io_error`，不返回空事实冒充成功。
+- 合法 profile 库在完整 profile schema/绑定校验后可由唯一 `SqliteStore` 复用 M1 任务能力；普通 M1 库仍走精确五表验证，不放宽旧库。`ProfileSessionLease` 每次从该 profile 库任务/设备租约和共享门禁重读完整 owner/pid/host/nonce/到期，并比较 store 路径与调用方给定 profile 库路径；不存在、失配或过期不返回租约，由 `decide` 桥前/桥后 `stale_decision` 拒绝。
 - 临时偏好只属于本轮运行上下文，不写入长期事实；M4c 没有运行上下文入口，因此不提供“临时值改长期库”的按钮。
 
 共享设备门禁固定在 Windows `LOCALAPPDATA/job-application-openagent/device-guard.sqlite3`，不随仓库、worktree、clone、`--pack` 或 `--config` 改变；非 Windows 或缺失固定 OS 根时拒绝真实占用。唯一 `primary` 行保存 profile_id、原 profile 库规范路径、owner/pid/host/nonce 与 `held/quarantined`，不存事实、聊天或序列号。
 
+- acquire 保存完整 owner_id/pid/host、nonce、profile 与库路径；verify 和 release 写事务共用同一完整身份复核。只改 owner 任一字段或 profile/路径都会拒绝，release 不删除原占用；nonce 篡改也拒绝。
+- 只有 user_version=0 且无用户对象的明确新空库可初始化；已有库核验版本、完整对象集合与 DDL，未知版本、额外对象或旧占用表固定失败且不改写/覆盖版本。
 - 每个真实会话（含 read_only）先 `BEGIN IMMEDIATE` 条件插入；存在 held 返 `device_busy`，存在 quarantined 返 `device_quarantined`，都不覆盖、不因 TTL/PID 消失/重启自动释放。
-- 启动、续租与每条设备子命令前复核 nonce、profile 绑定与 held 状态；nonce 篡改、换 profile 路径或库不可读都停止新动作并保留原绑定。
+- 启动、续租与每条设备子命令前复核完整身份、profile 绑定与 held 状态；库不可读、目录路径或其它不可判定状态停止新动作并保留原绑定。只有能确认门禁库/profile 库不存在才走无状态正例；存在但是目录时 restore 返回 unknown 并拒绝发布。
 - 正常释放只在该次操作明确收敛、无 pending/unknown 且全部子命令已退出时删除；异常、未知或库不可读保留行并置 `quarantined`。M4c 不提供伪授权开锁，M5 的真实对账入口尚未实现。
-- M0 `doctor --device` 与 M3 真实采集适配器都接同一门禁；`doctor` 必须带本轮 `--confirm-device`，未确认时任何 ADB 子进程都不启动。M4c 仍不提供 `read --device` 真实入口（真实 profile 未标定）。
+- 门禁适配器唯一记录 acquire/verify/release/quarantine 的 started/终态；run/restore 的 profile 打开记录 started/终态。CLI 不重复记录同一门禁操作；失败终态结束对应 started，不写事实值、owner 原值、库绝对路径或异常原文。
+- M0 `doctor --device` 与 M3 真实采集适配器都接同一门禁；适配器缺 gate 时在零子进程处拒绝，`doctor` 必须带本轮 `--confirm-device`，未确认时任何 ADB 子进程都不启动。M4c 仍不提供 `read --device` 真实入口（真实 profile 未标定）。
 
 验收凭证复核：
 
@@ -338,8 +342,9 @@ python -m app run check --pack prompts/local/demo --mode auto_send_tier_a --conf
 ```
 
 - `run check` 只做预检：不探测设备、不调用模型、不执行 M5 动作、不写动作表。成功输出 `preflight_only=true`、`actions_performed=0`、`decisions=0` 与 `m5_actions_not_implemented`/`m8_run_not_implemented` 限制，**不**表示完整运行或发送授权。
-- read_only 只要求本轮 `--confirm-device`；draft_only 另要求当前验收；`auto_send_tier_a` 在 v1 缺独立前置判据且固定 `policy_tier=C` 时始终 `authorization_required`。
-- 预检先取得共享占用，再打开 profile 库；profile 库坏或绑定不符时保留共享占用并置 `quarantined`，不补偿为设备空闲。正常预检结束才释放。
+- read_only 只要求本轮 `--confirm-device`；draft_only 另要求当前验收且 provider/model/model_config_hash 齐全；`auto_send_tier_a` 在 v1 缺独立前置判据且固定 `policy_tier=C` 时始终 `authorization_required`。
+- 预检先取得共享占用，再打开 profile 库；profile 库坏、绑定不符或存在 leased/running/blocked 未决时保留共享占用并置 `quarantined`，不补偿为设备空闲。正常预检结束才释放。门禁与 profile 打开步骤都有配对日志。
+- 实际 CLI 受控合成桥 eval→snapshot→restore→validate/preview→eval 串行闭环已验证：快照/恢复/验证与两次报告 pack_hash 一致，同 profile 既有事实与任务审计不变；模拟/真实 provider 外发边界不变。
 
 ## 八、显式真实设备模式
 
@@ -349,7 +354,7 @@ python -m app run check --pack prompts/local/demo --mode auto_send_tier_a --conf
 python -m app doctor --device --serial <serial> --confirm-device
 ```
 
-`--confirm-device` 是本轮确认的显式入口；缺省时在启动任何子进程前拒绝。真实模式先取得固定 OS 位置共享 SQLite 设备门禁的唯一 primary 占用，每条 ADB 命令前复核；正常结束只在该次探针明确收敛时释放，异常保留占用并隔离。
+`--confirm-device` 是本轮确认的显式入口；缺省时在启动任何子进程前拒绝。真实模式先取得固定 OS 位置共享 SQLite 设备门禁的唯一 primary 占用，每条 ADB 命令前复核完整身份；正常结束只在该次探针明确收敛时释放，异常保留占用并隔离。适配器缺 gate 时在零 subprocess 处固定拒绝。
 
 执行前必须完成本轮设备操作确认，并向使用者说明：
 
@@ -433,8 +438,8 @@ M2 `sense` 的合成输入另用 `tests/fixtures/sensor/` 的 manifest/profile/X
 
 每行固定包含 `schema_version/ts/correlation_id/stage/operation/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count/case_index`：
 
-- `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/sense/read/policy/facts/device_gate/run/eval/adb_hierarchy/adb_screen/adb_evidence/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、ADB 命令与证据保存、sense 解析、M3 read 解析/像素/合并/门禁、M4a policy 文件阶段、M4b eval/decision 桥阶段、M4c 事实/门禁/预检、业务判定、store 初始化/核验与 upsert/unresolved、输出和出口。M4b `operation` 含 `verify/bridge/validate/suite/authorize/case/report/holdout/acceptance`；报告写入同一 `correlation_id`，逐例只带安全序号 `case_index` 与摘要，不写正文、事实值、用户标识或绝对路径。M4c `facts` 只记 set/show/revoke/forget，`device_gate` 只记 acquire/verify/release/quarantine，`run` 只记 check；不写事实值、profile ID、门禁路径或原异常。
-- `operation` 在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，`sense` 阶段取 `parse/aggregate/stop_reason`，`read` 阶段取 `load/page/job_list/job_detail/unread/conversation/merge/pixel/gate`，`policy` 阶段取 `load/validate/render/publish` 及命令名 `init/validate/preview/list/snapshot/restore/eval/holdout/acceptance`，`facts` 阶段取 `set/show/revoke/forget`，`device_gate` 阶段取 `acquire/verify/release/quarantine`，`run` 阶段取 `check`，`eval` 阶段取 `suite/authorize/case/report/acceptance/holdout`，`decision` 阶段取 `verify/bridge/validate`；只有未承载操作的 stage 才为 `null`。公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时；`sense/parse`、`read/load` 与各 read 操作按 `ReadResult.status` 记 `ok/undetermined/failed`，内部异常记 `failed/error_category=internal` 后继续公共安全出口；`policy`/`eval` 在真实执行边界分别记录阶段 `started` 与唯一终态，命令级再记 `started`/终态，恢复活动未知记 `undetermined`；不记 PID/host/nonce/键/正文/XML/SQL/文件内容/路径/异常。
+- `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/sense/read/policy/facts/profile/device_gate/run/eval/adb_hierarchy/adb_screen/adb_evidence/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、ADB 命令与证据保存、sense 解析、M3 read 解析/像素/合并/门禁、M4a policy 文件阶段、M4b eval/decision 桥阶段、M4c 事实/profile 打开/门禁/预检、业务判定、store 初始化/核验与 upsert/unresolved、输出和出口。M4b `operation` 含 `verify/bridge/validate/suite/authorize/case/report/holdout/acceptance`；报告写入同一 `correlation_id`，逐例只带安全序号 `case_index` 与摘要，不写正文、事实值、用户标识或绝对路径。M4c `facts` 只记 set/show/revoke/forget，`profile` 只记 open_profile，`device_gate` 由适配器唯一记 acquire/verify/release/quarantine，`run` 只记 check；不写事实值、profile ID、门禁路径或原异常。
+- `operation` 在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations/current_lease_expiry`，`sense` 阶段取 `parse/aggregate/stop_reason`，`read` 阶段取 `load/page/job_list/job_detail/unread/conversation/merge/pixel/gate`，`policy` 阶段取 `load/validate/render/publish` 及命令名 `init/validate/preview/list/snapshot/restore/eval/holdout/acceptance`，`facts` 阶段取 `set/show/revoke/forget`，`profile` 阶段取 `open_profile`，`device_gate` 阶段取 `acquire/verify/release/quarantine`，`run` 阶段取 `check`，`eval` 阶段取 `suite/authorize/case/report/acceptance/holdout`，`decision` 阶段取 `verify/bridge/validate`；只有未承载操作的 stage 才为 `null`。公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时；`sense/parse`、`read/load` 与各 read 操作按 `ReadResult.status` 记 `ok/undetermined/failed`，内部异常记 `failed/error_category=internal` 后继续公共安全出口；`policy`/`eval` 在真实执行边界分别记录阶段 `started` 与唯一终态，命令级再记 `started`/终态，恢复活动未知记 `undetermined`；不记 PID/host/nonce/键/正文/XML/SQL/文件内容/路径/异常。
 - `result` 固定为 `started/ok/undetermined/failed`；`reason_code` 沿用计划词表（含 `identity_ambiguous`、字段未知/像素原因与 gate 原因）、M4a `invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case` 与 M4b `invalid_provider/eval_failed/authorization_required/invalid_decision/stale_decision/stale_evidence/decision_timeout/bridge_*`、M4c `invalid_profile/invalid_fact/fact_conflict/fact_not_found/profile_io_error/profile_mismatch/device_gate_unavailable/device_gate_io_error/device_busy/device_not_held/device_gate_mismatch/device_quarantined` 与 `run_io_error`；`error_category` 固定为 `argument/config/fixture/probe/business/store/sense/read/policy/facts/profile/gate/run/eval/decision/bridge/pixel/gate/evidence/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
 - `command` 只写 `adb_devices/adb_window/adb_hierarchy_dump/adb_hierarchy_cat/adb_screencap`；每次命令先记 `started`，完成后再记 `ok` 或固定失败类别。
 - `store` 阶段先记 `started`，再记 `ok` 或带固定仓储原因与 `error_category=store` 的 `failed`；非预期异常只把失败事件记为 `reason_code=null`/`error_category=internal`，业务 stdout 仍为 `store_io_error`/退出 `2`，最终 exit 分类与失败事件分类分别记录、互不替代。不写数据库路径。

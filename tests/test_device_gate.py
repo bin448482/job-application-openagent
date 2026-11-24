@@ -181,6 +181,109 @@ class SharedDeviceGateTests(unittest.TestCase):
         self.assertEqual(release_error.exception.reason_code, "device_gate_mismatch")
         self.assertEqual(gate.inspect()["state"], "held")
 
+    def test_owner_or_binding_tamper_blocks_verify_and_release(self) -> None:
+        """完整 owner/profile 绑定任一变化都不得复核或删除原占用。"""
+        mutations = {
+            "owner_id": "UPDATE device_guard SET owner_id = ?",
+            "owner_pid": "UPDATE device_guard SET owner_pid = 9999",
+            "owner_host": "UPDATE device_guard SET owner_host = ?",
+            "profile_id": "UPDATE device_guard SET profile_id = 'other'",
+            "profile_db_path": "UPDATE device_guard SET profile_db_path = ?",
+        }
+        for name, statement in mutations.items():
+            with self.subTest(mutation=name):
+                gate = self._gate("alpha")
+                self._acquire(gate, "alpha")
+                path = guard_database_path(self.os_root)
+                connection = sqlite3.connect(str(path))
+                try:
+                    if name == "owner_id":
+                        connection.execute(statement, ("00000000-0000-4000-8000-000000000099",))
+                    elif name == "owner_host":
+                        connection.execute(statement, (canonical_hash("other-host"),))
+                    elif name == "profile_db_path":
+                        connection.execute(
+                            statement,
+                            (str(profile_runtime_path(self.root, "other")),),
+                        )
+                    else:
+                        connection.execute(statement)
+                    connection.commit()
+                finally:
+                    connection.close()
+                with self.assertRaises(DeviceGateError) as verify_error:
+                    gate.verify()
+                self.assertEqual(
+                    verify_error.exception.reason_code, "device_gate_mismatch"
+                )
+                with self.assertRaises(DeviceGateError) as release_error:
+                    gate.release(now=LATER, converged=True)
+                self.assertEqual(
+                    release_error.exception.reason_code, "device_gate_mismatch"
+                )
+                self.assertEqual(gate.inspect()["state"], "held")
+                path.unlink()
+
+    def test_unknown_gate_schema_is_not_rewritten(self) -> None:
+        """未知版本/额外对象/旧占用表不能被 acquire 接管或改写。"""
+        path = guard_database_path(self.os_root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(str(path))
+        try:
+            connection.execute(
+                "CREATE TABLE legacy_guard(device_key TEXT PRIMARY KEY, nonce TEXT)"
+            )
+            connection.execute(
+                "INSERT INTO legacy_guard(device_key, nonce) VALUES ('primary', 'old')"
+            )
+            connection.execute("PRAGMA user_version = 99")
+            connection.commit()
+        finally:
+            connection.close()
+        before = path.read_bytes()
+        with self.assertRaises(DeviceGateError) as caught:
+            self._acquire(self._gate("alpha"), "alpha")
+        self.assertEqual(caught.exception.reason_code, "device_gate_io_error")
+        self.assertEqual(path.read_bytes(), before)
+        connection = sqlite3.connect(str(path))
+        try:
+            self.assertEqual(
+                int(connection.execute("PRAGMA user_version").fetchone()[0]), 99
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT nonce FROM legacy_guard WHERE device_key = 'primary'"
+                ).fetchone()[0],
+                "old",
+            )
+        finally:
+            connection.close()
+
+    def test_extra_objects_in_gate_schema_are_rejected(self) -> None:
+        """已有正确门禁表但额外对象时按完整对象集拒绝且不改写。"""
+        gate = self._gate("alpha")
+        self._acquire(gate, "alpha")
+        gate.release(now=LATER, converged=True)
+        path = guard_database_path(self.os_root)
+        connection = sqlite3.connect(str(path))
+        try:
+            connection.execute("CREATE TABLE unexpected_extra(value TEXT)")
+            connection.commit()
+            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+        finally:
+            connection.close()
+        before = path.read_bytes()
+        with self.assertRaises(DeviceGateError):
+            self._acquire(self._gate("alpha"), "alpha")
+        self.assertEqual(path.read_bytes(), before)
+        connection = sqlite3.connect(str(path))
+        try:
+            self.assertEqual(
+                int(connection.execute("PRAGMA user_version").fetchone()[0]), version
+            )
+        finally:
+            connection.close()
+
     def test_unreadable_gate_library_never_claims_release(self) -> None:
         """门禁库损坏时复核与释放都固定 IO 失败，不伪造设备空闲。"""
         gate = self._gate("alpha")

@@ -20,10 +20,11 @@
 - `test_policy_store.py`：路径/普通文件/链接/BOM/NUL/大小/CRLF、init/validate/preview/list、编辑语气/分档/披露、坏示例受控四键、snapshot 清单与复制前后源重读、restore 三值/base/清单/快照/目标篡改、坏 profile 库 unknown 拒绝、合成 stopped 正路径、失败清理、四键外层、配置错误四键、链接候选 list、load/validate/render/publish 阶段日志与零设备/网络/子进程。
 - `test_bridge.py`：M4b A/B 真实参数数组子进程成功、固定三角色/无工具无历史、伪造 role 保持 user 数据、启动失败一次重试、重试前时钟/包/事实有效期门禁、提交后 20 秒超时不重试、临时创建/输入写超预算零 Popen、2MiB stdout 上限、慢进程/不读 stdin/大 stderr/短命继承 stdout 有界收尾、输出监测/等待 OSError 受控、认证/额度/断连/坏 JSON/重复键/角色不符/坏回显固定诊断、事实来源复验、包变动与桥前后租约过期、RenderedRequest 篡改先拒绝。
 - `test_policy_eval.py`：实际加载当前包、公开套件模拟/真实适配器路径、报告绑定 base/pack/provider/model/config/suite 摘要与 correlation、模拟/失败/零样本/缺套件无凭证、成功凭证、授权拒绝前不启动桥且日志唯一失败终态、编辑包改变请求与摘要、24 行映射完整、公开/回归/留出分桶、失败报告无凭证、留出冻结/访问 intent/中断/写失败/并发/重启重复/样本身份换名与子集拒绝/摘要变化/退役实际 regression 准入/登记失败保留未确认准入但不可运行/新批次/外部 provider 拒绝/无上传合同绑定与缺失/零样本未测、有界套件读取、无关坏 regression 准入不影响 public+holdout、报告原子失败清理、真实 Windows junction 拒绝、job_card 正控制、缺 public suite 日志唯一失败终态、阶段日志与未知桥异常、CLI eval help/echo/未确认与 holdout register/retire。
-- `test_profile_facts.py`：M4c profile 事实域/CLI/存储绑定：提案不落库、确认后重读再显示、程序来源 ID、有效期、同键冲突/显式 replace、撤销/遗忘/无值审计、联系方式/控制字符拒绝、值不进日志、包白名单待办、不同 profile 不共享、旧合成库不导入与元数据绑定。
-- `test_device_gate.py`：M4c 固定 OS 门禁与活动检查：路径不随项目根/profile 改变、不同 profile/两逻辑项目根跨进程互斥、崩溃/PID/TTL 不释放、异常隔离、nonce 篡改、库不可读、非 Windows 拒绝、profile 库 leased/running/blocked 状态。
-- `test_run_guard.py`：M4c `run check`：read_only 本轮确认、draft 当前验收、A 档固定拒绝、预检零子进程与跨库故障隔离。
-- `test_m4c_closed_loop.py`：M4c 闭环：真实活动 restore、三值一致、同 profile 事实不重置、旧凭证摘要变化拒绝、真实文件快照桥前后重核与 M4a→M4b 模拟 eval→snapshot→restore→validate/preview→模拟 eval 串行运行。
+- `test_profile_facts.py`：M4c profile 事实域/CLI/存储绑定：提案不落库、确认后重读再显示、程序来源 ID、有效期、同键冲突/显式 replace、撤销/遗忘/无值审计、联系方式/控制字符拒绝、值不进日志、包白名单待办、pack.profile_id 与 `--profile` 不一致拒绝、目录路径不伪造空结果、不同 profile 不共享、旧合成库不导入与元数据绑定。
+- `test_device_gate.py`：M4c 固定 OS 门禁与活动检查：路径不随项目根/profile 改变、不同 profile/两逻辑项目根跨进程互斥、完整 owner/pid/host/nonce/profile/路径篡改均不删除占用、未知版本/额外对象/旧占用表不改写、崩溃/PID/TTL 不释放、异常隔离、库不可读、非 Windows 拒绝、profile 库 leased/running/blocked 状态。
+- `test_run_guard.py`：M4c `run check`：read_only 本轮确认、draft 当前验收、A 档固定拒绝、预检零子进程、跨库故障隔离与门禁/profile 打开日志 started/终态配对。
+- `test_profile_session_lease.py`：M4c 真实 profile 租约：合法 profile 库经唯一 SqliteStore 领取/续租/失效、`ProfileSessionLease` 与 decide 桥前后拒绝、任务 owner 篡改与错误 profile ID。
+- `test_m4c_closed_loop.py`：M4c 闭环：真实活动 restore、目录路径不发布、三值一致、同 profile 事实/任务审计不重置、旧凭证摘要变化拒绝、唯一仓储快照重核、实际受控合成桥 CLI eval→snapshot→restore→validate/preview→eval 串行。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。
 - `policy_helpers.py`：M4a/M4b 测试共用仓库原文读取、临时项目根（含公开套件）、CLI 运行、合成包写入与有效 envelope/decision/租约截止构造；不调用模型、设备或网络。
 - `fixtures/`：M0/M2/M3/M4a/M4b 纯合成输入夹具；见 `fixtures/AGENTS.md`。M4b 桥桩含成功、错误、慢进程、2MiB stdout、大 stderr、不读 stdin 与短命继承 stdout 模式。

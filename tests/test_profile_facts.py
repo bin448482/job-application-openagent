@@ -79,6 +79,25 @@ class ProfileFactsDomainTests(unittest.TestCase):
             conflicted["pending"], [{"key": "work_location", "reason": "conflict"}]
         )
 
+        same_value_store = SqliteProfileStore(self.root, "same", now=NOW)
+        same_value_store.open()
+        try:
+            same_value_store.set_fact(
+                "work_location", "合成城市甲", None, now=NOW, replace=False
+            )
+            same_value_store.set_fact(
+                "work_location", "合成城市甲", None, now=NOW, replace=False
+            )
+            same = select_profile_facts(
+                same_value_store.active_fact_rows(), pack, now=NOW
+            )
+        finally:
+            same_value_store.close()
+        self.assertEqual(same["allowed"], [])
+        self.assertEqual(
+            same["pending"], [{"key": "work_location", "reason": "conflict"}]
+        )
+
     def test_replace_supersedes_previous_active_sources(self) -> None:
         """显式 replace 才作废旧来源，并恢复唯一可注入事实。"""
         pack = _pack_with_facts("work_location")
@@ -193,6 +212,77 @@ class ProfileFactsCliTests(unittest.TestCase):
             payload["result"]["result"]["source_id"],
             payload["result"]["result"]["source_id"].strip(),
         )
+
+    def test_pack_profile_must_match_selected_profile(self) -> None:
+        """指定包时 profile 身份必须与 --profile 一致，不能交叉组合。"""
+        for name in ("alpha", "beta"):
+            code, _payload, _ = self._run(
+                ["policy", "init", "--dest", f"prompts/local/{name}"]
+            )
+            self.assertEqual(code, 0)
+        code, payload, stderr = self._run(
+            [
+                "facts",
+                "set",
+                "--profile",
+                "alpha",
+                "--key",
+                "work_location",
+                "--value",
+                "合成城市甲",
+                "--confirm",
+            ]
+        )
+        self.assertEqual((code, stderr), (0, ""), payload)
+        code, payload, stderr = self._run(
+            [
+                "facts",
+                "show",
+                "--profile",
+                "alpha",
+                "--pack",
+                "prompts/local/beta",
+            ]
+        )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(payload["reason_code"], "profile_mismatch")
+        code, payload, stderr = self._run(
+            [
+                "facts",
+                "set",
+                "--profile",
+                "alpha",
+                "--pack",
+                "prompts/local/beta",
+                "--key",
+                "salary_expectation",
+                "--value",
+                "15-20k",
+                "--confirm",
+            ]
+        )
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(payload["reason_code"], "profile_mismatch")
+        code, payload, stderr = self._run(
+            ["facts", "show", "--profile", "alpha"]
+        )
+        self.assertEqual((code, stderr), (0, ""), payload)
+        self.assertEqual(
+            [item["key"] for item in payload["result"]["facts"]],
+            ["work_location"],
+        )
+        code, payload, stderr = self._run(
+            [
+                "facts",
+                "show",
+                "--profile",
+                "alpha",
+                "--pack",
+                "prompts/local/alpha",
+            ]
+        )
+        self.assertEqual((code, stderr), (0, ""), payload)
+        self.assertTrue(payload["result"]["scoped_by_pack"])
 
     def test_values_never_enter_process_log(self) -> None:
         """事实值只在本机 stdout/库中，不写过程日志。"""
@@ -334,6 +424,14 @@ class ProfileFactsCliTests(unittest.TestCase):
             "sqlite_wal_and_existing_local_backups_not_erased",
             payload["result"]["limitations"],
         )
+
+    def test_existing_directory_profile_path_is_not_empty(self) -> None:
+        """profile 固定路径存在但为目录时 facts show 不伪造空结果。"""
+        path = profile_runtime_path(self.root, "demo")
+        path.mkdir(parents=True)
+        code, payload, stderr = self._run(["facts", "show", "--profile", "demo"])
+        self.assertEqual((code, stderr), (2, ""))
+        self.assertEqual(payload["reason_code"], "profile_io_error")
 
     def test_invalid_fact_value_is_rejected_without_echo(self) -> None:
         """非法事实值只返回 invalid_fact，不回显原值。"""

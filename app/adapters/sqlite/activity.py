@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -10,6 +12,7 @@ from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtim
 from app.domain.policy import utc_now
 from app.ports.device_gate import DeviceGateError
 from app.ports.profile import ProfileError
+from app.process_log import ProcessLog, elapsed_ms
 
 
 class ProfilePolicyActivity:
@@ -26,12 +29,14 @@ class ProfilePolicyActivity:
         os_root: Path | None = None,
         platform_name: str | None = None,
         clock: Callable[[], str] = utc_now,
+        process_log: ProcessLog | None = None,
     ) -> None:
-        """保存项目根、可注入测试 OS 根与时钟；构造阶段不访问文件。"""
+        """保存项目根、可注入测试 OS 根、时钟与日志；构造阶段不访问文件。"""
         self._root = Path(project_root)
         self._os_root = os_root
         self._platform_name = platform_name
         self._clock = clock
+        self._process_log = process_log
 
     def assess_restore(self, *, profile_id: str, dest_pack: str) -> str:
         """返回 stopped/active/unknown；只有 stopped 允许恢复新策略版本。"""
@@ -51,20 +56,39 @@ class ProfilePolicyActivity:
             return "active" if occupied["state"] == "held" else "unknown"
 
         path = profile_runtime_path(self._root, profile_id)
-        if not path.is_file():
+        if not os.path.lexists(path):
             return "stopped"
         store = SqliteProfileStore(
             self._root, profile_id, create=False, now=now
         )
+        started = time.perf_counter()
+        self._record("open_profile", "started")
         try:
             store.open()
             pending = store.pending_activity()
         except (ProfileError, ValueError):
+            self._record("open_profile", "failed", started)
             return "unknown"
         finally:
             store.close()
+        self._record("open_profile", "ok", started)
         if pending["leased"] or pending["running"] or pending["device_lease"]:
             return "active"
         if pending["blocked"]:
             return "unknown"
         return "stopped"
+
+    def _record(self, operation: str, result: str, started: float | None = None) -> None:
+        """记录 restore 活动检查的 profile 打开步骤，不写路径或异常。"""
+        if self._process_log is None:
+            return
+        try:
+            self._process_log.record(
+                stage="profile",
+                operation=operation,
+                result=result,
+                error_category="profile" if result == "failed" else None,
+                duration_ms=elapsed_ms(started) if started is not None else 0,
+            )
+        except Exception:
+            return

@@ -2,15 +2,42 @@
 
 from __future__ import annotations
 
+import time
+
 from app.domain.models import Owner
 from app.domain.policy import PolicyIssue, PolicyPack, compute_base_hash
 from app.ports.device_gate import SharedDeviceGatePort
 from app.ports.eval import EvalStorePort
 from app.ports.policy import PolicyError
 from app.ports.profile import ProfileStorePort
+from app.process_log import ProcessLog, elapsed_ms
 from app.usecases.acceptance import check_acceptance
 
 RUN_MODES = ("read_only", "draft_only", "auto_send_tier_a")
+
+
+def _record(
+    process_log: ProcessLog | None,
+    operation: str,
+    result: str,
+    *,
+    started: float | None = None,
+    reason_code: str | None = None,
+) -> None:
+    """由 run 用例记录 profile 打开步骤，不写事实值或路径。"""
+    if process_log is None:
+        return
+    try:
+        process_log.record(
+            stage="profile",
+            operation=operation,
+            result=result,
+            reason_code=reason_code,
+            error_category="profile" if result == "failed" else None,
+            duration_ms=elapsed_ms(started) if started is not None else 0,
+        )
+    except Exception:
+        return
 
 
 def _issue(field: str | None, code: str) -> PolicyIssue:
@@ -34,6 +61,7 @@ def check_preflight(
     provider_id: str | None = None,
     model_id: str | None = None,
     model_config_hash: str | None = None,
+    process_log: ProcessLog | None = None,
 ) -> dict[str, object]:
     """只做预检，不调用设备、模型或动作；失败时保留共享占用并隔离。
 
@@ -78,16 +106,27 @@ def check_preflight(
         owner=owner,
         now=now,
     )
+    profile_started = time.perf_counter()
+    _record(process_log, "open_profile", "started")
     try:
         gate.verify(now=now)
         profile_store.open()
         pending = profile_store.pending_activity()
-    except Exception:
+    except Exception as error:
+        reason = getattr(error, "reason_code", None)
+        _record(
+            process_log,
+            "open_profile",
+            "failed",
+            started=profile_started,
+            reason_code=reason if isinstance(reason, str) else None,
+        )
         try:
             gate.release(now=now, converged=False)
         except Exception:
             pass
         raise
+    _record(process_log, "open_profile", "ok", started=profile_started)
     profile_store.close()
     if pending["leased"] or pending["running"] or pending["blocked"] or pending["device_lease"]:
         try:

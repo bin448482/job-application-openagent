@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Iterator
 
+from app.adapters.sqlite.profile_schema import connect_profile_database
 from app.adapters.sqlite.schema import (
     connect_database,
     map_locked_error,
@@ -41,6 +42,7 @@ from app.domain.models import (
     format_utc,
     is_hash,
     is_int,
+    is_uuid,
     is_nonempty_text,
     parse_utc,
     validate_event_reason,
@@ -140,20 +142,30 @@ class SqliteStore:
         stop_checker: StopChecker | None = None,
         fault_hook: FaultHook | None = None,
         process_log: ProcessLog | None = None,
+        profile_id: str | None = None,
     ) -> None:
-        """打开并核验 v1 库，保存本机主机摘要、时钟、停止检查器与可选日志器。"""
+        """打开并核验 v1 库或已校验 profile 库，保存本机身份/时钟/日志。
+
+        `profile_id` 仅由 M4c 在完整 profile 库校验后传入；普通 M1 库仍走
+        精确五表 `connect_database`，不放宽旧库验证。
+        """
         self._monotonic = monotonic
         self._stop_checker = stop_checker if stop_checker is not None else default_stop_checker
         self._fault_hook = fault_hook
         self.process_log = process_log if process_log is not None else ProcessLog()
         self._clock_mark: tuple[float, datetime] | None = None
+        self.profile_id = profile_id
+        self.path = Path(path).resolve()
         with self._operation("open_store"):
             self._local_host = (
                 local_host if local_host is not None else default_local_host()
             )
             if not is_hash(self._local_host):
                 raise StoreError("invalid_input")
-            self._connection = connect_database(path)
+            if profile_id is None:
+                self._connection = connect_database(path)
+            else:
+                self._connection = connect_profile_database(Path(path), profile_id)
 
     def close(self) -> None:
         """关闭本机数据库连接；重复关闭保持无害。"""
@@ -555,6 +567,52 @@ class SqliteStore:
         except sqlite3.Error:
             raise StoreError("store_io_error") from None
         return [str(row["conversation_key"]) for row in rows]
+
+    @_store_operation("current_lease_expiry")
+    def current_lease_expiry(self, nonce: str, *, now: str) -> str | None:
+        """只读重核任务与设备租约的完整身份/绑定/到期；不匹配返回 None。"""
+        if not is_uuid(nonce):
+            raise StoreError("invalid_input")
+        try:
+            now_dt = parse_utc(now)
+        except ValueError:
+            raise StoreError("invalid_input") from None
+        try:
+            row = self._connection.execute(
+                "SELECT d.lease_owner AS task_owner, d.owner_pid AS task_pid, "
+                "d.owner_host AS task_host, d.nonce AS task_nonce, "
+                "d.lease_expires_at AS task_expiry, d.state AS task_state, "
+                "dl.lease_owner AS dev_owner, dl.owner_pid AS dev_pid, "
+                "dl.owner_host AS dev_host, dl.nonce AS dev_nonce, "
+                "dl.lease_expires_at AS dev_expiry, "
+                "dl.reservation_state AS dev_state "
+                "FROM hr_discoveries d JOIN device_lease dl ON d.nonce = dl.nonce "
+                "WHERE d.nonce = ? AND d.state IN ('leased', 'running')",
+                (nonce,),
+            ).fetchone()
+        except sqlite3.OperationalError as error:
+            raise map_locked_error(error) from None
+        except sqlite3.Error:
+            raise StoreError("store_io_error") from None
+        if row is None:
+            return None
+        try:
+            task_expiry = str(row["task_expiry"])
+            device_expiry = str(row["dev_expiry"])
+            valid = (
+                row["dev_state"] == "held"
+                and row["task_nonce"] == nonce
+                and row["dev_nonce"] == nonce
+                and row["task_owner"] == row["dev_owner"]
+                and int(row["task_pid"]) == int(row["dev_pid"])
+                and row["task_host"] == row["dev_host"]
+                and task_expiry == device_expiry
+                and now_dt < parse_utc(task_expiry)
+                and now_dt < parse_utc(device_expiry)
+            )
+        except (TypeError, ValueError):
+            return None
+        return task_expiry if valid else None
 
     @contextmanager
     def _operation(self, name: str) -> Iterator[None]:

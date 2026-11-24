@@ -1154,8 +1154,10 @@ def _run_facts(
     try:
         repo = FilePolicyRepository(PROJECT_ROOT)
         pack = _facts_pack(repo, getattr(args, "pack", None), log)
+        if pack is not None and pack.profile_id != args.profile:
+            raise ProfileError("profile_mismatch")
         path = profile_runtime_path(PROJECT_ROOT, args.profile)
-        if operation == "show" and not path.is_file():
+        if operation == "show" and not os.path.lexists(path):
             result: dict[str, object] = {
                 "profile_id": args.profile,
                 "facts": [],
@@ -1166,8 +1168,10 @@ def _run_facts(
                 "scoped_by_pack": pack is not None,
             }
         else:
-            if operation != "set" and not path.is_file():
+            if operation != "set" and not os.path.lexists(path):
                 raise ProfileError("fact_not_found")
+            if os.path.lexists(path) and not path.is_file():
+                raise ProfileError("profile_io_error")
             store = SqliteProfileStore(
                 PROJECT_ROOT,
                 args.profile,
@@ -1313,6 +1317,7 @@ def _run_run(
             profile_id=pack.profile_id,
             profile_db_path=profile_path,
             os_root=os_root,
+            process_log=log,
         )
         profile_store = SqliteProfileStore(
             PROJECT_ROOT, pack.profile_id, create=True, now=now
@@ -1332,6 +1337,7 @@ def _run_run(
             provider_id=args.provider,
             model_id=args.model_id,
             model_config_hash=args.model_config_hash,
+            process_log=log,
         )
     except (PolicyError, DeviceGateError, ProfileError) as error:
         log.record(
@@ -1453,7 +1459,9 @@ def _run_policy(
                 repository,
                 args.snapshot,
                 args.dest,
-                ProfilePolicyActivity(PROJECT_ROOT, os_root=os_root),
+                ProfilePolicyActivity(
+                    PROJECT_ROOT, os_root=os_root, process_log=log
+                ),
                 now=now,
                 process_log=log,
             )
@@ -1582,31 +1590,12 @@ def _run_policy(
 def _release_gate(
     gate: SharedDeviceGate, log: ProcessLog, *, converged: bool
 ) -> DeviceGateError | None:
-    """按收敛状态释放或隔离共享占用，并记录固定结果。"""
-    started = time.perf_counter()
-    log.record(
-        stage="device_gate",
-        operation="release",
-        result="started",
-    )
+    """按收敛状态释放或隔离共享占用；日志由门禁适配器唯一记录。"""
+    del log
     try:
         gate.release(now=utc_now(), converged=converged)
     except DeviceGateError as error:
-        log.record(
-            stage="device_gate",
-            operation="quarantine" if not converged else "release",
-            result="failed",
-            reason_code=error.reason_code,
-            error_category="gate",
-            duration_ms=elapsed_ms(started),
-        )
         return error
-    log.record(
-        stage="device_gate",
-        operation="release",
-        result="ok",
-        duration_ms=elapsed_ms(started),
-    )
     return None
 
 
@@ -1627,9 +1616,8 @@ def _device_snapshot(
             profile_id=profile_id,
             profile_db_path=profile_path,
             os_root=os_root,
+            process_log=log,
         )
-        gate_started = time.perf_counter()
-        log.record(stage="device_gate", operation="acquire", result="started")
         gate.acquire(
             profile_id=profile_id,
             profile_db_path=str(profile_path),
@@ -1637,14 +1625,6 @@ def _device_snapshot(
             now=utc_now(),
         )
     except DeviceGateError as error:
-        log.record(
-            stage="device_gate",
-            operation="acquire",
-            result="failed",
-            reason_code=error.reason_code,
-            error_category="gate",
-            duration_ms=elapsed_ms(gate_started),
-        )
         return None, _finalize_output(
             log,
             started,
@@ -1653,12 +1633,6 @@ def _device_snapshot(
             error.reason_code,
             "gate",
         )
-    log.record(
-        stage="device_gate",
-        operation="acquire",
-        result="ok",
-        duration_ms=elapsed_ms(gate_started),
-    )
 
     stage_started = time.perf_counter()
     log.record(stage="probe", result="started")

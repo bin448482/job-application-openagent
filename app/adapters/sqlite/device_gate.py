@@ -13,6 +13,7 @@ from app.adapters.sqlite.schema import BUSY_TIMEOUT_MS, _normalize_sql
 from app.domain.models import Owner, is_hash, is_uuid, parse_utc
 from app.domain.policy import is_profile_id
 from app.ports.device_gate import DeviceGateError
+from app.process_log import ProcessLog, elapsed_ms
 
 GATE_SCHEMA_VERSION = 1
 GATE_APP_DIR = "job-application-openagent"
@@ -56,9 +57,9 @@ class SharedDeviceGate:
         profile_db_path: Path,
         os_root: Path | None = None,
         platform_name: str | None = None,
-        process_log: object | None = None,
+        process_log: ProcessLog | None = None,
     ) -> None:
-        """保存 profile 绑定与固定路径选择；构造阶段不创建库或占用。"""
+        """保存 profile 绑定、日志归属与固定路径；构造阶段不创建库或占用。"""
         if not is_profile_id(profile_id):
             raise DeviceGateError("device_gate_mismatch")
         if not isinstance(profile_db_path, Path) or not profile_db_path.is_absolute():
@@ -68,57 +69,73 @@ class SharedDeviceGate:
         self._path = guard_database_path(os_root, platform_name=platform_name)
         self._process_log = process_log
         self._nonce: str | None = None
+        self._owner: Owner | None = None
 
     def acquire(
         self, *, profile_id: str, profile_db_path: str, owner: Owner, now: str
     ) -> str:
         """在共享库条件插入唯一 primary 行；存在任何状态即拒绝。"""
-        if profile_id != self._profile_id:
-            raise DeviceGateError("device_gate_mismatch")
-        if Path(profile_db_path).resolve() != Path(self._profile_db_path):
-            raise DeviceGateError("device_gate_mismatch")
-        if not is_uuid(owner.id) or not is_hash(owner.host) or type(owner.pid) is not int:
-            raise ValueError("owner is invalid")
-        if owner.pid <= 0:
-            raise ValueError("owner is invalid")
-        parse_utc(now)
-        if self._nonce is not None:
-            raise DeviceGateError("device_busy")
-        nonce = str(uuid.uuid4())
-        connection = self._connect(create=True)
+        operation = "acquire"
+        started = time.perf_counter()
+        self._record(operation, "started")
         try:
-            connection.execute("BEGIN IMMEDIATE")
-            existing = self._read_row(connection)
-            if existing is not None:
-                state = str(existing["state"])
-                connection.execute("ROLLBACK")
-                raise DeviceGateError(
-                    "device_quarantined" if state == "quarantined" else "device_busy"
+            if profile_id != self._profile_id:
+                raise DeviceGateError("device_gate_mismatch")
+            if Path(profile_db_path).resolve() != Path(self._profile_db_path):
+                raise DeviceGateError("device_gate_mismatch")
+            if (
+                not is_uuid(owner.id)
+                or not is_hash(owner.host)
+                or type(owner.pid) is not int
+                or owner.pid <= 0
+            ):
+                raise ValueError("owner is invalid")
+            parse_utc(now)
+            if self._nonce is not None:
+                raise DeviceGateError("device_busy")
+            nonce = str(uuid.uuid4())
+            connection = self._connect(create=True)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                existing = self._read_row(connection)
+                if existing is not None:
+                    state = str(existing["state"])
+                    connection.execute("ROLLBACK")
+                    raise DeviceGateError(
+                        "device_quarantined" if state == "quarantined" else "device_busy"
+                    )
+                connection.execute(
+                    "INSERT INTO device_guard(device_key, profile_id, profile_db_path, "
+                    "owner_id, owner_pid, owner_host, nonce, state, acquired_at, updated_at) "
+                    "VALUES ('primary', ?, ?, ?, ?, ?, ?, 'held', ?, ?)",
+                    (
+                        self._profile_id,
+                        self._profile_db_path,
+                        owner.id,
+                        owner.pid,
+                        owner.host,
+                        nonce,
+                        now,
+                        now,
+                    ),
                 )
-            connection.execute(
-                "INSERT INTO device_guard(device_key, profile_id, profile_db_path, "
-                "owner_id, owner_pid, owner_host, nonce, state, acquired_at, updated_at) "
-                "VALUES ('primary', ?, ?, ?, ?, ?, ?, 'held', ?, ?)",
-                (
-                    self._profile_id,
-                    self._profile_db_path,
-                    owner.id,
-                    owner.pid,
-                    owner.host,
-                    nonce,
-                    now,
-                    now,
-                ),
-            )
-            connection.execute("COMMIT")
-        except DeviceGateError:
+                connection.execute("COMMIT")
+            except DeviceGateError:
+                raise
+            except (sqlite3.Error, OSError):
+                _rollback(connection)
+                raise DeviceGateError("device_gate_io_error") from None
+            finally:
+                connection.close()
+            self._nonce = nonce
+            self._owner = owner
+        except DeviceGateError as error:
+            self._record(operation, "failed", started, error.reason_code)
             raise
-        except (sqlite3.Error, OSError):
-            _rollback(connection)
-            raise DeviceGateError("device_gate_io_error") from None
-        finally:
-            connection.close()
-        self._nonce = nonce
+        except Exception:
+            self._record(operation, "failed", started)
+            raise
+        self._record(operation, "ok", started)
         return nonce
 
     def require_available(self) -> None:
@@ -126,66 +143,86 @@ class SharedDeviceGate:
         self.verify()
 
     def verify(self, *, now: str | None = None) -> None:
-        """复核 held 状态、owner nonce 与 profile 库绑定；不自动续期或解锁。"""
+        """复核完整 owner/nonce、profile 绑定与 held 状态；不自动续期或解锁。"""
         del now
-        if self._nonce is None:
-            raise DeviceGateError("device_not_held")
-        connection = self._connect(create=False)
+        operation = "verify"
+        started = time.perf_counter()
+        self._record(operation, "started")
         try:
-            row = self._read_row(connection)
-        finally:
-            connection.close()
-        if row is None:
-            raise DeviceGateError("device_gate_mismatch")
-        if row["state"] == "quarantined":
-            raise DeviceGateError("device_quarantined")
-        if (
-            row["nonce"] != self._nonce
-            or row["profile_id"] != self._profile_id
-            or Path(str(row["profile_db_path"])).resolve()
-            != Path(self._profile_db_path)
-            or row["state"] != "held"
-        ):
-            raise DeviceGateError("device_gate_mismatch")
-
-    def release(self, *, now: str, converged: bool) -> None:
-        """本次 owner/nonce 且已收敛才删除；否则保留原行并置 quarantined。"""
-        parse_utc(now)
-        if self._nonce is None:
-            raise DeviceGateError("device_not_held")
-        connection = self._connect(create=False)
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            row = self._read_row(connection)
-            if row is None or row["nonce"] != self._nonce:
+            if self._nonce is None or self._owner is None:
+                raise DeviceGateError("device_not_held")
+            connection = self._connect(create=False)
+            try:
+                row = self._read_row(connection)
+            finally:
+                connection.close()
+            if row is None:
                 raise DeviceGateError("device_gate_mismatch")
             if row["state"] == "quarantined":
                 raise DeviceGateError("device_quarantined")
-            if converged:
-                connection.execute(
-                    "DELETE FROM device_guard WHERE device_key = 'primary' AND nonce = ?",
-                    (self._nonce,),
-                )
-            else:
-                connection.execute(
-                    "UPDATE device_guard SET state = 'quarantined', updated_at = ? "
-                    "WHERE device_key = 'primary' AND nonce = ?",
-                    (now, self._nonce),
-                )
-            connection.execute("COMMIT")
-        except DeviceGateError:
-            _rollback(connection)
+            if not self._matches_session(row):
+                raise DeviceGateError("device_gate_mismatch")
+        except DeviceGateError as error:
+            self._record(operation, "failed", started, error.reason_code)
             raise
-        except (sqlite3.Error, OSError):
-            _rollback(connection)
-            raise DeviceGateError("device_gate_io_error") from None
-        finally:
-            connection.close()
-        self._nonce = None
+        except Exception:
+            self._record(operation, "failed", started)
+            raise
+        self._record(operation, "ok", started)
+
+    def release(self, *, now: str, converged: bool) -> None:
+        """完整身份/绑定且已收敛才删除；否则保留原行并置 quarantined。"""
+        operation = "release" if converged else "quarantine"
+        started = time.perf_counter()
+        self._record(operation, "started")
+        try:
+            parse_utc(now)
+            if self._nonce is None or self._owner is None:
+                raise DeviceGateError("device_not_held")
+            connection = self._connect(create=False)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = self._read_row(connection)
+                if row is None:
+                    raise DeviceGateError("device_gate_mismatch")
+                if row["state"] == "quarantined":
+                    raise DeviceGateError("device_quarantined")
+                if not self._matches_session(row):
+                    raise DeviceGateError("device_gate_mismatch")
+                if converged:
+                    connection.execute(
+                        "DELETE FROM device_guard "
+                        "WHERE device_key = 'primary' AND nonce = ?",
+                        (self._nonce,),
+                    )
+                else:
+                    connection.execute(
+                        "UPDATE device_guard SET state = 'quarantined', updated_at = ? "
+                        "WHERE device_key = 'primary' AND nonce = ?",
+                        (now, self._nonce),
+                    )
+                connection.execute("COMMIT")
+            except DeviceGateError:
+                _rollback(connection)
+                raise
+            except (sqlite3.Error, OSError):
+                _rollback(connection)
+                raise DeviceGateError("device_gate_io_error") from None
+            finally:
+                connection.close()
+            self._nonce = None
+            self._owner = None
+        except DeviceGateError as error:
+            self._record(operation, "failed", started, error.reason_code)
+            raise
+        except Exception:
+            self._record(operation, "failed", started)
+            raise
+        self._record(operation, "ok", started)
 
     def inspect(self) -> dict[str, object] | None:
-        """只读返回固定白名单占用行；无行返回 None，不创建库或自动释放。"""
-        if not self._path.is_file():
+        """只读返回固定白名单占用行；明确不存在返回 None，其它异常状态拒绝。"""
+        if not os.path.lexists(self._path):
             return None
         connection = self._connect(create=False)
         try:
@@ -205,6 +242,47 @@ class SharedDeviceGate:
             "acquired_at": str(row["acquired_at"]),
             "updated_at": str(row["updated_at"]),
         }
+
+    def _matches_session(self, row: sqlite3.Row) -> bool:
+        """比较取得时完整 owner 身份、nonce、profile 绑定与 held 状态。"""
+        if self._nonce is None or self._owner is None:
+            return False
+        try:
+            owner_pid = int(row["owner_pid"])
+        except (TypeError, ValueError):
+            return False
+        return (
+            row["nonce"] == self._nonce
+            and row["owner_id"] == self._owner.id
+            and owner_pid == self._owner.pid
+            and row["owner_host"] == self._owner.host
+            and row["profile_id"] == self._profile_id
+            and Path(str(row["profile_db_path"])).resolve()
+            == Path(self._profile_db_path)
+            and row["state"] == "held"
+        )
+
+    def _record(
+        self,
+        operation: str,
+        result: str,
+        started: float | None = None,
+        reason_code: str | None = None,
+    ) -> None:
+        """由门禁适配器唯一记录 acquire/verify/release/quarantine 日志。"""
+        if self._process_log is None:
+            return
+        try:
+            self._process_log.record(
+                stage="device_gate",
+                operation=operation,
+                result=result,
+                reason_code=reason_code,
+                error_category="gate" if result == "failed" else None,
+                duration_ms=elapsed_ms(started) if started is not None else 0,
+            )
+        except Exception:
+            return
 
     def _connect(self, *, create: bool) -> sqlite3.Connection:
         """打开固定门禁库；首次创建允许少量本地文件/SQLite 竞争重试。"""
@@ -226,7 +304,7 @@ class SharedDeviceGate:
 
     def _connect_once(self, *, create: bool) -> sqlite3.Connection:
         """实际执行一次打开与建表/核验，失败关闭连接并映射固定错误。"""
-        if not create and not self._path.is_file():
+        if not create and not os.path.lexists(self._path):
             raise DeviceGateError("device_gate_io_error")
         try:
             if create:
@@ -247,38 +325,62 @@ class SharedDeviceGate:
         return connection
 
     def _ensure_schema(self, connection: sqlite3.Connection, *, create: bool) -> None:
-        """创建或核验唯一门禁表；已有其它结构时拒绝复用。"""
+        """只允许明确新空库初始化；已有库核验完整对象集与 DDL，不改写版本。"""
+        version, objects = self._read_schema(connection)
+        if objects:
+            self._verify_schema(version, objects)
+            return
+        if version != 0:
+            raise DeviceGateError("device_gate_io_error")
+        if not create:
+            raise DeviceGateError("device_gate_io_error")
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            version, objects = self._read_schema(connection)
+            if objects:
+                self._verify_schema(version, objects)
+            else:
+                if version != 0:
+                    raise DeviceGateError("device_gate_io_error")
+                connection.execute(GATE_TABLE_SQL)
+                connection.execute(f"PRAGMA user_version = {GATE_SCHEMA_VERSION}")
+                version, objects = self._read_schema(connection)
+                self._verify_schema(version, objects)
+            connection.execute("COMMIT")
+        except DeviceGateError:
+            _rollback(connection)
+            raise
+        except (sqlite3.Error, OSError):
+            _rollback(connection)
+            raise DeviceGateError("device_gate_io_error") from None
+
+    def _read_schema(
+        self, connection: sqlite3.Connection
+    ) -> tuple[int, dict[str, tuple[str, str]]]:
+        """读取版本与完整用户对象集；读取失败固定为门禁 IO 错误。"""
         try:
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-            row = connection.execute(
-                "SELECT type, sql FROM sqlite_schema WHERE name = 'device_guard'"
-            ).fetchone()
-        except sqlite3.Error:
+            objects = {
+                str(row["name"]): (str(row["type"]), str(row["sql"]))
+                for row in connection.execute(
+                    "SELECT type, name, sql FROM sqlite_schema "
+                    "WHERE name NOT LIKE 'sqlite_%'"
+                )
+            }
+        except (sqlite3.Error, TypeError, ValueError):
             raise DeviceGateError("device_gate_io_error") from None
-        if row is None:
-            if not create:
-                raise DeviceGateError("device_gate_io_error")
-            try:
-                connection.execute("BEGIN IMMEDIATE")
-                # 取得写锁后重新检查，避免两个首次启动进程同时建表。
-                raced = connection.execute(
-                    "SELECT type, sql FROM sqlite_schema WHERE name = 'device_guard'"
-                ).fetchone()
-                if raced is None:
-                    connection.execute(GATE_TABLE_SQL)
-                    connection.execute(f"PRAGMA user_version = {GATE_SCHEMA_VERSION}")
-                connection.execute("COMMIT")
-            except sqlite3.Error:
-                _rollback(connection)
-                raise DeviceGateError("device_gate_io_error") from None
-            if raced is None:
-                return
-            row = raced
-            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+        return version, objects
+
+    def _verify_schema(
+        self, version: int, objects: dict[str, tuple[str, str]]
+    ) -> None:
+        """拒绝未知版本、额外/缺失对象或非本门禁 DDL。"""
+        if version != GATE_SCHEMA_VERSION or set(objects) != {"device_guard"}:
+            raise DeviceGateError("device_gate_io_error")
+        object_type, sql = objects["device_guard"]
         if (
-            str(row["type"]) != "table"
-            or _normalize_sql(str(row["sql"])) != _normalize_sql(GATE_TABLE_SQL)
-            or version != GATE_SCHEMA_VERSION
+            object_type != "table"
+            or _normalize_sql(sql) != _normalize_sql(GATE_TABLE_SQL)
         ):
             raise DeviceGateError("device_gate_io_error")
 

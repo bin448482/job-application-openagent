@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from app.adapters.adb.screen import ADB_TIMEOUT_SECONDS, AdbScreenReader
 from app.adapters.boss.read import parse_page
+from app.ports.device_gate import DeviceGateError
 from app.ports.screen import (
     DeviceGate,
     DeviceGateUnavailable,
@@ -86,7 +87,11 @@ class ScreenAdapterTests(unittest.TestCase):
 
     def test_dump_hierarchy_uses_exact_args_timeout_and_saves_evidence(self) -> None:
         """dump/cat 使用参数数组、shell=false、5 秒超时且各执行一次。"""
-        reader = AdbScreenReader(self.root / "evidence", process_log=self.log)
+        reader = AdbScreenReader(
+            self.root / "evidence",
+            process_log=self.log,
+            gate=_Gate(unavailable=False),
+        )
         completed = [
             subprocess.CompletedProcess([], 0, stdout="UI hierarchy dumped"),
             subprocess.CompletedProcess([], 0, stdout=PAGE_XML),
@@ -131,7 +136,11 @@ class ScreenAdapterTests(unittest.TestCase):
 
     def test_capture_screen_is_binary_and_saved(self) -> None:
         """screencap 以二进制执行一次并保存原始证据。"""
-        reader = AdbScreenReader(self.root / "evidence", process_log=self.log)
+        reader = AdbScreenReader(
+            self.root / "evidence",
+            process_log=self.log,
+            gate=_Gate(unavailable=False),
+        )
         raw = b"screen-bytes"
         with patch(
             "subprocess.run",
@@ -151,7 +160,11 @@ class ScreenAdapterTests(unittest.TestCase):
 
     def test_failures_are_single_attempt_device_disconnected(self) -> None:
         """缺失、超时、OSError、非零退出均为单次 attempt 的断连。"""
-        reader = AdbScreenReader(self.root / "evidence", process_log=self.log)
+        reader = AdbScreenReader(
+            self.root / "evidence",
+            process_log=self.log,
+            gate=_Gate(unavailable=False),
+        )
         failures = [
             FileNotFoundError(),
             subprocess.TimeoutExpired(["adb"], ADB_TIMEOUT_SECONDS),
@@ -176,7 +189,11 @@ class ScreenAdapterTests(unittest.TestCase):
         """证据目录不可写时报 invalid_fixture，不声称已保存。"""
         evidence_file = self.root / "evidence-file"
         evidence_file.write_text("x", encoding="utf-8")
-        reader = AdbScreenReader(evidence_file, process_log=self.log)
+        reader = AdbScreenReader(
+            evidence_file,
+            process_log=self.log,
+            gate=_Gate(unavailable=False),
+        )
         with patch(
             "subprocess.run",
             side_effect=[
@@ -197,6 +214,17 @@ class ScreenAdapterTests(unittest.TestCase):
                 for event in events
             )
         )
+
+    def test_reader_without_gate_rejects_before_subprocess(self) -> None:
+        """缺共享门禁时 M3 采集在零子进程处固定拒绝。"""
+        reader = AdbScreenReader(self.root / "evidence")
+        for call in (reader.dump_hierarchy, reader.capture_screen):
+            with self.subTest(call=call.__name__):
+                with patch("subprocess.run") as run:
+                    with self.assertRaises(DeviceGateError) as caught:
+                        call(SERIAL)
+                self.assertEqual(caught.exception.reason_code, "device_not_held")
+                run.assert_not_called()
 
     def test_reader_rechecks_gate_before_every_subprocess(self) -> None:
         """dump/cat 与 screencap 的每条子命令前都调用共享门禁复核。"""
@@ -220,7 +248,7 @@ class ScreenAdapterTests(unittest.TestCase):
 
     def test_serial_is_required(self) -> None:
         """空 serial 在子进程启动前拒绝。"""
-        reader = AdbScreenReader(self.root / "evidence")
+        reader = AdbScreenReader(self.root / "evidence", gate=_Gate(unavailable=False))
         with patch("subprocess.run") as run:
             with self.assertRaises(ValueError):
                 reader.dump_hierarchy("")

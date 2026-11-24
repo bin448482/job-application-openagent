@@ -6,6 +6,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from pathlib import Path
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -14,6 +15,7 @@ from app.adapters.files.evals import FileEvalStore
 from app.adapters.sqlite.device_gate import SharedDeviceGate, guard_database_path
 from app.adapters.sqlite.profile_store import profile_runtime_path
 from app.ports.decision import BridgeDescriptor
+from app.process_log import ProcessLog
 from app.usecases import policy_eval as eval_usecases
 from tests import policy_helpers
 from tests.test_policy_eval import SimulatedBridge, public_decisions
@@ -210,6 +212,61 @@ class RunGuardTests(unittest.TestCase):
         self.assertEqual(payload["reason_code"], "authorization_required")
         self.assertEqual(self._gate().inspect()["state"], "quarantined")
 
+    def test_gate_and_profile_logs_are_paired(self) -> None:
+        """run 成功/跨库失败均记录门禁与 profile 打开的唯一 started/终态。"""
+        log = ProcessLog(self.root / "run-success.jsonl", correlation_id="corr-run")
+        code, payload, stderr = policy_helpers.run_cli(
+            self.root,
+            [
+                "run",
+                "check",
+                "--pack",
+                "prompts/local/demo",
+                "--mode",
+                "read_only",
+                "--confirm-device",
+            ],
+            process_log=log,
+            os_root=self.os_root,
+        )
+        self.assertEqual((code, stderr), (0, ""), payload)
+        events = _events(log)
+        _assert_paired(events, "device_gate", "acquire")
+        _assert_paired(events, "device_gate", "verify")
+        _assert_paired(events, "device_gate", "release")
+        _assert_paired(events, "profile", "open_profile")
+
+        profile_dir = self.root / "data/runtime/profiles/demo"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        (profile_dir / "runtime.sqlite3").write_bytes(b"not-a-profile-database")
+        failing = ProcessLog(self.root / "run-fail.jsonl", correlation_id="corr-run-fail")
+        code, payload, stderr = policy_helpers.run_cli(
+            self.root,
+            [
+                "run",
+                "check",
+                "--pack",
+                "prompts/local/demo",
+                "--mode",
+                "read_only",
+                "--confirm-device",
+            ],
+            process_log=failing,
+            os_root=self.os_root,
+        )
+        self.assertEqual((code, stderr), (2, ""))
+        events = _events(failing)
+        _assert_paired(events, "device_gate", "quarantine")
+        _assert_paired(events, "profile", "open_profile")
+        self.assertTrue(
+            any(
+                event["stage"] == "profile"
+                and event["operation"] == "open_profile"
+                and event["result"] == "failed"
+                for event in events
+            )
+        )
+
     def test_cross_database_failure_quarantines_shared_occupancy(self) -> None:
         """共享占用取得后 profile 库不可用，保留占用并隔离，不补偿为空闲。"""
         profile_dir = self.root / "data/runtime/profiles/demo"
@@ -234,6 +291,30 @@ class RunGuardTests(unittest.TestCase):
         finally:
             connection.close()
         self.assertEqual(tables, {"device_guard"})
+
+
+def _events(log: ProcessLog) -> list[dict[str, object]]:
+    """读取本次运行唯一日志文件的事件。"""
+    return [
+        json.loads(line)
+        for line in log.path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def _assert_paired(
+    events: list[dict[str, object]], stage: str, operation: str
+) -> None:
+    """断言指定阶段/操作每个 started 都有且仅有一个终态。"""
+    selected = [
+        event
+        for event in events
+        if event["stage"] == stage and event["operation"] == operation
+    ]
+    started = [event for event in selected if event["result"] == "started"]
+    terminal = [event for event in selected if event["result"] != "started"]
+    assert started, (stage, operation)
+    assert len(started) == len(terminal), (stage, operation, selected)
 
 
 if __name__ == "__main__":

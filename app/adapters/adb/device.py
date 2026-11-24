@@ -7,6 +7,7 @@ import subprocess
 import time
 
 from app.ports.device import DeviceEntry, ProbeSnapshot
+from app.ports.device_gate import DeviceGateError
 from app.ports.screen import DeviceGate
 from app.process_log import ProcessLog, elapsed_ms
 
@@ -52,6 +53,7 @@ class AdbDeviceProbe:
 
     def probe(self, serial: str | None = None) -> ProbeSnapshot:
         """读取一次设备清单和窗口字段，返回不含真实序列号或窗口原文的快照。"""
+        self._require_gate()
         if not isinstance(serial, str) or not serial:
             raise ValueError("serial is required")
 
@@ -106,9 +108,10 @@ class AdbDeviceProbe:
         stage: str,
         command: str,
     ) -> str:
-        """每条 ADB 子命令前复核共享门禁，再执行一条不重试的命令。"""
-        if self._gate is not None:
-            self._gate.verify()
+        """每条 ADB 子命令前要求并复核共享门禁，再执行一条不重试的命令。"""
+        self._require_gate()
+        assert self._gate is not None
+        self._gate.verify()
         started = time.perf_counter()
         self._record(
             stage=stage,
@@ -162,6 +165,11 @@ class AdbDeviceProbe:
             duration_ms=elapsed_ms(started),
         )
         return completed.stdout
+
+    def _require_gate(self) -> None:
+        """真实适配器缺失共享门禁时在零子进程处固定拒绝。"""
+        if self._gate is None:
+            raise DeviceGateError("device_not_held")
 
     def _record_failure(
         self,

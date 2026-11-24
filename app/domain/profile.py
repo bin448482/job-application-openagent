@@ -6,9 +6,8 @@ from app.domain.models import is_nonempty_text, parse_utc
 from app.domain.policy import (
     FACT_KEYS,
     PolicyPack,
-    effective_limits,
     has_contact,
-    select_allowed_facts,
+    select_allowed_facts_with_reasons,
 )
 
 FACT_STATES = frozenset({"active", "superseded", "revoked"})
@@ -120,49 +119,22 @@ def validate_fact_rows(rows: object) -> list[dict[str, object]]:
 def select_profile_facts(
     rows: list[dict[str, object]], pack: PolicyPack, *, now: str
 ) -> dict[str, object]:
-    """把 profile 行筛选为唯一 allowed 事实与不含值的待办列表。
+    """把 profile active 行交给唯一事实规则，并按结果组织无值待办。
 
-    只把 active 行交给既有 `select_allowed_facts`，由该唯一生产筛选器再做
-    包白名单、来源、有效期和冲突复验；这里只区分 missing/expired/conflict，
-    不凭较新时间择一，也不把 superseded/revoked 行重新激活。
+    active/superseded/revoked 是持久化状态转换，由 profile 侧先排除非 active；
+    包白名单、来源、有效期、重复/冲突与 missing 原因全部由唯一
+    `select_allowed_facts_with_reasons` 产出，不复制第二套选择语义。
     """
-    validated = validate_fact_rows(rows)
-    now_dt = parse_utc(now)
-    allowed_keys = [str(key) for key in effective_limits(pack)["fact_keys"]]
-    active_by_key: dict[str, list[dict[str, object]]] = {key: [] for key in allowed_keys}
-    for row in validated:
-        if row["state"] != "active":
-            continue
-        if row["key"] in active_by_key:
-            active_by_key[row["key"]].append(row)
-    candidates: list[dict[str, object]] = []
-    pending: list[dict[str, str]] = []
-    for key in allowed_keys:
-        rows_for_key = active_by_key[key]
-        if not rows_for_key:
-            pending.append({"key": key, "reason": "missing"})
-            continue
-        unexpired = [
-            row
-            for row in rows_for_key
-            if row["expires_at"] is None
-            or parse_utc(row["expires_at"]) > now_dt
-        ]
-        if not unexpired:
-            pending.append({"key": key, "reason": "expired"})
-            continue
-        if len(unexpired) > 1:
-            pending.append({"key": key, "reason": "conflict"})
-            continue
-        candidates.append(
-            {
-                "key": key,
-                "value": unexpired[0]["value"],
-                "source": "user_confirmed",
-                "expires_at": unexpired[0]["expires_at"],
-            }
-        )
-    return {
-        "allowed": select_allowed_facts(candidates, pack, now=now),
-        "pending": pending,
-    }
+    active_rows = [
+        row for row in validate_fact_rows(rows) if row["state"] == "active"
+    ]
+    projected = [
+        {
+            "key": row["key"],
+            "value": row["value"],
+            "source": row["source"],
+            "expires_at": row["expires_at"],
+        }
+        for row in active_rows
+    ]
+    return select_allowed_facts_with_reasons(projected, pack, now=now)

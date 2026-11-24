@@ -30,6 +30,7 @@ STAGES = frozenset(
         "read",
         "policy",
         "facts",
+        "profile",
         "device_gate",
         "run",
         "eval",
@@ -204,6 +205,7 @@ OPERATIONS = frozenset(
         "release",
         "quarantine",
         "check",
+        "current_lease_expiry",
     }
 )
 EVENT_KEYS = (

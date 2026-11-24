@@ -630,6 +630,22 @@ class DoctorCliTests(unittest.TestCase):
             run_doctor(snapshot)
 
 
+class _AlwaysGate:
+    """测试用共享门禁桩：不访问文件，只允许探针继续。"""
+
+    def require_available(self) -> None:
+        """视为已取得占用。"""
+        return None
+
+    def verify(self) -> None:
+        """视为复核通过。"""
+        return None
+
+    def release(self) -> None:
+        """测试不执行释放。"""
+        return None
+
+
 class AdbProbeTests(unittest.TestCase):
     """用 mock 的 subprocess 输出验证真实探针，不执行任何真实 ADB。"""
 
@@ -646,7 +662,7 @@ class AdbProbeTests(unittest.TestCase):
             "subprocess.run",
             side_effect=[_completed(devices), _completed(window)],
         ) as run_mock:
-            snapshot = AdbDeviceProbe().probe("synthetic-serial")
+            snapshot = AdbDeviceProbe(gate=_AlwaysGate()).probe("synthetic-serial")
 
         self.assertEqual(snapshot.selected_alias, "primary")
         self.assertEqual(snapshot.unlocked, True)
@@ -672,6 +688,17 @@ class AdbProbeTests(unittest.TestCase):
         output = json.dumps(run_doctor(snapshot), ensure_ascii=False)
         self.assertNotIn("synthetic-serial", output)
         self.assertNotIn("synthetic-serial", repr(snapshot))
+
+    def test_probe_without_gate_rejects_before_subprocess(self) -> None:
+        """缺共享门禁时真实探针在零子进程处固定拒绝。"""
+
+        from app.ports.device_gate import DeviceGateError
+
+        with patch("subprocess.run") as run:
+            with self.assertRaises(DeviceGateError) as caught:
+                AdbDeviceProbe().probe("synthetic-serial")
+        self.assertEqual(caught.exception.reason_code, "device_not_held")
+        run.assert_not_called()
 
     def test_probe_rechecks_shared_gate_before_each_command(self) -> None:
         """M0 探针的每条 ADB 子命令前都复核同一共享门禁。"""
@@ -716,7 +743,7 @@ class AdbProbeTests(unittest.TestCase):
             with self.subTest(name=name):
                 devices = f"List of devices attached\nsynthetic-serial\t{state}\n"
                 with patch("subprocess.run", return_value=_completed(devices)) as run_mock:
-                    snapshot = AdbDeviceProbe().probe("synthetic-serial")
+                    snapshot = AdbDeviceProbe(gate=_AlwaysGate()).probe("synthetic-serial")
                 self.assertEqual(run_mock.call_count, 1)
                 result = run_doctor(snapshot)
                 self.assertEqual(result["reason_code"], reason)
@@ -729,7 +756,7 @@ class AdbProbeTests(unittest.TestCase):
         devices = "List of devices attached\nother-serial\tdevice\n"
         with patch("subprocess.run", return_value=_completed(devices)) as run_mock:
             with self.assertRaises(DeviceProbeError) as caught:
-                AdbDeviceProbe().probe("synthetic-serial")
+                AdbDeviceProbe(gate=_AlwaysGate()).probe("synthetic-serial")
         self.assertEqual(run_mock.call_count, 1)
         error = caught.exception
         self.assertEqual(error.reason_code, "device_disconnected")
@@ -748,7 +775,7 @@ class AdbProbeTests(unittest.TestCase):
             with self.subTest(name=name):
                 with patch("subprocess.run", side_effect=effect) as run_mock:
                     with self.assertRaises(DeviceProbeError) as caught:
-                        AdbDeviceProbe().probe("synthetic-serial")
+                        AdbDeviceProbe(gate=_AlwaysGate()).probe("synthetic-serial")
                 self.assertEqual(run_mock.call_count, 1)
                 self.assertEqual(caught.exception.reason_code, "device_disconnected")
 
@@ -770,7 +797,7 @@ class AdbProbeTests(unittest.TestCase):
                     log = ProcessLog(path=path, correlation_id=f"corr-{name}")
                     with patch("subprocess.run", side_effect=effect):
                         with self.assertRaises(DeviceProbeError) as caught:
-                            AdbDeviceProbe(process_log=log).probe("synthetic-serial")
+                            AdbDeviceProbe(process_log=log, gate=_AlwaysGate()).probe("synthetic-serial")
                     self.assertEqual(
                         caught.exception.reason_code,
                         "device_disconnected",
@@ -802,7 +829,7 @@ class AdbProbeTests(unittest.TestCase):
             log = ProcessLog(path=path, correlation_id="corr-interrupt")
             with patch("subprocess.run", side_effect=RuntimeError("interrupt")):
                 with self.assertRaises(RuntimeError):
-                    AdbDeviceProbe(process_log=log).probe("synthetic-serial")
+                    AdbDeviceProbe(process_log=log, gate=_AlwaysGate()).probe("synthetic-serial")
             events = _read_log(log.path)
             log_text = log.path.read_text(encoding="utf-8")
         self.assertEqual(len(events), 1)
@@ -817,7 +844,7 @@ class AdbProbeTests(unittest.TestCase):
         devices = "List of devices attached\nadb: no devices/emulators found\n"
         with patch("subprocess.run", return_value=_completed(devices)) as run_mock:
             with self.assertRaises(DeviceProbeError) as caught:
-                AdbDeviceProbe().probe("synthetic-serial")
+                AdbDeviceProbe(gate=_AlwaysGate()).probe("synthetic-serial")
         self.assertEqual(run_mock.call_count, 1)
         self.assertEqual(caught.exception.reason_code, "device_disconnected")
         self.assertEqual(caught.exception.device_count, 0)
@@ -833,7 +860,7 @@ class AdbProbeTests(unittest.TestCase):
                 side_effect=[_completed(devices), _completed(returncode=1)],
             ) as run_mock:
                 with self.assertRaises(DeviceProbeError) as caught:
-                    AdbDeviceProbe(process_log=log).probe("synthetic-serial")
+                    AdbDeviceProbe(process_log=log, gate=_AlwaysGate()).probe("synthetic-serial")
             events = _read_log(log.path)
         self.assertEqual(run_mock.call_count, 2)
         self.assertEqual(caught.exception.reason_code, "device_disconnected")
@@ -1261,8 +1288,12 @@ class DoctorLoggingTests(unittest.TestCase):
                 "device_gate",
                 "device_gate",
                 "probe",
+                "device_gate",
+                "device_gate",
                 "adb_devices",
                 "adb_devices",
+                "device_gate",
+                "device_gate",
                 "adb_window",
                 "adb_window",
                 "probe",
