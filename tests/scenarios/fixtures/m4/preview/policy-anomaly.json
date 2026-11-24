@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "case_id": "policy-anomaly",
+  "now": "2026-11-24T00:00:00.000Z",
+  "task_id": "preview-task-policy-anomaly",
+  "nonce": "00000000-0000-4000-8000-000000000203",
+  "kind": "anomaly",
+  "subject": {
+    "conversation_key": null,
+    "job_brief": null
+  },
+  "inbound": "页面结构不完整，无法确认当前页面。",
+  "context": [],
+  "allowed_facts": []
+}

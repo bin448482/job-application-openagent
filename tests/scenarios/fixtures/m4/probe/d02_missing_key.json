@@ -1,0 +1,10 @@
+{
+  "operation": "decision",
+  "pack": "prompts/local/valid",
+  "envelope_mutation": {
+    "op": "delete",
+    "path": [
+      "subject"
+    ]
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "suite": "holdout",
+  "version": "2026-11-24",
+  "cases": [
+    {
+      "input": {
+        "schema_version": 1,
+        "case_id": "holdout-synthetic-1",
+        "now": "2026-11-24T00:00:00.000Z",
+        "task_id": "holdout-task-1",
+        "nonce": "00000000-0000-4000-8000-000000000601",
+        "kind": "hr_message",
+        "subject": {
+          "conversation_key": "boss:conv:1111111111111111111111111111111111111111111111111111111111111111",
+          "job_brief": null
+        },
+        "inbound": "您好，请问您目前接受的工作地点是哪里？",
+        "context": [],
+        "allowed_facts": [
+          {
+            "key": "work_location",
+            "value": "苏州",
+            "source": "user_confirmed",
+            "expires_at": null
+          }
+        ]
+      },
+      "assertions": {
+        "intent_in": [
+          "interested"
+        ],
+        "sub_intents_required": [
+          "greeting"
+        ],
+        "sub_intents_forbidden": [
+          "sensitive"
+        ],
+        "reply_nonempty": true,
+        "reply_contains_any": [
+          "苏州"
+        ],
+        "escalate_in": [
+          null
+        ]
+      }
+    },
+    {
+      "input": {
+        "schema_version": 1,
+        "case_id": "holdout-synthetic-2",
+        "now": "2026-11-24T00:00:00.000Z",
+        "task_id": "holdout-task-2",
+        "nonce": "00000000-0000-4000-8000-000000000602",
+        "kind": "hr_message",
+        "subject": {
+          "conversation_key": "boss:conv:2222222222222222222222222222222222222222222222222222222222222222",
+          "job_brief": null
+        },
+        "inbound": "您好，方便告诉我您的期望薪资吗？",
+        "context": [],
+        "allowed_facts": [
+          {
+            "key": "salary_expectation",
+            "value": "15-20k",
+            "source": "user_confirmed",
+            "expires_at": null
+          }
+        ]
+      },
+      "assertions": {
+        "intent_in": [
+          "interested"
+        ],
+        "sub_intents_required": [
+          "salary"
+        ],
+        "sub_intents_forbidden": [
+          "sensitive"
+        ],
+        "reply_nonempty": true,
+        "reply_contains_any": [
+          "15-20k"
+        ],
+        "escalate_in": [
+          null
+        ]
+      }
+    }
+  ]
+}

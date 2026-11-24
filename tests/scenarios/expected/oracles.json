@@ -2827,12 +2827,53 @@
       "variant_id": "selected_missing"
     },
     "SC-D01/mapping_matrix": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 24,
+                "path": "row_count"
+              },
+              {
+                "equals": 20,
+                "path": "unmapped_count"
+              },
+              {
+                "equals": 4,
+                "path": "derived_render_count"
+              },
+              {
+                "length_equals": 0,
+                "path": "missing_derived"
+              },
+              {
+                "equals": true,
+                "path": "all_rows_owned"
+              },
+              {
+                "equals": true,
+                "path": "no_expected_fields"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "answer 仅作 reply 候选",
         "can_send 不生成授权",
         "memory_updates 不丢原断言",
-        "不能映射的独立留旧套件"
+        "不能映射的独立留旧套件",
+        "24 行映射全部有 owner，未映射行有独立原因"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -2858,10 +2899,43 @@
       "variant_id": "mapping_matrix"
     },
     "SC-D01/no_false_coverage": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 24,
+                "path": "row_count"
+              },
+              {
+                "equals": 20,
+                "path": "unmapped_count"
+              },
+              {
+                "equals": 4,
+                "path": "derived_render_count"
+              },
+              {
+                "equals": true,
+                "path": "all_rows_owned"
+              },
+              {
+                "equals": true,
+                "path": "no_expected_fields"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "未映射项显式列出",
-        "不以 npm 通过替代 M4"
+        "不以 npm 通过替代 M4",
+        "派生输入只经真实 render，不读取旧 expected"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -2887,14 +2961,31 @@
       "variant_id": "no_false_coverage"
     },
     "SC-D02/array": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "拒绝",
-        "不执行"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "拒绝",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -2916,13 +3007,31 @@
       "variant_id": "array"
     },
     "SC-D02/bool_version": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "拒绝 bool 当整数"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "拒绝 bool 当整数",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -2944,13 +3053,31 @@
       "variant_id": "bool_version"
     },
     "SC-D02/evidence_not_substring": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "stale_evidence",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "stale_evidence/blocked"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "stale_evidence/blocked",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -2972,14 +3099,31 @@
       "variant_id": "evidence_not_substring"
     },
     "SC-D02/expired_nonce": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "stale_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "stale_decision",
-        "从新租约重跑"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "stale_decision",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3001,14 +3145,31 @@
       "variant_id": "expired_nonce"
     },
     "SC-D02/extra_key": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "拒绝额外键",
-        "不执行"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "拒绝额外键",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3030,14 +3191,31 @@
       "variant_id": "extra_key"
     },
     "SC-D02/fenced_json": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "拒绝非单 JSON",
-        "不执行"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "拒绝非单 JSON",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3059,13 +3237,31 @@
       "variant_id": "fenced_json"
     },
     "SC-D02/long_reply": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "不截断、记 invalid_decision"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "不截断、记 invalid_decision",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3087,14 +3283,31 @@
       "variant_id": "long_reply"
     },
     "SC-D02/missing_key": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "invalid_decision/blocked",
-        "不执行"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "invalid_decision/blocked",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3116,14 +3329,43 @@
       "variant_id": "missing_key"
     },
     "SC-D02/valid_decision": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "prompt_hash_matches"
+              },
+              {
+                "equals": true,
+                "path": "input_hash_matches"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "校验通过但不自动授权",
-        "回显三标识"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "校验通过但不自动授权",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3145,13 +3387,31 @@
       "variant_id": "valid_decision"
     },
     "SC-D02/wrong_hash": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "stale_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "stale_decision/blocked"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "stale_decision/blocked",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3173,13 +3433,31 @@
       "variant_id": "wrong_hash"
     },
     "SC-D02/wrong_nonce": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "stale_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "stale_decision/blocked"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "stale_decision/blocked",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3201,13 +3479,31 @@
       "variant_id": "wrong_nonce"
     },
     "SC-D02/wrong_task": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "stale_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "stale_decision/blocked"
+        "合法阳性必须通过但不自动授权",
+        "回显三标识与租约边界受控",
+        "真实 parse/render/validate 消费，零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "stale_decision/blocked",
+      "expected_summary": "合法阳性必须通过但不自动授权",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3229,14 +3525,31 @@
       "variant_id": "wrong_task"
     },
     "SC-D03/input_too_large": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "input_too_large",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "超限 input_too_large 转待办",
-        "不截断 inbound"
+        "提交前仅一次重试，提交后不重试",
+        "真实 decide 记录尝试/提交计数与固定诊断",
+        "超限不截断 inbound、零桥调用"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "超限 input_too_large 转待办",
+      "expected_summary": "提交前仅一次重试，提交后不重试",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3258,15 +3571,47 @@
       "variant_id": "input_too_large"
     },
     "SC-D03/post_submit_timeout": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "decision_timeout",
+                "path": "reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "attempts"
+              },
+              {
+                "equals": 1,
+                "path": "submissions"
+              },
+              {
+                "equals": 1,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": true,
+                "path": "submitted"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "decision_timeout",
-        "不重复调用",
-        "不推断模型处理结果"
+        "提交前仅一次重试，提交后不重试",
+        "真实 decide 记录尝试/提交计数与固定诊断",
+        "超限不截断 inbound、零桥调用"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "decision_timeout",
+      "expected_summary": "提交前仅一次重试，提交后不重试",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3288,14 +3633,43 @@
       "variant_id": "post_submit_timeout"
     },
     "SC-D03/pre_submit_error": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 2,
+                "path": "attempts"
+              },
+              {
+                "equals": 1,
+                "path": "submissions"
+              },
+              {
+                "equals": 2,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": "C",
+                "path": "resolved_tier"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "最多重试一次",
-        "trace 记录提交/调用次数"
+        "提交前仅一次重试，提交后不重试",
+        "真实 decide 记录尝试/提交计数与固定诊断",
+        "超限不截断 inbound、零桥调用"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "最多重试一次",
+      "expected_summary": "提交前仅一次重试，提交后不重试",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3316,13 +3690,273 @@
       ],
       "variant_id": "pre_submit_error"
     },
+    "SC-D04/contract_expired_fact": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 0,
+                "path": "selected_fact_count"
+              },
+              {
+                "equals": "C",
+                "path": "tier"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "过期事实不进入 envelope",
+        "档位仍为 C",
+        "零桥/零事实写入"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "过期事实不进入 envelope",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 策略与事实门禁",
+        "v1 固定 C"
+      ],
+      "scenario_id": "SC-D04",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "contract_expired_fact"
+    },
+    "SC-D04/contract_injection_tier": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 0,
+                "path": "selected_fact_count"
+              },
+              {
+                "equals": "C",
+                "path": "tier"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "uncertain_reason"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "注入文本不改变档位/事实",
+        "uncertain 仍需人工",
+        "零桥"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "注入文本不改变档位/事实",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 策略与事实门禁",
+        "v1 固定 C"
+      ],
+      "scenario_id": "SC-D04",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "contract_injection_tier"
+    },
+    "SC-D04/contract_tier_floor": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "C",
+                "path": "tier"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "salary 等敏感子意图固定 C",
+        "不提升 A/B"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "salary 等敏感子意图固定 C",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 策略与事实门禁",
+        "v1 固定 C"
+      ],
+      "scenario_id": "SC-D04",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "contract_tier_floor"
+    },
+    "SC-D04/contract_uncertain_escalation": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "uncertain_reason"
+              },
+              {
+                "equals": "C",
+                "path": "tier"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "无 human_review 的 uncertain 被拒绝",
+        "零发送/零动作"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "无 human_review 的 uncertain 被拒绝",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 策略与事实门禁",
+        "v1 固定 C"
+      ],
+      "scenario_id": "SC-D04",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "contract_uncertain_escalation"
+    },
+    "SC-D04/contract_unconfirmed_source": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 0,
+                "path": "selected_fact_count"
+              },
+              {
+                "equals": "C",
+                "path": "tier"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "非 user_confirmed 事实被丢弃",
+        "不编造事实",
+        "零桥"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "非 user_confirmed 事实被丢弃",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 策略与事实门禁",
+        "v1 固定 C"
+      ],
+      "scenario_id": "SC-D04",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "contract_unconfirmed_source"
+    },
     "SC-D04/expired_fact": {
       "acceptance": null,
       "assertions": [
         "不入请求",
         "转 ask_user 待办"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 事实确认/待办/授权",
       "device_gate": false,
       "expected_summary": "不入请求",
       "forbidden": [
@@ -3351,7 +3985,7 @@
         "HR 不改变策略/档位/事实",
         "无工具"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 事实确认/待办/授权",
       "device_gate": false,
       "expected_summary": "HR 不改变策略/档位/事实",
       "forbidden": [
@@ -3380,7 +4014,7 @@
         "ask_user",
         "不改变硬下限"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 事实确认/待办/授权",
       "device_gate": false,
       "expected_summary": "ask_user",
       "forbidden": [
@@ -3409,7 +4043,7 @@
         "不得提升 A",
         "未授权动作次数 0"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 事实确认/待办/授权",
       "device_gate": false,
       "expected_summary": "不得提升 A",
       "forbidden": [
@@ -3438,7 +4072,7 @@
         "必须 escalate=human_review",
         "C 待办，不发送"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 事实确认/待办/授权",
       "device_gate": false,
       "expected_summary": "必须 escalate=human_review",
       "forbidden": [
@@ -3467,7 +4101,7 @@
         "拒绝",
         "不编造事实"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 事实确认/待办/授权",
       "device_gate": false,
       "expected_summary": "拒绝",
       "forbidden": [
@@ -3491,13 +4125,45 @@
       "variant_id": "unconfirmed_source"
     },
     "SC-D05/bool_integer": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "整数不接受 bool"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "整数不接受 bool",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3519,14 +4185,45 @@
       "variant_id": "bool_integer"
     },
     "SC-D05/contact_fact_conflict": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "sensitive/conflict 拒绝",
-        "不自动修正"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "sensitive/conflict 拒绝",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3548,13 +4245,45 @@
       "variant_id": "contact_fact_conflict"
     },
     "SC-D05/disclosure_missing": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "拒绝"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "拒绝",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3576,14 +4305,45 @@
       "variant_id": "disclosure_missing"
     },
     "SC-D05/encoding_and_nul": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "encoding 诊断",
-        "拒绝"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "encoding 诊断",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3605,13 +4365,45 @@
       "variant_id": "encoding_and_nul"
     },
     "SC-D05/extra_key": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "拒绝额外键"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "拒绝额外键",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3633,14 +4425,45 @@
       "variant_id": "extra_key"
     },
     "SC-D05/missing_key": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "invalid_policy",
-        "启动前退出"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "invalid_policy",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3662,13 +4485,45 @@
       "variant_id": "missing_key"
     },
     "SC-D05/path_in_style": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "path 诊断，拒绝"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "path 诊断，拒绝",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3695,7 +4550,7 @@
         "policy_changed 停新动作",
         "在途仍核实"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 在途活动核实",
       "device_gate": false,
       "expected_summary": "policy_changed 停新动作",
       "forbidden": [
@@ -3718,14 +4573,100 @@
       ],
       "variant_id": "runtime_changed"
     },
-    "SC-D05/size_limits": {
-      "acceptance": null,
+    "SC-D05/runtime_changed_decision": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "policy_changed",
+                "path": "reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": false,
+                "path": "submitted"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "超限拒绝，不截断后称合法"
+        "重试前包摘要变化拒绝",
+        "不提交变更包",
+        "零动作"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "超限拒绝，不截断后称合法",
+      "expected_summary": "重试前包摘要变化拒绝",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 包校验已交付",
+        "合成包不含真实内容"
+      ],
+      "scenario_id": "SC-D05",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "runtime_changed_decision"
+    },
+    "SC-D05/size_limits": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3747,14 +4688,40 @@
       "variant_id": "size_limits"
     },
     "SC-D05/symlink_pack": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_input",
+                "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "link_detected"
+              },
+              {
+                "equals": [
+                  "path"
+                ],
+                "path": "issue_codes"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "path 诊断",
-        "不读取链接目标"
+        "先查 leaf/祖先链接再 resolve",
+        "path 诊断且不读取链接目标"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "path 诊断",
+      "expected_summary": "先查 leaf/祖先链接再 resolve",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3776,13 +4743,45 @@
       "variant_id": "symlink_pack"
     },
     "SC-D05/tier_gap": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "拒绝漏项"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "拒绝漏项",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3804,13 +4803,45 @@
       "variant_id": "tier_gap"
     },
     "SC-D05/tier_overlap": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "拒绝冲突"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "拒绝冲突",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3832,13 +4863,45 @@
       "variant_id": "tier_overlap"
     },
     "SC-D05/unsafe_a": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "safety_floor 拒绝"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "safety_floor 拒绝",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3860,14 +4923,53 @@
       "variant_id": "unsafe_a"
     },
     "SC-D05/valid_pack": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              },
+              {
+                "equals": "synthetic-m4",
+                "path": "result.profile_id"
+              },
+              {
+                "path": "result.pack_hash",
+                "pattern": "[0-9a-f]{64}"
+              },
+              {
+                "path": "result.base_hash",
+                "pattern": "[0-9a-f]{64}"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "validate 通过",
-        "有效限制可计算"
+        "真实 policy validate 读取合成包",
+        "非法包启动前失败且不回显正文/绝对路径",
+        "合法包有效限制/硬下限/摘要可计算"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "validate 通过",
+      "expected_summary": "真实 policy validate 读取合成包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -3889,7 +4991,87 @@
       "variant_id": "valid_pack"
     },
     "SC-D06/init_validate_preview": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              },
+              {
+                "equals": "demo",
+                "path": "result.profile_id"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              },
+              {
+                "equals": "demo",
+                "path": "result.profile_id"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "init 不覆盖已有目录",
         "preview 不调模型/设备",
@@ -3923,7 +5105,7 @@
         "直接建待办",
         "不从 HR 文本导入事实"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 事实确认入口",
       "device_gate": false,
       "expected_summary": "直接建待办",
       "forbidden": [
@@ -3959,7 +5141,7 @@
         "未执行或 BLOCKED 时不得记 PASS"
       ],
       "layer": "F",
-      "module_evidence": null,
+      "module_evidence": "docs/operator.md 与 tests/test_policy_store.py 文档/帮助覆盖；本 Task 不重复模块单测，也不声称新用户全路径已验收",
       "observations_ref": null,
       "preconditions": [
         "M4 policy 工具已交付"
@@ -3974,7 +5156,31 @@
       "variant_id": "operator_docs"
     },
     "SC-D07/injection_no_escalation": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "C",
+                "path": "resolved_tier"
+              },
+              {
+                "equals": 0,
+                "path": "fact_count"
+              },
+              {
+                "equals": 1,
+                "path": "bridge_submissions"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "schema 合法也不提升 C/事实/授权",
         "设备和事实写入 0"
@@ -4003,15 +5209,55 @@
       "variant_id": "injection_no_escalation"
     },
     "SC-D07/role_partition": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": [
+                  "system",
+                  "developer",
+                  "user"
+                ],
+                "path": "roles"
+              },
+              {
+                "length_equals": 0,
+                "path": "tools"
+              },
+              {
+                "length_equals": 0,
+                "path": "history"
+              },
+              {
+                "equals": true,
+                "path": "user_is_json"
+              },
+              {
+                "equals": true,
+                "path": "system_is_base"
+              },
+              {
+                "equals": 1,
+                "path": "bridge_attempts"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "原文只在 user JSON 字符串",
-        "不支持分区拒绝",
-        "无工具/无跨例历史"
+        "真实 LocalProcessBridge 捕获固定三角色",
+        "工具/历史为空",
+        "无跨例历史"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "原文只在 user JSON 字符串",
+      "expected_summary": "真实 LocalProcessBridge 捕获固定三角色",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -4033,14 +5279,30 @@
       "variant_id": "role_partition"
     },
     "SC-D07/subject_required": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "拒绝",
+        "HR 缺会话键拒绝",
         "不调用桥"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "拒绝",
+      "expected_summary": "HR 缺会话键拒绝",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -4062,7 +5324,23 @@
       "variant_id": "subject_required"
     },
     "SC-D08/directory_rename": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "pack_hash_independent"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "目录不入摘要",
         "相同内容不要求不同 hash"
@@ -4091,7 +5369,31 @@
       "variant_id": "directory_rename"
     },
     "SC-D08/hash_order": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "prompt_hash_non_self"
+              },
+              {
+                "equals": true,
+                "path": "base_hash_independent"
+              },
+              {
+                "equals": true,
+                "path": "pack_hash_independent"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "先 base/pack，再 prompt_hash，最后 input_hash",
         "无自引用"
@@ -4120,7 +5422,27 @@
       "variant_id": "hash_order"
     },
     "SC-D08/nonce_only": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "prompt_excludes_nonce"
+              },
+              {
+                "equals": true,
+                "path": "input_includes_nonce"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "prompt_hash 不变，input_hash 变"
       ],
@@ -4148,7 +5470,23 @@
       "variant_id": "nonce_only"
     },
     "SC-D08/rendered_tamper": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "tamper_reason"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "H(RenderedRequest) 不符拒绝"
       ],
@@ -4176,7 +5514,27 @@
       "variant_id": "rendered_tamper"
     },
     "SC-D08/size_limits": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "envelope_2048_reached"
+              },
+              {
+                "equals": "input_too_large",
+                "path": "over_2048_reason"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "限额不静默截断",
         "超限 input_too_large"
@@ -4210,7 +5568,7 @@
         "失败保留占用",
         "不补偿为空闲"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 共享 OS 设备门禁",
       "device_gate": false,
       "expected_summary": "失败保留占用",
       "forbidden": [
@@ -4238,7 +5596,7 @@
         "保留隔离",
         "换 profile/重启不自动解除"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 共享 OS 设备门禁",
       "device_gate": false,
       "expected_summary": "保留隔离",
       "forbidden": [
@@ -4266,7 +5624,7 @@
         "仅当前 owner/nonce 条件删除",
         "先对账"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 共享 OS 设备门禁",
       "device_gate": false,
       "expected_summary": "仅当前 owner/nonce 条件删除",
       "forbidden": [
@@ -4294,7 +5652,7 @@
         "整个 run 含 read_only 持有",
         "profile 库 primary 不能替代"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 共享 OS 设备门禁",
       "device_gate": false,
       "expected_summary": "整个 run 含 read_only 持有",
       "forbidden": [
@@ -4322,7 +5680,7 @@
         "共享库唯一 primary 覆盖整个 run 含 read_only",
         "profile 库 primary 不能替代"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 共享 OS 设备门禁",
       "device_gate": false,
       "expected_summary": "共享库唯一 primary 覆盖整个 run 含 read_only",
       "forbidden": [
@@ -4350,7 +5708,7 @@
         "TTL/PID 不存在/重启不自动解除",
         "跨 profile 不共享事实/额度"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 共享 OS 设备门禁",
       "device_gate": false,
       "expected_summary": "TTL/PID 不存在/重启不自动解除",
       "forbidden": [
@@ -4378,7 +5736,7 @@
         "拒绝自动恢复",
         "要求匹配发布"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 活动/额度/旧授权与显式 activity 成功事务",
       "device_gate": false,
       "expected_summary": "拒绝自动恢复",
       "forbidden": [
@@ -4407,7 +5765,7 @@
         "暂存包不可加载",
         "原包与快照保留"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 活动/额度/旧授权与显式 activity 成功事务",
       "device_gate": false,
       "expected_summary": "暂存包不可加载",
       "forbidden": [
@@ -4436,7 +5794,7 @@
         "拒绝 restore",
         "不加载半包"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 活动/额度/旧授权与显式 activity 成功事务",
       "device_gate": false,
       "expected_summary": "拒绝 restore",
       "forbidden": [
@@ -4465,7 +5823,7 @@
         "拒绝提升",
         "重新 validate/preview/eval"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 活动/额度/旧授权与显式 activity 成功事务",
       "device_gate": false,
       "expected_summary": "拒绝提升",
       "forbidden": [
@@ -4494,7 +5852,7 @@
         "额度/冷却/动作证据保留",
         "不复用旧授权"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 活动/额度/旧授权与显式 activity 成功事务",
       "device_gate": false,
       "expected_summary": "额度/冷却/动作证据保留",
       "forbidden": [
@@ -4517,13 +5875,223 @@
       ],
       "variant_id": "quota_preserved"
     },
+    "SC-D10/restore_active_subevidence": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "policy_changed",
+                "path": "reason_code"
+              },
+              {
+                "equals": "active",
+                "path": "activity_state"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "active 拒绝恢复",
+        "不覆盖目标",
+        "不把 active 当 stopped"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "active 拒绝恢复",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 snapshot/restore 已交付",
+        "合成包"
+      ],
+      "scenario_id": "SC-D10",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "restore_active_subevidence"
+    },
+    "SC-D10/restore_stopped_subevidence": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "snapshot_created"
+              },
+              {
+                "equals": true,
+                "path": "pack_hash_match"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "三值摘要一致且 stopped 才恢复",
+        "目标新目录不覆盖",
+        "仅子证据，不代表 M4c 活动检查交付"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "三值摘要一致且 stopped 才恢复",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 snapshot/restore 已交付",
+        "合成包"
+      ],
+      "scenario_id": "SC-D10",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "restore_stopped_subevidence"
+    },
+    "SC-D10/restore_unknown_subevidence": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "policy_changed",
+                "path": "reason_code"
+              },
+              {
+                "equals": "unknown",
+                "path": "activity_state"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "unknown 不自动解除",
+        "拒绝恢复",
+        "保留原包/快照"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "unknown 不自动解除",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 snapshot/restore 已交付",
+        "合成包"
+      ],
+      "scenario_id": "SC-D10",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "restore_unknown_subevidence"
+    },
+    "SC-D10/snapshot_state_limit": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "result"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              },
+              {
+                "path": "result.pack_hash",
+                "pattern": "[0-9a-f]{64}"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "snapshot 成功只证明快照事务",
+        "生产 restore 仍等待 M4c 活动证据",
+        "不冒充完整恢复成功"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "snapshot 成功只证明快照事务",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 snapshot/restore 已交付",
+        "合成包"
+      ],
+      "scenario_id": "SC-D10",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "snapshot_state_limit"
+    },
     "SC-D10/target_exists": {
       "acceptance": null,
       "assertions": [
         "policy_exists",
         "保留错误版本"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 活动/额度/旧授权与显式 activity 成功事务",
       "device_gate": false,
       "expected_summary": "policy_exists",
       "forbidden": [
@@ -4552,7 +6120,7 @@
         "pack_hash 三值相等且 base 匹配",
         "不覆盖原包"
       ],
-      "deferred_to": null,
+      "deferred_to": "M4c 活动/额度/旧授权与显式 activity 成功事务",
       "device_gate": false,
       "expected_summary": "pack_hash 三值相等且 base 匹配",
       "forbidden": [
@@ -4576,14 +6144,208 @@
       "variant_id": "three_hashes_equal"
     },
     "SC-D11/holdout_freeze": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "synthetic-batch",
+                "path": "batch"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": false,
+                "path": "holdout.repeat_access"
+              },
+              {
+                "equals": true,
+                "path": "holdout.new_evidence"
+              },
+              {
+                "equals": "completed",
+                "path": "holdout.outcome"
+              },
+              {
+                "equals": false,
+                "path": "acceptance"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "holdout.repeat_access"
+              },
+              {
+                "equals": false,
+                "path": "holdout.new_evidence"
+              },
+              {
+                "equals": false,
+                "path": "acceptance"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "holdout.repeat_access"
+              },
+              {
+                "equals": false,
+                "path": "holdout.new_evidence"
+              },
+              {
+                "equals": false,
+                "path": "acceptance"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 0,
+                "path": "regression_case_count"
+              },
+              {
+                "equals": [
+                  "frozen"
+                ],
+                "path": "registry_statuses"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "regression_ref_present"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 2,
+                "path": "regression_case_count"
+              },
+              {
+                "equals": [
+                  "retired"
+                ],
+                "path": "registry_statuses"
+              },
+              {
+                "equals": true,
+                "path": "frozen_absent"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "查看调优即整批转回归",
-        "重复访问不算新证据"
+        "登记冻结批次",
+        "首次访问 intent 持久化且完成消耗",
+        "重复访问 repeat_access=true 且 new_evidence=false",
+        "整批退役写入实际 regression 准入",
+        "read_suite('regression') 含原批全部样本且退役批不再冻结",
+        "不读取真实私有样本"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "查看调优即整批转回归",
+      "expected_summary": "登记冻结批次",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -4605,15 +6367,39 @@
       "variant_id": "holdout_freeze"
     },
     "SC-D11/no_provider": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "not_measured",
+                "path": "eval_status"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": false,
+                "path": "acceptance"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "零样本 N/A",
-        "不声称测得能力",
-        "错误不外泄配置值"
+        "缺套件零样本 N/A",
+        "零桥调用",
+        "不声称测得能力"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "零样本 N/A",
+      "expected_summary": "缺套件零样本 N/A",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -4640,7 +6426,7 @@
         "固定无原值诊断",
         "不换模型或改用 smoke"
       ],
-      "deferred_to": null,
+      "deferred_to": "真实 provider 明确未测；模拟仅作子证据",
       "device_gate": false,
       "expected_summary": "固定无原值诊断",
       "forbidden": [
@@ -4663,16 +6449,102 @@
       ],
       "variant_id": "provider_error"
     },
-    "SC-D11/public_contract": {
-      "acceptance": null,
+    "SC-D11/provider_error_simulated": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "bridge_auth",
+                "path": "reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "attempts"
+              },
+              {
+                "equals": 1,
+                "path": "submissions"
+              },
+              {
+                "equals": 1,
+                "path": "bridge_calls"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "preview 不读黄金答案",
-        "metadata/expected 不入模型",
-        "实际加载当前包"
+        "bridge_auth 固定诊断",
+        "提交后不重试",
+        "不换模型"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "preview 不读黄金答案",
+      "expected_summary": "bridge_auth 固定诊断",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 eval 已交付",
+        "无合规本机 provider 即未测"
+      ],
+      "scenario_id": "SC-D11",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "provider_error_simulated"
+    },
+    "SC-D11/public_contract": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "measured",
+                "path": "eval_status"
+              },
+              {
+                "equals": false,
+                "path": "acceptance"
+              },
+              {
+                "equals": 6,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": true,
+                "path": "descriptor_simulated"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "实际加载当前包",
+        "metadata/expected 不入 transport",
+        "simulated 不生成验收凭证"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "实际加载当前包",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -4694,14 +6566,30 @@
       "variant_id": "public_contract"
     },
     "SC-D11/unknown_case": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_input",
+                "path": "reason_code"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
-        "unknown_case/invalid_provider",
-        "拒绝参考回放"
+        "unknown/invalid_provider 拒绝",
+        "不换参考回放"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "unknown_case/invalid_provider",
+      "expected_summary": "unknown/invalid_provider 拒绝",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"

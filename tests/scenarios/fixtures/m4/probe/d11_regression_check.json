@@ -1,0 +1,5 @@
+{
+  "operation": "eval",
+  "pack": "prompts/local/eval",
+  "mode": "regression_check"
+}

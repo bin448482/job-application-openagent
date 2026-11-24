@@ -1,0 +1,12 @@
+{
+  "operation": "facts",
+  "pack": "prompts/local/valid",
+  "facts": [
+    {
+      "key": "work_location",
+      "value": "合成城市甲",
+      "source": "user_confirmed",
+      "expires_at": "2000-01-01T00:00:00.000Z"
+    }
+  ]
+}

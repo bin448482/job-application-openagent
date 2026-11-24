@@ -1,0 +1,12 @@
+{
+  "operation": "facts",
+  "pack": "prompts/local/valid",
+  "facts": [
+    {
+      "key": "work_location",
+      "value": "合成城市甲",
+      "source": "synthetic_unconfirmed",
+      "expires_at": null
+    }
+  ]
+}

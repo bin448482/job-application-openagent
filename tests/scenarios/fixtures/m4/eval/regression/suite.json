@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "suite": "regression",
+  "version": "2026-11-24",
+  "cases": [
+    {
+      "input": {
+        "schema_version": 1,
+        "case_id": "eval-job-card",
+        "now": "2026-11-24T00:00:00.000Z",
+        "task_id": "eval-task-job-card",
+        "nonce": "00000000-0000-4000-8000-000000000306",
+        "kind": "job_card",
+        "subject": {
+          "conversation_key": null,
+          "job_brief": "后端开发，三年以上经验，工作地点苏州。"
+        },
+        "inbound": "后端开发，三年以上经验，工作地点苏州。",
+        "context": [],
+        "allowed_facts": []
+      },
+      "assertions": {
+        "intent_in": [
+          "interested"
+        ],
+        "sub_intents_required": [],
+        "sub_intents_forbidden": [
+          "sensitive"
+        ],
+        "reply_nonempty": false,
+        "reply_contains_any": [],
+        "escalate_in": [
+          null
+        ]
+      }
+    }
+  ]
+}

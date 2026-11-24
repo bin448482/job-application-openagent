@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "case_id": "policy-job-card",
+  "now": "2026-11-24T00:00:00.000Z",
+  "task_id": "preview-task-policy-job-card",
+  "nonce": "00000000-0000-4000-8000-000000000202",
+  "kind": "job_card",
+  "subject": {
+    "conversation_key": null,
+    "job_brief": "后端开发，负责服务端接口与数据链路。"
+  },
+  "inbound": "后端开发岗位：负责服务端接口设计、数据链路与稳定性建设，要求熟悉 Python 与 SQL。",
+  "context": [],
+  "allowed_facts": []
+}

@@ -1,0 +1,4 @@
+{
+  "operation": "policy_validate",
+  "pack": "prompts/local/linked"
+}

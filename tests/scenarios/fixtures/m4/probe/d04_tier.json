@@ -1,0 +1,8 @@
+{
+  "operation": "facts",
+  "pack": "prompts/local/valid",
+  "intent": "interested",
+  "sub_intents": [
+    "salary"
+  ]
+}

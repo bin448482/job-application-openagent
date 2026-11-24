@@ -25,7 +25,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, model, replay, runner  # noqa: E402
+from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, m4_probe, model, replay, runner  # noqa: E402
 from scenarios.framework.compare import compare_invocation, compare_step, strict_equal  # noqa: E402
 
 SCENARIO_ROOT = TESTS_DIR / "scenarios"
@@ -53,6 +53,29 @@ def variant_index(assets: model.LoadedAssets) -> dict[str, dict]:
     for scenario, variant in model.iter_variants(assets.catalogue):
         result[f"{scenario['id']}/{variant['id']}"] = variant
     return result
+
+
+def _make_m4_project(root: Path) -> None:
+    """在临时根复制公开 base/示例/套件与合成包，供 M4 探针真实调用。"""
+    repo_root = TESTS_DIR.parent
+    for relative in ("prompts/base", "tests/fixtures/policy-preview", "evals/policy-suite"):
+        shutil.copytree(repo_root / relative, root / relative, dirs_exist_ok=True)
+    for name in ("valid", "eval"):
+        shutil.copytree(
+            SCENARIO_ROOT / "fixtures/m4/policy/packs" / name,
+            root / "prompts/local" / name,
+            dirs_exist_ok=True,
+        )
+    shutil.copytree(
+        SCENARIO_ROOT / "fixtures/m4/eval/holdout",
+        root / "evals/private/holdout",
+        dirs_exist_ok=True,
+    )
+    shutil.copytree(
+        SCENARIO_ROOT / "fixtures/m4/eval/regression",
+        root / "evals/private/regression",
+        dirs_exist_ok=True,
+    )
 
 
 class AssetCompletenessTests(unittest.TestCase):
@@ -746,11 +769,11 @@ class IsolationTripwireTests(unittest.TestCase):
 class P2M0BindingTests(unittest.TestCase):
     """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
 
-    def test_milestone_gate_blocks_unimplemented_m4(self) -> None:
-        """M4 未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
+    def test_milestone_gate_blocks_unimplemented_m5(self) -> None:
+        """M5 未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
         load_assets()
-        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3"})
-        scenario = {"id": "SC-R99", "milestone": "M4"}
+        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4"})
+        scenario = {"id": "SC-R99", "milestone": "M5"}
         variant = {
             "id": "synthetic",
             "layer": "F",
@@ -1590,6 +1613,7 @@ class M1DriverBoundaryTests(unittest.TestCase):
             "mode": None,
             "config_source": None,
             "device_count": None,
+            "case_index": None,
         }
         event.update(extra)
         return event
@@ -1921,6 +1945,128 @@ class M1DriverBoundaryTests(unittest.TestCase):
             mutate(broken["result"]["value"])
             differences = compare_invocation({**invocation, "stdout_json": broken}, oracle)
             self.assertTrue(differences, name)
+
+    def test_real_m4_decision_timeout_and_retry_mutant_are_caught(self) -> None:
+        """真实 decide 提交后超时只一次；若误允许重试，D03 实际 oracle 必须拒绝。"""
+        from app.ports.decision import BridgeError
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D03/post_submit_timeout"]["acceptance"]["steps"][0]
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m4/probe/d03_post_submit_timeout.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root):
+                actual = m4_probe._decision_run_operation(request)
+                normal = {
+                    "exit_code": 0,
+                    "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                        key: value for key, value in actual.items() if key != "status"
+                    }},
+                    "stdout_json_ok": True,
+                    "stdout_text": "",
+                    "stderr": "",
+                }
+                self.assertEqual(compare_invocation(normal, oracle), [])
+                with mock.patch.object(
+                    BridgeError,
+                    "retryable",
+                    new_callable=mock.PropertyMock,
+                    return_value=True,
+                ):
+                    mutant = m4_probe._decision_run_operation(request)
+            invocation = {
+                "exit_code": 0,
+                "stdout_json": {"schema_version": 1, "status": mutant["status"], **{
+                    key: value for key, value in mutant.items() if key != "status"
+                }},
+                "stdout_json_ok": True,
+                "stdout_text": "",
+                "stderr": "",
+            }
+            differences = compare_invocation(invocation, oracle)
+            self.assertTrue(any("attempts" in item or "bridge_calls" in item for item in differences), differences)
+
+    def test_real_m4_role_partition_mutant_is_caught_by_d07_oracle(self) -> None:
+        """真实桥请求额外加入 tools 时，D07 角色/工具 oracle 必须拒绝。"""
+        from app.adapters.llm import support as bridge_support
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D07/role_partition"]["acceptance"]["steps"][0]
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m4/probe/d07_role.json").read_text(encoding="utf-8")
+        )
+        original = bridge_support.SubprocessBridge._request
+
+        def with_tools(self, system_message, developer_message, user_message, echo):
+            """在真实桥请求上追加一个合成工具，模拟分区泄露。"""
+            text = original(self, system_message, developer_message, user_message, echo)
+            data = json.loads(text.decode("utf-8"))
+            data["tools"] = [{"name": "synthetic"}]
+            return (json.dumps(data, ensure_ascii=False) + "\n").encode("utf-8")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root), mock.patch.object(
+                bridge_support.SubprocessBridge, "_request", with_tools
+            ):
+                actual = m4_probe._bridge_operation(request)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("tools" in item for item in differences), differences)
+
+    def test_real_m4_simulated_acceptance_mutant_is_caught_by_d11_oracle(self) -> None:
+        """模拟桥被伪装成非模拟并写验收凭证时，D11 public oracle 必须拒绝。"""
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D11/public_contract"]["acceptance"]["steps"][0]
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m4/probe/d11_eval_public.json").read_text(encoding="utf-8")
+        )
+        original = m4_probe._EvalBridge.descriptor
+
+        def real_descriptor(self):
+            """返回 simulated=false 的错误描述符。"""
+            from app.ports.decision import BridgeDescriptor
+
+            return BridgeDescriptor(
+                provider_id="local-process",
+                model_id="synthetic-model",
+                model_config_hash="0" * 64,
+                bridge="bridge_b",
+                simulated=False,
+            )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root), mock.patch.object(
+                m4_probe._EvalBridge, "descriptor", real_descriptor
+            ):
+                actual = m4_probe._eval_operation(request)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("acceptance" in item or "simulated" in item for item in differences), differences)
 
     def test_real_m2_sut_mutant_coverage_is_caught(self) -> None:
         """真实 M2 解析器把 coverage 降为 viewport 时，SC-U04 oracle 必须失败。"""

@@ -37,7 +37,7 @@ EXIT_FAIL = 1
 EXIT_BLOCKED = 3
 RUN_ROOT = Path("data") / "evals" / "scenario-runs"
 # 只有已独立验收并进入稳定 main 的里程碑才允许执行；扩展前先更新指南。
-IMPLEMENTED_MILESTONES = {"M0", "M1", "M2", "M3"}
+IMPLEMENTED_MILESTONES = {"M0", "M1", "M2", "M3", "M4"}
 
 
 def _utc_stamp() -> str:
@@ -184,6 +184,7 @@ M0_PROBE_PATH = "tests/scenarios/framework/m0_protocol_probe.py"
 M1_PROBE_PATH = "tests/scenarios/framework/m1_probe.py"
 M2_PROBE_PATH = "tests/scenarios/framework/m2_probe.py"
 M3_PROBE_PATH = "tests/scenarios/framework/m3_probe.py"
+M4_PROBE_PATH = "tests/scenarios/framework/m4_probe.py"
 EXPECTED_FILE_NAMES = {"expected.json", "oracles.json"}
 
 
@@ -334,6 +335,17 @@ def _prepare_isolation(
         destination_m3 = root / M3_PROBE_PATH
         destination_m3.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(resolved_m3, destination_m3)
+    if any(M4_PROBE_PATH in command for command in _iter_command_strings(variant)):
+        source_m4 = target / M4_PROBE_PATH
+        _reject_link_ancestors(source_m4, target, "m4_probe")
+        if source_m4.is_symlink():
+            raise IsolationError("M4 探针不得是符号链接")
+        resolved_m4 = source_m4.resolve()
+        if not _within(resolved_m4, target.resolve()) or not resolved_m4.is_file():
+            raise IsolationError("M4 探针路径越界或不存在")
+        destination_m4 = root / M4_PROBE_PATH
+        destination_m4.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(resolved_m4, destination_m4)
     if any(M0_PROBE_PATH in command for command in _iter_command_strings(variant)):
         source_probe = target / M0_PROBE_PATH
         _reject_link_ancestors(source_probe, target, "m0_protocol_probe")
@@ -352,6 +364,89 @@ def _prepare_isolation(
         destination = root / "tests" / "scenarios" / "fixtures" / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+    shared_inputs = variant.get("shared_inputs") or []
+    if not isinstance(shared_inputs, list) or any(
+        not isinstance(item, str) for item in shared_inputs
+    ):
+        raise IsolationError("共享输入必须是相对路径数组")
+    for relative in shared_inputs:
+        source_root = target / relative
+        _validate_source_tree(source_root, target, "共享输入")
+        for source in sorted(source_root.rglob("*")):
+            if not source.is_file() or _is_expected_name(source):
+                continue
+            if _is_link_like(source):
+                raise IsolationError("共享输入含符号链接或 junction")
+            destination = root / relative / source.relative_to(source_root)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+    fixture_copies = variant.get("fixture_copies") or {}
+    if not isinstance(fixture_copies, dict):
+        raise IsolationError("fixture_copies 必须是对象")
+    for destination_rel, relative in fixture_copies.items():
+        if not isinstance(destination_rel, str) or not isinstance(relative, str):
+            raise IsolationError("fixture_copies 必须是相对路径对象")
+        destination_root = (root / destination_rel).resolve()
+        if not _within(destination_root, root.resolve()):
+            raise IsolationError("fixture_copies 目标越界")
+        source_root = target / "tests" / "scenarios" / "fixtures" / relative
+        _validate_source_tree(source_root, target, "复制夹具")
+        for source in sorted(source_root.rglob("*")):
+            if not source.is_file() or _is_expected_name(source):
+                continue
+            if source.name in {"AGENTS.md", "CLAUDE.md"}:
+                continue
+            if _is_link_like(source):
+                raise IsolationError("复制夹具含符号链接或 junction")
+            target_file = destination_root / source.relative_to(source_root)
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target_file)
+    local_packs = variant.get("local_packs") or {}
+    if not isinstance(local_packs, dict):
+        raise IsolationError("local_packs 必须是对象")
+    for name, relative in local_packs.items():
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            raise IsolationError("local 包名非法")
+        source_root = target / "tests" / "scenarios" / "fixtures" / relative
+        _validate_source_tree(source_root, target, "local 包")
+        destination = root / "prompts" / "local" / name
+        if destination.exists():
+            raise IsolationError("local 包目标重复")
+        destination.mkdir(parents=True)
+        for source in sorted(source_root.rglob("*")):
+            if not source.is_file() or _is_expected_name(source):
+                continue
+            if source.name in {"AGENTS.md", "CLAUDE.md"}:
+                continue
+            if _is_link_like(source):
+                raise IsolationError("local 包含符号链接或 junction")
+            target_file = destination / source.relative_to(source_root)
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target_file)
+    junctions = variant.get("junctions") or {}
+    if not isinstance(junctions, dict):
+        raise IsolationError("junctions 必须是对象")
+    for link_rel, target_rel in junctions.items():
+        if not isinstance(link_rel, str) or not isinstance(target_rel, str):
+            raise IsolationError("junction 路径必须是字符串")
+        link = (root / link_rel).resolve(strict=False)
+        target_path = (root / target_rel).resolve()
+        if not _within(link, root.resolve()) or not _within(target_path, root.resolve()):
+            raise IsolationError("junction 路径越界")
+        if link.exists() or _is_link_like(link):
+            raise IsolationError("junction 目标已存在")
+        link.parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(link), str(target_path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if created.returncode != 0 or not _is_link_like(link):
+                raise IsolationError("无法创建合成 junction")
+        else:
+            link.symlink_to(target_path, target_is_directory=True)
     (root / "data" / "evals" / "scenario-runs" / run_id).mkdir(parents=True, exist_ok=True)
     (root / "bin").mkdir()
     (root / "tmp").mkdir()
@@ -470,6 +565,7 @@ LOG_EVENT_KEYS = frozenset(
         "mode",
         "config_source",
         "device_count",
+        "case_index",
     }
 )
 LOG_STAGES = frozenset(
@@ -489,6 +585,8 @@ LOG_STAGES = frozenset(
         "adb_hierarchy",
         "adb_screen",
         "adb_evidence",
+        "policy",
+        "eval",
         "output",
         "exit",
     }
@@ -517,6 +615,22 @@ LOG_OPERATIONS = frozenset(
         "pixel",
         "merge",
         "gate",
+        "acceptance",
+        "authorize",
+        "bridge",
+        "case",
+        "eval",
+        "holdout",
+        "list",
+        "preview",
+        "publish",
+        "render",
+        "report",
+        "restore",
+        "snapshot",
+        "suite",
+        "validate",
+        "verify",
     }
 )
 LOG_REASON_CODES = frozenset(
@@ -556,6 +670,27 @@ LOG_REASON_CODES = frozenset(
         "store_io_error",
         "db_version_unsupported",
         "migration_failed",
+        "authorization_required",
+        "bridge_auth",
+        "bridge_disconnected",
+        "bridge_protocol",
+        "bridge_quota",
+        "bridge_roles",
+        "bridge_start_failed",
+        "bridge_timeout",
+        "bridge_unavailable",
+        "decision_timeout",
+        "eval_failed",
+        "input_too_large",
+        "invalid_decision",
+        "invalid_policy",
+        "invalid_provider",
+        "policy_changed",
+        "policy_exists",
+        "policy_io_error",
+        "stale_decision",
+        "stale_evidence",
+        "unknown_case",
     }
 )
 LOG_ERROR_CATEGORIES = frozenset(
@@ -572,6 +707,10 @@ LOG_ERROR_CATEGORIES = frozenset(
         "gate",
         "evidence",
         "internal",
+        "bridge",
+        "decision",
+        "eval",
+        "policy",
         "adb_missing",
         "adb_timeout",
         "adb_nonzero",
@@ -660,6 +799,10 @@ def _valid_log_event(event: dict[str, Any]) -> str | None:
         type(event["device_count"]) is not int or event["device_count"] < 0
     ):
         return "过程日志设备数非法"
+    if event["case_index"] is not None and (
+        type(event["case_index"]) is not int or event["case_index"] < 1
+    ):
+        return "过程日志用例序号非法"
     for value in event.values():
         if isinstance(value, str) and ("/" in value or "\\" in value or ".." in value):
             return "过程日志字段值含路径或越界标记"
@@ -828,6 +971,7 @@ def _run_concurrent(
             or command.startswith(f"python {M1_PROBE_PATH} ")
             or command.startswith(f"python {M2_PROBE_PATH} ")
             or command.startswith(f"python {M3_PROBE_PATH} ")
+            or command.startswith(f"python {M4_PROBE_PATH} ")
         ):
             raise IsolationError("并发子进程命令不在白名单")
     barrier = root / "barrier"
@@ -968,6 +1112,7 @@ def _variant_status(scenario: dict[str, Any], variant: dict[str, Any], target: P
             or command.startswith(f"python {M1_PROBE_PATH} ")
             or command.startswith(f"python {M2_PROBE_PATH} ")
             or command.startswith(f"python {M3_PROBE_PATH} ")
+            or command.startswith(f"python {M4_PROBE_PATH} ")
         ):
             return "BLOCKED_ENTRY_UNFROZEN"
     return "READY"

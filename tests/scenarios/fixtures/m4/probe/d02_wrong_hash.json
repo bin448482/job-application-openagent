@@ -1,0 +1,7 @@
+{
+  "operation": "decision",
+  "pack": "prompts/local/valid",
+  "decision_overrides": {
+    "input_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  }
+}

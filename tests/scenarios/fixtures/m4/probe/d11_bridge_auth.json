@@ -1,0 +1,7 @@
+{
+  "operation": "decision_run",
+  "pack": "prompts/local/valid",
+  "bridge_modes": [
+    "bridge_auth"
+  ]
+}
