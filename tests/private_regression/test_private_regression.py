@@ -84,6 +84,34 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _real_git_failure_command(repo: Path, fail_calls: set[int]) -> tuple[object, dict]:
+    """包装真实 Git 调用，只对指定 ls-files 次数短暂破坏临时 index。"""
+    real_run = extract.subprocess.run
+    index = repo / ".git" / "index"
+    state: dict[str, object] = {"ls_calls": 0, "codes": []}
+
+    def command(arguments: list[str], *args: object, **kwargs: object) -> object:
+        """在目标 ls-files 调用前写入真实坏 index，调用后恢复。"""
+        if "ls-files" in arguments:
+            state["ls_calls"] = int(state["ls_calls"]) + 1
+            if int(state["ls_calls"]) in fail_calls:
+                saved = index.read_bytes() if index.exists() else None
+                index.write_bytes(b"SYNTHETIC_CORRUPT_INDEX")
+                try:
+                    result = real_run(arguments, *args, **kwargs)
+                    state["codes"].append(result.returncode)
+                    return result
+                finally:
+                    if saved is None:
+                        index.unlink()
+                    else:
+                        index.write_bytes(saved)
+        return real_run(arguments, *args, **kwargs)
+
+    return command, state
+
+
+
 class _CountingScandir:
     """包装真实 scandir，记录实际产出条目数与被关闭状态。"""
 
@@ -1832,6 +1860,149 @@ class PrivateRegressionTests(unittest.TestCase):
         self.assertEqual(small_result["status"], "invalid")
         self.assertNotIn(small_chain[2], small_scanned)
         self.assertTrue(all(probe.closed for _, probe in small_probes))
+
+    # ---------- Git 查询运行故障：真实坏索引、阶段隔离与返回码矩阵 ----------
+
+    def test_git_index_failure_at_initial_check_rejects_without_output(self) -> None:
+        """初检 ls-files 真实返回 128 时固定 git_unavailable，且不创建输出。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        output = repo / "data" / "private-regression"
+        command, state = _real_git_failure_command(repo, {1})
+        with mock.patch.object(extract.subprocess, "run", side_effect=command):
+            code, out, err = _run_main(["--source", str(source), "--output", str(output)])
+        receipt = json.loads(out)
+        self.assertEqual(state["codes"], [128])
+        self.assertEqual(code, 2)
+        self.assertEqual(receipt["status"], "error")
+        self.assertEqual(receipt["error_reason"], "git_unavailable")
+        self.assertNotIn("safety", receipt)
+        self.assertFalse(output.exists())
+        self.assertNotIn("fatal", (out + err).lower())
+        self.assertNotIn("index", (out + err).lower())
+
+    def test_git_index_failure_at_final_check_reports_error_not_success(self) -> None:
+        """结束复核 ls-files 真实返回 128 时 CLI 非零，不写成功安全回执。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        output = repo / "data" / "private-regression"
+        command, state = _real_git_failure_command(repo, {2})
+        with mock.patch.object(extract.subprocess, "run", side_effect=command):
+            code, out, err = _run_main(["--source", str(source), "--output", str(output)])
+        receipt = json.loads(out)
+        self.assertEqual(state["codes"], [128])
+        self.assertEqual(code, 2)
+        self.assertEqual(receipt["status"], "error")
+        self.assertEqual(receipt["error_reason"], "git_unavailable")
+        self.assertNotIn("safety", receipt)
+        batches = list(output.glob("b-*"))
+        self.assertEqual(len(batches), 1)
+        self.assertTrue((batches[0] / "xml").is_dir())
+        self.assertTrue(list((batches[0] / "xml").glob("*.xml")))
+        self.assertFalse((batches[0] / "safe_receipt.json").exists())
+        self.assertFalse((batches[0] / "manifest.json").exists())
+        self.assertNotIn("fatal", (out + err).lower())
+        self.assertNotIn("index", (out + err).lower())
+
+    def test_git_index_failure_in_validator_returns_invalid(self) -> None:
+        """独立 validate 遇到真实坏索引时 invalid/退出 2，不把查询失败当安全通过。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        index = repo / ".git" / "index"
+        saved = index.read_bytes() if index.exists() else None
+        index.write_bytes(b"SYNTHETIC_CORRUPT_INDEX")
+        try:
+            result = extract.validate_batch(batch)
+            code, out, err = _run_main(["--validate", str(batch)])
+        finally:
+            if saved is None:
+                index.unlink()
+            else:
+                index.write_bytes(saved)
+        cli_result = json.loads(out)
+        self.assertEqual(result["status"], "invalid")
+        self.assertEqual(result["error_reason"], "git_unavailable")
+        self.assertFalse(result["checks"]["output_git_ignored"])
+        self.assertFalse(result["checks"]["output_not_tracked"])
+        self.assertEqual(code, 2)
+        self.assertEqual(cli_result["status"], "invalid")
+        self.assertEqual(cli_result["error_reason"], "git_unavailable")
+        self.assertNotIn("fatal", (out + err).lower())
+        self.assertNotIn("index", (out + err).lower())
+
+    def test_git_positive_control_still_reports_ignored_untracked(self) -> None:
+        """同一真实临时仓库无故障时仍为 ignored/untracked 正控。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        output = repo / "data" / "private-regression"
+        code, out, _ = _run_main(["--source", str(source), "--output", str(output)])
+        receipt = json.loads(out)
+        self.assertEqual(code, 0)
+        self.assertEqual(receipt["status"], "ok")
+        self.assertTrue(receipt["safety"]["output_git_ignored"])
+        self.assertTrue(receipt["safety"]["output_not_tracked"])
+        validate_code, validate_out, _ = _run_main(
+            ["--validate", str(output / receipt["batch_id"])]
+        )
+        self.assertEqual(validate_code, 0)
+        self.assertEqual(json.loads(validate_out)["status"], "valid")
+
+    def test_git_query_returncode_matrix_and_oserror(self) -> None:
+        """check-ignore/ls-files 仅接受 0/1；2/128/负码与 OSError 均固定拒绝。"""
+        repo = _make_repo(self.tmp)
+        target = repo / "data" / "private-regression"
+        normal_cases = (
+            (0, 0, True, True),
+            (0, 1, True, False),
+            (1, 0, False, True),
+            (1, 1, False, False),
+        )
+        for check_code, tracked_code, expected_ignored, expected_tracked in normal_cases:
+            with self.subTest(check=check_code, tracked=tracked_code):
+                responses = [
+                    subprocess.CompletedProcess([], check_code),
+                    subprocess.CompletedProcess([], tracked_code),
+                ]
+                with mock.patch.object(extract.subprocess, "run", side_effect=responses):
+                    ignored, tracked = extract._git_ignore_status(target)
+                self.assertEqual(ignored, expected_ignored)
+                self.assertEqual(tracked, expected_tracked)
+        failure_cases = (
+            (2, 1),
+            (0, 2),
+            (128, 1),
+            (0, 128),
+            (-9, 1),
+            (0, -9),
+        )
+        for check_code, tracked_code in failure_cases:
+            with self.subTest(check=check_code, tracked=tracked_code):
+                responses = [
+                    subprocess.CompletedProcess([], check_code),
+                    subprocess.CompletedProcess([], tracked_code),
+                ]
+                with mock.patch.object(extract.subprocess, "run", side_effect=responses):
+                    with self.assertRaises(extract.ExtractionError) as raised:
+                        extract._git_ignore_status(target)
+                self.assertEqual(raised.exception.reason, "git_unavailable")
+        with mock.patch.object(extract.subprocess, "run", side_effect=OSError("synthetic")):
+            with self.assertRaises(extract.ExtractionError) as raised:
+                extract._git_ignore_status(target)
+        self.assertEqual(raised.exception.reason, "git_unavailable")
 
 
 if __name__ == "__main__":

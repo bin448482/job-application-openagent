@@ -100,7 +100,7 @@ python tests/private_regression/extract.py --validate "<main-repo>/data/private-
 python -m unittest discover -s tests/private_regression -p "test_*.py"
 ```
 
-最近一次结果：82 项测试通过（上一轮 81 项判据全部保留 + 本轮深度时序新增 1 项）、0 失败、0 错误、0 跳过，退出码 0。另以独立审核端提供的合成探针在本机副本逐项复跑，B-1/B-2/B-3/N-1/N-2 的旧探针结论均已翻转；证据只写在本机 Git 忽略目录。该结果只证明合成判据与工具链路，不证明真实抽取、真实数据覆盖、独立审核通过或业务 PASS。
+最近一次结果：87 项测试通过（上一轮 82 项判据全部保留 + 本轮 Git 故障安全新增 5 项）、0 失败、0 错误、0 跳过，退出码 0。另以独立审核端提供的合成探针在本机副本逐项复跑，B-1/B-2/B-3/N-1/N-2 的旧探针结论均已翻转；证据只写在本机 Git 忽略目录。该结果只证明合成判据与工具链路，不证明真实抽取、真实数据覆盖、独立审核通过或业务 PASS。
 
 旧 R3 实际只读抽取与验证结果对应较早实现版本（作者声明），本轮未重跑真实数据，也未独立复核旧回执；不能用旧结果证明当前实现。公开提交只含 6 个工具/测试/指南文件，真实/派生产物仍只在被忽略目录。上述结果不代表真实模型、设备、独立标注或业务 PASS。
 
@@ -351,3 +351,64 @@ python -m unittest discover -s tests/private_regression -p "test_*.py"
 - 深度独立探针：before `yielded=112`、after `yielded=12`；当前目录 100 兄弟零消费、更深 `scandir` 零、全部 closed。
 - 仍未验证：真实旧 XML/日志/provenance、真实 R3、真实 Windows ACL/并发替换、设备/ADB、网络/模型、独立标注与业务 PASS；源发现 `_walk_xml` 的 `os.walk` 逐目录模式仍是已披露未改残差。
 - 结论仅为作者在合成范围内完成深度发现即停返修，必须由原独立审核端复审，不能以 82 项绿灯或本节自审代替。
+
+## 9 39ebb28 Git 查询故障安全返修后三轮作者自审（合成范围）
+
+> 本节针对主协调对 `39ebb28` 的 changes_requested 追加。仍是同一作者自审，不是独立审核、协调端验收或真实回归业务 PASS；只使用临时合成目录与临时 Git 仓库，未读取真实旧 XML/日志/provenance、旧 R3 或真实项目索引。
+
+### 9.0 复审问题矩阵
+
+| 编号 | 复审问题 | 整改落点 | 复验（合成） | 未测边界 |
+|---|---|---|---|---|
+| 阻塞 Git | `check-ignore`/`ls-files` 的 `returncode == 0` 吞掉运行故障；真实坏索引 128 被当作未跟踪 | 新增 `_git_query_returncode`，只接受 0/1；2/128/负码/OSError 固定 `git_unavailable`；两条查询共用 | 原独立探针 before：CLI0/ok/ignored=true/not_tracked=true/128×2 → after：CLI2/error/git_unavailable/无 safety/128×1 | 真实 ACL/索引修复未测 |
+| 阶段隔离 | 初检/结束/validate 需要不同失败后果 | 初检在建输出前拒绝；结束错误回执不写成功 receipt；validate invalid | 三个真实坏索引测试 + 正控通过 | 真实 OS 并发未测 |
+| 返回码矩阵 | 缺 0/1/2/128/负码与 OSError 显式覆盖 | 对两条查询做配对矩阵与启动失败 | 0/1 正常语义；2/128/-9/OSError 全部 git_unavailable | 仅合成 CompletedProcess 矩阵，真实 Git 另测 |
+| 既有 82 项 | 修改 Git 逻辑可能回归 N2/状态/Unicode | 只改 Git 查询边界，保留全部旧断言 | 原 82 项全部保留，新增 5 项后 87 项通过 | 非独立批准 |
+
+### 9.1 第十六轮：Git 返回码、阶段安全与原始证据
+
+审查视角：是否区分正常匹配/非匹配与操作失败；初检/结束/validate 是否分别安全拒绝；是否使用真实临时索引。
+
+| 问题 | 实际发现 | 修订 | 复验证据 | 未测边界 |
+|---|---|---|---|---|
+| R16-01 | 两条 Git 查询 `==0` 把 128 转成 false | 抽 `_git_query_returncode`，非 0/1 一律 `git_unavailable` | 真实坏索引 ls-files=128；同探针 after CLI2/status error/无 safety | 不修复 Git/索引 |
+| R16-02 | 初检失败可能仍创建输出 | `_assert_output_safe` 在 mkdir 前调用，失败即抛 | 初检真实 128：输出根不存在、CLI2、固定错误回执 | 真实权限错误未测 |
+| R16-03 | 结束失败可能仍返回成功回执 | 结束复核失败在写 receipt/manifest 前抛出；main 输出固定错误 | 结束真实 128：CLI2、无 success safety、无 safe_receipt/manifest，已写 XML 保留 | 不声称回滚 |
+| R16-04 | validate 可能把查询失败当 valid | 保留流式/内容检查，Git 失败 `git_unavailable`/invalid | 独立 validate 与 CLI 均 invalid/退出 2 | 真实批次未跑 |
+| R16-05 | 缺显式返回码矩阵/OSError | 配对测 check/ ls-files 的 0/1/2/128/-9 与 OSError | 0/1 正常；其余全部固定拒绝；正控仍 valid | CompletedProcess 模拟仅矩阵补充 |
+
+本轮复核：Git 查询失败不再产生任何安全通过布尔；真实临时索引测试与返回码矩阵分别覆盖实际与显式边界。
+
+### 9.2 第十七轮：原 82 项、N2 与状态/Unicode/日志保持
+
+审查视角：Git 边界改动是否破坏原 82 项、流式消费/深度即停与既有状态语义。
+
+| 问题 | 实际发现 | 修订 | 复验证据 | 未测边界 |
+|---|---|---|---|---|
+| R17-01 | 原 82 项可能被 Git 改动影响 | 只改 `_git_ignore_status`/validate 错误映射 | 原 82 项全部通过，新增 5 项后 87 项 | 非独立批准 |
+| R17-02 | N2 文件/目录/深度消费可能回归 | 不改枚举实现 | 文件 305→257、目录 105→17、小阈值 5、深度 before112→after12、首项1/兄弟0/更深0/close | 真实大目录未跑 |
+| R17-03 | log-only/状态矩阵可能回归 | 不改状态原因集合 | 16 例矩阵自洽、log-only 双入口 0/0 | 真实组合未跑 |
+| R17-04 | Unicode/日志变化/链接可能回归 | 不改解析/时序/链接路径 | Unicode 解析 0 次、日志变化 error、合法/链接测试通过 | 真实 ACL 未测 |
+
+本轮复核：返修限定在 Git 查询边界，原 82 项、N2 与已闭合状态语义保持。
+
+### 9.3 第十八轮：最终归档、范围、哈希与敏感边界
+
+审查视角：最终 Git archive 自包含、只改允许文件、原 82 保留、源码前后哈希、旧敏感提交仅 ancestry。
+
+| 问题 | 实际发现 | 修订 | 复验证据 | 未测边界 |
+|---|---|---|---|---|
+| R18-01 | 工作区通过不等于归档自包含 | 从最终 `git archive` 解包运行同一 unittest 与关键探针 | 归档 87 项通过、Git 失败探针 after 一致、无未跟踪依赖 | 未跑真实源 |
+| R18-02 | 新增测试可能删除旧判据 | 原 82 项全部保留，仅尾部新增 5 项 | 相对 `39ebb28` 测试文件纯新增；87 项通过 | 非业务 PASS |
+| R18-03 | 改动可能越出允许范围 | 只改现有五文件，`CLAUDE.md` 未动 | 相对 `39ebb28` 恰 5 个修改；相对 `5cb6817` 恰 6 个新增 | 未合并主树 |
+| R18-04 | 测试可能改写源码 | 运行前后计算六文件 SHA256；归档 blob 对比 HEAD | 前后一致、归档 blob 全部 MATCH | 不代表真实数据 |
+| R18-05 | 旧敏感提交/隐私边界 | 仅 `merge-base --is-ancestor` 检查 `70f01e4`，不读 blob；不读真实数据/配置 | 非祖先退出 1；静态扫描仅 `@AGENTS.md` | 真实隐私未涉及 |
+
+本轮复核：最终交付限定六文件范围，归档可重跑，原 82 项保留；仍需原独立审核端复审新固定 SHA。
+
+### 9.4 本轮三轮自审总结
+
+- 实际命令：`python -m unittest discover -s tests/private_regression -p "test_*.py"`；87 项通过、0 失败、0 错误、0 跳过、退出 0；最终归档重跑同结果。
+- Git 独立探针：before fault CLI0/ok/ignored+not_tracked=true/128×2；after CLI2/error/git_unavailable/无 safety，正控仍 CLI0/ok。
+- 仍未验证：真实旧 XML/日志/provenance、真实 R3、真实 Windows ACL/并发替换、真实项目索引、设备/ADB、网络/模型、独立标注与业务 PASS；源发现 `_walk_xml` 的 `os.walk` 逐目录模式仍是已披露残差。
+- 结论仅为作者在合成范围内完成 Git 查询故障安全返修，必须由原独立审核端复审，不能以 87 项绿灯或本节自审代替。

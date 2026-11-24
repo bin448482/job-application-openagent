@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 TOOL_NAME = "private-regression-extractor"
-TOOL_VERSION = "0.5.0"
+TOOL_VERSION = "0.6.0"
 SCHEMA_RECEIPT = "private-regression-safe-receipt/v1"
 SCHEMA_VALIDATION = "private-regression-validation/v1"
 SCHEMA_MANIFEST = "private-regression-manifest/v1"
@@ -525,8 +525,23 @@ def _find_repo_root(start: Path) -> Path | None:
     return None
 
 
+def _git_query_returncode(repo: Path, arguments: list[str], rel_text: str) -> int:
+    """执行一次 Git 查询，只接受 0/1 正常语义；其他返回码或 OSError 统一拒绝。"""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo), *arguments, "--", rel_text],
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise ExtractionError("git_unavailable") from exc
+    if result.returncode not in (0, 1):
+        raise ExtractionError("git_unavailable")
+    return result.returncode
+
+
 def _git_ignore_status(target: Path) -> tuple[bool, bool]:
-    """返回 (是否被 Git 忽略, 是否已被跟踪)；Git 不可用时抛固定错误。"""
+    """返回 (是否被 Git 忽略, 是否已被跟踪)；查询运行失败时抛固定错误。"""
     repo = _find_repo_root(target if target.exists() else target.parent)
     if repo is None:
         raise ExtractionError("git_unavailable")
@@ -535,25 +550,8 @@ def _git_ignore_status(target: Path) -> tuple[bool, bool]:
     except (ValueError, OSError) as exc:
         raise ExtractionError("git_unavailable") from exc
     rel_text = rel.as_posix()
-    try:
-        ignored = (
-            subprocess.run(
-                ["git", "-C", str(repo), "check-ignore", "-q", "--", rel_text],
-                capture_output=True,
-                check=False,
-            ).returncode
-            == 0
-        )
-        tracked = (
-            subprocess.run(
-                ["git", "-C", str(repo), "ls-files", "--error-unmatch", "--", rel_text],
-                capture_output=True,
-                check=False,
-            ).returncode
-            == 0
-        )
-    except OSError as exc:
-        raise ExtractionError("git_unavailable") from exc
+    ignored = _git_query_returncode(repo, ["check-ignore", "-q"], rel_text) == 0
+    tracked = _git_query_returncode(repo, ["ls-files", "--error-unmatch"], rel_text) == 0
     return ignored, tracked
 
 
@@ -2644,12 +2642,13 @@ def validate_batch(batch_dir: Path) -> dict[str, object]:
         combined = _json_text(receipt) + _json_text(manifest) + _json_text(payloads)
         checks["no_absolute_dates"] = DATE_RE.search(combined) is None
         error_reason = "none"
+    except ExtractionError as exc:
+        error_reason = exc.reason
     except (
         OSError,
         UnicodeDecodeError,
         json.JSONDecodeError,
         ValueError,
-        ExtractionError,
         ExtractErrorSize,
         ET.ParseError,
     ):
