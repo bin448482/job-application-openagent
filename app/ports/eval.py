@@ -40,11 +40,3 @@ class EvalStorePort(Protocol):
     ) -> str:
         """把退役留出整批冻结副本写入本机 regression 准入目录，不覆盖。"""
         ...
-
-    def regression_admission_exists(self, batch_id: str) -> bool:
-        """判断指定批次的 regression 准入副本是否已存在。"""
-        ...
-
-    def remove_regression_admission(self, batch_id: str) -> None:
-        """只清理本次明确拥有的 regression 准入副本与空目录，不按 glob 删除。"""
-        ...

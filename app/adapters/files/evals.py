@@ -17,7 +17,7 @@ from app.adapters.files.support import (
     read_bounded_bytes,
     resolve_project_relative,
 )
-from app.domain.eval import empty_holdout_registry
+from app.domain.eval import empty_holdout_registry, validate_holdout_registry
 from app.domain.json_input import load_json_object
 from app.domain.policy import PolicyIssue
 from app.ports.policy import PolicyError
@@ -115,11 +115,16 @@ class FileEvalStore:
         if suite_name != "regression":
             return base
         registry = self._read_registry_unlocked()
+        try:
+            validate_holdout_registry(registry)
+        except ValueError:
+            raise PolicyError(
+                "policy_io_error", [PolicyIssue(REGISTRY_REL, None, None, "format")]
+            ) from None
         retired = {
             str(batch["batch_id"]): batch.get("regression_ref")
-            for batch in registry.get("batches", [])
-            if isinstance(batch, dict)
-            and batch.get("status") == "retired"
+            for batch in registry["batches"]
+            if batch.get("status") == "retired"
             and batch.get("regression_eligible") is True
         }
         admissions = self._read_regression_admissions()
@@ -342,22 +347,3 @@ class FileEvalStore:
                 "policy_io_error", [PolicyIssue(REGRESSION_ADMISSION_ROOT, None, None, "path")]
             )
         return f"{REGRESSION_ADMISSION_ROOT}/{batch_id}/suite.json"
-
-    def regression_admission_exists(self, batch_id: str) -> bool:
-        """判断该批次准入副本是否为普通文件；链接/junction 由解析拒绝。"""
-        path, _posix = self._resolve(self._admission_rel(batch_id))
-        return path.is_file() and not is_link_like(path)
-
-    def remove_regression_admission(self, batch_id: str) -> None:
-        """仅删除该批次自己的准入文件与空目录；不递归、不 glob 清理。"""
-        rel = self._admission_rel(batch_id)
-        path, posix = self._resolve(rel)
-        try:
-            path.unlink(missing_ok=True)
-            path.parent.rmdir()
-        except FileNotFoundError:
-            return
-        except OSError:
-            raise PolicyError(
-                "policy_io_error", [PolicyIssue(posix, None, None, "path")]
-            ) from None

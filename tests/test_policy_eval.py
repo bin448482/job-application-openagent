@@ -614,6 +614,65 @@ class PolicyEvalTests(unittest.TestCase):
             self.store.read_suite("regression")
         self.assertEqual(caught.exception.reason_code, "policy_io_error")
 
+    def test_invalid_registry_is_controlled_before_regression_bridge(self) -> None:
+        """regression 读取前复用唯一 validator；坏 schema/计数/批列表零调用受控失败。"""
+        self._install_holdout()
+        registry_path = self.root / "data/evals/holdout-registry.local.json"
+        valid = json.loads(registry_path.read_text(encoding="utf-8"))
+        mutations = (
+            lambda data: data.update({"schema_version": 2}),
+            lambda data: data["batches"][0].update({"sample_count": 5}),
+            lambda data: data.update({"batches": None}),
+        )
+        for mutate in mutations:
+            data = json.loads(json.dumps(valid))
+            mutate(data)
+            registry_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            bridge = SimulatedBridge(public_decisions())
+            authorized: list[object] = []
+            with self.assertRaises(PolicyError) as caught:
+                eval_usecases.eval_pack(
+                    self.repo,
+                    self.store,
+                    "prompts/local/demo",
+                    "regression",
+                    bridge,
+                    lambda plan: authorized.append(plan) or True,
+                    now=self.now,
+                )
+            self.assertEqual(caught.exception.reason_code, "policy_io_error")
+            self.assertEqual(bridge.requests, [])
+            self.assertEqual(authorized, [])
+        self.store.write_holdout_registry(valid)
+
+    def test_retired_single_sample_regression_is_runnable(self) -> None:
+        """正常退役的合成单例批次仍可由同一 regression 生产路径实际运行。"""
+        self._install_holdout(register=False)
+        suite = json.loads(
+            (self.root / "evals/private/holdout/suite.json").read_text(encoding="utf-8")
+        )
+        suite["cases"] = suite["cases"][:1]
+        (self.root / "evals/private/holdout/suite.json").write_text(
+            json.dumps(suite, ensure_ascii=False), encoding="utf-8"
+        )
+        eval_usecases.register_holdout(
+            self.store,
+            batch_id="batch-one",
+            version="2026-11-24",
+            sample_count=1,
+            annotator="synthetic-annotator",
+            maintainer="synthetic-maintainer",
+            frozen_at=self.now,
+            candidate_release="candidate-one",
+        )
+        self._eval(SimulatedBridge(public_decisions()), "holdout")
+        eval_usecases.retire_holdout(self.store, batch_id="batch-one", retired_at=self.now)
+        regression = self.store.read_suite("regression")
+        self.assertIsNotNone(regression)
+        self.assertEqual(len(regression["cases"]), 1)
+        result = self._eval(SimulatedBridge(public_decisions()), "regression")
+        self.assertEqual(self._report(result)["buckets"]["regression"]["passed"], 1)
+
     def test_holdout_concurrent_first_access_is_not_double_counted(self) -> None:
         """并发登记事务串行：只有一次首次访问，另一条标记重复，记录不丢失。"""
         self._install_holdout()
@@ -775,10 +834,17 @@ class PolicyEvalTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "authorization_required")
         self.assertEqual(mismatched.requests, [])
 
-    def test_retire_registry_failure_removes_admission_and_keeps_registry(self) -> None:
-        """退役登记写失败时清理本次准入副本，regression 不可运行且原登记不变。"""
+    def test_retire_registry_io_failure_preserves_reason_and_other_owner_admission(self) -> None:
+        """登记 I/O 失败保留 policy_io_error，且不删除另一 store 已有的同内容准入。"""
         self._install_holdout()
-        before = self.store.read_holdout_registry()
+        suite = json.loads(
+            (self.root / "evals/private/holdout/suite.json").read_text(encoding="utf-8")
+        )
+        other_store = FileEvalStore(self.root)
+        other_store.write_regression_admission("batch-1", suite)
+        admission = self.root / "data/evals/regression-admissions/batch-1/suite.json"
+        before_bytes = admission.read_bytes()
+        before_registry = self.store.read_holdout_registry()
 
         class FailingRetireStore(FileEvalStore):
             """退役登记写入固定失败。"""
@@ -787,17 +853,30 @@ class PolicyEvalTests(unittest.TestCase):
                 """不执行 mutator，模拟锁内写失败。"""
                 raise PolicyError("policy_io_error", [])
 
+        log = ProcessLog(self.root / "logs" / "retire-io.jsonl")
         with self.assertRaises(PolicyError) as caught:
             eval_usecases.retire_holdout(
                 FailingRetireStore(self.root),
                 batch_id="batch-1",
                 retired_at=self.now,
+                process_log=log,
             )
-        self.assertEqual(caught.exception.reason_code, "eval_failed")
-        self.assertEqual(self.store.read_holdout_registry(), before)
+        self.assertEqual(caught.exception.reason_code, "policy_io_error")
+        self.assertEqual(self.store.read_holdout_registry(), before_registry)
+        self.assertEqual(admission.read_bytes(), before_bytes)
         self.assertIsNone(self.store.read_suite("regression"))
-        self.assertFalse(
-            (self.root / "data/evals/regression-admissions/batch-1/suite.json").exists()
+        events = [
+            json.loads(line)
+            for line in log.path.read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertTrue(
+            any(
+                event["stage"] == "eval"
+                and event.get("operation") == "holdout"
+                and event["result"] == "failed"
+                and event.get("reason_code") == "policy_io_error"
+                for event in events
+            )
         )
 
     def test_unconfirmed_admission_is_not_readable_as_regression(self) -> None:
@@ -812,34 +891,6 @@ class PolicyEvalTests(unittest.TestCase):
         regression = self.store.read_suite("regression")
         self.assertIsNotNone(regression)
         self.assertEqual(len(regression["cases"]), 6)
-
-    def test_retire_cleanup_failure_cannot_expose_unconfirmed_regression(self) -> None:
-        """登记失败且准入清理也失败时，未确认批次仍不得可运行 regression。"""
-        self._install_holdout()
-
-        class FailingCleanupStore(FileEvalStore):
-            """登记更新与本次准入清理都失败。"""
-
-            def update_holdout_registry(self, mutator):
-                """模拟登记写失败。"""
-                raise PolicyError("policy_io_error", [])
-
-            def remove_regression_admission(self, batch_id: str) -> None:
-                """模拟清理失败。"""
-                raise PolicyError("policy_io_error", [])
-
-        before = self.store.read_holdout_registry()
-        with self.assertRaises(PolicyError):
-            eval_usecases.retire_holdout(
-                FailingCleanupStore(self.root),
-                batch_id="batch-1",
-                retired_at=self.now,
-            )
-        self.assertEqual(self.store.read_holdout_registry(), before)
-        self.assertIsNone(self.store.read_suite("regression"))
-        self.assertTrue(
-            (self.root / "data/evals/regression-admissions/batch-1/suite.json").exists()
-        )
 
     def test_holdout_rejects_external_provider(self) -> None:
         """留出只允许本机 provider，外部 agent 在调用前拒绝。"""

@@ -285,7 +285,7 @@ python -m app policy holdout register --batch-id <批次ID> --version <版本> `
 python -m app policy holdout retire --batch-id <批次ID>
 ```
 
-登记必须有维护者、独立标注者、版本、数量、冻结时间与候选关联，且 `--sample-count` 必须即时等于当前留出套件实际数；登记同时保存每例样本身份指纹（排除 case/task/nonce/now 等运行字段）。所有历史批次占用过的样本身份不得换 batch/候选/套件或拆子集重新冻结。访问意向在授权/桥调用前先原子持久化；中断/写失败/重跑均按已看访问记录处理，只有同摘要重跑标记为重复、不产生新证据。退役必须整批写入 `data/evals/regression-admissions/<batch-id>/suite.json` 冻结副本并在登记写 `regression_ref`/`regression_eligible=true`，regression 只读取 registry 已确认 retired 且 ref 匹配的副本；登记写失败时只清理本次新建准入副本，清理也失败时未确认副本仍不可运行。零样本、无登记或缺无上传条件时记未测，不以 100% 或公开集替代。
+登记必须有维护者、独立标注者、版本、数量、冻结时间与候选关联，且 `--sample-count` 必须即时等于当前留出套件实际数；登记同时保存每例样本身份指纹（排除 case/task/nonce/now 等运行字段）。所有历史批次占用过的样本身份不得换 batch/候选/套件或拆子集重新冻结。访问意向在授权/桥调用前先原子持久化；中断/写失败/重跑均按已看访问记录处理，只有同摘要重跑标记为重复、不产生新证据。退役必须整批写入 `data/evals/regression-admissions/<batch-id>/suite.json` 冻结副本并在登记写 `regression_ref`/`regression_eligible=true`，regression 只读取 registry 已确认 retired 且 ref 匹配的副本；登记写失败时保留未确认准入本机残留，registry 过滤使其不可运行，且不删除其它 owner 文件。零样本、无登记或缺无上传条件时记未测，不以 100% 或公开集替代。
 
 M4c 事实来源选择/确认/撤销、M5 授权/动作与本轮设备确认仍分别归后续里程碑；M4b 的 nonce/租约不证明发送授权，`policy eval` 通过不证明语义安全、A 档资格或真实模型能力。
 

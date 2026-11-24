@@ -832,7 +832,6 @@ def retire_holdout(
             or batch["sample_fingerprints"] != suite_fingerprints(suite)
         ):
             raise PolicyError("eval_failed", [_issue(None, "conflict")])
-        admission_existed = eval_store.regression_admission_exists(batch_id)
         regression_ref = eval_store.write_regression_admission(batch_id, suite)
 
         def mutate(current: dict[str, object]) -> object:
@@ -848,11 +847,9 @@ def retire_holdout(
 
         try:
             result = eval_store.update_holdout_registry(mutate)
-        except (PolicyError, ValueError):
-            if not admission_existed:
-                try:
-                    eval_store.remove_regression_admission(batch_id)
-                except PolicyError:
-                    pass
+        except PolicyError:
+            # 保留 I/O/登记安全原因；未确认准入被 registry 资格过滤，留给本机审计。
+            raise
+        except ValueError:
             raise PolicyError("eval_failed", [_issue(None, "conflict")]) from None
     return {"regression_ref": regression_ref, **result}  # type: ignore[dict-item]
