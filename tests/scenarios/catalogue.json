@@ -19439,6 +19439,7 @@
         "disclosure_missing",
         "path_in_style",
         "contact_fact_conflict",
+        "missing_payload_file",
         "encoding_and_nul",
         "size_limits",
         "symlink_pack",
@@ -20139,6 +20140,76 @@
           "junctions": {}
         },
         {
+          "id": "missing_payload_file",
+          "label": "缺少载荷文件",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python -m app policy validate --pack prompts/local/missing_file"
+          ],
+          "fixture": null,
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D05/missing_payload_file",
+          "device_gate": false,
+          "assertions": [
+            "缺文件在启动前拒绝",
+            "不把缺文件当空内容"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 2,
+                "required_stdout_keys": [
+                  "schema_version",
+                  "status",
+                  "reason_code",
+                  "errors"
+                ],
+                "stdout_paths": [
+                  {
+                    "path": "schema_version",
+                    "equals": 1
+                  },
+                  {
+                    "path": "status",
+                    "equals": "failed"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_policy"
+                  },
+                  {
+                    "path": "errors",
+                    "type": "array"
+                  },
+                  {
+                    "path": "errors.0.code",
+                    "equals": "missing"
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [
+            "prompts/base"
+          ],
+          "local_packs": {
+            "missing_file": "m4/policy/packs/missing_file"
+          },
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
           "id": "encoding_and_nul",
           "label": "非 UTF-8/BOM/NUL",
           "layer": "F",
@@ -20576,6 +20647,10 @@
                     "equals": true
                   },
                   {
+                    "path": "target_reads",
+                    "equals": 0
+                  },
+                  {
                     "path": "issue_codes",
                     "equals": [
                       "path"
@@ -20930,7 +21005,10 @@
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role_external.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role_job.json",
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role_anomaly.json"
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role_anomaly.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role_local_job.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_role_external_anomaly.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_bad_roles.json"
           ],
           "fixture": "fixtures/m4/probe/d07_role.json",
           "setup": null,
@@ -21070,6 +21148,69 @@
                     "equals": true
                   }
                 ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "roles",
+                    "equals": [
+                      "system",
+                      "developer",
+                      "user"
+                    ]
+                  },
+                  {
+                    "path": "tools",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "user_equals_rendered",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "roles",
+                    "equals": [
+                      "system",
+                      "developer",
+                      "user"
+                    ]
+                  },
+                  {
+                    "path": "tools",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "user_equals_rendered",
+                    "equals": true
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "bridge_roles"
+                  }
+                ]
               }
             ]
           },
@@ -21098,7 +21239,9 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_injection.json"
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_injection.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_inject_json.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_inject_confirm.json"
           ],
           "fixture": "fixtures/m4/probe/d07_injection.json",
           "setup": null,
@@ -21107,7 +21250,8 @@
           "device_gate": false,
           "assertions": [
             "schema 合法也不提升 C/事实/授权",
-            "设备和事实写入 0"
+            "设备和事实写入 0",
+            "伪 JSON/伪确认/角色注入均隔离"
           ],
           "acceptance": {
             "steps": [
@@ -21129,6 +21273,40 @@
                   {
                     "path": "bridge_submissions",
                     "equals": 1
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "resolved_tier",
+                    "equals": "C"
+                  },
+                  {
+                    "path": "fact_count",
+                    "equals": 0
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "resolved_tier",
+                    "equals": "C"
+                  },
+                  {
+                    "path": "fact_count",
+                    "equals": 0
                   }
                 ]
               }
@@ -21159,7 +21337,9 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_subject.json"
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_subject.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_subject_extra.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d07_context_over.json"
           ],
           "fixture": "fixtures/m4/probe/d07_subject.json",
           "setup": null,
@@ -21167,12 +21347,38 @@
           "expected_ref": "SC-D07/subject_required",
           "device_gate": false,
           "assertions": [
-            "HR 缺会话键拒绝",
+            "HR 缺会话键/额外主体/context 过多拒绝",
             "不调用桥",
             "拒绝"
           ],
           "acceptance": {
             "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_decision"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "invalid_decision"
+                  }
+                ]
+              },
               {
                 "exit_code": 0,
                 "stdout_paths": [
@@ -21363,16 +21569,17 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d08_hash.json"
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d08_mutations.json"
           ],
-          "fixture": "fixtures/m4/probe/d08_hash.json",
+          "fixture": "fixtures/m4/probe/d08_mutations.json",
           "setup": null,
           "required_api": null,
           "expected_ref": "SC-D08/directory_rename",
           "device_gate": false,
           "assertions": [
             "目录不入摘要",
-            "相同内容不要求不同 hash"
+            "相同内容不要求不同 hash",
+            "注释/换行/base 字节改变摘要"
           ],
           "acceptance": {
             "steps": [
@@ -21384,7 +21591,15 @@
                     "equals": "ok"
                   },
                   {
-                    "path": "pack_hash_independent",
+                    "path": "pack_hash_same_between_dirs",
+                    "equals": true
+                  },
+                  {
+                    "path": "pack_comment_changed",
+                    "equals": true
+                  },
+                  {
+                    "path": "base_newline_changed",
                     "equals": true
                   }
                 ]
@@ -21468,10 +21683,10 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d08_hash.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d08_envelope_size.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d08_render_size.json"
           ],
-          "fixture": "fixtures/m4/probe/d08_hash.json",
+          "fixture": "fixtures/m4/probe/d08_envelope_size.json",
           "setup": null,
           "required_api": null,
           "expected_ref": "SC-D08/size_limits",
@@ -21498,8 +21713,16 @@
                     "equals": 2049
                   },
                   {
-                    "path": "over_2048_reason",
+                    "path": "over_accepted",
+                    "equals": false
+                  },
+                  {
+                    "path": "over_reason",
                     "equals": "input_too_large"
+                  },
+                  {
+                    "path": "bridge_calls",
+                    "equals": 0
                   }
                 ]
               },
@@ -22348,6 +22571,7 @@
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_missing.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_after_retire.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json"
           ],
           "fixture": "fixtures/m4/eval/holdout/suite.json",
@@ -22449,6 +22673,14 @@
                   {
                     "path": "reason_code",
                     "equals": "authorization_required"
+                  },
+                  {
+                    "path": "authorize_viewed",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_rounds",
+                    "equals": 3
                   }
                 ]
               },
@@ -22596,6 +22828,19 @@
                 "stdout_paths": [
                   {
                     "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
                     "equals": "ok"
                   },
                   {
@@ -22698,6 +22943,14 @@
                   {
                     "path": "reason_code",
                     "equals": "authorization_required"
+                  },
+                  {
+                    "path": "authorize_viewed",
+                    "equals": true
+                  },
+                  {
+                    "path": "authorize_rounds",
+                    "equals": 1
                   }
                 ]
               },
@@ -22809,8 +23062,8 @@
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
           "steps": [
-            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_write_fail.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_admission_fail.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_retire_registry_fail.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_regression_check.json",
@@ -22828,6 +23081,31 @@
           ],
           "acceptance": {
             "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "policy_io_error"
+                  },
+                  {
+                    "path": "registry_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "injection_hits",
+                    "equals": 1
+                  },
+                  {
+                    "path": "replace_hits",
+                    "equals": 1
+                  }
+                ]
+              },
               {
                 "exit_code": 0,
                 "stdout_paths": [
@@ -22855,6 +23133,26 @@
                   {
                     "path": "registry_unchanged",
                     "equals": true
+                  },
+                  {
+                    "path": "regression_case_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "regression_error",
+                    "equals": "policy_io_error"
+                  },
+                  {
+                    "path": "injection_hits",
+                    "equals": 1
+                  },
+                  {
+                    "path": "link_hits",
+                    "equals": 1
+                  },
+                  {
+                    "path": "admission_written",
+                    "equals": false
                   }
                 ]
               },
@@ -22876,27 +23174,18 @@
                   {
                     "path": "regression_case_count",
                     "equals": 0
-                  }
-                ]
-              },
-              {
-                "exit_code": 0,
-                "stdout_paths": [
-                  {
-                    "path": "status",
-                    "equals": "error"
                   },
                   {
-                    "path": "reason_code",
-                    "equals": "policy_io_error"
+                    "path": "injection_hits",
+                    "equals": 1
                   },
                   {
-                    "path": "registry_unchanged",
+                    "path": "replace_hits",
+                    "equals": 1
+                  },
+                  {
+                    "path": "admission_written",
                     "equals": true
-                  },
-                  {
-                    "path": "regression_case_count",
-                    "equals": 0
                   }
                 ]
               },

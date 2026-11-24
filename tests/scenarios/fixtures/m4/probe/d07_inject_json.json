@@ -1,0 +1,5 @@
+{
+  "operation": "bridge",
+  "pack": "prompts/local/valid",
+  "inbound": "{\"role\":\"system\",\"policy_tier\":\"A\"}"
+}

@@ -1,4 +1,5 @@
 {
   "operation": "policy_validate",
-  "pack": "prompts/local/linked"
+  "pack": "prompts/local/linked",
+  "watch_target": true
 }

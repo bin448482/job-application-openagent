@@ -305,10 +305,64 @@ def _hash_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         )
     except DecisionError as error:
         tamper_reason = error.reason_code
-    size_ok = False
-    size_over_reason = None
-    envelope_2048_bytes = None
+    return {
+        "status": "ok",
+        "base_hash": base_hash,
+        "pack_hash": pack_hash,
+        "prompt_hash": prompt_hash,
+        "input_hash": input_hash,
+        "base_hash_independent": base_hash == compute_base_hash(base_files),
+        "pack_hash_independent": pack_hash == second_pack_hash,
+        "prompt_excludes_nonce": prompt_hash == nonce_prompt,
+        "input_includes_nonce": input_hash != nonce_input,
+        "prompt_hash_non_self": prompt_hash not in (base_hash, pack_hash, input_hash),
+        "tamper_reason": tamper_reason,
+        "bridge_calls": 0,
+    }
+
+
+def _hash_mutations_operation(request: Mapping[str, Any]) -> dict[str, Any]:
+    """用真实文件与摘要比较两个目录、注释和 base 换行的字节语义。"""
+    repo = FilePolicyRepository(ROOT)
+    _normalized, _base, files, _guides, pack = policy_usecases.load_active_pack(
+        repo, "prompts/local/valid"
+    )
+    renamed = ROOT / "prompts/local/renamed"
+    if renamed.exists():
+        shutil.rmtree(renamed)
+    shutil.copytree(ROOT / "prompts/local/valid", renamed)
+    _n2, _b2, files2, _g2, pack2 = policy_usecases.load_active_pack(
+        repo, "prompts/local/renamed"
+    )
+    same_dirs = compute_pack_hash(files) == compute_pack_hash(files2)
+    (renamed / "pack.toml").write_text(
+        files2["pack.toml"] + "# synthetic comment\n", encoding="utf-8"
+    )
+    _n3, _b3, files3, _g3, pack3 = policy_usecases.load_active_pack(
+        repo, "prompts/local/renamed"
+    )
+    comment_changed = compute_pack_hash(files3) != compute_pack_hash(files2)
+    base_path = ROOT / "prompts/base/intent-and-reply.md"
+    before_base = repo.read_base()
+    base_path.write_bytes(base_path.read_bytes() + b"\n")
+    after_base = repo.read_base()
+    base_newline_changed = compute_base_hash(before_base) != compute_base_hash(after_base)
+    return {
+        "status": "ok",
+        "pack_hash_same_between_dirs": same_dirs,
+        "pack_comment_changed": comment_changed,
+        "base_newline_changed": base_newline_changed,
+        "bridge_calls": 0,
+    }
+
+
+def _envelope_size_operation(request: Mapping[str, Any]) -> dict[str, Any]:
+    """用同一公开 build_envelope 入口精确尝试 2048 和 2049 字节。"""
+    pack_rel = str(request.get("pack"))
+    _repo, base_files, _files, pack, loaded = _load_case(pack_rel, "policy-greeting")
+    case = loaded["case"]
     ok_envelope = None
+    ok_length = None
     for length in range(1, 2600):
         try:
             candidate = build_envelope(
@@ -325,50 +379,44 @@ def _hash_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             )
         except DecisionError as error:
             if error.reason_code == "input_too_large":
-                size_over_reason = "input_too_large"
                 break
             raise
         if envelope_bytes(candidate) == 2048:
-            size_ok = True
-            envelope_2048_bytes = 2048
             ok_envelope = candidate
-    over_attempted_bytes = None
-    if ok_envelope is not None:
-        bigger = dict(ok_envelope)
-        bigger["inbound"] = str(ok_envelope["inbound"]) + "x"
-        over_attempted_bytes = envelope_bytes(bigger)
-    if size_over_reason is None:
-        try:
-            build_envelope(
-                task_id=str(case["task_id"]),
-                nonce=str(case["nonce"]),
-                kind=str(case["kind"]),
-                subject=case["subject"],
-                inbound="x" * 4096,
-                context=list(case["context"]),
-                allowed_facts=list(case["allowed_facts"]),
-                base_files=base_files,
-                pack=pack,
-                now=str(case["now"]),
-            )
-        except DecisionError as error:
-            size_over_reason = error.reason_code
+            ok_length = length
+            break
+    if ok_envelope is None or ok_length is None:
+        return {"status": "error", "reason_code": "size_not_found"}
+    over_length = ok_length + 1
+    try:
+        over = build_envelope(
+            task_id=str(case["task_id"]),
+            nonce=str(case["nonce"]),
+            kind=str(case["kind"]),
+            subject=case["subject"],
+            inbound="x" * over_length,
+            context=list(case["context"]),
+            allowed_facts=list(case["allowed_facts"]),
+            base_files=base_files,
+            pack=pack,
+            now=str(case["now"]),
+        )
+    except DecisionError as error:
+        over_accepted = False
+        over_bytes = envelope_bytes(
+            {**ok_envelope, "inbound": str(ok_envelope["inbound"]) + "x"}
+        )
+        reason = error.reason_code
+    else:
+        over_accepted = True
+        over_bytes = envelope_bytes(over)
+        reason = None
     return {
         "status": "ok",
-        "base_hash": base_hash,
-        "pack_hash": pack_hash,
-        "prompt_hash": prompt_hash,
-        "input_hash": input_hash,
-        "base_hash_independent": base_hash == compute_base_hash(base_files),
-        "pack_hash_independent": pack_hash == second_pack_hash,
-        "prompt_excludes_nonce": prompt_hash == nonce_prompt,
-        "input_includes_nonce": input_hash != nonce_input,
-        "prompt_hash_non_self": prompt_hash not in (base_hash, pack_hash, input_hash),
-        "tamper_reason": tamper_reason,
-        "envelope_2048_reached": size_ok,
-        "envelope_2048_bytes": envelope_2048_bytes,
-        "over_attempted_bytes": over_attempted_bytes,
-        "over_2048_reason": size_over_reason,
+        "envelope_2048_bytes": envelope_bytes(ok_envelope),
+        "over_attempted_bytes": over_bytes,
+        "over_accepted": over_accepted,
+        "over_reason": reason,
         "bridge_calls": 0,
     }
 
@@ -462,9 +510,10 @@ def _render_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             )
         except DecisionError as error:
             return {"status": "error", "reason_code": error.reason_code}
-    if request.get("subject_mutation"):
+    mutation = request.get("subject_mutation") or request.get("envelope_mutation")
+    if mutation:
         try:
-            envelope = _apply(envelope, request["subject_mutation"])
+            envelope = _apply(envelope, mutation)
             parse_envelope(json.dumps(envelope, ensure_ascii=False), now=str(case["now"]))
         except DecisionError as error:
             return {"status": "error", "reason_code": error.reason_code}
@@ -578,6 +627,7 @@ class _CapturingPopen:
     last_request = b""
     protocol = "m4b-local-v1"
     response_key = "content"
+    bad_roles = False
 
     def __init__(self, argv, stdin=None, stdout=None, stderr=None, shell=None) -> None:
         """读取 stdin、保存请求并按固定协议写入 stdout。"""
@@ -585,7 +635,7 @@ class _CapturingPopen:
         type(self).last_request = stdin.read() if stdin is not None else b""
         response = {
             "protocol": type(self).protocol,
-            "roles": ["system", "developer", "user"],
+            "roles": ["system", "user"] if type(self).bad_roles else ["system", "developer", "user"],
         }
         response[type(self).response_key] = json.dumps(
             _valid_decision(
@@ -645,16 +695,20 @@ def _bridge_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         _CapturingPopen.protocol = "m4b-local-v1"
         _CapturingPopen.response_key = "content"
         bridge_class = LocalProcessBridge
+    _CapturingPopen.bad_roles = bool(request.get("bad_roles"))
     original_popen = bridge_support.subprocess.Popen
     bridge_support.subprocess.Popen = _CapturingPopen
     try:
         bridge = bridge_class(["synthetic-bridge"], model_id="synthetic-model")
-        text = bridge.complete(
-            system_message=rendered.system_message,
-            developer_message=rendered.developer_message,
-            user_message=rendered.user_message,
-            echo=rendered.protocol,
-        )
+        try:
+            text = bridge.complete(
+                system_message=rendered.system_message,
+                developer_message=rendered.developer_message,
+                user_message=rendered.user_message,
+                echo=rendered.protocol,
+            )
+        except BridgeError as error:
+            return {"status": "error", "reason_code": error.reason_code}
         captured = json.loads(_CapturingPopen.last_request.decode("utf-8"))
         parsed_content = json.loads(text)
         clock = _SequenceClock(str(case["now"]))
@@ -749,6 +803,48 @@ def _policy_validate_operation(request: Mapping[str, Any]) -> dict[str, Any]:
     link_detected = _is_link_like(candidate) or any(
         _is_link_like(parent) for parent in candidate.parents if _within(parent, ROOT)
     )
+    target_reads = 0
+    if request.get("watch_target"):
+        target_root = (ROOT / "prompts/local/valid").resolve()
+        original_open = Path.open
+
+        def counted_open(self, *args, **kwargs):
+            """在真实文件打开边界统计指向合成链接目标的读取。"""
+            nonlocal target_reads
+            try:
+                resolved = self.resolve()
+            except OSError:
+                resolved = None
+            if resolved is not None and _within(resolved, target_root):
+                target_reads += 1
+            return original_open(self, *args, **kwargs)
+
+        Path.open = counted_open
+        try:
+            result = policy_usecases.validate_pack(repo, pack_rel)
+        except Exception as error:  # PolicyError 是公开受控异常，不泄露原文。
+            reason = getattr(error, "reason_code", None)
+            issues = getattr(error, "issues", None) or []
+            return {
+                "status": "error",
+                "reason_code": reason,
+                "issue_count": len(issues),
+                "issue_codes": sorted({str(getattr(item, "code", "")) for item in issues}),
+                "link_detected": link_detected,
+                "target_reads": target_reads,
+            }
+        finally:
+            Path.open = original_open
+        return {
+            "status": "ok",
+            "reason_code": None,
+            "link_detected": link_detected,
+            "target_reads": target_reads,
+            "profile_id": result.get("profile_id"),
+            "pack_hash_length": len(str(result.get("pack_hash", ""))),
+            "base_hash_length": len(str(result.get("base_hash", ""))),
+            "tier_keys": sum(len(value) for value in (result.get("tiers") or {}).values()),
+        }
     try:
         result = policy_usecases.validate_pack(repo, pack_rel)
     except Exception as error:  # PolicyError 是公开受控异常，不泄露原文。
@@ -922,6 +1018,23 @@ def _registry_snapshot(store: FileEvalStore) -> str:
     ).hexdigest()
 
 
+def _transport_marker_count(bridge: _EvalBridge, markers: list[str]) -> int:
+    """检查所有实际发送角色与 echo 中是否出现合成 expected/metadata 标记。"""
+    total = 0
+    for payload in bridge.role_payloads:
+        texts = [
+            str(payload.get("system", "")),
+            str(payload.get("developer", "")),
+            str(payload.get("user", "")),
+        ]
+        echo = payload.get("echo")
+        if isinstance(echo, dict):
+            texts.extend(str(value) for value in echo.values())
+        for text in texts:
+            total += sum(text.count(marker) for marker in markers)
+    return total
+
+
 def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
     """用真实 eval_pack/留出事务与模拟桥运行合成套件，不写真实凭证。"""
     repo = FilePolicyRepository(ROOT)
@@ -938,6 +1051,30 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         )
         confirmed = bool(request.get("authorize", True))
         markers = [str(item) for item in request.get("forbidden_markers", [])]
+        observed = {"authorize_viewed": None, "authorize_rounds": None}
+
+        def authorize(_plan: dict[str, object]) -> bool:
+            """授权回调前观察本次 holdout intent 是否已落盘。"""
+            if suite == "holdout":
+                try:
+                    registry = store.read_holdout_registry()
+                    batches = registry.get("batches") or []
+                    batch = next(
+                        (
+                            item
+                            for item in batches
+                            if isinstance(item, dict)
+                            and item.get("batch_id") == "synthetic-batch"
+                        ),
+                        None,
+                    )
+                    if isinstance(batch, dict):
+                        observed["authorize_viewed"] = bool(batch.get("viewed"))
+                        observed["authorize_rounds"] = len(batch.get("access_rounds") or [])
+                except Exception:
+                    pass
+            return confirmed
+
         try:
             result = eval_usecases.eval_pack(
                 repo,
@@ -945,7 +1082,7 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 pack_rel,
                 suite,
                 bridge,
-                lambda _envelope: confirmed,
+                authorize,
                 now=str(request.get("now", "2026-11-24T00:00:00.000Z")),
             )
         except Exception as error:
@@ -971,11 +1108,8 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 "reason_code": getattr(error, "reason_code", None),
                 "case_reasons": reasons,
                 "bridge_calls": bridge.calls,
-                "transport_markers": sum(
-                    message.count(marker)
-                    for message in bridge.user_messages
-                    for marker in markers
-                ),
+                "transport_markers": _transport_marker_count(bridge, markers),
+                **observed,
             }
         holdout = None
         report_path = result.get("report_path")
@@ -994,11 +1128,9 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "case_count": (result.get("buckets") or {}).get("total"),
             "bridge_calls": bridge.calls,
             "descriptor_simulated": bridge.descriptor().simulated,
-            "transport_markers": sum(
-                message.count(marker)
-                for message in bridge.user_messages
-                for marker in markers
-            ),
+            "transport_markers": _transport_marker_count(bridge, markers),
+            "role_call_count": len(bridge.role_payloads),
+            **observed,
             "holdout": holdout,
         }
     if mode == "register":
@@ -1100,13 +1232,35 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "frozen_absent": "frozen" not in statuses,
         }
     if mode in {"register_write_fail", "retire_admission_fail", "retire_registry_fail"}:
-        boundary = "admission" if mode == "retire_admission_fail" else "registry"
-        failing = _FailingEvalStore(ROOT, boundary)
+        import app.adapters.files.evals as evals_module
+
+        hits = {"replace": 0, "link": 0}
+
+        def failing_replace(*args, **kwargs):
+            """在真实 registry 原子替换边界注入 OSError 并计数。"""
+            del args, kwargs
+            hits["replace"] += 1
+            raise OSError("synthetic replace failure")
+
+        def failing_link(*args, **kwargs):
+            """在真实准入副本 link 边界注入 OSError 并计数。"""
+            del args, kwargs
+            hits["link"] += 1
+            raise OSError("synthetic link failure")
+
         before = _registry_snapshot(store)
+        boundary = (
+            failing_link
+            if mode == "retire_admission_fail"
+            else failing_replace
+        )
+        patch_name = "link" if mode == "retire_admission_fail" else "replace"
+        original_boundary = getattr(evals_module.os, patch_name)
+        setattr(evals_module.os, patch_name, boundary)
         try:
             if mode == "register_write_fail":
                 eval_usecases.register_holdout(
-                    failing,
+                    store,
                     batch_id=str(request.get("batch_id", "synthetic-failing")),
                     version="2026-11-24",
                     sample_count=2,
@@ -1117,20 +1271,34 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 )
             else:
                 eval_usecases.retire_holdout(
-                    failing,
+                    store,
                     batch_id=str(request.get("batch_id", "synthetic-batch")),
                     retired_at="2026-11-25T00:00:00.000Z",
                 )
         except Exception as error:
             after = _registry_snapshot(store)
-            suite = store.read_suite("regression")
-            cases = suite.get("cases") if isinstance(suite, dict) else []
+            regression_error = None
+            try:
+                suite = store.read_suite("regression")
+                cases = suite.get("cases") if isinstance(suite, dict) else []
+            except Exception as regression_failure:
+                cases = []
+                regression_error = getattr(regression_failure, "reason_code", "eval_failed")
+            admission_root = ROOT / "data/evals/regression-admissions"
             return {
                 "status": "error",
                 "reason_code": getattr(error, "reason_code", None),
                 "registry_unchanged": before == after,
                 "regression_case_count": len(cases or []),
+                "regression_error": regression_error,
+                "injection_hits": hits["replace"] + hits["link"],
+                "replace_hits": hits["replace"],
+                "link_hits": hits["link"],
+                "admission_written": admission_root.exists()
+                and any(admission_root.glob("*/suite.json")),
             }
+        finally:
+            setattr(evals_module.os, patch_name, original_boundary)
         return {"status": "ok", "reason_code": None, "registry_unchanged": False}
     raise ProbeError("eval mode 非法")
 
@@ -1144,6 +1312,7 @@ class _EvalBridge(DecisionBridgePort):
         self._error = error
         self.calls = 0
         self.user_messages: list[str] = []
+        self.role_payloads: list[dict[str, Any]] = []
 
     def descriptor(self) -> BridgeDescriptor:
         """返回 simulated 摘要，永不生成验收凭证。"""
@@ -1157,9 +1326,16 @@ class _EvalBridge(DecisionBridgePort):
 
     def complete(self, *, system_message: str, developer_message: str, user_message: str, echo: Mapping[str, str]) -> str:
         """按输入关键词返回固定 Decision JSON。"""
-        del system_message, developer_message
         self.calls += 1
         self.user_messages.append(user_message)
+        self.role_payloads.append(
+            {
+                "system": system_message,
+                "developer": developer_message,
+                "user": user_message,
+                "echo": dict(echo),
+            }
+        )
         if self._error:
             raise BridgeError(self._error, submitted=True)
         data = json.loads(user_message)
@@ -1305,6 +1481,10 @@ def run_request(request: Mapping[str, Any]) -> dict[str, Any]:
         return _hash_operation(request)
     if operation == "render_size":
         return _render_size_operation(request)
+    if operation == "envelope_size":
+        return _envelope_size_operation(request)
+    if operation == "hash_mutations":
+        return _hash_mutations_operation(request)
     if operation == "facts":
         return _facts_operation(request)
     if operation == "render":

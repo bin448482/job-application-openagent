@@ -4630,6 +4630,69 @@
       ],
       "variant_id": "missing_key"
     },
+    "SC-D05/missing_payload_file": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 2,
+            "required_stdout_keys": [
+              "schema_version",
+              "status",
+              "reason_code",
+              "errors"
+            ],
+            "stdout_paths": [
+              {
+                "equals": 1,
+                "path": "schema_version"
+              },
+              {
+                "equals": "failed",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_policy",
+                "path": "reason_code"
+              },
+              {
+                "path": "errors",
+                "type": "array"
+              },
+              {
+                "equals": "missing",
+                "path": "errors.0.code"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "缺文件在启动前拒绝",
+        "不把缺文件当空内容"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "缺文件在启动前拒绝",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 包校验已交付",
+        "合成包不含真实内容"
+      ],
+      "scenario_id": "SC-D05",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "missing_payload_file"
+    },
     "SC-D05/path_in_style": {
       "acceptance": {
         "steps": [
@@ -5043,6 +5106,10 @@
               {
                 "equals": true,
                 "path": "link_detected"
+              },
+              {
+                "equals": 0,
+                "path": "target_reads"
               },
               {
                 "equals": [
@@ -5524,12 +5591,47 @@
                 "path": "bridge_submissions"
               }
             ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "C",
+                "path": "resolved_tier"
+              },
+              {
+                "equals": 0,
+                "path": "fact_count"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "C",
+                "path": "resolved_tier"
+              },
+              {
+                "equals": 0,
+                "path": "fact_count"
+              }
+            ]
           }
         ]
       },
       "assertions": [
         "schema 合法也不提升 C/事实/授权",
-        "设备和事实写入 0"
+        "设备和事实写入 0",
+        "伪 JSON/伪确认/角色注入均隔离"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -5680,6 +5782,69 @@
                 "path": "user_equals_rendered"
               }
             ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": [
+                  "system",
+                  "developer",
+                  "user"
+                ],
+                "path": "roles"
+              },
+              {
+                "length_equals": 0,
+                "path": "tools"
+              },
+              {
+                "equals": true,
+                "path": "user_equals_rendered"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": [
+                  "system",
+                  "developer",
+                  "user"
+                ],
+                "path": "roles"
+              },
+              {
+                "length_equals": 0,
+                "path": "tools"
+              },
+              {
+                "equals": true,
+                "path": "user_equals_rendered"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "bridge_roles",
+                "path": "reason_code"
+              }
+            ]
           }
         ]
       },
@@ -5729,17 +5894,43 @@
                 "path": "reason_code"
               }
             ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "invalid_decision",
+                "path": "reason_code"
+              }
+            ]
           }
         ]
       },
       "assertions": [
-        "HR 缺会话键拒绝",
+        "HR 缺会话键/额外主体/context 过多拒绝",
         "不调用桥",
         "拒绝"
       ],
       "deferred_to": null,
       "device_gate": false,
-      "expected_summary": "HR 缺会话键拒绝",
+      "expected_summary": "HR 缺会话键/额外主体/context 过多拒绝",
       "forbidden": [
         "不得以资产自检代替产品执行",
         "未执行或 BLOCKED 时不得记 PASS"
@@ -5772,7 +5963,15 @@
               },
               {
                 "equals": true,
-                "path": "pack_hash_independent"
+                "path": "pack_hash_same_between_dirs"
+              },
+              {
+                "equals": true,
+                "path": "pack_comment_changed"
+              },
+              {
+                "equals": true,
+                "path": "base_newline_changed"
               }
             ]
           }
@@ -5780,7 +5979,8 @@
       },
       "assertions": [
         "目录不入摘要",
-        "相同内容不要求不同 hash"
+        "相同内容不要求不同 hash",
+        "注释/换行/base 字节改变摘要"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -5977,8 +6177,16 @@
                 "path": "over_attempted_bytes"
               },
               {
+                "equals": false,
+                "path": "over_accepted"
+              },
+              {
                 "equals": "input_too_large",
-                "path": "over_2048_reason"
+                "path": "over_reason"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
               }
             ]
           },
@@ -6639,6 +6847,14 @@
               {
                 "equals": "authorization_required",
                 "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "authorize_viewed"
+              },
+              {
+                "equals": 1,
+                "path": "authorize_rounds"
               }
             ]
           },
@@ -6836,6 +7052,14 @@
               {
                 "equals": "authorization_required",
                 "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "authorize_viewed"
+              },
+              {
+                "equals": 3,
+                "path": "authorize_rounds"
               }
             ]
           },
@@ -6982,6 +7206,19 @@
             "exit_code": 0,
             "stdout_paths": [
               {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "eval_failed",
+                "path": "reason_code"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
                 "equals": "ok",
                 "path": "status"
               },
@@ -7057,6 +7294,31 @@
             "exit_code": 0,
             "stdout_paths": [
               {
+                "equals": "error",
+                "path": "status"
+              },
+              {
+                "equals": "policy_io_error",
+                "path": "reason_code"
+              },
+              {
+                "equals": true,
+                "path": "registry_unchanged"
+              },
+              {
+                "equals": 1,
+                "path": "injection_hits"
+              },
+              {
+                "equals": 1,
+                "path": "replace_hits"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
                 "equals": "ok",
                 "path": "status"
               },
@@ -7080,6 +7342,26 @@
               {
                 "equals": true,
                 "path": "registry_unchanged"
+              },
+              {
+                "equals": 0,
+                "path": "regression_case_count"
+              },
+              {
+                "equals": "policy_io_error",
+                "path": "regression_error"
+              },
+              {
+                "equals": 1,
+                "path": "injection_hits"
+              },
+              {
+                "equals": 1,
+                "path": "link_hits"
+              },
+              {
+                "equals": false,
+                "path": "admission_written"
               }
             ]
           },
@@ -7101,27 +7383,18 @@
               {
                 "equals": 0,
                 "path": "regression_case_count"
-              }
-            ]
-          },
-          {
-            "exit_code": 0,
-            "stdout_paths": [
-              {
-                "equals": "error",
-                "path": "status"
               },
               {
-                "equals": "policy_io_error",
-                "path": "reason_code"
+                "equals": 1,
+                "path": "injection_hits"
+              },
+              {
+                "equals": 1,
+                "path": "replace_hits"
               },
               {
                 "equals": true,
-                "path": "registry_unchanged"
-              },
-              {
-                "equals": 0,
-                "path": "regression_case_count"
+                "path": "admission_written"
               }
             ]
           },

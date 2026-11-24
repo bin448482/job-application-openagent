@@ -2144,6 +2144,113 @@ class M1DriverBoundaryTests(unittest.TestCase):
             differences,
         )
 
+    def test_real_m4_eval_role_leak_mutant_is_caught_by_d11_oracle(self) -> None:
+        """实际评测桥 developer/system 泄漏合成 expected 标记时，D11 oracle 必须拒绝。"""
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D11/public_contract"]["acceptance"]["steps"][0]
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m4/probe/d11_eval_public.json").read_text(encoding="utf-8")
+        )
+        original = m4_probe._EvalBridge.complete
+
+        def leaking_complete(self, **kwargs):
+            """在真实桥调用成功后向 developer 载荷注入合成 expected 标记。"""
+            text = original(self, **kwargs)
+            self.role_payloads[-1]["developer"] += " expected"
+            return text
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root), mock.patch.object(
+                m4_probe._EvalBridge, "complete", leaking_complete
+            ):
+                actual = m4_probe._eval_operation(request)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("transport_markers" in item for item in differences), differences)
+
+    def test_real_m4_envelope_limit_mutant_is_caught_by_d08_oracle(self) -> None:
+        """真实 envelope 上限放宽 1 字节时，D08 精确 2049 oracle 必须拒绝。"""
+        from app.domain import policy as policy_module
+
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D08/size_limits"]["acceptance"]["steps"][0]
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m4/probe/d08_envelope_size.json").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root), mock.patch.object(
+                policy_module, "ENVELOPE_MAX_BYTES", 2049
+            ):
+                actual = m4_probe._envelope_size_operation(request)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("over_accepted" in item for item in differences), differences)
+
+    def test_real_m4_link_target_read_mutant_is_caught_by_d05_oracle(self) -> None:
+        """真实仓库经链接目标读 pack.toml 时，D05 symlink oracle 必须拒绝。"""
+        if os.name != "nt":
+            self.skipTest("仅 Windows 验证 junction")
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D05/symlink_pack"]["acceptance"]["steps"][0]
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m4/probe/d05_symlink.json").read_text(encoding="utf-8")
+        )
+        original = m4_probe.FilePolicyRepository.read_pack
+
+        def reading_link(self, pack_rel):
+            """模拟先通过链接读取目标 pack.toml 再走原校验。"""
+            if str(pack_rel).endswith("linked"):
+                (Path(self.root) / "prompts/local/valid/pack.toml").read_text(encoding="utf-8")
+            return original(self, pack_rel)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            (root / "prompts/local").mkdir(parents=True, exist_ok=True)
+            created = subprocess.run(
+                ["cmd", "/c", "mklink", "/J", str(root / "prompts/local/linked"), str(root / "prompts/local/valid")],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if created.returncode != 0:
+                self.skipTest("当前平台/账户不能创建 junction")
+            with mock.patch.object(m4_probe, "ROOT", root), mock.patch.object(
+                m4_probe.FilePolicyRepository, "read_pack", reading_link
+            ):
+                actual = m4_probe._policy_validate_operation(request)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("target_reads" in item for item in differences), differences)
+
     def test_real_m4_simulated_acceptance_mutant_is_caught_by_d11_oracle(self) -> None:
         """模拟桥被伪装成非模拟并写验收凭证时，D11 public oracle 必须拒绝。"""
         assets = load_assets()

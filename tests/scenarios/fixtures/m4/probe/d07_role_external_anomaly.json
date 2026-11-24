@@ -1,0 +1,6 @@
+{
+  "operation": "bridge",
+  "pack": "prompts/local/valid",
+  "provider": "external-agent",
+  "case_id": "policy-anomaly"
+}

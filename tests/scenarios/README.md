@@ -15,14 +15,14 @@
 
 ## 2. 当前事实
 
-- 场景 73、变体 342：F 320、T 9、O 12、W 1；M4 81（66 原 + 15 子证据）。
-- READY_FOR_APP 193、ASSET_ONLY 89、DEFERRED 33、MODULE_EVIDENCE 5、DEVICE_GATE 22。
+- 场景 73、变体 343：F 321、T 9、O 12、W 1；M4 82（66 原 + 16 子证据）。
+- READY_FOR_APP 194、ASSET_ONLY 89、DEFERRED 33、MODULE_EVIDENCE 5、DEVICE_GATE 22。
 - M0 `51333d8`、M1 `a600d0a`、M2 `cc103f8`、M3 `584b814`（merge `92a0b68`）、M4a/b `140c182`（merge `ec66db4`）已普通 merge 并接入。
   - M0 实际执行：C01 9 PASS + 1 T 门槛、C02 12 PASS、C03 8 PASS，共 29 PASS、0 FAIL。
   - M1 实际执行：38 PASS、0 FAIL；DEFERRED 2（abandon→M5、leased_no_start→M6）、MODULE_EVIDENCE 3（纯约束用例，不重做模块单测）。M1 子集总体 BLOCKED、退出 3，不冒充完整 M1 通过。
   - M3 实际执行：15 PASS、0 FAIL；8 DEFERRED、1 MODULE_EVIDENCE、17 设备门槛，子集退出 3。新增 10 个 M3 子变体只证明定向核对 API、读侧副作用边界、稳定身份新增键与页面/职位路径，不冒充 R03/R04/R06/R07 完整流程。
-  - M4a/b 实际执行：57 PASS、0 FAIL；23 DEFERRED、1 MODULE_EVIDENCE，子集退出 3。D01 真实映射、D02 12+子证据、D03 2+子证据、D05 14（16/32/64 KiB 与编码边界、真实 junction）、D06 1、D07 3（Local/External、hr/job/anomaly）、D08 5（独立手算摘要、2048/2049、65536/65537）、D10 4、D11 8（首次失败审计、I/O 失败、provider 固定诊断、完整合成 holdout 首次/重复/退役/真实 regression 内容核验）。
-  - 全量验收：M0–M4 共 193 PASS、0 FAIL；89 个 M5+ ASSET_ONLY 入口未冻结、22 个设备门槛未验收、33 DEFERRED、5 MODULE_EVIDENCE；总体 BLOCKED、退出 3。
+  - M4a/b 实际执行：58 PASS、0 FAIL；23 DEFERRED、1 MODULE_EVIDENCE，子集退出 3。D01 真实映射、D02 12+子证据、D03 2+子证据、D05 14（16/32/64 KiB 与编码边界、真实 junction）、D06 1、D07 3（Local/External、hr/job/anomaly）、D08 5（独立手算摘要、2048/2049、65536/65537）、D10 4、D11 8（首次失败审计、I/O 失败、provider 固定诊断、完整合成 holdout 首次/重复/退役/真实 regression 内容核验）。
+  - 全量验收：M0–M4 共 194 PASS、0 FAIL；89 个 M5+ ASSET_ONLY 入口未冻结、22 个设备门槛未验收、33 DEFERRED、5 MODULE_EVIDENCE；总体 BLOCKED、退出 3。
   - `--only SC-C` 的 M0 子集退出 0；`--only SC-L` 的 M1 子集因 2 DEFERRED/3 MODULE_EVIDENCE 退出 3；两者 `product_acceptance` 都不是 PASS。
   - 未运行真实 ADB、设备、模型或网络。
 
@@ -40,7 +40,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --only SC-R --targe
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-D --target .
 ```
 
-- unittest：86 项，验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant。
+- unittest：89 项，验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；
