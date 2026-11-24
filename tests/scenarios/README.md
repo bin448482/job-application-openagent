@@ -16,13 +16,13 @@
 ## 2. 当前事实
 
 - 场景 73、变体 364：F 342、T 9、O 12、W 1；M4 103（66 原 + 37 子证据）。
-- READY_FOR_APP 259、ASSET_ONLY 43、DEFERRED 35、MODULE_EVIDENCE 5、DEVICE_GATE 22。
+- READY_FOR_APP 257、ASSET_ONLY 45、DEFERRED 35、MODULE_EVIDENCE 5、DEVICE_GATE 22。
 - M0 `51333d8`、M1 `a600d0a`、M2 `cc103f8`、M3 `584b814`（merge `92a0b68`）、M4a/b `140c182`（merge `ec66db4`）、M4c `5cb6817`（普通 merge `248483e`）已接入。
   - M0 实际执行：C01 9 PASS + 1 T 门槛、C02 12 PASS、C03 8 PASS，共 29 PASS、0 FAIL。
   - M1 实际执行：38 PASS、0 FAIL；DEFERRED 2（abandon→M5、leased_no_start→M6）、MODULE_EVIDENCE 3（纯约束用例，不重做模块单测）。M1 子集总体 BLOCKED、退出 3，不冒充完整 M1 通过。
   - M3 实际执行：15 PASS、0 FAIL；8 DEFERRED、1 MODULE_EVIDENCE、17 设备门槛，子集退出 3。新增 10 个 M3 子变体只证明定向核对 API、读侧副作用边界、稳定身份新增键与页面/职位路径，不冒充 R03/R04/R06/R07 完整流程。
   - M4a/b/c 实际执行：77 PASS、0 FAIL；25 DEFERRED、1 MODULE_EVIDENCE，子集退出 3。D01 真实映射、D02 12+真实租约适配子证据、D03 2+真实租约桥前后子证据、D05 15（16/32/64 KiB 与编码边界、真实 junction）、D06 2（事实入口与空事实待办）、D07 3 子证据（Local/External、hr/job/anomaly）、D08 5（独立手算摘要、2048/2049、65536/65537）、D09 7（两进程恰一 primary、真实失败隔离/崩溃/TTL/PID/换 profile/字段篡改、预检先占后开）、D10 7（真实活动 stopped/active/unknown、真实 restore 三值/目标不半写、改 base/包/model 旧凭证失效）、D11 11；M4c 事实过期/冲突/白名单外/跨 profile/HR 键与真实活动/租约子证据均不冒充完整 M5 流程。
-  - 全量验收：M0–M5 共 257 PASS、0 FAIL；43 个 M5+ ASSET_ONLY 入口未冻结（含 A06 六个依赖 M6）、22 个设备门槛未验收、35 DEFERRED、5 MODULE_EVIDENCE；总体 BLOCKED、退出 3。
+  - 全量验收：M0–M5 共 257 PASS、0 FAIL；45 个 M5+ ASSET_ONLY 入口未冻结（含 A06 六个依赖 M6）、22 个设备门槛未验收、35 DEFERRED、5 MODULE_EVIDENCE；总体 BLOCKED、退出 3。
   - `--only SC-C` 的 M0 子集退出 0；`--only SC-L` 的 M1 子集因 2 DEFERRED/3 MODULE_EVIDENCE 退出 3；两者 `product_acceptance` 都不是 PASS。
   - 未运行真实 ADB、设备、模型或网络。
 
@@ -84,6 +84,6 @@ acceptance 对每个可执行变体：
 ## 7. 未完成与下一步
 
 - P2 已接入 M0/M1/M2/M3/M4a/M4b/M4c/M5 动作与事实入口；M6+ 需等业务方稳定提交后，逐一绑定调度/清理/灰度接口；不得合并未验收业务分支。
-- 43 个 M5+ ASSET_ONLY 变体仍缺接口（含 A06 六个与 M6–M8）；35 个 DEFERRED 与 5 个 MODULE_EVIDENCE 保持未计 PASS。原 R03/R04/R06/R07 完整变体仍分别依赖 M6 调度/M5–M6 进入与事件时序；M4 D02/D03 完整调度重跑与超限待办、D04 ask_user/blocked 授权、D06 完整十步、D09 read_only 整轮持有、D10 额度/旧授权/在途、D11 真实 provider/私有留出仍未验收。
+- 45 个 M5+ ASSET_ONLY 变体仍缺接口（含 A06 六个与 M6–M8）；35 个 DEFERRED 与 5 个 MODULE_EVIDENCE 保持未计 PASS。原 R03/R04/R06/R07 完整变体仍分别依赖 M6 调度/M5–M6 进入与事件时序；M4 D02/D03 完整调度重跑与超限待办、D04 ask_user/blocked 授权、D06 完整十步、D09 read_only 整轮持有、D10 额度/旧授权/在途、D11 真实 provider/私有留出仍未验收。
 - 纯实机门槛、真实模型/provider、真实写入与设备证据全部未执行。
 - 根 `tests/AGENTS.md`、根 `AGENTS.md` 索引与 README 由业务方串行更新；本目录只提供待同步条目。

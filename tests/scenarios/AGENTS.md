@@ -24,14 +24,14 @@ M0 `51333d8`、M1 `a600d0a`、M2 `cc103f8`、M3 `584b814`（普通 merge `92a0b6
 
 - 场景 73 个：M0 3、M1 7、M2 15、M3 14、M4 11、M5 8、M6 8、M7 4、M8 3。
 - 变体 364 个：F 342、T 9、O 12、W 1；M4 103 个（66 原 + 37 显式子证据）。
-- 资产状态：READY_FOR_APP 259、ASSET_ONLY 43、DEFERRED 35、MODULE_EVIDENCE 5、DEVICE_GATE 22。
+- 资产状态：READY_FOR_APP 257、ASSET_ONLY 45、DEFERRED 35、MODULE_EVIDENCE 5、DEVICE_GATE 22。
 - M0 已执行：C01 9 PASS + 1 T 门槛、C02 12 PASS、C03 8 PASS；共 29 PASS、0 FAIL。C01 real_probe 仍是未验收 T 门槛。
 - M1 已执行：38 PASS、0 FAIL；2 DEFERRED（M5/M6）、3 MODULE_EVIDENCE（纯约束，不重做模块单测）。M1 总体仍 BLOCKED，不冒充完整通过。
 - M3 已执行：15 PASS、0 FAIL；8 DEFERRED（R01 三项、R02、R03/R04/R06/R07 原变体）、1 MODULE_EVIDENCE（R01 无确认的零子进程证据）、17 设备门槛。新增 10 个明确父场景的 M3 子变体（定向核对 API/边界、全局正计数 API、读侧不关闭发现、稳定身份新增键、页面/职位完整路径）；它们不计作原 R03/R04/R06/R07 完整通过。
 - D11 留出公开/冻结/首次失败/冲突/IO/无提供方/未知案例等 11 变体由真实探针执行；所需无上传合同以显式公开合成文件名 `fixtures/m4/eval/attestation/holdout-attestation.synthetic.json` 交付，变体用 `fixture_files` 映射到隔离根的固定 `data/evals/holdout-attestation.local.json`，不依赖被忽略的本机文件。
 - M4a/b/c 已执行：77 PASS、0 FAIL；25 DEFERRED（D02 原从新租约重跑、D03 原超限待办、D04 原 ask_user/待办/授权、D06 完整十步、D09 read_only 整轮、D10 额度/旧授权/在途）、1 MODULE_EVIDENCE（operator_docs）。D01 真实映射 24 行、D02 12+真实租约适配、D03 2+真实租约桥前后拒绝、D05 15（真实 junction、16/32/64 KiB 等/超边界、坏 UTF8/BOM/NUL）、D06 2、D07 3 子证据（Local/External、hr/job/anomaly）、D08 5（独立手算摘要、2048/2049、65536/65537）、D09 7（两进程恰一 primary、失败隔离 quarantined、崩溃/TTL/PID/换 profile/字段篡改、预检先占后开）、D10 7（真实活动 stopped/active/unknown、真实 restore 三值/目标不半写、改 base/包/model 旧凭证失效）、D11 11；M4c 事实过期/冲突/白名单外/跨 profile/HR 键与真实活动/租约子证据均不冒充完整 M5 流程。
 - M5 已执行：44 PASS、0 FAIL；A01 6、A02 8、A03 7、A04 7、A05 6、A07 4、A08 6。10 个 BLOCKED_ENTRY_UNFROZEN：A06 六个依赖 M6 apply_job；A01 输入法/发送控件候选与 A03/A04 直接单次不可逆点击缺 M5 控件发现入口。M5 子集退出 3，不冒充产品通过。
-- 其余 43 个 M5+ ASSET_ONLY 记 `BLOCKED_ENTRY_UNFROZEN`；DEFERRED/MODULE_EVIDENCE 均不得算 PASS。
+- 其余 45 个 M5+ ASSET_ONLY 记 `BLOCKED_ENTRY_UNFROZEN`；DEFERRED/MODULE_EVIDENCE 均不得算 PASS。
 - DEVICE_GATE 是 T/O/W 纯实机门槛，保留未验收；F 通过不能替代。
 - 日志判据绑定单次调用产生的唯一日志文件与 correlation，校验完整有序 `stage/operation/result/reason_code` 序列、`started` 成对次数、固定字段白名单/类型和敏感标记；无像素分支不得出现 pixel。比较器对 rows/cards/messages/field_evidence 的每个元素校验固定键与必要类型，并对非首项身份/摘要/证据给出独立预期。
 
