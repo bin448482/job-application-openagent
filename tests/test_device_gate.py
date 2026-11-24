@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import multiprocessing
 import os
 import sqlite3
@@ -24,6 +25,7 @@ from app.adapters.sqlite.profile_store import (
 )
 from app.domain.models import Owner, canonical_hash
 from app.ports.device_gate import DeviceGateError
+from app.process_log import ProcessLog
 from app.usecases.device import occupancy_payload, require_profile_writable
 from tests import policy_helpers
 
@@ -861,6 +863,152 @@ class GateReadOnlyTests(unittest.TestCase):
         with self.assertRaises(DeviceGateError) as caught:
             inspect_gate_occupancy(platform_name="linux")
         self.assertEqual(caught.exception.reason_code, "device_gate_unavailable")
+
+    def test_exclusive_sqlite_busy_is_mapped_at_public_ports(self) -> None:
+        """真实 BEGIN EXCLUSIVE 下所有公共路径只抛 DeviceGateError，锁释放后同一身份可复核/释放。"""
+        path = profile_runtime_path(self.root, "alpha")
+        log = ProcessLog(
+            self.root / "gate-busy.jsonl", correlation_id="corr-gate-busy"
+        )
+        gate = SharedDeviceGate(
+            profile_id="alpha",
+            profile_db_path=path,
+            os_root=self.os_root,
+            process_log=log,
+        )
+        gate.acquire(
+            profile_id="alpha",
+            profile_db_path=str(path),
+            owner=_owner(),
+            now=NOW,
+        )
+        before = gate.inspect()
+        self.assertEqual(before["state"], "held")
+        self.assertEqual(before["owner_pid"], 4242)
+        gate_path = guard_database_path(self.os_root)
+        blocker = sqlite3.connect(str(gate_path))
+        blocker.execute("BEGIN EXCLUSIVE")
+        try:
+            with patch("app.adapters.sqlite.device_gate.BUSY_TIMEOUT_MS", 150):
+                cli_log = ProcessLog(
+                    self.root / "gate-busy-cli.jsonl", correlation_id="corr-cli"
+                )
+                code, payload, stderr = policy_helpers.run_cli(
+                    self.root,
+                    ["device", "gate", "inspect"],
+                    process_log=cli_log,
+                    os_root=self.os_root,
+                )
+                self.assertEqual((code, stderr), (2, ""), payload)
+                self.assertEqual(payload["reason_code"], "device_gate_io_error")
+                self.assertNotIn("Traceback", stderr)
+                with self.assertRaises(DeviceGateError) as verify_error:
+                    gate.verify(now=NOW)
+                self.assertEqual(verify_error.exception.reason_code, "device_busy")
+                with self.assertRaises(DeviceGateError) as release_error:
+                    gate.release(now=NOW, converged=True)
+                self.assertEqual(release_error.exception.reason_code, "device_busy")
+                with self.assertRaises(DeviceGateError) as identity_error:
+                    gate.session_identity()
+                self.assertEqual(identity_error.exception.reason_code, "device_busy")
+                with self.assertRaises(DeviceGateError) as inspect_error:
+                    inspect_gate_occupancy(os_root=self.os_root)
+                self.assertEqual(
+                    inspect_error.exception.reason_code, "device_gate_io_error"
+                )
+                recovering = SharedDeviceGate(
+                    profile_id="alpha",
+                    profile_db_path=path,
+                    os_root=self.os_root,
+                )
+                with self.assertRaises(DeviceGateError) as recover_error:
+                    recovering.recover(
+                        profile_id="alpha",
+                        profile_db_path=str(path),
+                        owner=_owner(5151),
+                        confirm_stopped=True,
+                        stop_checker=lambda pid: "stopped",
+                        now=LATER,
+                    )
+                self.assertEqual(
+                    recover_error.exception.reason_code, "device_busy"
+                )
+                activity = ProfilePolicyActivity(self.root, os_root=self.os_root)
+                self.assertEqual(
+                    activity.assess_restore(
+                        profile_id="alpha", dest_pack="prompts/local/x"
+                    ),
+                    "unknown",
+                )
+                row = blocker.execute(
+                    "SELECT profile_id, owner_id, owner_pid, owner_host, nonce, state "
+                    "FROM device_guard WHERE device_key = 'primary'"
+                ).fetchone()
+                self.assertEqual(
+                    row,
+                    (
+                        before["profile_id"],
+                        before["owner_id"],
+                        before["owner_pid"],
+                        before["owner_host"],
+                        before["nonce"],
+                        "held",
+                    ),
+                )
+            cli_events = [
+                json.loads(line)
+                for line in cli_log.path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            inspect_events = [
+                event
+                for event in cli_events
+                if event["stage"] == "device_gate"
+                and event["operation"] == "inspect"
+            ]
+            self.assertEqual(
+                [event["result"] for event in inspect_events], ["started", "failed"]
+            )
+            self.assertEqual(
+                inspect_events[-1]["reason_code"], "device_gate_io_error"
+            )
+            self.assertEqual(inspect_events[-1]["error_category"], "gate")
+            adapter_events = [
+                json.loads(line)
+                for line in log.path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            busy_failures = [
+                event
+                for event in adapter_events
+                if event["stage"] == "device_gate"
+                and event["result"] == "failed"
+            ]
+            self.assertTrue(busy_failures)
+            self.assertTrue(
+                all(
+                    event["reason_code"] == "device_busy"
+                    for event in busy_failures
+                )
+            )
+            self.assertTrue(
+                any(
+                    event["operation"] == "release"
+                    and event["result"] == "failed"
+                    and event["reason_code"] == "device_busy"
+                    for event in adapter_events
+                )
+            )
+        finally:
+            blocker.rollback()
+            blocker.close()
+        gate.verify(now=NOW)
+        identity = gate.session_identity()
+        self.assertEqual(identity.nonce, before["nonce"])
+        self.assertEqual(identity.owner, _owner())
+        self.assertEqual(identity.state, "held")
+        gate.release(now=NOW, converged=True)
+        self.assertIsNone(gate.inspect())
 
     def test_occupancy_payload_maps_free_and_rejects_unknown_state(self) -> None:
         """空闲行映射为固定键；不可识别状态按 IO 错误拒绝。"""

@@ -182,6 +182,9 @@ class SharedDeviceGate:
         self._record(operation, "started")
         try:
             self._read_validated_row()
+        except _GateBusy:
+            self._record(operation, "failed", started, "device_busy")
+            raise DeviceGateError("device_busy") from None
         except DeviceGateError as error:
             self._record(operation, "failed", started, error.reason_code)
             raise
@@ -237,6 +240,9 @@ class SharedDeviceGate:
                 connection.close()
             self._nonce = None
             self._owner = None
+        except _GateBusy:
+            self._record(operation, "failed", started, "device_busy")
+            raise DeviceGateError("device_busy") from None
         except DeviceGateError as error:
             self._record(operation, "failed", started, error.reason_code)
             raise
@@ -359,6 +365,9 @@ class SharedDeviceGate:
                 nonce=str(row["nonce"]),
                 state=str(row["state"]),
             )
+        except _GateBusy:
+            self._record(operation, "failed", started, "device_busy")
+            raise DeviceGateError("device_busy") from None
         except DeviceGateError as error:
             self._record(operation, "failed", started, error.reason_code)
             raise
@@ -435,7 +444,7 @@ class SharedDeviceGate:
             return
 
     def _connect(
-        self, *, create: bool, busy_timeout_ms: int = BUSY_TIMEOUT_MS
+        self, *, create: bool, busy_timeout_ms: int | None = None
     ) -> sqlite3.Connection:
         """打开固定门禁库；委托模块级连接函数并保留实例路径。"""
         return _connect_gate(
@@ -534,11 +543,14 @@ def _inspect_path(path: Path) -> dict[str, object] | None:
         return None
     if state != PATH_FILE:
         raise DeviceGateError("device_gate_io_error")
-    connection = _connect_gate(path, create=False)
     try:
-        row = _read_gate_row(connection)
-    finally:
-        connection.close()
+        connection = _connect_gate(path, create=False)
+        try:
+            row = _read_gate_row(connection)
+        finally:
+            connection.close()
+    except _GateBusy:
+        raise DeviceGateError("device_gate_io_error") from None
     if row is None:
         return None
     return _gate_row_payload(row)
@@ -560,15 +572,16 @@ def _gate_row_payload(row: sqlite3.Row) -> dict[str, object]:
 
 
 def _connect_gate(
-    path: Path, *, create: bool, busy_timeout_ms: int = BUSY_TIMEOUT_MS
+    path: Path, *, create: bool, busy_timeout_ms: int | None = None
 ) -> sqlite3.Connection:
     """打开固定门禁库；首次创建允许少量文件/SQLite IO 重试，忙不重试。"""
+    timeout_ms = BUSY_TIMEOUT_MS if busy_timeout_ms is None else busy_timeout_ms
     attempts = 3 if create else 1
     last: DeviceGateError | None = None
     for attempt in range(attempts):
         try:
             return _connect_gate_once(
-                path, create=create, busy_timeout_ms=busy_timeout_ms
+                path, create=create, busy_timeout_ms=timeout_ms
             )
         except DeviceGateError as error:
             last = error
@@ -580,9 +593,10 @@ def _connect_gate(
 
 
 def _connect_gate_once(
-    path: Path, *, create: bool, busy_timeout_ms: int = BUSY_TIMEOUT_MS
+    path: Path, *, create: bool, busy_timeout_ms: int | None = None
 ) -> sqlite3.Connection:
     """实际执行一次打开与建表/核验，失败关闭连接并映射固定错误。"""
+    timeout_ms = BUSY_TIMEOUT_MS if busy_timeout_ms is None else busy_timeout_ms
     state = probe_path(path)
     if state == PATH_UNKNOWN:
         raise DeviceGateError("device_gate_io_error")
@@ -593,10 +607,10 @@ def _connect_gate_once(
     try:
         if create:
             path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(str(path), timeout=busy_timeout_ms / 1000)
+        connection = sqlite3.connect(str(path), timeout=timeout_ms / 1000)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute(f"PRAGMA busy_timeout = {busy_timeout_ms}")
+        connection.execute(f"PRAGMA busy_timeout = {timeout_ms}")
     except sqlite3.Error as error:
         if _is_busy(error):
             raise _GateBusy() from None
@@ -682,12 +696,14 @@ def _verify_gate_schema(version: int, objects: dict[str, tuple[str, str]]) -> No
 
 
 def _read_gate_row(connection: sqlite3.Connection) -> sqlite3.Row | None:
-    """读取唯一 primary 行；读取失败固定为门禁 IO 错误。"""
+    """读取唯一 primary 行；忙保持内部标记，其它读取失败为门禁 IO 错误。"""
     try:
         return connection.execute(
             "SELECT * FROM device_guard WHERE device_key = 'primary'"
         ).fetchone()
-    except sqlite3.Error:
+    except sqlite3.Error as error:
+        if _is_busy(error):
+            raise _GateBusy() from None
         raise DeviceGateError("device_gate_io_error") from None
 
 

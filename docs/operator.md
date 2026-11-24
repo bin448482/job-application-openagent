@@ -315,7 +315,7 @@ python -m app facts forget --profile demo --key work_location --confirm
 
 共享设备门禁固定在 Windows `LOCALAPPDATA/job-application-openagent/device-guard.sqlite3`，不随仓库、worktree、clone、`--pack` 或 `--config` 改变；非 Windows 或缺失固定 OS 根时拒绝真实占用。唯一 `primary` 行保存 profile_id、原 profile 库规范路径、owner/pid/host/nonce 与 `held/quarantined`，不存事实、聊天或序列号。
 
-- acquire 保存完整 owner_id/pid/host、nonce、profile 与库路径；verify 和 release 写事务共用同一完整身份复核。只改 owner 任一字段或 profile/路径都会拒绝，release 不删除原占用；nonce 篡改也拒绝。`session_identity` 只读取一次并对同一行完成完整核验后构造身份，不从第二次未校验读取返回。acquire 使用显式零等待连接，门禁库写锁竞争立即映射 `device_busy`，不排队、不重试；verify/release/recover 保留有界等待，以便正常持有者短暂等待事实写事务。
+- acquire 保存完整 owner_id/pid/host、nonce、profile 与库路径；verify 和 release 写事务共用同一完整身份复核。只改 owner 任一字段或 profile/路径都会拒绝，release 不删除原占用；nonce 篡改也拒绝。`session_identity` 只读取一次并对同一行完成完整核验后构造身份，不从第二次未校验读取返回。acquire 使用显式零等待连接，门禁库写锁竞争立即映射 `device_busy`，不排队、不重试；verify/release/recover/session_identity 保留有界等待，busy 时返回 `device_busy`；只读 `inspect`/`inspect_gate_occupancy` 在 busy 时返回保守 `device_gate_io_error`。内部 busy 分类不越过公共端口，busy 不释放占用、不改 owner/nonce，锁解除后同一持有者仍可正常复核与明确释放。
 - 只有 user_version=0 且无用户对象的明确新空库可初始化；已有库核验版本、完整对象集合与 DDL，未知版本、额外对象或旧占用表固定失败且不改写/覆盖版本。
 - 每个真实会话（含 read_only）先 `BEGIN IMMEDIATE` 条件插入；存在 held 返 `device_busy`，存在 quarantined 返 `device_quarantined`，都不覆盖、不因 TTL/PID 消失/重启自动释放。
 - 启动、续租与每条设备子命令前复核完整身份、profile 绑定与 held 状态；库不可读、目录路径、权限查询错误或其它不可判定状态停止新动作并保留原绑定。路径判断复用 `probe_path`：只有 `FileNotFoundError` 是明确缺失，目录/非普通文件/权限或其它 OSError 都不是缺失；存在但是目录或权限错误时 restore 返回 unknown 并拒绝发布，facts 同类路径返回固定错误而不是空结果。
