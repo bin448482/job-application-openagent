@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-承载 M1 起的纯领域模型与无 IO 校验：任务状态、读取三态、未读快照、候选、动作证据和租约，以及 M2 的未读聚合/停止原因和 M3 的读取值类型、字段阶梯与稳定消息身份。该目录不导入 `sqlite3`、`adapters/`、`adb` 或具体应用控件，只依赖标准库与自身。
+承载 M1 起的纯领域模型与无 IO 校验：任务状态、读取三态、未读快照、候选、动作证据和租约，M2 的未读聚合/停止原因，M3 的读取值类型、字段阶梯与稳定消息身份，以及 M4a 的 DecisionEnvelope/Decision 契约、策略包校验、摘要与受限渲染。该目录不导入 `sqlite3`、`adapters/`、`adb` 或具体应用控件，只依赖标准库与自身。
 
 ## 二、当前文件
 
@@ -12,6 +12,7 @@
 - `reading.py`：M3 读取值类型 `FieldEvidence/PageSnapshot/JobCard/JobList/JobDetail/UnreadRowRead/UnreadRead/ChatMessage/Conversation`、稳定职位键/消息键算法、跨快照 `new_message_keys` 与各值类型严格校验；`validate_read_value` 是 `ReadResult.value` 的唯一分派入口。稳定消息身份只来自 profile 验证过的应用 `content-desc` 原值，内容摘要不生成消息键；不保存正文到日志/库。
 - `ladder.py`：`FieldReading/FieldResolution` 与纯 `resolve_field`；层级→像素→视觉→人工顺序，reading 的 source 必须与调用槽位一致，前级 failed 在上下文比较前保留，跨级冲突/上下文不一致转 undetermined/人工且只携带主上下文证据，视觉默认关闭且无独立交叉证据不放行；枚举/原因/计数/flag 先做类型检查，坏类型统一 ValueError。
 - `scheduler.py`：`aggregate_unread(snapshot, unresolved_keys)` 只重算 `unread_state`；`stop_reason_for(snapshot, queued_keys)` 按 M2 有序判据返回 `null/unread_unverified/needs_targeted_verification`。两者均无 IO，非法参数抛 `ValueError`。
+- `policy.py`：M4a `DecisionEnvelope`/`Decision` 严格校验、`parse_envelope`/`parse_decision`、租约参数位置 `validate_decision(..., *, now, lease_expires_at)`；TOML+三 md schema、45 组合唯一覆盖与 A 档硬下限、`effective_limits`、`resolve_policy_tier(pack, intent, sub_intents, escalate, upper_tier)`；`compute_base_hash/compute_pack_hash/compute_prompt_hash/compute_input_hash` 与无自引用投影；固定 system/developer/user `render_request`；`append_and_validate_reply` 追加披露并复验码点/控制字符/联系方式/禁谈项/事实来源；`validate_policy_guides` 检查可选双指南编码/控制字符/联系方式；`v1_policy_tier()` 固定 C。只有标准库与自身依赖。
 
 ## 三、行为契约
 
@@ -27,22 +28,27 @@
 10. 本目录不保存正文、不解密身份、不连接设备；M1/M2/M3 只用合成对象。M2 XML 解析在 `adapters/boss/list.py`，M3 页面/职位/会话解析在 `adapters/boss/read.py`，聚合与停止原因在 `scheduler.py`。
 11. `aggregate_unread` 仅在任一适用源 present 时 present；只有 coverage=all、至少一个适用源、所有适用源 absent、无身份不可定位行且无未关闭发现时才 absent；其余 unknown。`not_applicable` 不参与“全部 absent”，全不适用仍为 unknown。
 12. `stop_reason_for` 先看可领取 unread 候选（`null`）；任一前三源 present 或存在 unread 候选但不可领取为 `needs_targeted_verification`；再对前三源/聚合 unknown 返回 `unread_unverified`；仅 preview 正且其它源 absent/not_applicable 且有可领取 `new_message` 时返回 `null`；聚合 absent 返回 `null`；其余 `needs_targeted_verification`。
+13. M4a Envelope 全部键必填、拒绝额外键；`schema_version=1`、规范 UUID nonce、64hex 摘要、`app` 注册表、kind 词表、kind 最小 subject、非空 conversation_key 必须是 `app:conv:<64hex>`、非空 inbound、最多两条 context、事实固定四键且 key 在注册表、`source=user_confirmed`、未过期（`expires_at<=now` 拒绝）、重复键拒绝；constraints 为 `max_chars 1–300`、`no_contact=true`、`max_bytes=2048`；完整 envelope 规范 UTF-8 ≤2048 字节，超限 `input_too_large`。`input_hash` 用完整 envelope 去自身重算。
+14. Decision 全部键必填、拒绝额外键；前三个标识逐字回显，不一致 `stale_decision`；intent/子意图词表、去重；reply 0–300 码点、只放行 LF、拒绝其它控制字符与孤立代理；evidence 必须为 inbound 非空子串；`needs_human/uncertain` 必须 `human_review`。租约有效期不在 Envelope 内，由调用者传入可信 `lease_expires_at`（M1 `Lease.expires_at`），`now>=lease_expires_at` 拒绝。
+15. H 只使用键排序、UTF-8、紧凑分隔符的 SHA-256，不做 strip/换行/Unicode 规范化。`base_hash=H({项目相对 base 路径:原文})`；`pack_hash=H({schema_version:1,files:{四文件名:原文}})`；`prompt_hash=H({base:{version,hash,files},pack:{hash,config,files},data:envelope 去 task_id/nonce/input_hash/prompt_hash})`；`input_hash` 最后计算。摘要不得包含自身；目录名/时间不入 pack 摘要。
+16. 策略包 TOML 与三 md 全部键/语法必填；45 个 `intent.sub_intent` 恰好覆盖一次，通配只支持 `intent.*`，同档重复/跨档冲突/漏项/A 越权（仅 interested.greeting/job_question 可 A）拒绝；有效限制取 base min/max，禁止项取并集，事实键取注册表/包白名单交集输入。披露 1–80 码点、含 `AI助手`、单行、无联系方式，且不得命中 never-say。pack 文件大小/路径/链接/BOM/控制字符/联系方式在适配器与领域共同拒绝；有限模式不声称完整语义判断。
+17. `render_request` 只选当前 kind 的一份 base 作为 system，有效策略为 developer，envelope 投影为 user JSON；两份 base 原文均进 `base_hash`/`prompt_hash`；总决策内容 ≤64 KiB；`H(RenderedRequest)=envelope.prompt_hash`。预览不调用桥/模型/设备，`v1_policy_tier()` 固定 C。
 
 ## 四、测试
 
 ```powershell
-python -m unittest tests.test_store tests.test_migrations tests.test_sensor tests.test_read
+python -m unittest tests.test_store tests.test_migrations tests.test_sensor tests.test_read tests.test_policy_contract tests.test_policy_pack
 ```
 
-领域校验通过仓储入口间接覆盖，包括 app 固定 boss、bool 计数、坏摘要/UUID/时间、候选键重算与证据组合；M2 聚合/停止原因由 `tests.test_sensor` 断言，M3 值类型、稳定消息/职位键、阶梯与跨屏身份由 `tests.test_read` 断言。
+领域校验通过仓储入口间接覆盖，包括 app 固定 boss、bool 计数、坏摘要/UUID/时间、候选键重算与证据组合；M2 聚合/停止原因由 `tests.test_sensor` 断言，M3 值类型、稳定消息/职位键、阶梯与跨屏身份由 `tests.test_read` 断言；M4a 契约、摘要、45 组合、渲染与披露复验由 `tests.test_policy_contract`、`tests.test_policy_pack` 断言。
 
 ## 五、维护要求
 
-1. 修改类型、词表、键/摘要算法、聚合或停止原因规则时，同步更新本文件、`app/ports/AGENTS.md`、`app/adapters/sqlite/AGENTS.md`、`app/adapters/boss/AGENTS.md`、根 `AGENTS.md` 和受影响测试。
-2. 新模型必须有当前里程碑的真实消费者；不预建 M4+ 解析或动作状态。
+1. 修改类型、词表、键/摘要算法、聚合、停止原因或 M4a 契约时，同步更新本文件、`app/ports/AGENTS.md`、`app/adapters/sqlite/AGENTS.md`、`app/adapters/boss/AGENTS.md`、`app/adapters/files/AGENTS.md`、根 `AGENTS.md` 和受影响测试。
+2. 新模型必须有当前里程碑的真实消费者；不预建 M4b 桥、动作或运行时调度模型。
 3. 每个函数/方法写 docstring，文件顶部说明用途；不引入第三方依赖。
 
 ## 六、已知限制
 
-- M2 只实现合成快照聚合；M3 只实现合成页面/职位/未读/会话读取、像素字段后备与跨屏稳定身份；真实设备采集、导航、视觉与正文持久化未实现。
-- `unread_state=present` 不证明候选可点击或计数完整；`unknown` 不得当成无未读。M3 `actionable=true` 只是离线门禁，不提供发送授权。
+- M2 只实现合成快照聚合；M3 只实现合成页面/职位/未读/会话读取、像素字段后备与跨屏稳定身份；M4a 只实现纯契约、策略包/摘要/渲染与回复复验，真实设备采集、导航、视觉、正文持久化、模型桥与真实 A 档判据未实现。
+- `unread_state=present` 不证明候选可点击或计数完整；`unknown` 不得当成无未读。M3 `actionable=true` 只是离线门禁，不提供发送授权。M4a 的 pattern/长度/禁谈检查只是有限确定性门禁，未命中不等于语义安全，最终档位固定 C。

@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-组织单次业务用例的输入校验与领域判定，不直接访问属性、文件、数据库或网络。当前包含 M0 `doctor`、M2 `sense` 的持久化/聚合结果编排与 M3 `read` 的决策门禁/定向核对/JSON 组装。
+组织单次业务用例的输入校验与领域判定，不直接访问属性、文件、数据库或网络。当前包含 M0 `doctor`、M2 `sense` 的持久化/聚合结果编排、M3 `read` 的决策门禁/定向核对/JSON 组装，以及 M4a `policy` 的初始化/校验/预览/列表/快照/恢复编排。
 
 ## 二、当前文件
 
@@ -11,6 +11,7 @@
 - `sense.py`：`persist_and_aggregate(store, result, process_log=None)` 先 upsert 快照、再查未关闭会话，调用领域 `aggregate_unread` 与 `stop_reason_for`；两步分别以 `sense/aggregate`、`sense/stop_reason` 记 started→ok/failed（内部异常保留 `error_category=internal` 并继续公共安全出口），不记录正文/身份/路径/异常消息。`build_sense_payload`/`result_payload` 是 M2 唯一 JSON 结果组装点，不读取 XML 或数据库。SQLite 初始化与打开仍由 CLI 在解析/合并 ok 后执行。
 - `read.py`：`is_actionable(result)`/`require_actionable` 按值类型检查页面、职位、未读与会话；结构 ok 但字段未知/身份未决仍拒绝决策。`build_read_payload` 是 M3 唯一 JSON 组装点；`targeted_verification_outcome(initial,targeted,queued_keys,*,now)` 要求新 snapshot、同 app/profile、observed_at 在 0–5 秒且不老于 initial，重放/陈旧/跨 profile 分别返回 `unread_unverified/stale_snapshot/identity_ambiguous`；`read_from_device` 在任何门禁或采集前拒绝不可调用 parser，再要求共享设备门禁通过。不调用仓储、模型或动作。
 - `payload.py`：M2/M3 共用的 `ReadResult` 七键与 `UnreadSnapshot` 深层序列化唯一实现；用显式字段投影而不 `asdict`，保持 M2 `SIGNAL_KEYS` 顺序与全部字段，`sense`/`read` 均复用。
+- `policy.py`：`init_pack/validate_pack/preview_pack/list_packs/snapshot_pack/restore_pack` 只经 `PolicyRepositoryPort` 做文件事务，经领域纯函数校验/摘要/渲染；`init` 只建 local 直接子目录并保留 profile 身份；`snapshot` 复制前后 pack_hash 一致且清单完成才发布；`restore` 要求清单/快照/目标三值 `pack_hash` 相等、base_hash 与 base_version 匹配、保留 profile_id，staging 同卷发布且不覆盖。`RefusingPolicyActivity` 是 M4a 生产受控拒绝（返回 unknown）；测试可向同一 `restore_pack` 注入明确合成 `stopped` 证据，完整 CLI 安全接线留 M4c。
 
 ## 三、行为契约
 
@@ -25,12 +26,16 @@
 - 重复 JSON 对象键在 CLI 共享输入边界或解析器输入边界拒绝，不在本模块另造解析层。
 - M3 `read` 不让 `undetermined` 或字段未知进入决策；门禁原因固定 `not_ok/field_unknown/identity_ambiguous/incomplete/no_target`。`read` 不写库、不关闭发现、不推进已验证基线；合成 `actionable=true` 不提供发送授权。
 - `read_from_device` 必须在任何采集前调用 `DeviceGate.require_available()`；M4 共享门禁未交付时抛出 `DeviceGateUnavailable`，不得回退到 profile 内任务锁或真实子进程。
+- M4a `policy` 不读取根 `config.json`、设备、模型或网络；preview 只读固定 `tests/fixtures/policy-preview` 合成案例并纯渲染，不读黄金答案。`init`/`snapshot`/`restore` 的暂存路径以点前缀命名，活动包发现器不接纳；失败只清理本次登记路径，不按共享目录 glob 删除。
+- `restore_pack` 只接受 `prompts/local/history/<snapshot-id>` 与新的 local 直接子目录；`activity.assess_restore` 非 `stopped` 时以 `policy_changed` 拒绝，未知状态不得当已停止。M4a CLI 固定注入返回 unknown 的受控实现，不新增公开绕过参数。
 
 ## 四、测试
 
 ```powershell
-python -m unittest tests.test_doctor tests.test_sensor tests.test_sensor_store tests.test_read tests.test_screen
+python -m unittest tests.test_doctor tests.test_sensor tests.test_sensor_store tests.test_read tests.test_screen tests.test_policy_store
 ```
+
+`tests/test_policy_store.py` 覆盖六命令文件事务、四键外层、受控恢复拒绝、清单篡改、失败清理、日志阶段与零设备/网络/子进程。
 
 ## 五、维护要求
 
@@ -40,5 +45,5 @@ python -m unittest tests.test_doctor tests.test_sensor tests.test_sensor_store t
 
 ## 六、已知限制
 
-- 当前只有 `doctor`、`sense` 与 `read`；M4+ 的 `round.py`、`message.py`、`job.py` 等尚未创建。M1 `store init` 由 CLI 直接调用 SQLite 适配器，不经本层。
-- 真实设备模式只复用 `doctor` 判定；M2 `sense` 只读合成夹具，M3 `read` 只读合成输入且真实采集在共享门禁前拒绝。M3 真实导航/进入/滚动/视觉仍未实现。
+- 当前只有 `doctor`、`sense`、`read` 与 M4a `policy`；M4b 桥/eval、M5 动作与 M6 调度尚未创建。M1 `store init` 由 CLI 直接调用 SQLite 适配器，不经本层。
+- 真实设备模式只复用 `doctor` 判定；M2 `sense` 只读合成夹具，M3 `read` 只读合成输入且真实采集在共享门禁前拒绝；M4a `policy` 只在合成项目根/临时目录验证，生产 `restore` 固定受控拒绝，真实活动/未决检查、模型与设备未接入。

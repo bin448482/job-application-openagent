@@ -13,13 +13,18 @@ from typing import NoReturn
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
 from app.adapters.boss.list import load_and_parse_snapshot
 from app.adapters.boss.read import load_and_read_fixture
+from app.adapters.files.policy import FilePolicyRepository
 from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
 from app.ports.device import ProbeSnapshot
+from app.ports.policy import PolicyError
 from app.ports.store import StoreError
 from app.domain.json_input import load_json_object as _load_json_object
+from app.domain.policy import PolicyIssue, utc_now
 from app.process_log import ProcessLog, elapsed_ms
+from app.usecases import policy as policy_usecases
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
+from app.usecases.policy import RefusingPolicyActivity
 from app.usecases.read import build_read_payload
 from app.usecases.sense import build_sense_payload, persist_and_aggregate
 
@@ -96,11 +101,11 @@ class _UniqueStoreTrue(argparse.Action):
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """构造只含全局 --config、doctor 与 store init 的严格解析器。"""
+    """构造全局 --config 与 doctor/store/sense/read/policy 子命令的严格解析器。"""
     parser = _StrictArgumentParser(
         prog="python -m app",
         description=(
-            "M0 只读 doctor、M1 store init、M2 sense 与 M3 read；"
+            "M0 只读 doctor、M1 store init、M2 sense、M3 read 与 M4a policy；"
             "默认不连接设备、不调用网络或模型。"
         ),
         allow_abbrev=False,
@@ -195,6 +200,102 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         metavar="<相对文件>",
         help="读取 read manifest 及其同目录 profile/XML/像素文件。",
+    )
+    policy = subparsers.add_parser(
+        "policy",
+        allow_abbrev=False,
+        help="离线编辑、校验、预览与回滚本机策略包。",
+        description="只读本机策略文件；不连接设备、网络或模型。",
+    )
+    policy_commands = policy.add_subparsers(
+        dest="policy_command",
+        required=True,
+        parser_class=_StrictArgumentParser,
+    )
+    policy_init = policy_commands.add_parser(
+        "init",
+        allow_abbrev=False,
+        help="从公开示例创建 local 直接子目录策略包。",
+        description="目标存在不覆盖；失败不留可加载半包。",
+    )
+    policy_init.add_argument(
+        "--dest",
+        action=_UniqueStore,
+        required=True,
+        metavar="<prompts/local/名称>",
+        help="新的 local 直接 profile 子目录。",
+    )
+    policy_validate = policy_commands.add_parser(
+        "validate",
+        allow_abbrev=False,
+        help="校验活动包与 base 并输出有效限制和摘要。",
+        description="不调用设备、网络或模型，不修改包。",
+    )
+    policy_validate.add_argument(
+        "--pack",
+        action=_UniqueStore,
+        required=True,
+        metavar="<prompts/local/名称>",
+        help="local 直接活动包目录。",
+    )
+    policy_preview = policy_commands.add_parser(
+        "preview",
+        allow_abbrev=False,
+        help="用独立合成输入纯渲染决策投影。",
+        description="不调用桥、设备、网络或模型，不读取黄金答案。",
+    )
+    policy_preview.add_argument(
+        "--pack",
+        action=_UniqueStore,
+        required=True,
+        metavar="<prompts/local/名称>",
+        help="local 直接活动包目录。",
+    )
+    policy_preview.add_argument(
+        "--case",
+        action=_UniqueStore,
+        required=True,
+        metavar="<案例ID>",
+        help="固定 tests/fixtures/policy-preview 中的合成案例 ID。",
+    )
+    policy_commands.add_parser(
+        "list",
+        allow_abbrev=False,
+        help="列出活动包与 history 快照，不自动选最新。",
+        description="只输出相对路径、身份、摘要与有效性，不输出正文。",
+    )
+    policy_snapshot = policy_commands.add_parser(
+        "snapshot",
+        allow_abbrev=False,
+        help="把已校验活动包复制为 history 快照。",
+        description="复制前后摘要一致且清单完成后才发布成功。",
+    )
+    policy_snapshot.add_argument(
+        "--pack",
+        action=_UniqueStore,
+        required=True,
+        metavar="<prompts/local/名称>",
+        help="local 直接活动包目录。",
+    )
+    policy_restore = policy_commands.add_parser(
+        "restore",
+        allow_abbrev=False,
+        help="校验清单/快照/目标三值后恢复到新目录。",
+        description="M4a 生产缺可信停止证据时受控拒绝；不覆盖旧包。",
+    )
+    policy_restore.add_argument(
+        "--snapshot",
+        action=_UniqueStore,
+        required=True,
+        metavar="<prompts/local/history/快照ID>",
+        help="history 直接快照目录。",
+    )
+    policy_restore.add_argument(
+        "--dest",
+        action=_UniqueStore,
+        required=True,
+        metavar="<prompts/local/名称>",
+        help="新的 local 直接目标目录。",
     )
     return parser
 
@@ -675,6 +776,117 @@ def _run_read(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
     )
 
 
+def _policy_error_payload(
+    reason_code: str, issues: list[PolicyIssue] | None = None
+) -> dict[str, object]:
+    """构造策略四键失败对象，errors 项固定 file/field/line/code。"""
+    return {
+        "schema_version": 1,
+        "status": "failed",
+        "reason_code": reason_code,
+        "errors": [issue.to_dict() for issue in issues or []],
+    }
+
+
+def _policy_command_token(argv: list[str]) -> str | None:
+    """只按第一个位置参数识别命令位置，跳过全局 --config 及其值。"""
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token == "--config":
+            index += 2
+            continue
+        if token.startswith("--config="):
+            index += 1
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        return token
+    return None
+
+
+def _run_policy(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
+    """执行 policy 子命令，复用唯一日志器、correlation 与输出收尾。"""
+    operation = args.policy_command
+    stage_started = time.perf_counter()
+    log.record(stage="policy", operation=operation, result="started")
+    try:
+        repository = FilePolicyRepository(PROJECT_ROOT)
+        now = utc_now()
+        if operation == "init":
+            result = policy_usecases.init_pack(repository, args.dest, now=now)
+        elif operation == "validate":
+            result = policy_usecases.validate_pack(repository, args.pack, now=now)
+        elif operation == "preview":
+            result = policy_usecases.preview_pack(
+                repository, args.pack, args.case, now=now
+            )
+        elif operation == "list":
+            result = policy_usecases.list_packs(repository, now=now)
+        elif operation == "snapshot":
+            result = policy_usecases.snapshot_pack(repository, args.pack, now=now)
+        elif operation == "restore":
+            result = policy_usecases.restore_pack(
+                repository,
+                args.snapshot,
+                args.dest,
+                RefusingPolicyActivity(),
+                now=now,
+            )
+        else:
+            raise PolicyError("invalid_input")
+    except PolicyError as error:
+        result_status = (
+            "undetermined" if error.activity_state == "unknown" else "failed"
+        )
+        log.record(
+            stage="policy",
+            operation=operation,
+            result=result_status,
+            reason_code=error.reason_code,
+            error_category="policy",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _policy_error_payload(error.reason_code, error.issues),
+            2,
+            error.reason_code,
+            "policy",
+        )
+    except Exception:
+        log.record(
+            stage="policy",
+            operation=operation,
+            result="failed",
+            error_category="internal",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _policy_error_payload("policy_io_error"),
+            2,
+            "policy_io_error",
+            "internal",
+        )
+    log.record(
+        stage="policy",
+        operation=operation,
+        result="ok",
+        duration_ms=elapsed_ms(stage_started),
+    )
+    payload = {
+        "schema_version": 1,
+        "status": "ok",
+        "reason_code": None,
+        "result": result,
+    }
+    return _finalize_output(log, started, payload, 0, None, None)
+
+
 def _finish_output_failure(log: ProcessLog, started: float) -> int:
     """输出通道不可用时记录 output=failed，并安全完成 exit。"""
     log.record(
@@ -712,9 +924,11 @@ def main(
     *,
     process_log: ProcessLog | None = None,
 ) -> int:
-    """执行一次 doctor 调用并返回 0 或 2，不向 stderr 回显输入或异常。"""
+    """执行一次 CLI 命令并返回 0 或 2，不向 stderr 回显输入或异常。"""
     log = process_log if process_log is not None else ProcessLog()
     started = time.perf_counter()
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    policy_invocation = _policy_command_token(raw_argv) == "policy"
     log.record(stage="start", result="started")
 
     try:
@@ -726,10 +940,15 @@ def main(
             reason_code="invalid_input",
             error_category="argument",
         )
+        payload = (
+            _policy_error_payload("invalid_input")
+            if policy_invocation
+            else _error_payload("invalid_input")
+        )
         return _finalize_output(
             log,
             started,
-            _error_payload("invalid_input"),
+            payload,
             2,
             "invalid_input",
             "argument",
@@ -800,6 +1019,8 @@ def main(
         return _run_sense(log, started, args)
     if args.command == "read":
         return _run_read(log, started, args)
+    if args.command == "policy":
+        return _run_policy(log, started, args)
 
     mode = _requested_mode(args)
     if not _mode_is_valid(args):

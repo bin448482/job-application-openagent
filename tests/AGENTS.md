@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-存放 Python 标准库 `unittest` 测试与纯合成夹具。当前覆盖 M0 `doctor`、M1 状态库/租约、M2 合成传感器/落库与 M3 离线读取/像素/跨屏身份/ADB 采集模拟，不连接真实设备、不调用模型或网络、不读取根 `config.json`；M1/M2 测试只使用临时合成 SQLite 库与合成 XML，M3 还使用合成 RGBA 与 mock subprocess。
+存放 Python 标准库 `unittest` 测试与纯合成夹具。当前覆盖 M0 `doctor`、M1 状态库/租约、M2 合成传感器/落库、M3 离线读取/像素/跨屏身份/ADB 采集模拟与 M4a 决策契约/策略包/文件事务，不连接真实设备、不调用模型或网络、不读取根 `config.json`；M1/M2 测试只使用临时合成 SQLite 库与合成 XML，M3 还使用合成 RGBA 与 mock subprocess，M4a 使用临时项目根与固定合成 preview 案例。
 
 ## 二、当前文件与子目录
 
@@ -15,28 +15,33 @@
 - `test_sensor_store.py`：`sense` 正例两次重放、发现数 1 且不追加事件、终态同指纹不重开、终态旧键与不同 queued 新键、四类停止原因、未标定/坏输入/非法 Unicode/巨大区域不建库、parse 三态日志、聚合/停因成功与内部失败轨迹、日志降级、超大坐标 CLI 固定 JSON、仓储错误三键安全出口、严格参数、同一日志/ correlation 与零设备/网络/进程断言。
 - `test_read.py`：M3 五类 `read` CLI fixture、页面分类/unknown 门禁、职位卡规范化与重复身份、职位详情正文/截断、未读行身份与像素后备、阈值/分辨率/损坏/未知格式/显式零角标/像素 count、字段阶梯来源槽位/前级优先/冲突/failed/视觉默认关闭/人工/跨上下文自校验/派生结果篡改/保留证据伪造、会话身份与方向/重复正文与方向控件/稳定消息键/重复 ID 会话未知/后页重复传播/跨屏重叠/新增消息同会话核对/过期、公开解析入口标定/context/合并值类型/profile 校验、不支持标定边界零 pixel 事件/实际像素 started→failed、错页零 pixel 日志、定向核对重放/陈旧/错 profile、ReadResult 分派、M1 仓储拒绝非 UnreadSnapshot、undetermined 日志与门禁。
 - `test_screen.py`：M3 mock `subprocess.run` 验证 dump/cat/screencap 参数、`shell=False`、5 秒超时、单次 attempt、证据保存成功与失败 `adb_evidence` 日志、serial 前置拒绝、共享门禁先于采集与生产解析接线；不运行真实 ADB。
+- `test_policy_contract.py`：M4a Envelope/Decision 严格键/类型/词表/回显/证据/nonce 租约参数/2048 字节边界、嵌套重复 JSON 键、H 无规范化与四类摘要无自引用、64 KiB 渲染限额、职位五 intent、Markdown 围栏拒绝、披露追加后的码点/控制字符/联系方式/禁谈/事实复验。
+- `test_policy_pack.py`：TOML/Markdown 完整 schema、缺失/额外/类型/范围/词表、45 组合唯一覆盖、同档重复/跨档冲突/漏项/A 越权、硬下限、有效限制、通配限制、联系方式、三 md 语法、base/system 选择、developer/user 投影、RenderedRequest 摘要、preview 案例 schema。
+- `test_policy_store.py`：路径/普通文件/链接/BOM/NUL/大小/CRLF、init/validate/preview/list、编辑语气/分档/披露、snapshot 清单与复制摘要、restore 三值/base/清单/快照/目标篡改、生产受控拒绝、合成 stopped 正路径、失败清理、四键外层、参数错误区分、日志 stage/operation/结果与零设备/网络/子进程。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。
-- `fixtures/`：M0/M2/M3 纯合成输入夹具；见 `fixtures/AGENTS.md`。
+- `policy_helpers.py`：M4a 测试共用仓库原文读取、临时项目根复制、CLI 运行、合成包写入与有效 envelope/decision/租约截止构造；不调用模型、设备或网络。
+- `fixtures/`：M0/M2/M3/M4a 纯合成输入夹具；见 `fixtures/AGENTS.md`。
 
 ## 三、范围边界
 
 - 独立场景协调端维护 `tests/scenarios/` 与 `tests/test_offline_scenarios.py`，私有回归在 `tests/private_regression/`；本目录指南不为这些位置虚构内容，也不得由本 Task 创建或修改。
 - 负例由测试进程捕获预期退出码；验收命令本身必须退出 `0`。
-- 真实适配器只在测试中 mock `subprocess.run` 与 ctypes；不得实际运行 ADB 或检查真实 PID。`sense`/`read` 测试额外 mock/断言零设备、网络、子进程与任务租约写入口。
-- 测试不把被测输出反推成预期，也不使用真实姓名、序列号、聊天、数据库或绝对路径；`fixtures/sensor/expected.json` 与 `fixtures/read/expected.json` 只由测试读取。
+- 真实适配器只在测试中 mock `subprocess.run` 与 ctypes；不得实际运行 ADB 或检查真实 PID。`sense`/`read`/`policy` 测试额外 mock/断言零设备、网络、子进程与任务租约写入口；`policy` 用 `FilePolicyRepository` 在临时项目根运行，不写仓库 `prompts/local`。
+- 测试不把被测输出反推成预期，也不使用真实姓名、序列号、聊天、数据库或绝对路径；`fixtures/sensor/expected.json`、`fixtures/read/expected.json` 只由测试读取，`fixtures/policy-preview` 不含 expected/答案且是 preview 的生产公开资源，不能按临时目录删除。
 - 日志测试覆盖正常追加、白名单拒绝、IO 故障注入与 CLI 固定 `m0_process_log_degraded` 标记；fixture 模式只允许写被忽略日志，M1/M2 只写临时库。每次运行日志必须独立，显式路径也不得退回共享追加；CLI 默认生产日志保留在被忽略目录，测试不得按目录差集删除文件。
-- M1/M2/M3 反例必须显式断言失败原因与“任务/设备/事件全部回滚”“未创建业务库”或“未生成可发送身份/未通过门禁”，不能只断言抛出异常。
+- M1/M2/M3/M4a 反例必须显式断言失败原因与“任务/设备/事件全部回滚”“未创建业务库”“未生成可发送身份/未通过门禁”或“未留下半包/未覆盖旧包”，不能只断言抛出异常。
+- M4a 生产 `policy restore` 固定拒绝；正路径只对同一 `restore_pack` 用例注入 `_StoppedActivity` 合成证据，不新增公开 CLI 绕过参数，也不声称生产恢复已安全接线。
 
 ## 四、运行方式
 
 在项目根执行：
 
 ```powershell
-python -m unittest tests.test_doctor tests.test_store tests.test_migrations tests.test_sensor tests.test_sensor_store tests.test_process_log_concurrency tests.test_read tests.test_screen
+python -m unittest tests.test_doctor tests.test_store tests.test_migrations tests.test_sensor tests.test_sensor_store tests.test_process_log_concurrency tests.test_read tests.test_screen tests.test_policy_contract tests.test_policy_pack tests.test_policy_store
 npm test
 ```
 
-M0–M3 测试不依赖 Node；`npm test` 验证既有评测判据未被破坏。
+M0–M4a 测试不依赖 Node；`npm test` 验证既有评测判据未被破坏。
 
 ## 五、维护要求
 
@@ -48,7 +53,7 @@ M0–M3 测试不依赖 Node；`npm test` 验证既有评测判据未被破坏�
 
 ## 六、已知限制
 
-- 当前覆盖 M0–M3；M4+ 的决策、动作与调度测试尚未实现。
-- 真实 ADB、真实机型、窗口/截图输出与真实消息稳定标识未验证；M1 停止检查器只用注入值或 mock ctypes；M2 只用合成 XML/profile；M3 只用合成 XML/RGBA 与 mock subprocess。
+- 当前覆盖 M0–M4a；M4b 桥/eval、M4c 真实活动检查、M5+ 动作与调度测试尚未实现。
+- 真实 ADB、真实机型、窗口/截图输出与真实消息稳定标识未验证；M1 停止检查器只用注入值或 mock ctypes；M2 只用合成 XML/profile；M3 只用合成 XML/RGBA 与 mock subprocess；M4a 只用临时项目根、合成 base/包/preview 与注入停止证据。
 - 独立离线场景与私有回归测试不在本 Task 范围。
 - 日志测试验证的是本机 best-effort 行为，不代表磁盘故障时仍能保留完整日志。

@@ -1,0 +1,30 @@
+schema_version = 1
+profile_id = "default"
+locale = "zh-CN"
+apps = ["boss"]
+
+[disclosure]
+text = "个人开发AI助手"
+
+[limits]
+max_chars = 300
+reply_cooldown_seconds = 86400
+daily_sends = 10
+
+[tiers]
+A = []
+B = []
+C = ["interested.*", "rejected.*", "declined.*", "needs_human.*", "uncertain.*"]
+
+[forbidden]
+extra_topics = []
+
+[style]
+tone = "tone.md"
+phrase_bank = "phrase-bank.md"
+never_say = "never-say.md"
+
+[facts]
+allow_keys = []
+missing = "ask_user"
+conflict = "ask_user"

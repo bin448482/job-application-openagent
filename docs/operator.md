@@ -1,19 +1,20 @@
-# M0 只读探针、M1 状态库、M2 合成传感器与 M3 离线读取操作手册
+# M0 只读探针、M1 状态库、M2 合成传感器、M3 离线读取与 M4a 策略包操作手册
 
-> 文件用途：说明当前已实现的 M0 `doctor`、M1 `store init`、M2 `sense` 与 M3 `read` 能做什么、怎么运行、如何解读 JSON，以及在执行真实设备探针/采集前必须完成的确认与边界；M4 及以后的能力尚未实现。
+> 文件用途：说明当前已实现的 M0 `doctor`、M1 `store init`、M2 `sense`、M3 `read` 与 M4a `policy` 能做什么、怎么运行、如何解读 JSON，以及在执行真实设备探针/采集前必须完成的确认与边界；M4b 真实桥/eval、M4c 真实活动检查及 M5 以后的能力尚未实现。
 
 ## 一、当前可用范围
 
-已实现四条离线入口：
+已实现五组离线入口：
 
 - `doctor`：一次独立的只读探针，读取 ADB 设备清单或合成 fixture，并输出设备数量、所选逻辑别名、解锁状态和前台应用类别。
 - `store init`：创建或核验设计说明 §6 的本机 SQLite v1 状态库（五表、约束、索引与用户版本 1），不导入旧库。
 - `sense`：读取合成 sensor manifest/profile/XML，按 M2 四源规则解析、合并、落库候选并输出有序停止原因。
 - `read`：读取 M3 合成页面/职位/未读/会话 manifest/profile/XML 与可选合成像素标定，执行层级/像素/人工读取阶梯和跨屏合并，输出 `ReadResult` 与决策门禁；不连接业务库。
+- `policy`：M4a 策略包六命令，离线完成初始化、TOML/Markdown 校验、纯渲染预览、活动包/快照列表、快照与恢复；不连接设备、业务库、模型或网络。
 
-M0–M3 都不切换真实应用、不 dump 真实聊天、不截图、不点击、不发送、不调用网络或模型。`doctor --fixture` 只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite；`sense`/`read` 只读合成输入，`sense` 可写项目内合成 SQLite，`read` 不写业务库。每次运行创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl` 本机过程日志（见第十节），运行之间不共享追加。
+M0–M4a 都不切换真实应用、不 dump 真实聊天、不截图、不点击、不发送、不调用网络或模型。`doctor --fixture` 只读取合成 JSON，永远不启动子进程；`store init` 只写项目内本机 SQLite；`sense`/`read` 只读合成输入，`sense` 可写项目内合成 SQLite，`read` 不写业务库；`policy` 只读写项目内公开 base、示例、固定 preview 案例与本机 `prompts/local`。每次运行创建自己的被忽略 `data/logs/m0-process-<运行 UUID>.jsonl` 本机过程日志（见第十一节），运行之间不共享追加。
 
-M1 的仓储 API 已实现候选入库、任务租约、三态收敛与过期恢复；M2 `sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，**不** claim/start/finish、不消耗发现、不推进已读基线、不打开会话。M3 `read` 不调用仓储、不关闭发现、不写正文或 `verified` 基线；M4+ 的决策、动作与调度仍未实现。
+M1 的仓储 API 已实现候选入库、任务租约、三态收敛与过期恢复；M2 `sense` 只调用 `upsert_snapshot` 与 `unresolved_conversations`，**不** claim/start/finish、不消耗发现、不推进已读基线、不打开会话。M3 `read` 不调用仓储、不关闭发现、不写正文或 `verified` 基线；M4a `policy` 不调用桥、仓储或设备。M4b 真实桥/eval、M4c 真实活动检查、M5+ 的决策运行、动作与调度仍未实现。
 
 ## 二、离线 fixture 模式（默认推荐）
 
@@ -169,7 +170,74 @@ python -m app read --fixture tests/fixtures/read/conversation.json
 - 真实采集适配器 `AdbScreenReader` 只用参数数组、`shell=False`、5 秒超时、不重试，并保存本机证据；测试只 mock subprocess。真实 read 依赖共享 OS 设备门禁，M4 门禁未交付前 usecase 在任何子进程启动前拒绝，不能用 profile 内 primary 任务锁替代。本仓库未执行真实 ADB。
 - 详细字段/枚举/失败边界见 [M3 契约文档](BOSS直聘_M3读取阶梯与最小数据契约_20261124.md)。
 
-## 七、显式真实设备模式
+## 七、M4a 策略包离线编辑、校验、预览与回滚
+
+M4a 只交付策略包契约、公开 base/示例、确定性渲染和本机文件事务，不代表完整 M4、M4b 模型桥/eval、M4c 运行绑定或真实发送授权。所有命令从项目根执行，只接受项目内相对路径，显式 `--pack`/`--dest`/`--snapshot`，不自动读取根 `config.json`。
+
+### 7.1 初始化
+
+```powershell
+python -m app policy init --dest prompts/local/my-profile
+```
+
+- 只允许 `prompts/local/<profile>` 直接子目录；目录名必须符合 profile_id 词法，目标存在报 `policy_exists`，不覆盖。
+- 从 `prompts/examples/default/` 复制四载荷文件，只把唯一 `profile_id` 行改为目标目录名，并生成固定 `AGENTS.md`/`CLAUDE.md` 双指南。
+- 先在点前缀暂存目录写入并校验，再同卷改名发布；失败清理本次自有路径，不留可加载半包。
+
+### 7.2 编辑四个载荷
+
+非程序使用者只编辑以下文件：
+
+- `tone.md`：通用语气，普通非空文本。
+- `phrase-bank.md`：`## intent.sub_intent` 标题与 `- 通用短句`；可空文件。
+- `never-say.md`：`- 禁用字面表达`；可空文件，程序逐字匹配最终完整回复。
+- `pack.toml`：披露、字数/冷却/每日上限、A/B/C 分档、额外禁谈主题、三份 md 文件名、事实白名单。公开示例为全 C、空事实；只能按策略包说明 §3.2 的硬下限调整，A 档也不授予发送权限。
+
+不要写个人事实、真实聊天、联系方式、凭据或旧个人策略。四载荷及可选双指南须为普通文件；拒绝链接/junction、BOM、NUL、非 UTF-8、`pack.toml` >16 KiB、单份 md >32 KiB、四文件合计 >64 KiB、联系方式模式与非法 Markdown 语法。
+
+### 7.3 校验与预览
+
+```powershell
+python -m app policy validate --pack prompts/local/my-profile
+python -m app policy preview --pack prompts/local/my-profile --case policy-greeting
+```
+
+`validate` 读取两份公开 base 与活动包，输出 profile_id、base_version、base_hash、pack_hash、有效限制、展开后的 A/B/C、硬下限、来源相对文件/字段/行与文件列表。成功退出 `0`；坏包退出 `2`，`errors` 定位相对文件、字段与 1 起行号，未知键只定位父表，不回显原值。
+
+`preview` 只读固定 `tests/fixtures/policy-preview/` 的独立合成案例（发布清单固定包含 `policy-greeting`，另有 job/anomaly/injection），用当前 base/包实际构建 envelope 与 `system/developer/user` 三分区投影，输出完整渲染、有效限制、硬下限、来源与四类摘要。它不读取 `evals/cases.json`、参考 provider、expected、私有回归/留出答案，不调用桥、设备或模型。`tests/fixtures/policy-preview/` 是生产 preview 的公开运行资源，部署时必须携带，不能当作可删除的临时测试目录。
+
+- ENVELOPE 全部键必填、拒绝额外键；`nonce` 为规范 UUID，摘要为 64 位小写十六进制，完整 envelope 按规范 UTF-8 不超过 2048 字节，超限 `input_too_large`，不截断原文。
+- Decision 的前三个标识逐字回显；`evidence` 必须是 inbound 非空原样子串；`reply` 0–300 码点、只允许 LF；程序非空追加披露后复验完整码点数、联系方式、`never-say`、额外禁谈主题与有限事实来源模式，超限/冲突不截断。
+- 租约有效期不使用 Envelope 新字段：由调用方传入可信 `lease_expires_at`（M1 `Lease.expires_at`），`now>=lease_expires_at` 拒绝。M4a preview 不生成 Decision，也不证明模型语义安全。
+- 有限正则未命中不等于语义安全；v1 无独立 A 档前置判据时程序前置档位固定 C，最终档位再与包分档取最严格者。
+
+### 7.4 列表、快照与恢复
+
+```powershell
+python -m app policy list
+python -m app policy snapshot --pack prompts/local/my-profile
+python -m app policy restore --snapshot prompts/local/history/<snapshot-id> --dest prompts/local/my-profile-rollback
+```
+
+- `list` 分别列出 local 直接活动包与 history 快照的相对路径、profile_id、base/pack 摘要与有效性；不输出正文、不自动选最新，history 不是活动包，链接/坏包只标无效。
+- `snapshot` 把已校验四载荷与可选双指南复制到 `prompts/local/history/<UTC时间-随机后缀>/`，旁边写 `<snapshot-id>.local.json`；清单固定 `{schema_version,profile_id,source_pack,base_version,base_hash,pack_hash,created_at}`。复制前后 pack_hash 必须一致，清单与副本全部完成才发布成功；失败清理本次暂存/发布路径，不覆盖已有 ID。
+- `restore` 要求清单 `pack_hash`、快照重算 `pack_hash`、目标重算 `pack_hash` 三值完全相等，`base_hash` 与当前 base 相等、`base_version` 匹配，并保留原 `profile_id`；只恢复到新的 local 直接子目录，目标存在报 `policy_exists`，不覆盖原包。先写点前缀暂存并完整校验，再同卷改名；中断或失败不暴露半包。
+
+M4a 尚无 M4c 的真实运行/停止/未决租约检查，生产 CLI `restore` 固定受控拒绝为 `policy_changed`，`errors` 指向目标冲突，不把未知状态当 `stopped`、不用占位 `True`。只有测试可向同一生产 `restore_pack` 用例注入明确合成 `stopped` 证据，验证文件事务与三值一致；完整 CLI 安全接线与真实恢复须在 M4c 另行复验，没有公开 CLI 绕过参数。
+
+恢复后必须重新 `validate`、`preview`，以后还要按策略包说明 §5–6 重新 eval/取得运行授权；快照、公开示例通过或 preview 都不构成发送授权。恢复不重置同 profile 的额度/冷却，不回滚数据库、动作证据或已发送内容。
+
+### 7.5 策略错误外层
+
+`policy` 成功输出四键：
+
+```json
+{"schema_version":1,"status":"ok","reason_code":null,"result":{}}
+```
+
+失败也输出四键：`{schema_version:1,status:"failed",reason_code:<固定>,errors:[{file,field,line,code}]}`，`errors` 可为空；`policy` 参数形状错误同样使用四键，不改变其它命令的三键约定。原因码固定 `invalid_input/invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case`；字段诊断码固定 `missing/unknown_key/duplicate/type/range/vocabulary/coverage/safety_floor/encoding/path/size/sensitive/conflict/format`。`file` 仅为项目内相对路径或 null，`line` 为 1 起整数或 null；不得回显原值、可疑键名或底层异常。帮助退出 `0`，业务/校验/IO 失败退出 `2`。
+
+## 八、显式真实设备模式
 
 只有同时给出 `--device` 与 `--serial` 才启用真实探针：
 
@@ -187,7 +255,7 @@ python -m app doctor --device --serial <serial>
 
 按计划 M0–M3 没有业务设备循环；当前已实现 M0 探针、M1 本机状态库、M2 合成传感器与 M3 离线读取，真实探针只是一次独立调用。M3 起真实读取/采集必须纳入共享 OS 设备门禁与设备用例全局占用；M4 门禁未交付前 `read` 不提供真实 `--device` 入口，也不得与设备循环并用。当前仓库尚未对任何真实设备执行过该模式，M2 合成 profile 与 M3 合成读取都不代表真实版本已标定或真机只读一轮通过。
 
-## 八、输出与退出码
+## 九、输出与退出码
 
 `doctor` 业务结果固定包含以下七个键：
 
@@ -216,6 +284,8 @@ python -m app doctor --device --serial <serial>
 
 `read` 输出 `{schema_version:1,result:<ReadResult>,actionable:<bool>,gate_reason:<null|fixed>}`；`result` 与 M2 同样保留完整七键，`gate_reason` 仅 `not_ok/field_unknown/identity_ambiguous/incomplete/no_target`。`status=ok` 且 `actionable=true` 退出 `0`，其它退出 `2`；失败/未决的 `value` 必须为 null。`read` 不写库，因此没有仓储错误出口。
 
+`policy` 使用第七节 7.5 的四键成功/失败外层，与 doctor/sense/read 的三键安全对象不同；这是策略命令的明确扩展，调用方应按命令读取对应外层。
+
 参数、配置、夹具或 M1/M2 仓储错误不输出业务字段，而是输出三键安全对象：
 
 ```json
@@ -226,7 +296,7 @@ python -m app doctor --device --serial <serial>
 
 若业务 JSON 的 stdout 写入失败（`UnicodeError`/`OSError`），程序安全退出 `2`，不回显 traceback，也不要求再次写 JSON；日志会记录 `output=failed` 并以 `internal` 收尾。`--help` 仍由 argparse 直接处理、正常退出 `0`，不套用业务 JSON 契约。本机日志降级不是业务失败，退出码仍按业务结果；stderr 只多一行固定 `m0_process_log_degraded`。
 
-## 九、fixture 输入规则
+## 十、fixture 输入规则
 
 `--fixture` 指向的合成 JSON 必须恰好包含：
 
@@ -247,19 +317,19 @@ python -m app doctor --device --serial <serial>
 - 任何额外键、重复别名、不存在的选择、非法类型或读取失败都输出 `invalid_fixture`。
 - 配置与夹具在共享 JSON 输入边界拒绝顶层或嵌套对象的重复键；夹具还拒绝不可 UTF-8 编码的 `alias`/`selected_alias`（例如孤立代理字符），按 `invalid_fixture` 安全退出且不回显键值。
 
-M2 `sense` 的合成输入另用 `tests/fixtures/sensor/` 的 manifest/profile/XML 契约，不复用 M0 doctor 夹具。manifest 引用只能指向同夹具目录内的既有 `profile.json`/XML；解析器不读取仅供测试的 `expected.json`。M3 `read` 另用 `tests/fixtures/read/` 的 manifest/profile/XML 与可选像素标定，同样不读取 expected；它不消费 M2 sensor 夹具，也不把合成 profile 升级成真实标定。M1 的 ReadResult/Evidence 由测试或 M2 构造，M1 没有 CLI 文件入口，不要把 M0 fixture 形状当作 M1/M2/M3 快照输入。
+M2 `sense` 的合成输入另用 `tests/fixtures/sensor/` 的 manifest/profile/XML 契约，不复用 M0 doctor 夹具。manifest 引用只能指向同夹具目录内的既有 `profile.json`/XML；解析器不读取仅供测试的 `expected.json`。M3 `read` 另用 `tests/fixtures/read/` 的 manifest/profile/XML 与可选像素标定，同样不读取 expected；它不消费 M2 sensor 夹具，也不把合成 profile 升级成真实标定。M4a `policy preview` 固定读取 `tests/fixtures/policy-preview/<case>.json`，案例 schema 见第 7.3 节和目录指南；该目录是生产公开资源，不含期望/答案，必须随部署携带。M1 的 ReadResult/Evidence 由测试或 M2 构造，M1 没有 CLI 文件入口，不要把 M0 fixture 形状当作 M1/M2/M3 快照输入。
 
-## 十、本机过程日志与复核
+## 十一、本机过程日志与复核
 
-每次 `python -m app doctor`、`store init`、`sense` 或 `read` 运行都会创建一个独立的 `data/logs/m0-process-<运行 UUID>.jsonl` JSON Lines 过程日志；不同进程/命令不共享同一个追加文件，避免并发丢行或互相覆盖。该目录被根 `.gitignore` 的 `/data/**` 覆盖，不提交 Git；不调用网络、不启动后台任务，也不写远程日志。旧的共享 `m0-process.jsonl` 若存在仅为历史文件，当前代码不再写入。
+每次 `python -m app doctor`、`store init`、`sense`、`read` 或 `policy` 运行都会创建一个独立的 `data/logs/m0-process-<运行 UUID>.jsonl` JSON Lines 过程日志；不同进程/命令不共享同一个追加文件，避免并发丢行或互相覆盖。该目录被根 `.gitignore` 的 `/data/**` 覆盖，不提交 Git；不调用网络、不启动后台任务，也不写远程日志。旧的共享 `m0-process.jsonl` 若存在仅为历史文件，当前代码不再写入。
 
 日志器对显式 `ProcessLog(path=...)` 同样采用隔离语义：传入路径只作为同目录命名基础（目录或文件均可），实际文件名由唯一日志器追加运行 UUID 后决定；不会退回共享追加。需要读取时使用日志器给出的实际路径，而不是假定等于传入路径。
 
 每行固定包含 `schema_version/ts/correlation_id/stage/operation/result/reason_code/error_category/duration_ms/command/exit_code/mode/config_source/device_count`：
 
-- `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/sense/read/adb_hierarchy/adb_screen/adb_evidence/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、ADB 命令与证据保存、sense 解析、M3 read 解析/像素/合并/门禁、业务判定、store 初始化/核验与 upsert/unresolved、输出和出口。
-- `operation` 仅在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，`sense` 阶段取 `parse/aggregate/stop_reason`，`read` 阶段取 `load/page/job_list/job_detail/unread/conversation/merge/pixel/gate`，其它阶段为 `null`；公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时；`sense/parse`、`read/load` 与各 read 操作按 `ReadResult.status` 记 `ok/undetermined/failed`，内部异常记 `failed/error_category=internal` 后继续公共安全出口；不记 PID/host/nonce/键/正文/XML/SQL/异常。
-- `result` 固定为 `started/ok/undetermined/failed`；`reason_code` 沿用计划词表（含 `identity_ambiguous`、字段未知/像素原因与 gate 原因），不新增业务原因；`error_category` 固定为 `argument/config/fixture/probe/business/store/read/pixel/gate/evidence/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
+- `stage` 固定为 `start/arguments/config/mode/fixture/probe/adb_devices/adb_window/decision/store/sense/read/policy/adb_hierarchy/adb_screen/adb_evidence/output/exit`，可用同一 `correlation_id` 串联参数、配置、fixture/探针、ADB 命令与证据保存、sense 解析、M3 read 解析/像素/合并/门禁、M4a policy 文件阶段、业务判定、store 初始化/核验与 upsert/unresolved、输出和出口。
+- `operation` 仅在 `store` 阶段取 `init/open_store/upsert_snapshot/claim/start/renew/finish/recover/unresolved_conversations`，`sense` 阶段取 `parse/aggregate/stop_reason`，`read` 阶段取 `load/page/job_list/job_detail/unread/conversation/merge/pixel/gate`，`policy` 阶段取 `init/validate/preview/list/snapshot/restore`，其它阶段为 `null`；公开仓储操作先记 `started`，再记 `ok` 或带固定原因码/`error_category=store` 的 `failed`，并写耗时；`sense/parse`、`read/load` 与各 read 操作按 `ReadResult.status` 记 `ok/undetermined/failed`，内部异常记 `failed/error_category=internal` 后继续公共安全出口；`policy` 每次先记 `started`，再记 `ok` 或带固定策略原因/`error_category=policy` 的 `failed`，恢复活动状态未知记 `undetermined`，并写耗时；不记 PID/host/nonce/键/正文/XML/SQL/文件内容/路径/异常。
+- `result` 固定为 `started/ok/undetermined/failed`；`reason_code` 沿用计划词表（含 `identity_ambiguous`、字段未知/像素原因与 gate 原因）与 M4a `invalid_policy/policy_exists/policy_io_error/policy_changed/unknown_case`；`error_category` 固定为 `argument/config/fixture/probe/business/store/sense/read/policy/pixel/gate/evidence/internal/adb_missing/adb_timeout/adb_nonzero/adb_oserror`。
 - `command` 只写 `adb_devices/adb_window/adb_hierarchy_dump/adb_hierarchy_cat/adb_screencap`；每次命令先记 `started`，完成后再记 `ok` 或固定失败类别。
 - `store` 阶段先记 `started`，再记 `ok` 或带固定仓储原因与 `error_category=store` 的 `failed`；非预期异常只把失败事件记为 `reason_code=null`/`error_category=internal`，业务 stdout 仍为 `store_io_error`/退出 `2`，最终 exit 分类与失败事件分类分别记录、互不替代。不写数据库路径。
 - `output` 只为 JSON 收尾：写出成功记 `ok`，写出失败记 `failed`（`error_category=internal`）并安全退出 `2`；不能据此假称 JSON 已输出。
@@ -280,17 +350,17 @@ git check-ignore data/logs/m0-process.jsonl data/runtime/m1-acceptance.sqlite3 d
 Select-String -Path data/logs/m0-process-*.jsonl -Pattern '"correlation_id":"<UUID>"'
 ```
 
-stdout 不包含 `correlation_id`。按单次运行核对时，优先读取该次独立的 `start`→`exit` 文件；同一 `correlation_id` 不应跨两个运行文件。fixture 模式仍保持零设备、零网络、零子进程和零业务库；`store init` 只写项目内本机 SQLite。日志按运行累积且没有自动轮转/保留期，需要时由使用者在本机清理旧文件。
+stdout 不包含 `correlation_id`。按单次运行核对时，优先读取该次独立的 `start`→`exit` 文件；同一 `correlation_id` 不应跨两个运行文件。fixture 模式仍保持零设备、零网络、零子进程和零业务库；`store init` 只写项目内本机 SQLite；`policy` 只写项目内 `prompts/local`/history 与本次日志。日志按运行累积且没有自动轮转/保留期，需要时由使用者在本机清理旧文件。
 
-## 十一、尚未实现
+## 十二、尚未实现
 
-M3 离线读取（`read`）已实现；M4 的决策契约、M5 的动作护栏以及 M6–M8 的调度、清理和灰度都尚未实现。M1 的完整任务租约 API 已实现，但 M2 `sense` 只调用 upsert 与未关闭会话查询，M3 `read` 不调用仓储、不 claim/start/finish、不关闭发现。真实读取、进入会话、滚动、返回与截图仍依赖后续共享设备门禁和本轮确认；不要用 M0 的 fixture 结果、M1 的合成库、M2 的合成 profile 或 M3 的合成读取推断真实设备支持范围，也不要把合成候选、探针成功、读取 actionable 或 `store init` 成功当作发送授权或真实版本已标定。
+M3 离线读取（`read`）与 M4a 策略包六命令（`policy`）已实现；M4b 真实桥/eval、M4c 真实活动/未决检查与完整 CLI 安全恢复、M5 的动作护栏以及 M6–M8 的调度、清理和灰度都尚未实现。M1 的完整任务租约 API 已实现，但 M2 `sense` 只调用 upsert 与未关闭会话查询，M3 `read` 不调用仓储、不 claim/start/finish、不关闭发现。M4a `policy preview` 不生成 Decision、不调用模型；生产 `policy restore` 固定受控拒绝。真实读取、进入会话、滚动、返回与截图仍依赖后续共享设备门禁和本轮确认；不要用 M0 的 fixture 结果、M1 的合成库、M2 的合成 profile、M3 的合成读取或 M4a 的 preview 推断真实设备/模型支持范围，也不要把合成候选、探针成功、读取 actionable、`store init` 成功、策略 validate/preview 或快照当作发送授权或真实版本已标定。
 
-## 十二、安全与隐私
+## 十三、安全与隐私
 
 - fixture 只用合成别名与状态，不放真实序列号、聊天、联系人、公司、截图或绝对路径。
 - 真实模式输出不含真实序列号、窗口原文或异常命令参数。
-- M1 只保存摘要、键、状态与白名单事件，不保存聊天正文；M2 只解析合成 XML，日志不写 XML、身份键或正文。M3 `read` 的会话/职位正文只存在内存与合成 CLI 数据区，不写日志、事件或数据库；像素标定与原始截图只在合成测试与本机证据目录使用。数据库、事件、日志与截图只在本机保存，不提交 Git。
+- M1 只保存摘要、键、状态与白名单事件，不保存聊天正文；M2 只解析合成 XML，日志不写 XML、身份键或正文。M3 `read` 的会话/职位正文只存在内存与合成 CLI 数据区，不写日志、事件或数据库；像素标定与原始截图只在合成测试与本机证据目录使用。M4a `policy` 只读写四载荷、双指南、history 与固定 preview 案例；日志不写文件正文、绝对路径或异常，preview/快照输出属于本机数据，不提交公开报告。数据库、事件、日志与截图只在本机保存，不提交 Git。
 - 不读取根 `config.json`、环境文件、凭据或个人事实。
 - 设备、日志、截图和评测产物只在本机保存，不提交 Git。
 - 发现疑似敏感信息时按根 `AGENTS.md` 的“开源项目敏感信息告知”处理，不在对话或公开材料中复述原值。
