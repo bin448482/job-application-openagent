@@ -8,8 +8,8 @@
 
 ## 二、当前结构
 
-- `extract.py`：标准库工具（当前工具版本 `0.3.0`）。受控发现、路径/链接/重叠/覆盖防护、XML 白名单重构与异常合成代表、日志固定类别时序与失败窗口、安全回执、provenance、本机校验器。预算命中（单文件/深度/节点/样本/扫描）会进入 `xml.truncated`/总 `truncated` 并给出 `partial`；读取期间 XML 或日志大小/mtime 变化、日志边界/链接失败按源改变 `error`。验证器有界枚举文件与目录、拒绝未知文件/空目录/链接、解析前拒绝 DTD/实体/其他声明/注释/CDATA/PI，并重算状态与安全语义；有输出但无 XML 覆盖（如仅日志窗口）为 `partial`，`log_missing`/`no_failure_evidence` 为允许 `ok` 的软观察原因。
-- `test_private_regression.py`：78 项 `unittest` 纯合成自测（上一轮 69 项判据全部保留 + 本轮复审新增 9 项），覆盖拓扑递归、属性/文本白名单、DTD/实体/编码/超限/深度/节点异常、注释/处理指令、Unicode 元素名解析前预算与 Unicode 属性值、路径逃逸、junction 祖先与子目录、输出重叠/覆盖/未忽略、源不变与 XML/日志读取期间增长/缩短/替换、日志 pre-open 复核、去重/抽样、provenance 对齐与绝对根行为、时序感知去重、长簇分片与尾部类别、物理行上限、NaN/Infinity、固定时序类别、缺时钟/乱序/截断、旧 oracle 不可信、stdout/异常泄露、只含 `needs_label`、XML 字符正文、未知自由字段、验证器拒绝重复 manifest/代表、未知文件/空目录/链接、文件与目录总量预算、状态组合矩阵、矛盾 status 与坏产物。
+- `extract.py`：标准库工具（当前工具版本 `0.4.0`）。受控发现、路径/链接/重叠/覆盖防护、XML 白名单重构与异常合成代表、日志固定类别时序与失败窗口、安全回执、provenance、本机校验器。预算命中（单文件/深度/节点/样本/扫描）会进入 `xml.truncated`/总 `truncated` 并给出 `partial`；读取期间 XML 或日志大小/mtime 变化、日志边界/链接失败按源改变 `error`。验证器用 `contextlib.closing(os.scandir(...))` 流式枚举批次条目，超文件/目录/深度上限立即停止并关闭迭代器；拒绝未知文件/空目录/链接、解析前拒绝 DTD/实体/其他声明/注释/CDATA/PI，并重算状态与安全语义；有输出但无 XML 覆盖（如仅日志窗口）为 `partial`，`log_missing`/`no_failure_evidence` 为允许 `ok` 的软观察原因。
+- `test_private_regression.py`：81 项 `unittest` 纯合成自测（上一轮 78 项判据全部保留 + 本轮复审新增 3 项），覆盖拓扑递归、属性/文本白名单、DTD/实体/编码/超限/深度/节点异常、注释/处理指令、Unicode 元素名解析前预算与 Unicode 属性值、路径逃逸、junction 祖先与子目录、输出重叠/覆盖/未忽略、源不变与 XML/日志读取期间增长/缩短/替换、日志 pre-open 复核、去重/抽样、provenance 对齐与绝对根行为、时序感知去重、长簇分片与尾部类别、物理行上限、NaN/Infinity、固定时序类别、缺时钟/乱序/截断、旧 oracle 不可信、stdout/异常泄露、只含 `needs_label`、XML 字符正文、未知自由字段、验证器拒绝重复 manifest/代表、未知文件/空目录/链接、文件与目录总量预算、流式枚举实际消费数/close/单目录超限/目录超限/深度 4-5、状态组合矩阵、矛盾 status 与坏产物。
 - `README.md`：公开使用说明、预算、状态/覆盖原因/安全语义、输出 schema、固定类别与限制。
 - `SELF_REVIEW.md`：R1 数据边界/脱敏、R2 故障输入/抽样限制/独立 expected、R3 较早版本真实执行的作者声明、上一轮整改 R4–R6，以及本轮复审返修 R7–R9 作者自审；旧 R3 明确未在新实现重跑、不能为当前实现盖章，各轮记录问题矩阵、修订、合成复验与未测边界。
 - `AGENTS.md`：本文件，目录索引与维护要求。
@@ -40,7 +40,7 @@ python tests/private_regression/extract.py --validate "<main-repo>/data/private-
 - 发现/读取/校验全程有界；命中上限在回执标记 `truncated`/`partial`，不静默继续。XML 单文件/深度/节点命中保持真实故障计数，同时置 `xml.truncated=true` 并给出 `partial`；发现阶段已知超限不误报源改变。
 - 源在抽取期间大小、mtime 或读取窗口变化，以及日志边界/链接复核失败时，工具以 `error`/退出码 2 结束；日志在发现阶段保存 stat，并在 pre-open、读取后、结束复核；结束复核覆盖全部已发现候选（未读候选仅 stat 范围）与已读 XML/完整日志的哈希，不能把未复核候选、读取失败候选或发现后被替换的日志当成已证明未变。
 - provenance 只写本机 Git 忽略批次，`not_for_model=true`，实际保存绝对 `source_root` 与选中样本相对路径/大小/SHA-256；该绝对根不进入 stdout、回执或 manifest，公开文档不写实际值。
-- 本机验证器有界枚举全批次目录与文件（文件 ≤256、子目录 ≤16、深度 ≤4），拒绝未知顶层/嵌套/非 JSON 文件、未知空目录、链接与非普通文件；派生 XML 解析前拒绝 DTD/实体/其他声明/注释/CDATA/PI；manifest 的 case_id 与代表 fault 必须唯一；验证器重算状态、输出、截断与可复核安全项，不把回执布尔当作独立测量。`log_missing`/`no_failure_evidence` 是软观察原因，`ok` 允许；有输出但无 XML 覆盖、预算/读取缺口为 `partial`。
+- 本机验证器以流式 `os.scandir` 枚举全批次目录与文件（文件 ≤256、子目录 ≤16、深度 ≤4），逐个条目即时检查，超限立即停止并关闭迭代器，不先完整物化目录；拒绝未知顶层/嵌套/非 JSON 文件、未知空目录、链接与非普通文件。源发现 `_walk_xml` 仍使用 `os.walk` 逐目录列表，是本轮已披露残差，不在该流式保证内。派生 XML 解析前拒绝 DTD/实体/其他声明/注释/CDATA/PI；manifest 的 case_id 与代表 fault 必须唯一；验证器重算状态、输出、截断与可复核安全项，不把回执布尔当作独立测量。`log_missing`/`no_failure_evidence` 是软观察原因，`ok` 允许；有输出但无 XML 覆盖、预算/读取缺口为 `partial`。
 - 安全布尔区分动态可复核项（源/输出 Git/内容扫描等）与构造性不变量（新目录、无重叠、无 DTD、stdout 脱敏等）；`valid` 只代表当前批次符合本机合同，不证明历史来源未变或真实业务正确。
 - 不新增第三方依赖；Python >=3.13 标准库。
 
@@ -56,7 +56,7 @@ python tests/private_regression/extract.py --validate "<main-repo>/data/private-
 - 相对时间只在窗口内有效；缺失/乱序/截断只标记，不修复。
 - 日志被预算截断时只做大小/时间完整性校验，并标记 `log_integrity_scope=prefix`；发现期 stat 不能消除检查与 `open` 之间的真实并发竞态。
 - XML 解析前预算使用标签无关词法粗扫，支持 Unicode 元素名但不是完整 XML Name 校验或安全解析器；正常 Unicode 属性值仍按白名单合成。
-- 验证器对 XML 的自由文本通道采用解析前词法拒绝，对目录/文件总量有界，但不等于完整 XML 安全审计或通用平台；真实 ACL/重解析点矩阵与并发竞态未测。
+- 验证器对批次目录采用流式枚举并在上限立即停止/关闭；源发现 `_walk_xml` 仍可能按 `os.walk` 逐目录物化，属于已披露未改残差。验证器对 XML 的自由文本通道采用解析前词法拒绝，对目录/文件总量有界，但不等于完整 XML 安全审计或通用平台；真实 ACL/重解析点矩阵与并发竞态未测。
 - 旧 R3 真实只读结论属较早版本作者声明，新实现未复验；`valid` 与合成测试绿灯都不构成独立审核、真实数据覆盖或业务 PASS。
 - 不验证 SQLite 持久化、跨会话检索、设备执行或真实业务正确性。
 

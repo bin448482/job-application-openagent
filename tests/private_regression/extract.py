@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -28,7 +29,7 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 TOOL_NAME = "private-regression-extractor"
-TOOL_VERSION = "0.3.0"
+TOOL_VERSION = "0.4.0"
 SCHEMA_RECEIPT = "private-regression-safe-receipt/v1"
 SCHEMA_VALIDATION = "private-regression-validation/v1"
 SCHEMA_MANIFEST = "private-regression-manifest/v1"
@@ -2268,7 +2269,7 @@ def _check_provenance_structure(
 
 
 def _enumerate_batch_entries(directory: Path) -> tuple[set[str], set[str]]:
-    """有界枚举批次内全部目录/文件，拒绝链接/非普通文件并返回 POSIX 相对路径。"""
+    """流式枚举批次目录/文件，超限立即停止并关闭当前迭代器。"""
     files: set[str] = set()
     dirs: set[str] = set()
     stack: list[tuple[Path, int]] = [(directory, 0)]
@@ -2277,25 +2278,25 @@ def _enumerate_batch_entries(directory: Path) -> tuple[set[str], set[str]]:
         if depth > MAX_VALIDATE_DEPTH:
             raise ExtractErrorSize()
         try:
-            entries = list(os.scandir(current))
+            with contextlib.closing(os.scandir(current)) as entries:
+                for entry in entries:
+                    path = Path(entry.path)
+                    if _is_link_like(path):
+                        raise ExtractionError("symlink_rejected")
+                    relative = path.relative_to(directory).as_posix()
+                    if entry.is_dir(follow_symlinks=False):
+                        dirs.add(relative)
+                        if len(dirs) > MAX_VALIDATE_DIRS:
+                            raise ExtractErrorSize()
+                        stack.append((path, depth + 1))
+                    elif entry.is_file(follow_symlinks=False):
+                        files.add(relative)
+                        if len(files) > MAX_VALIDATE_FILES:
+                            raise ExtractErrorSize()
+                    else:
+                        raise ExtractionError("symlink_rejected")
         except OSError as exc:
             raise ExtractionError("internal_error") from exc
-        for entry in entries:
-            path = Path(entry.path)
-            if _is_link_like(path):
-                raise ExtractionError("symlink_rejected")
-            relative = path.relative_to(directory).as_posix()
-            if entry.is_dir(follow_symlinks=False):
-                dirs.add(relative)
-                if len(dirs) > MAX_VALIDATE_DIRS:
-                    raise ExtractErrorSize()
-                stack.append((path, depth + 1))
-            elif entry.is_file(follow_symlinks=False):
-                files.add(relative)
-                if len(files) > MAX_VALIDATE_FILES:
-                    raise ExtractErrorSize()
-            else:
-                raise ExtractionError("symlink_rejected")
     return files, dirs
 
 

@@ -84,6 +84,47 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+class _CountingScandir:
+    """包装真实 scandir，记录实际产出条目数与被关闭状态。"""
+
+    def __init__(self, real: object) -> None:
+        """保存底层迭代器并初始化计数。"""
+        self._real = real
+        self.yielded = 0
+        self.closed = False
+
+    def __iter__(self) -> "_CountingScandir":
+        """返回自身作为迭代器。"""
+        return self
+
+    def __next__(self) -> object:
+        """读取下一个条目并累计实际消费数。"""
+        entry = next(self._real)
+        self.yielded += 1
+        return entry
+
+    def close(self) -> None:
+        """关闭底层 scandir 迭代器并记录。"""
+        if not self.closed:
+            self.closed = True
+            self._real.close()
+
+
+def _scandir_factory() -> tuple[object, list[tuple[Path, _CountingScandir]]]:
+    """返回可替换 os.scandir 的计数工厂与探针列表。"""
+    real = extract.os.scandir
+    probes: list[tuple[Path, _CountingScandir]] = []
+
+    def factory(path: Path) -> _CountingScandir:
+        """为一次 scandir 调用创建计数包装。"""
+        probe = _CountingScandir(real(path))
+        probes.append((Path(path), probe))
+        return probe
+
+    return factory, probes
+
+
+
 class PrivateRegressionTests(unittest.TestCase):
     """覆盖白名单、异常输入、路径/预算、时序、验证器与泄露边界。"""
 
@@ -1581,6 +1622,92 @@ class PrivateRegressionTests(unittest.TestCase):
             result = extract.validate_batch(batch)
         self.assertEqual(result["status"], "invalid")
         self.assertFalse(result["checks"]["batch_layout_ok"])
+
+    # ---------- f211f83 复审阻塞：流式枚举、立即停止与关闭 ----------
+
+    def test_file_cap_stops_streaming_at_production_threshold(self) -> None:
+        """单目录 300 额外文件时在 256 文件上限处停止，不消费全部条目。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        for index in range(300):
+            (batch / f"extra-{index:03d}.txt").write_text("x", encoding="utf-8")
+        total_entries = sum(1 for _ in extract.os.scandir(batch))
+        self.assertGreater(total_entries, extract.MAX_VALIDATE_FILES)
+        factory, probes = _scandir_factory()
+        with mock.patch.object(extract.os, "scandir", side_effect=factory):
+            result = extract.validate_batch(batch)
+        yielded = sum(probe.yielded for _, probe in probes)
+        self.assertEqual(result["status"], "invalid")
+        self.assertFalse(result["checks"]["batch_layout_ok"])
+        self.assertLess(yielded, total_entries)
+        self.assertLessEqual(
+            yielded, extract.MAX_VALIDATE_FILES + extract.MAX_VALIDATE_DIRS + 1
+        )
+        self.assertTrue(all(probe.closed for _, probe in probes))
+
+    def test_directory_cap_stops_streaming_immediately(self) -> None:
+        """目录上限命中后立即停止，不扫完大量额外空目录。"""
+        repo = _make_repo(self.tmp)
+        source = _make_source(self.tmp)
+        (source / "screenshots" / "a.xml").write_text(
+            _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+        )
+        receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+        batch = repo / "data" / "private-regression" / receipt["batch_id"]
+        for index in range(100):
+            (batch / f"extra-dir-{index:03d}").mkdir()
+        total_entries = sum(1 for _ in extract.os.scandir(batch))
+        factory, probes = _scandir_factory()
+        with mock.patch.object(extract, "MAX_VALIDATE_DIRS", 4):
+            with mock.patch.object(extract.os, "scandir", side_effect=factory):
+                result = extract.validate_batch(batch)
+        yielded = sum(probe.yielded for _, probe in probes)
+        self.assertEqual(result["status"], "invalid")
+        self.assertLess(yielded, total_entries)
+        self.assertLessEqual(yielded, 5 + 3)
+        self.assertTrue(all(probe.closed for _, probe in probes))
+
+    def test_depth_cap_does_not_scan_deeper_directory(self) -> None:
+        """深度 4 允许扫描自身，深度 5 在上限检查处停止且不扫描更深目录。"""
+        def build(name: str, levels: int) -> Path:
+            """创建一个只含 XML 与指定深度目录链的批次。"""
+            root = self.tmp / name
+            root.mkdir()
+            repo = _make_repo(root)
+            source = _make_source(root)
+            (source / "screenshots" / "a.xml").write_text(
+                _xml(_node(**{"class": "android.view.View"})), encoding="utf-8"
+            )
+            receipt = extract.run_extraction(source, repo / "data" / "private-regression")
+            batch = repo / "data" / "private-regression" / receipt["batch_id"]
+            current = batch
+            for index in range(levels):
+                current = current / f"d{index}"
+                current.mkdir()
+            return batch
+
+        depth4 = build("depth-four", 4)
+        factory, probes = _scandir_factory()
+        with mock.patch.object(extract.os, "scandir", side_effect=factory):
+            result4 = extract.validate_batch(depth4)
+        scanned4 = {path for path, _ in probes}
+        self.assertEqual(result4["status"], "invalid")
+        self.assertIn(depth4 / "d0" / "d1" / "d2" / "d3", scanned4)
+        self.assertTrue(all(probe.closed for _, probe in probes))
+
+        depth5 = build("depth-five", 5)
+        factory, probes = _scandir_factory()
+        with mock.patch.object(extract.os, "scandir", side_effect=factory):
+            result5 = extract.validate_batch(depth5)
+        scanned5 = {path for path, _ in probes}
+        self.assertEqual(result5["status"], "invalid")
+        self.assertNotIn(depth5 / "d0" / "d1" / "d2" / "d3" / "d4", scanned5)
+        self.assertTrue(all(probe.closed for _, probe in probes))
 
 
 if __name__ == "__main__":
