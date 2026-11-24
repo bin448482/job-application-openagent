@@ -153,5 +153,6 @@ def read_from_device(
     if not callable(parse_hierarchy):
         raise ValueError("parser is invalid")
     gate.require_available()
+    gate.verify()
     capture = screen.dump_hierarchy(serial)
     return parse_hierarchy(capture.xml_text)

@@ -21,6 +21,10 @@ class EvalStorePort(Protocol):
         """仅在全部公开契约通过时写出绑定摘要的本机验收凭证。"""
         ...
 
+    def read_acceptance(self, rel_path: str) -> dict[str, object] | None:
+        """只读本机 data/evals 运行目录内的验收凭证；不存在返回 None。"""
+        ...
+
     def read_holdout_registry(self) -> dict[str, object]:
         """读取本机留出登记；不存在时返回空登记对象。"""
         ...

@@ -2,12 +2,16 @@
 
 ## 一、目录用途
 
-实现 `app/ports/store.py` 声明的 M1 本机 SQLite 仓储：空库 v1 建库/核验、候选入库、全局 primary 设备租约、任务 start/renew/finish/recover 与只读未关闭会话查询。不连接设备、不调用模型、不读取旧库。
+实现 `app/ports/store.py` 声明的 M1 本机 SQLite 仓储与 M4c profile 事实库、固定 OS 共享设备门禁、restore 活动检查：空库 v1 建库/核验、候选入库、全局 primary 设备租约、任务 start/renew/finish/recover 与只读未关闭会话查询。不连接设备、不调用模型、不读取旧库。
 
 ## 二、当前文件
 
 - `__init__.py`：声明 SQLite 适配器包。
 - `schema.py`：五张 STRICT 表与五个索引的确定性 DDL；`initialize_database` 在单个 `BEGIN IMMEDIATE` 事务内建库或核验，任一步失败回滚；`connect_database` 打开现有 v1 库并设置 `foreign_keys=ON`、`busy_timeout=5000`；`verify_v1` 比较 `user_version`、对象集合与规范化 SQL，缺失、额外或篡改均报 `db_version_unsupported`。
+- `profile_schema.py`：M4c profile 库完整对象集 = 复用 `schema.py` 的 v1 五表/索引 DDL + `profile_meta/profile_facts/profile_fact_events` 与索引；`initialize_profile_database` 在写事务内创建或核验完整结构与绑定 ID，`connect_profile_database` 拒绝旧 v1 库/篡改/身份不符；不复用 `verify_v1` 的精确五表断言，也不改 M1 五表合同或虚构 1→2 迁移。
+- `profile_store.py`：`SqliteProfileStore` 固定 `data/runtime/profiles/<profile_id>/runtime.sqlite3`；`set_fact` 生成来源 ID、`replace` 显式作废旧 active、非 replace 允许冲突待办；`revoke_fact` 保留历史，`forget_fact` 删除事实行并只写无值来源审计；`active_fact_rows`/`source_ids_for_key`/`pending_activity` 只读。值只进本机库/交互输出，不写日志或错误。
+- `device_gate.py`：`SharedDeviceGate` 固定 Windows `LOCALAPPDATA/job-application-openagent/device-guard.sqlite3`；唯一 primary、`BEGIN IMMEDIATE` 插入、held/quarantined 任意状态拒绝、启动/续租/子命令前 `verify`、正常收敛 `release` 删除、异常 `release(converged=False)` 置 quarantined；不做 TTL/PID/重启自动解锁。测试可注入临时 OS 根/平台名，生产无自选路径。
+- `activity.py`：`ProfilePolicyActivity.assess_restore` 只读检查共享门禁与 profile 库现有 M1 状态：held→active、quarantined/坏库/绑定不符→unknown、leased/running→active、blocked→unknown、其余 stopped；不释放占用、不改库，也不声称已实现 M5 动作对账。
 - `repo.py`：`SqliteStore` 实现 upsert/claim/start/renew/finish/recover/unresolved_conversations；默认创建并可注入唯一 `ProcessLog`，打开库及公开操作以 `operation` 记录 started/ok/failed、固定原因码与耗时，不记 PID/host/nonce/键/正文/SQL/异常，业务事务与幂等不受影响；日志降级时由 ProcessLog 唯一告警出口最多提示一次，构造失败无实例时也可观察。`open_store` 边界先记录 started，再在连接前校验本机 host 摘要；非法 host 记 `invalid_input`/`store` 失败且不创建或改动数据库。默认本机 host 为 `H(platform.node())`，owner.id 必须是规范 UUID、owner.host 必须是 64 位小写十六进制本机摘要，租约 key 必须是当前 app 的 discovery 键。默认 Windows 停止检查器用 ctypes `OpenProcess`（同时请求查询权限与 `SYNCHRONIZE`）/`WaitForSingleObject`，显式声明 x64 HANDLE/DWORD/BOOL 签名；非 Windows 用 `os.kill(pid, 0)`。支持注入单调时钟、停止检查器与仅测试使用的故障点回调。
 
 ## 三、库结构与事务契约
@@ -25,14 +29,14 @@
 ## 四、测试
 
 ```powershell
-python -m unittest tests.test_store tests.test_migrations
+python -m unittest tests.test_store tests.test_migrations tests.test_profile_facts tests.test_device_gate tests.test_m4c_closed_loop
 python -m app store init --db data/runtime/m1-acceptance.sqlite3
 ```
 
-`tests.test_store` 覆盖竞争、TTL、停止未知/异主机、旧 nonce/截止时间、重复 start/finish、blocked 设备隔离、事务故障注入、clock_changed、非法类型/枚举、非 UUID owner、跨 app 租约键与 Windows ctypes 签名/高 64 位句柄；`tests.test_migrations` 覆盖建库、幂等、初始化回滚、schema 篡改、约束、CLI 路径与固定 JSON。Windows 停止检查器只用 mock ctypes，不读取真实 PID；测试不调用 ADB。
+`tests.test_store` 覆盖竞争、TTL、停止未知/异主机、旧 nonce/截止时间、重复 start/finish、blocked 设备隔离、事务故障注入、clock_changed、非法类型/枚举、非 UUID owner、跨 app 租约键与 Windows ctypes 签名/高 64 位句柄；`tests.test_migrations` 覆盖建库、幂等、初始化回滚、schema 篡改、约束、CLI 路径与固定 JSON。`tests.test_profile_facts` 覆盖事实库/审计/旧库拒绝/绑定；`tests.test_device_gate` 覆盖临时 OS 根下固定路径、跨进程互斥、崩溃/TTL/nonce/库不可读隔离与活动检查；`tests.test_m4c_closed_loop` 覆盖真实活动恢复与三值一致。Windows 停止检查器只用 mock ctypes，不读取真实 PID；测试不调用 ADB，也不写真实 `LOCALAPPDATA` 门禁。
 
 ## 五、维护要求
 
 1. 修改 DDL、索引、租约/恢复规则或错误码时，同步更新本文件、`app/ports/AGENTS.md`、`app/domain/AGENTS.md`、根 `AGENTS.md`、`docs/operator.md` 与测试。
-2. 不预建后续动作表、任务表、第二应用或迁移框架；v1 不做 1→2 升级。
+2. 不预建后续动作表、任务表、第二应用或迁移框架；v1 不做 1→2 升级；profile 库只追加当前事实/元数据/审计表，不伪造迁移或改五表合同。
 3. 每个函数/方法写 docstring；新增故障注入点只用于测试，不接入生产 CLI。

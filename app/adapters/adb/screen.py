@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from app.ports.screen import (
+    DeviceGate,
     HierarchyCapture,
     ScreenCapture,
     ScreenReadError,
@@ -26,11 +27,13 @@ class AdbScreenReader:
         evidence_dir: Path,
         adb: str = "adb",
         process_log: ProcessLog | None = None,
+        gate: DeviceGate | None = None,
     ) -> None:
-        """保存 adb 文件名、证据目录与可选日志，构造阶段不启动子进程。"""
+        """保存 adb 文件名、证据目录、可选日志与共享门禁；构造不启动子进程。"""
         self._adb = adb
         self._evidence_dir = Path(evidence_dir)
         self._process_log = process_log
+        self._gate = gate
 
     def dump_hierarchy(self, serial: str) -> HierarchyCapture:
         """依次执行 dump 与 cat，保存 XML 证据并返回内存文本。"""
@@ -84,7 +87,9 @@ class AdbScreenReader:
         command: str,
         binary: bool,
     ) -> subprocess.CompletedProcess:
-        """以 shell=false、5 秒超时执行一次子进程，不重试也不输出原值。"""
+        """每条 ADB 子命令前复核共享门禁，再执行一次有界子进程。"""
+        if self._gate is not None:
+            self._gate.verify()
         started = time.perf_counter()
         self._record(stage, command, "started", 0)
         try:

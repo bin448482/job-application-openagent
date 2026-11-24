@@ -673,6 +673,38 @@ class AdbProbeTests(unittest.TestCase):
         self.assertNotIn("synthetic-serial", output)
         self.assertNotIn("synthetic-serial", repr(snapshot))
 
+    def test_probe_rechecks_shared_gate_before_each_command(self) -> None:
+        """M0 探针的每条 ADB 子命令前都复核同一共享门禁。"""
+
+        class _Gate:
+            """记录复核次数的合成共享门禁。"""
+
+            def __init__(self) -> None:
+                """初始化计数。"""
+                self.verifies = 0
+
+            def require_available(self) -> None:
+                """要求占用可用。"""
+                self.verifies += 1
+
+            def verify(self) -> None:
+                """记录每条命令前的复核。"""
+                self.verifies += 1
+
+            def release(self) -> None:
+                """测试中不执行释放。"""
+                return None
+
+        devices = "List of devices attached\nsynthetic-serial\tdevice\n"
+        window = "isKeyguardShowing=false\n"
+        gate = _Gate()
+        with patch(
+            "subprocess.run",
+            side_effect=[_completed(devices), _completed(window)],
+        ):
+            AdbDeviceProbe(gate=gate).probe("synthetic-serial")
+        self.assertEqual(gate.verifies, 2)
+
     def test_offline_unauthorized_and_unknown_states(self) -> None:
         """清单中的 offline、unauthorized 与未知状态分别保守映射。"""
         cases = {
@@ -1203,8 +1235,15 @@ class DoctorLoggingTests(unittest.TestCase):
             ):
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     code = main(
-                        ["doctor", "--device", "--serial", "synthetic-serial"],
+                        [
+                            "doctor",
+                            "--device",
+                            "--serial",
+                            "synthetic-serial",
+                            "--confirm-device",
+                        ],
                         process_log=log,
+                        os_root=Path(tmp) / "appdata",
                     )
             self.assertEqual(code, 0)
             self.assertEqual(stderr.getvalue(), "")
@@ -1219,12 +1258,16 @@ class DoctorLoggingTests(unittest.TestCase):
                 "arguments",
                 "config",
                 "mode",
+                "device_gate",
+                "device_gate",
                 "probe",
                 "adb_devices",
                 "adb_devices",
                 "adb_window",
                 "adb_window",
                 "probe",
+                "device_gate",
+                "device_gate",
                 "decision",
                 "output",
                 "exit",
@@ -1383,8 +1426,15 @@ class DoctorLoggingTests(unittest.TestCase):
             with patch("subprocess.run", side_effect=FileNotFoundError("missing")):
                 with redirect_stdout(stdout), redirect_stderr(stderr):
                     code = main(
-                        ["doctor", "--device", "--serial", "synthetic-serial"],
+                        [
+                            "doctor",
+                            "--device",
+                            "--serial",
+                            "synthetic-serial",
+                            "--confirm-device",
+                        ],
                         process_log=log,
+                        os_root=Path(tmp) / "appdata",
                     )
             self.assertEqual(code, 2)
             self.assertEqual(stderr.getvalue(), "")

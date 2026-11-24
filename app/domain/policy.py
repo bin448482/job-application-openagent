@@ -400,6 +400,11 @@ def _has_contact(value: str) -> bool:
     return any(pattern.search(value) for pattern in _CONTACT_PATTERNS)
 
 
+def has_contact(value: str) -> bool:
+    """公开同一联系方式模式入口，供事实录入与回复复验共用。"""
+    return _has_contact(value)
+
+
 def _fact_claims(value: str) -> list[tuple[str, str]]:
     """返回可确定识别的个人事实形式及其捕获值，不推断未命中文本。"""
     claims: list[tuple[str, str]] = []

@@ -39,6 +39,16 @@ REPORT_MAX_BYTES = 2 * 1024 * 1024
 LOCK_WAIT_SECONDS = 5.0
 
 
+def _is_run_dir(name: str) -> bool:
+    """判断目录名是否为 eval- 加 32 位小写十六进制运行 ID。"""
+    return (
+        isinstance(name, str)
+        and name.startswith("eval-")
+        and len(name) == 5 + 32
+        and all(char in "0123456789abcdef" for char in name[5:])
+    )
+
+
 class FileEvalStore:
     """只在项目内读取合成套件，并把全部产物写入被忽略的 data/evals。"""
 
@@ -194,6 +204,28 @@ class FileEvalStore:
         return self._write_new_json(
             self._run_path(run_id, "acceptance.json"), acceptance, 64 * 1024
         )
+
+    def read_acceptance(self, rel_path: str) -> dict[str, object] | None:
+        """读取 data/evals/eval-<run-id>/acceptance.json；其它位置拒绝。"""
+        if not isinstance(rel_path, str):
+            raise PolicyError("invalid_input", [PolicyIssue(None, None, None, "path")])
+        normalized = rel_path.replace("\\", "/")
+        prefix = REPORT_ROOT + "/"
+        parts = normalized[len(prefix):].split("/") if normalized.startswith(prefix) else []
+        if (
+            len(parts) != 2
+            or not _is_run_dir(parts[0])
+            or parts[1] != "acceptance.json"
+        ):
+            raise PolicyError("invalid_input", [PolicyIssue(None, None, None, "path")])
+        data = self._read_json(normalized, 64 * 1024)
+        if data is None:
+            return None
+        if not isinstance(data, dict):
+            raise PolicyError(
+                "policy_io_error", [PolicyIssue(rel_path, None, None, "format")]
+            )
+        return data
 
     def read_holdout_registry(self) -> dict[str, object]:
         """读取本机留出登记；不存在时返回空登记，不创建文件。"""

@@ -12,7 +12,7 @@
 
 ## 三、命令与安全契约
 
-- 只用 subprocess 参数数组，`shell=False`；每条命令超时 `5` 秒，不重试。
+- 只用 subprocess 参数数组，`shell=False`；每条命令超时 `5` 秒，不重试。M4c 起 `AdbDeviceProbe`/`AdbScreenReader` 可接收共享 `DeviceGate`，在每条 `subprocess.run` 之前调用 `verify`；生产 CLI 必须注入，离线直连适配器只存在于测试。
 - 未安装 ADB、超时或非零退出归一为 `device_disconnected`；过程日志分别用固定 `adb_missing/adb_timeout/adb_oserror/adb_nonzero` 错误类别，不扩业务原因码。每条命令在 `subprocess.run` 前记录同 `correlation_id` 的 `started`，完成后记录 `ok` 或 `failed`；中断/未归一异常保留 `started` 便于定位。
 - 设备清单只接受 tab 分隔的确定记录；`adb: no devices/emulators found` 等提示行、标题和守护进程行不计入设备数。serial 不在清单也报断连；清单未知状态保守视为 `offline`。
 - 显式 serial 只在本机内存精确匹配，输出逻辑别名固定为 `primary`，不输出真实序列号或窗口原文。
@@ -21,7 +21,7 @@
 - 本模块不得在 fixture 模式或其他离线测试中实际执行；测试只 mock `subprocess.run`。模块导入必须零副作用。
 - `AdbScreenReader` 的 dump 后 cat 固定为两条命令；`exec-out screencap` 以二进制捕获。缺失/超时/OSError/非零退出统一 `ScreenReadError('device_disconnected')`，单次 attempt 不重放；证据落盘失败为 `ScreenReadError('invalid_fixture')`，不声称已保存。
 - 过程日志 `stage=adb_hierarchy/adb_screen/adb_evidence`、`command=adb_hierarchy_dump/adb_hierarchy_cat/adb_screencap`，只写固定结果、耗时和 `adb_missing/adb_timeout/adb_oserror/adb_nonzero/evidence` 类别；证据保存成功/失败记 `adb_evidence`，失败原因 `invalid_fixture`；不写 serial、设备临时路径、XML、截图或异常文本。
-- 真实 `read` 在调用本适配器前必须先通过共享设备门禁；M4 门禁未交付时 usecase 直接拒绝，不以 profile 内任务锁代替。
+- M4c 已交付固定 OS 共享设备门禁；真实 `read` 仍不暴露 `--device` 入口，但采集适配器在每条子命令前复核，`read_from_device` 也在采集前要求门禁。不得以 profile 内任务锁代替共享占用。M0 `doctor --device` 必须先取得占用且带 `--confirm-device`，异常保留并隔离。
 
 ## 四、测试
 
@@ -40,4 +40,4 @@ python -m unittest tests.test_doctor tests.test_screen
 ## 六、已知限制
 
 - 真实 `adb devices` / `dumpsys window` / `uiautomator dump` / `screencap` 输出未在本机验证；不同 Android 版本的多显示器、字段差异、截图头格式可能使判定失败或未知。
-- 当前只在测试中 mock subprocess，未在真机执行；M3 真实 read 在共享门禁交付前不开放。
+- 当前只在测试中 mock subprocess，未在真机执行；M3 真实 read 仍不开放，共享门禁只在临时 OS 根模拟。

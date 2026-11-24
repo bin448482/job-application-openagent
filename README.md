@@ -4,12 +4,12 @@
 
 ## 当前状态
 
-旧的业务源码、Skills 与业务离线测试已清理，项目正在分阶段实现。当前已实现 M0 只读探针、M1 本机状态库/租约、M2 合成未读四源传感器、M3 离线读取阶梯/页面/职位/会话读取、M4a 策略包离线编辑/校验/预览/快照/恢复与 M4b A/B 本机决策桥/分层 policy eval/留出冻结登记，并已建立独立的 promptfoo 合成黄金测试集：
+旧的业务源码、Skills 与业务离线测试已清理，项目正在分阶段实现。当前已实现 M0 只读探针、M1 本机状态库/租约、M2 合成未读四源传感器、M3 离线读取阶梯/页面/职位/会话读取、M4a 策略包离线编辑/校验/预览/快照/恢复、M4b A/B 本机决策桥/分层 policy eval/留出冻结登记，以及 M4c profile 独立事实库/本机事实确认入口、固定 OS 共享 SQLite 设备门禁、真实 restore 活动检查、验收凭证复核与 `run check` 预检；仍未连接真实设备或模型，并已建立独立的 promptfoo 合成黄金测试集：
 
 - `pyproject.toml`、`requirements.txt`：Python 业务元数据；暂不引入第三方 Python 依赖。
-- `app/`：M0–M4b 分层程序，提供 `python -m app`、只读 `doctor`、`store init`、合成 `sense`、合成 `read` 与 `policy`（含 `eval`/`holdout`），以及 `domain/` 纯模型/读取/策略/评测契约、`adapters/sqlite/` 本机仓储、`adapters/boss/` 解析、`adapters/adb/` 采集、`adapters/files/` 策略/评测文件与 `adapters/llm/` A/B 子进程桥。
-- `tests/`：M0–M4b 标准库 `unittest` 与纯合成夹具。
-- `docs/operator.md`：M0–M4b 探针、状态库、合成传感器、离线读取、策略包、桥/eval/留出、配置、schema、停因、错误码及回滚说明。
+- `app/`：M0–M4c 分层程序，提供 `python -m app`、只读 `doctor`、`store init`、合成 `sense`、合成 `read`、`policy`（含 `eval`/`holdout`/`acceptance`）、本机 `facts` 与 `run check`，以及 `domain/` 纯模型/读取/策略/评测/事实契约、`adapters/sqlite/` 本机仓储/profile 库/共享设备门禁/活动检查、`adapters/boss/` 解析、`adapters/adb/` 采集、`adapters/files/` 策略/评测文件与 `adapters/llm/` A/B 子进程桥。
+- `tests/`：M0–M4c 标准库 `unittest` 与纯合成夹具。
+- `docs/operator.md`：M0–M4c 探针、状态库、合成传感器、离线读取、策略包、桥/eval/留出、profile 事实、共享门禁、恢复检查、验收复核与 `run check` 预检说明。
 - `docs/BOSS直聘_M3读取阶梯与最小数据契约_20261124.md`：M3 读取值类型、字段阶梯、像素标定、跨屏稳定消息身份与失败/门禁契约。
 - `prompts/`：公开 base、纯合成示例与 `policy init` 生成的本机策略包/history；`tests/fixtures/policy-preview/` 是 preview 的公开合成输入资源；`evals/policy-suite/` 是 eval 的公开套件与旧 24 映射。
 - `config.example.json`：可提交的示例配置，当前只描述未来 M4 的策略包引用，不是 M0 配置。
@@ -39,10 +39,10 @@ fixture 模式只读合成输入，不启动子进程、不连接设备、不调
 真实探针必须显式指定：
 
 ```powershell
-python -m app doctor --device --serial <serial>
+python -m app doctor --device --serial <serial> --confirm-device
 ```
 
-执行前必须说明两条只读命令、预计最多 10 秒、设备独占要求并取得本轮确认。输出不含真实序列号或窗口原文。当前尚未在真实设备上执行该模式，M0 也不提供业务循环、导航、截图或发送。完整规则见 [docs/operator.md](docs/operator.md)。
+执行前必须说明两条只读命令、预计最多 10 秒、设备独占要求并取得本轮确认。`--confirm-device` 是本轮确认入口；未确认时在启动任何 ADB 子进程前拒绝。真实模式先取得固定 OS 位置共享 SQLite 设备门禁的唯一 primary 占用，每条 ADB 命令前复核，正常结束只在该次探针已明确收敛时释放；异常或未知保留占用并隔离。输出不含真实序列号、窗口原文或门禁路径。当前尚未在真实设备上执行该模式，M0 也不提供业务循环、导航、截图或发送。完整规则见 [docs/operator.md](docs/operator.md)。
 
 ## M1 状态库与租约（已实现）
 
@@ -117,7 +117,7 @@ python -m app policy restore --snapshot prompts/local/history/<snapshot-id> --de
 
 M4a 交付公开 `prompts/base/` 两份 base、`prompts/examples/default/` 全 C 空事实示例、固定 `tests/fixtures/policy-preview/` 独立合成 preview 输入，以及完整 DecisionEnvelope/Decision 严格契约、TOML+三 md schema、45 组合唯一覆盖与统一硬下限（2 个可 A、4 个至少 B、其余 39 个固定 C）、四类无自引用摘要、唯一 `{base,pack,data}` 内容对象、system/developer/user 固定投影和披露/事实复验。`validate` 输出有效限制、分档、硬下限、来源与摘要；`preview` 只做纯渲染，不读黄金答案、不调用桥、设备、网络或模型；`init` 只建 `prompts/local` 直接子目录且不覆盖；`snapshot` 复制前后重读活动源并保证清单与副本完成；`restore` 要求清单/快照/目标三值 pack_hash 相等、base 匹配并保留原 profile_id，暂存后同卷发布、不覆盖旧包。策略命令的成功/失败四键外层、配置错误四键、`load/validate/render/publish` 阶段日志与恢复受控拒绝见操作手册。
 
-策略命令成功/失败使用四键外层（失败带 `errors:[{file,field,line,code}]`），这是对既有 doctor/sense/read 三键外层之外的明确扩展。M4a 尚无 M4c 真实活动/未决检查，因此生产 CLI `restore` 固定受控拒绝为 `policy_changed`；只有测试可向同一生产用例注入明确合成停止证据验证文件事务，完整 CLI 安全接线留 M4c。M4b 桥/eval 已单独实现于下一节；真实设备执行、事实授权与真实 provider 能力仍不由 M4a/M4b 证明；preview/snapshot 通过不构成发送授权。完整命令、字段、错误码与回滚边界见 [docs/operator.md](docs/operator.md)。
+策略命令成功/失败使用四键外层（失败带 `errors:[{file,field,line,code}]`），这是对既有 doctor/sense/read 三键外层之外的明确扩展。M4c 已把生产 CLI `restore` 接到真实活动检查：共享设备门禁存在任意占用、profile 库 leased/running 时拒绝为 active，blocked/坏库/绑定不符时保守为 unknown，均以 `policy_changed` 拒绝且不通过换目录解除占用或重置额度；只有 stopped 才允许恢复，恢复仍要求清单/快照/目标三值一致。M4b 桥/eval 已单独实现于下一节；真实设备执行、事实授权与真实 provider 能力仍不由 M4a/M4b 证明；preview/snapshot 通过不构成发送授权。完整命令、字段、错误码与回滚边界见 [docs/operator.md](docs/operator.md)。
 
 ## M4b 决策桥与真实策略评测链路（已实现，未调用真实模型）
 
@@ -132,7 +132,26 @@ M4b 交付架构 A 外部 agent 与 B 本机进程两个参数数组桥：固定
 
 `policy eval` 实际加载 `--pack` 指定的当前包，经同一决策桥逐例运行公开/回归/留出套件；必须显式选择 `external-agent` 或 `local-process`，拒绝 echo/参考回放，并要求 `--confirm-external-send`。该确认只表示本轮模型评测外发与计费，不授予设备、事实写入或业务发送权限，也不替代留出无上传合同。逐例报告只写本机 `data/evals`，绑定 base/pack/profile/provider/model/model_config_hash/suite_hash 与 process correlation；失败、零样本、缺私有套件、非公开套件或 simulated transport 不生成有效验收凭证。公开套件与旧 24 案例 npm 回归独立，`evals/policy-suite/mapping.json` 只登记每例责任与未接入原因。留出按语义输入指纹占用历史样本，已看样本不得换批次/候选/套件或拆子集重冻结；访问意向在调用前锁内持久化，完成/失败/中断/重复如实区分；退役整批写 `data/evals/regression-admissions/` 副本并可被同一 regression 路径实际运行；登记写失败保留未确认准入本机残留，但 registry 过滤使其不可运行，不删除其它 owner 文件。public/holdout 不读取无关 regression 准入；重试前用唯一 render 校验器复核事实有效期；临时文件创建/输入写也计入总预算，输出监测/等待 OSError 受控。留出还要求 `data/evals/holdout-attestation.local.json` 绑定当前 model/config 并显式声明 no-upload/cache/share/telemetry/cloud-fallback 全部关闭；该声明是 operator/host 合同，不证明子进程真实无网络。
 
-真实 provider、私有回归/留出、M4c 真实活动/事实确认与 M5 授权/动作未运行；桥自报角色/工具/历史只是协议声明，不证明第三方实际能力。详见 [docs/operator.md](docs/operator.md) 与 [evals/policy-suite/AGENTS.md](evals/policy-suite/AGENTS.md)。
+真实 provider、私有回归/留出与 M5 授权/动作未运行；桥自报角色/工具/历史只是协议声明，不证明第三方实际能力。详见 [docs/operator.md](docs/operator.md) 与 [evals/policy-suite/AGENTS.md](evals/policy-suite/AGENTS.md)。
+
+## M4c profile 事实、共享设备门禁与 M4 闭环（已实现，未接真机/真实 provider）
+
+```powershell
+python -m unittest tests.test_profile_facts tests.test_device_gate tests.test_run_guard tests.test_m4c_closed_loop
+python -m app facts set --profile demo --key work_location --value "<合成值>"
+python -m app facts set --profile demo --key work_location --value "<合成值>" --confirm
+python -m app facts show --profile demo --pack prompts/local/demo
+python -m app facts revoke --profile demo --key work_location --confirm
+python -m app facts forget --profile demo --key work_location --confirm
+python -m app policy acceptance check --pack prompts/local/demo --credential data/evals/eval-<id>/acceptance.json
+python -m app run check --pack prompts/local/demo --mode read_only --confirm-device
+```
+
+`facts` 使用本机交互 CLI 逐字段录入长期事实：未带 `--confirm` 只输出提案，不写事实；确认后从库中重读并再次显示值。每条事实由程序生成来源 ID、记录确认时间与有效期；同键多个 active 来源不按较新时间自动择一，而是转 `conflict` 待办；显式 `--replace` 才作废旧来源。撤销保留历史来源，`forget` 删除当前事实行并只保留来源 ID/无值审计，明确不宣称擦除 SQLite WAL 或既有本机备份。事实值只写 `data/runtime/profiles/<profile_id>/runtime.sqlite3`，不进入策略包、过程日志、公开报告或错误文本；不读取 HR 文本、旧合成库、根 `config.json` 或凭据。旧 `data/runtime/runtime.sqlite3` 不自动导入。
+
+共享设备门禁固定在 Windows `LOCALAPPDATA/job-application-openagent/device-guard.sqlite3`，不随仓库、worktree、clone、`--pack` 或配置改变；其它平台在支持前拒绝真实运行。整个真实会话（含 read_only）先 `BEGIN IMMEDIATE` 条件插入唯一 `primary` 行，存在任何状态即拒绝；启动、续租与每条设备命令前复核 owner/nonce/profile 绑定。崩溃、PID 消失、TTL、库不可读、nonce 篡改或换 profile 都不自动解锁；正常释放只在该次操作明确收敛且无在途子命令时删除，异常保留原绑定并置 `quarantined`。M0 `doctor --device` 已纳入同一占用；M3 真实采集适配器也在每条子命令前复核，未取得门禁或未确认时任何 ADB 子进程都不启动。
+
+`policy acceptance check` 只读比较 M4b 验收凭证与当前 base/pack（可选 provider/model 摘要），任何变化以 `policy_changed` 拒绝旧凭证，不授予设备或发送权限。`run check` 是预检而非完整运行：read_only 要求本轮 `--confirm-device`，draft_only 另要求当前验收，`auto_send_tier_a` 在 v1 固定 C 且缺独立前置判据时始终 `authorization_required`；它不探测设备、不调用模型、不执行 M5 动作，跨库失败会隔离共享占用。M5–M8 的动作、调度、真机执行与真实 provider 仍未实现，完整 MVP 运行不可声称完成。
 
 ## 开发环境
 
@@ -141,7 +160,7 @@ M4b 交付架构 A 外部 agent 与 B 本机进程两个参数数组桥：固定
 - 真机功能另需 Android SDK Platform-Tools 中的 `adb`、USB 调试和使用者确认；M0–M4b 离线测试不连接设备。
 - 仓库中的 `.venv/` 与 `config.json` 为被 Git 忽略的本机文件，可自行保留或删除。
 
-M4c 真实活动/未决检查与完整运行绑定、M5–M8 的动作、调度与灰度仍待实现；M3 的读取阶梯只使用合成 XML、合成 RGBA、模拟 ADB 与独立门禁测试，不代表真实设备采集或真实版本标定；M4a 只用合成 base/包/preview、临时项目根与注入停止证据，M4b 只用合成本机桥桩/模拟 transport，不代表真实 provider 能力、事实确认或发送安全。数据库、日志、截图、契约、凭据和个人事实只在本机保存。
+M5–M8 的动作、调度、灰度与完整运行仍待实现；M4c 的 `run check` 只是预检，不执行设备或动作。M3 的读取阶梯只使用合成 XML、合成 RGBA、模拟 ADB 与独立门禁测试，不代表真实设备采集或真实版本标定；M4a 只用合成 base/包/preview 与临时项目根，M4b 只用合成本机桥桩/模拟 transport，M4c 只用临时 OS 根、合成事实与进程内/跨进程模拟，不代表真实 provider 能力、真机门禁或发送安全。数据库、日志、截图、契约、凭据和个人事实只在本机保存。
 
 全新机器的引导、依赖边界与验收规划见[新环境自动化部署方案](docs/求职自动化_新环境自动化部署方案_20261123.md)：分别设计 eval、ADB 工具准备和经本轮确认后的手机环境检测（§8、§10.1）；工具安装不代表手机或业务就绪。安装器与手机检查器尚未实现，干净机器及手机验收均待执行；本轮仅文档，不运行 ADB 或连接手机。
 
@@ -165,7 +184,7 @@ npm run eval:model -- "<provider-id>"
 
 该命令会将合成输入交给指定 provider，可能产生模型调用费用。当前没有默认真实模型，不能把 smoke 结果当作模型评测。结果只写到被 Git 忽略的 `data/evals/`；入口关闭遥测、更新检查、缓存及分享，不读取本机 config.json 或个人事实。
 
-案例覆盖偏好有效性与冲突、长期更新/临时偏好/遗忘、授权范围与到期、动作防重、请求与交付区别及 HR 指令注入。所有地点、薪资和身份均为合成值。当前只给出记忆决策协议，SQLite 运行时记忆及端到端读写仍待实现。字段和限制见 [evals/AGENTS.md](evals/AGENTS.md)。
+案例覆盖偏好有效性与冲突、长期更新/临时偏好/遗忘、授权范围与到期、动作防重、请求与交付区别及 HR 指令注入。所有地点、薪资和身份均为合成值。M4c 已实现 profile 长期事实确认/撤销/遗忘与 SQLite 本机存储；HR 会话运行时记忆、跨会话检索及端到端动作读写仍待实现。字段和限制见 [evals/AGENTS.md](evals/AGENTS.md)。
 
 工具依据：promptfoo 官方 JavaScript assertion 与自定义 provider 文档。配置和执行已按固定版本在本机验证；case metadata 不进入模型提示词。
 

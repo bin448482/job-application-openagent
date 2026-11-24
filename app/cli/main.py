@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import platform
 import sys
 import time
 import uuid
@@ -17,18 +19,26 @@ from app.adapters.files.evals import FileEvalStore
 from app.adapters.files.policy import FilePolicyRepository
 from app.adapters.llm.bridge_a import ExternalAgentBridge
 from app.adapters.llm.bridge_b import LocalProcessBridge
+from app.adapters.sqlite.activity import ProfilePolicyActivity
+from app.adapters.sqlite.device_gate import SharedDeviceGate
+from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
 from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
+from app.domain.models import Owner, canonical_hash
 from app.ports.device import ProbeSnapshot
+from app.ports.device_gate import DeviceGateError
 from app.ports.policy import PolicyError
+from app.ports.profile import ProfileError
 from app.ports.store import StoreError
 from app.domain.json_input import load_json_object as _load_json_object
-from app.domain.policy import PolicyIssue, utc_now
+from app.domain.policy import FACT_KEYS, PolicyIssue, utc_now
 from app.process_log import ProcessLog, elapsed_ms
+from app.usecases import acceptance as acceptance_usecases
+from app.usecases import facts as facts_usecases
 from app.usecases import policy as policy_usecases
 from app.usecases import policy_eval as policy_eval_usecases
+from app.usecases import run as run_usecases
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
-from app.usecases.policy import RefusingPolicyActivity
 from app.usecases.read import build_read_payload
 from app.usecases.sense import build_sense_payload, persist_and_aggregate
 
@@ -139,8 +149,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = _StrictArgumentParser(
         prog="python -m app",
         description=(
-            "M0 只读 doctor、M1 store init、M2 sense、M3 read、M4a policy 与 M4b policy eval；"
-            "除显式 policy eval 本机桥外，默认不连接设备、不调用网络或模型。"
+            "M0 只读 doctor、M1 store init、M2 sense、M3 read、M4a policy、M4b policy eval、"
+            "M4c facts/run check 与共享设备门禁；除显式 policy eval 本机桥或已确认的真实探针外，"
+            "默认不连接设备、不调用网络或模型。"
         ),
         allow_abbrev=False,
     )
@@ -179,6 +190,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action=_UniqueStore,
         metavar="<serial>",
         help="仅与 --device 同用；只在内存匹配，不写入输出。",
+    )
+    doctor.add_argument(
+        "--confirm-device",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="确认本轮独占一次真实 ADB 探针；未确认时任何设备子进程都不启动。",
     )
     store = subparsers.add_parser(
         "store",
@@ -235,13 +252,142 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="<相对文件>",
         help="读取 read manifest 及其同目录 profile/XML/像素文件。",
     )
+    facts = subparsers.add_parser(
+        "facts",
+        allow_abbrev=False,
+        help="按 profile 确认、查看、撤销或遗忘长期事实。",
+        description=(
+            "值只写本机 profile 独立库；提案需再次 --confirm 才落库；"
+            "不读取 HR 文本、策略包事实或任何外部来源。"
+        ),
+    )
+    facts_commands = facts.add_subparsers(
+        dest="facts_command",
+        required=True,
+        parser_class=_StrictArgumentParser,
+    )
+    facts_set = facts_commands.add_parser(
+        "set",
+        allow_abbrev=False,
+        help="提案或确认写入一条长期事实。",
+        description="未带 --confirm 时只显示提案；写入后再次显示库中确认结果。",
+    )
+    facts_set.add_argument(
+        "--profile", action=_UniqueStore, required=True, metavar="<profile_id>"
+    )
+    facts_set.add_argument("--key", action=_UniqueStore, required=True, metavar="<事实键>")
+    facts_set.add_argument("--value", action=_UniqueStore, required=True, metavar="<本机值>")
+    facts_set.add_argument(
+        "--expires-at", action=_UniqueStore, metavar="<UTC时间>", default=None
+    )
+    facts_set.add_argument(
+        "--replace",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="明确作废该键现有 active 来源；不静默按较新时间择一。",
+    )
+    facts_set.add_argument(
+        "--confirm",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="确认本轮写入；未确认不落库。",
+    )
+    facts_set.add_argument(
+        "--pack", action=_UniqueStore, metavar="<prompts/local/名称>", default=None
+    )
+    facts_show = facts_commands.add_parser(
+        "show",
+        allow_abbrev=False,
+        help="显示本机事实、来源、有效期与按包白名单计算的待办。",
+        description="只读；不存在 profile 库时返回空结果，不创建库。",
+    )
+    facts_show.add_argument(
+        "--profile", action=_UniqueStore, required=True, metavar="<profile_id>"
+    )
+    facts_show.add_argument(
+        "--pack", action=_UniqueStore, metavar="<prompts/local/名称>", default=None
+    )
+    for name, help_text in (
+        ("revoke", "提案或确认撤销该键当前 active 事实。"),
+        ("forget", "提案或确认删除该键当前事实并保留无值来源审计。"),
+    ):
+        command = facts_commands.add_parser(
+            name,
+            allow_abbrev=False,
+            help=help_text,
+            description="未带 --confirm 时只显示提案；确认后写入本机 profile 库。",
+        )
+        command.add_argument(
+            "--profile", action=_UniqueStore, required=True, metavar="<profile_id>"
+        )
+        command.add_argument("--key", action=_UniqueStore, required=True, metavar="<事实键>")
+        command.add_argument(
+            "--confirm",
+            action=_UniqueStoreTrue,
+            default=False,
+            help="确认本轮撤销/遗忘；未确认不落库。",
+        )
+        command.add_argument(
+            "--pack", action=_UniqueStore, metavar="<prompts/local/名称>", default=None
+        )
+    run = subparsers.add_parser(
+        "run",
+        allow_abbrev=False,
+        help="运行前 mode/确认/验收/共享占用预检，不执行动作。",
+        description=(
+            "只做预检：不探测设备、不调用模型、不执行 M5 动作；"
+            "预检成功不等于自动发送授权。"
+        ),
+    )
+    run_commands = run.add_subparsers(
+        dest="run_command",
+        required=True,
+        parser_class=_StrictArgumentParser,
+    )
+    run_check = run_commands.add_parser(
+        "check",
+        allow_abbrev=False,
+        help="检查指定 mode 的前置护栏。",
+        description="read_only 只要求本轮设备确认；draft/A 另按当前验收与固定 C 判定。",
+    )
+    run_check.add_argument(
+        "--pack", action=_UniqueStore, required=True, metavar="<prompts/local/名称>"
+    )
+    run_check.add_argument(
+        "--mode",
+        action=_UniqueStore,
+        required=True,
+        choices=("read_only", "draft_only", "auto_send_tier_a"),
+        metavar="<mode>",
+    )
+    run_check.add_argument(
+        "--confirm-device",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="确认本轮设备独占；未确认时预检失败且不取得共享占用。",
+    )
+    run_check.add_argument(
+        "--credential",
+        action=_UniqueStore,
+        metavar="<data/evals/eval-<id>/acceptance.json>",
+        default=None,
+    )
+    run_check.add_argument(
+        "--provider", action=_UniqueStore, metavar="<provider_id>", default=None
+    )
+    run_check.add_argument(
+        "--model-id", action=_UniqueStore, metavar="<model_id>", default=None
+    )
+    run_check.add_argument(
+        "--model-config-hash", action=_UniqueStore, metavar="<摘要>", default=None
+    )
     policy = subparsers.add_parser(
         "policy",
         allow_abbrev=False,
         help="离线编辑/校验/预览/回滚策略包，并运行显式本机桥评测。",
         description=(
-            "init/validate/preview/list/snapshot/restore/holdout 只读本机策略文件；"
-            "eval 只在显式 provider 与本轮确认下启动本机桥程序。"
+            "init/validate/preview/list/snapshot/restore/holdout/acceptance 只读本机策略文件与凭证；"
+            "restore 另查真实 profile/共享占用；eval 只在显式 provider 与本轮确认下启动本机桥程序。"
         ),
     )
     policy_commands = policy.add_subparsers(
@@ -447,6 +593,49 @@ def _build_parser() -> argparse.ArgumentParser:
     holdout_retire.add_argument(
         "--retired-at", action=_UniqueStore, metavar="<UTC时间>", default=None
     )
+    policy_acceptance = policy_commands.add_parser(
+        "acceptance",
+        allow_abbrev=False,
+        help="只读复核 M4b 验收凭证是否绑定当前摘要。",
+        description="不调用模型、不授予设备或发送权限；摘要变化拒绝旧凭证。",
+    )
+    acceptance_commands = policy_acceptance.add_subparsers(
+        dest="acceptance_command",
+        required=True,
+        parser_class=_StrictArgumentParser,
+    )
+    acceptance_check = acceptance_commands.add_parser(
+        "check",
+        allow_abbrev=False,
+        help="比较当前 base/pack 与凭证绑定摘要。",
+        description="可附加 provider/model 摘要比较；任何不一致退出 2。",
+    )
+    acceptance_check.add_argument(
+        "--pack",
+        action=_UniqueStore,
+        required=True,
+        metavar="<prompts/local/名称>",
+        help="local 直接活动包目录。",
+    )
+    acceptance_check.add_argument(
+        "--credential",
+        action=_UniqueStore,
+        required=True,
+        metavar="<data/evals/eval-<id>/acceptance.json>",
+        help="本机验收凭证相对路径。",
+    )
+    acceptance_check.add_argument(
+        "--provider", action=_UniqueStore, metavar="<provider_id>", default=None
+    )
+    acceptance_check.add_argument(
+        "--model-id", action=_UniqueStore, metavar="<model_id>", default=None
+    )
+    acceptance_check.add_argument(
+        "--model-config-hash",
+        action=_UniqueStore,
+        metavar="<摘要>",
+        default=None,
+    )
     return parser
 
 
@@ -512,8 +701,12 @@ def _mode_is_valid(args: argparse.Namespace) -> bool:
     if args.fixture is not None and not args.fixture:
         return False
     if args.device:
-        return bool(args.serial and args.serial.strip())
-    return args.fixture is not None and args.serial is None
+        return bool(args.serial and args.serial.strip() and args.confirm_device)
+    return (
+        args.fixture is not None
+        and args.serial is None
+        and not args.confirm_device
+    )
 
 
 def _requested_mode(args: argparse.Namespace) -> str | None:
@@ -926,6 +1119,274 @@ def _run_read(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
     )
 
 
+def _gate_owner() -> Owner:
+    """构造本次进程的共享门禁持有者身份；host 只在本机库内使用。"""
+    return Owner(
+        id=str(uuid.uuid4()),
+        pid=os.getpid(),
+        host=canonical_hash(platform.node()),
+    )
+
+
+def _facts_pack(
+    repo: FilePolicyRepository,
+    pack_rel: str | None,
+    log: ProcessLog,
+):
+    """按可选 --pack 加载并校验活动包，供事实待办按白名单筛选。"""
+    if pack_rel is None:
+        return None
+    _, _base, _files, _guides, pack = policy_usecases.load_active_pack(
+        repo, pack_rel, process_log=log
+    )
+    return pack
+
+
+def _run_facts(
+    log: ProcessLog, started: float, args: argparse.Namespace
+) -> int:
+    """执行 facts set/show/revoke/forget；值只进本机库与交互 stdout。"""
+    operation = args.facts_command
+    now = utc_now()
+    stage_started = time.perf_counter()
+    log.record(stage="facts", operation=operation, result="started")
+    store: SqliteProfileStore | None = None
+    try:
+        repo = FilePolicyRepository(PROJECT_ROOT)
+        pack = _facts_pack(repo, getattr(args, "pack", None), log)
+        path = profile_runtime_path(PROJECT_ROOT, args.profile)
+        if operation == "show" and not path.is_file():
+            result: dict[str, object] = {
+                "profile_id": args.profile,
+                "facts": [],
+                "active_keys": [],
+                "registered_keys": sorted(FACT_KEYS),
+                "pending": [],
+                "allowed": [],
+                "scoped_by_pack": pack is not None,
+            }
+        else:
+            if operation != "set" and not path.is_file():
+                raise ProfileError("fact_not_found")
+            store = SqliteProfileStore(
+                PROJECT_ROOT,
+                args.profile,
+                create=operation == "set",
+                now=now,
+            )
+            store.open()
+            if operation == "set":
+                if args.confirm:
+                    result = facts_usecases.apply_set(
+                        store,
+                        profile_id=args.profile,
+                        key=args.key,
+                        value=args.value,
+                        expires_at=args.expires_at,
+                        replace=args.replace,
+                        now=now,
+                        pack=pack,
+                    )
+                else:
+                    result = facts_usecases.propose_set(
+                        store,
+                        profile_id=args.profile,
+                        key=args.key,
+                        value=args.value,
+                        expires_at=args.expires_at,
+                        replace=args.replace,
+                        now=now,
+                    )
+            elif operation == "show":
+                result = facts_usecases.show_facts(
+                    store, profile_id=args.profile, pack=pack, now=now
+                )
+            elif operation == "revoke":
+                if args.confirm:
+                    result = facts_usecases.apply_revoke(
+                        store,
+                        profile_id=args.profile,
+                        key=args.key,
+                        now=now,
+                        pack=pack,
+                    )
+                else:
+                    result = facts_usecases.propose_revoke(
+                        store, profile_id=args.profile, key=args.key
+                    )
+            elif operation == "forget":
+                if args.confirm:
+                    result = facts_usecases.apply_forget(
+                        store,
+                        profile_id=args.profile,
+                        key=args.key,
+                        now=now,
+                        pack=pack,
+                    )
+                else:
+                    result = facts_usecases.propose_forget(
+                        store, profile_id=args.profile, key=args.key
+                    )
+            else:
+                raise ProfileError("invalid_fact")
+    except (ProfileError, PolicyError) as error:
+        log.record(
+            stage="facts",
+            operation=operation,
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="facts",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "facts",
+        )
+    except Exception:
+        log.record(
+            stage="facts",
+            operation=operation,
+            result="failed",
+            error_category="internal",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("profile_io_error"),
+            2,
+            "profile_io_error",
+            "internal",
+        )
+    finally:
+        if store is not None:
+            store.close()
+    log.record(
+        stage="facts",
+        operation=operation,
+        result="ok",
+        duration_ms=elapsed_ms(stage_started),
+    )
+    status = (
+        "confirmation_required"
+        if result.get("confirmed") is False
+        else "ok"
+    )
+    return _finalize_output(
+        log,
+        started,
+        {
+            "schema_version": 1,
+            "status": status,
+            "reason_code": None,
+            "result": result,
+        },
+        0,
+        None,
+        None,
+    )
+
+
+def _run_run(
+    log: ProcessLog,
+    started: float,
+    args: argparse.Namespace,
+    os_root: Path | None,
+) -> int:
+    """执行 run check 预检；不探测设备、不调用模型、不执行动作。"""
+    stage_started = time.perf_counter()
+    log.record(stage="run", operation="check", result="started")
+    now = utc_now()
+    try:
+        if args.run_command != "check":
+            raise PolicyError("invalid_input")
+        repo = FilePolicyRepository(PROJECT_ROOT)
+        _pack_rel, base_files, _files, _guides, pack = (
+            policy_usecases.load_active_pack(repo, args.pack, process_log=log)
+        )
+        profile_path = profile_runtime_path(PROJECT_ROOT, pack.profile_id)
+        gate = SharedDeviceGate(
+            profile_id=pack.profile_id,
+            profile_db_path=profile_path,
+            os_root=os_root,
+        )
+        profile_store = SqliteProfileStore(
+            PROJECT_ROOT, pack.profile_id, create=True, now=now
+        )
+        result = run_usecases.check_preflight(
+            base_files=base_files,
+            pack=pack,
+            mode=args.mode,
+            confirm_device=args.confirm_device,
+            gate=gate,
+            profile_store=profile_store,
+            owner=_gate_owner(),
+            profile_db_path=str(profile_path),
+            now=now,
+            eval_store=FileEvalStore(PROJECT_ROOT),
+            credential_rel=args.credential,
+            provider_id=args.provider,
+            model_id=args.model_id,
+            model_config_hash=args.model_config_hash,
+        )
+    except (PolicyError, DeviceGateError, ProfileError) as error:
+        log.record(
+            stage="run",
+            operation="check",
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="run",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "run",
+        )
+    except Exception:
+        log.record(
+            stage="run",
+            operation="check",
+            result="failed",
+            error_category="internal",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("run_io_error"),
+            2,
+            "run_io_error",
+            "internal",
+        )
+    log.record(
+        stage="run",
+        operation="check",
+        result="ok",
+        duration_ms=elapsed_ms(stage_started),
+    )
+    return _finalize_output(
+        log,
+        started,
+        {
+            "schema_version": 1,
+            "status": "ok",
+            "reason_code": None,
+            "result": result,
+        },
+        0,
+        None,
+        None,
+    )
+
+
 def _policy_error_payload(
     reason_code: str, issues: list[PolicyIssue] | None = None
 ) -> dict[str, object]:
@@ -956,7 +1417,12 @@ def _policy_command_token(argv: list[str]) -> str | None:
     return None
 
 
-def _run_policy(log: ProcessLog, started: float, args: argparse.Namespace) -> int:
+def _run_policy(
+    log: ProcessLog,
+    started: float,
+    args: argparse.Namespace,
+    os_root: Path | None,
+) -> int:
     """执行 policy 子命令，复用唯一日志器、correlation 与输出收尾。"""
     operation = args.policy_command
     stage_started = time.perf_counter()
@@ -987,9 +1453,24 @@ def _run_policy(log: ProcessLog, started: float, args: argparse.Namespace) -> in
                 repository,
                 args.snapshot,
                 args.dest,
-                RefusingPolicyActivity(),
+                ProfilePolicyActivity(PROJECT_ROOT, os_root=os_root),
                 now=now,
                 process_log=log,
+            )
+        elif operation == "acceptance":
+            if args.acceptance_command != "check":
+                raise PolicyError("invalid_input")
+            _pack_rel, base_files, _files, _guides, pack = (
+                policy_usecases.load_active_pack(repository, args.pack, process_log=log)
+            )
+            result = acceptance_usecases.check_acceptance(
+                FileEvalStore(PROJECT_ROOT),
+                args.credential,
+                base_files=base_files,
+                pack=pack,
+                provider_id=args.provider,
+                model_id=args.model_id,
+                model_config_hash=args.model_config_hash,
             )
         elif operation == "eval":
             bridge_types = {
@@ -1098,6 +1579,176 @@ def _run_policy(log: ProcessLog, started: float, args: argparse.Namespace) -> in
     return _finalize_output(log, started, payload, 0, None, None)
 
 
+def _release_gate(
+    gate: SharedDeviceGate, log: ProcessLog, *, converged: bool
+) -> DeviceGateError | None:
+    """按收敛状态释放或隔离共享占用，并记录固定结果。"""
+    started = time.perf_counter()
+    log.record(
+        stage="device_gate",
+        operation="release",
+        result="started",
+    )
+    try:
+        gate.release(now=utc_now(), converged=converged)
+    except DeviceGateError as error:
+        log.record(
+            stage="device_gate",
+            operation="quarantine" if not converged else "release",
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="gate",
+            duration_ms=elapsed_ms(started),
+        )
+        return error
+    log.record(
+        stage="device_gate",
+        operation="release",
+        result="ok",
+        duration_ms=elapsed_ms(started),
+    )
+    return None
+
+
+def _device_snapshot(
+    log: ProcessLog,
+    started: float,
+    args: argparse.Namespace,
+    os_root: Path | None,
+    *,
+    mode: str | None,
+) -> tuple[ProbeSnapshot | None, int | None]:
+    """在共享占用下执行一次真实探针；未取得占用时不启动任何子进程。"""
+    del mode
+    profile_id = "m0-doctor"
+    profile_path = profile_runtime_path(PROJECT_ROOT, profile_id)
+    try:
+        gate = SharedDeviceGate(
+            profile_id=profile_id,
+            profile_db_path=profile_path,
+            os_root=os_root,
+        )
+        gate_started = time.perf_counter()
+        log.record(stage="device_gate", operation="acquire", result="started")
+        gate.acquire(
+            profile_id=profile_id,
+            profile_db_path=str(profile_path),
+            owner=_gate_owner(),
+            now=utc_now(),
+        )
+    except DeviceGateError as error:
+        log.record(
+            stage="device_gate",
+            operation="acquire",
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="gate",
+            duration_ms=elapsed_ms(gate_started),
+        )
+        return None, _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "gate",
+        )
+    log.record(
+        stage="device_gate",
+        operation="acquire",
+        result="ok",
+        duration_ms=elapsed_ms(gate_started),
+    )
+
+    stage_started = time.perf_counter()
+    log.record(stage="probe", result="started")
+    try:
+        snapshot = AdbDeviceProbe(process_log=log, gate=gate).probe(args.serial)
+    except DeviceProbeError as error:
+        device_count = max(0, error.device_count)
+        log.record(
+            stage="probe",
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="probe",
+            duration_ms=elapsed_ms(stage_started),
+            device_count=device_count,
+        )
+        _release_gate(gate, log, converged=True)
+        log.record(
+            stage="decision",
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="probe",
+            device_count=device_count,
+        )
+        return None, _finalize_output(
+            log,
+            started,
+            build_result(
+                status="failed",
+                reason_code=error.reason_code,
+                device_count=device_count,
+                selected_alias=error.selected_alias,
+                unlocked=None,
+                foreground_app="unknown",
+            ),
+            2,
+            error.reason_code,
+            "probe",
+        )
+    except DeviceGateError as error:
+        log.record(
+            stage="probe",
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="gate",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        _release_gate(gate, log, converged=False)
+        return None, _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "gate",
+        )
+    except Exception:
+        log.record(
+            stage="probe",
+            result="failed",
+            error_category="internal",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        _release_gate(gate, log, converged=False)
+        return None, _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_input"),
+            2,
+            "invalid_input",
+            "internal",
+        )
+    log.record(
+        stage="probe",
+        result="ok",
+        duration_ms=elapsed_ms(stage_started),
+        device_count=len(snapshot.devices),
+    )
+    release_error = _release_gate(gate, log, converged=True)
+    if release_error is not None:
+        return None, _finalize_output(
+            log,
+            started,
+            _error_payload(release_error.reason_code),
+            2,
+            release_error.reason_code,
+            "gate",
+        )
+    return snapshot, None
+
+
 def _finish_output_failure(log: ProcessLog, started: float) -> int:
     """输出通道不可用时记录 output=failed，并安全完成 exit。"""
     log.record(
@@ -1134,8 +1785,13 @@ def main(
     argv: list[str] | None = None,
     *,
     process_log: ProcessLog | None = None,
+    os_root: Path | None = None,
 ) -> int:
-    """执行一次 CLI 命令并返回 0 或 2，不向 stderr 回显输入或异常。"""
+    """执行一次 CLI 命令并返回 0 或 2，不向 stderr 回显输入或异常。
+
+    `os_root` 只供测试注入临时应用数据根；生产 CLI 不提供该参数，固定使用
+    LOCALAPPDATA 下的共享设备门禁位置。
+    """
     log = process_log if process_log is not None else ProcessLog()
     started = time.perf_counter()
     raw_argv = list(sys.argv[1:] if argv is None else argv)
@@ -1240,8 +1896,12 @@ def main(
         return _run_sense(log, started, args)
     if args.command == "read":
         return _run_read(log, started, args)
+    if args.command == "facts":
+        return _run_facts(log, started, args)
+    if args.command == "run":
+        return _run_run(log, started, args, os_root)
     if args.command == "policy":
-        return _run_policy(log, started, args)
+        return _run_policy(log, started, args, os_root)
 
     mode = _requested_mode(args)
     if not _mode_is_valid(args):
@@ -1318,75 +1978,12 @@ def main(
             config_source=config_source,
         )
     else:
-        stage_started = time.perf_counter()
-        log.record(
-            stage="probe",
-            result="started",
-            mode=mode,
-            config_source=config_source,
+        snapshot, early_exit = _device_snapshot(
+            log, started, args, os_root, mode=mode
         )
-        try:
-            snapshot = AdbDeviceProbe(process_log=log).probe(args.serial)
-        except DeviceProbeError as error:
-            device_count = max(0, error.device_count)
-            log.record(
-                stage="probe",
-                result="failed",
-                reason_code=error.reason_code,
-                error_category="probe",
-                duration_ms=elapsed_ms(stage_started),
-                mode=mode,
-                config_source=config_source,
-            )
-            log.record(
-                stage="decision",
-                result="failed",
-                reason_code=error.reason_code,
-                error_category="probe",
-                mode=mode,
-                config_source=config_source,
-                device_count=device_count,
-            )
-            return _finalize_output(
-                log,
-                started,
-                build_result(
-                    status="failed",
-                    reason_code=error.reason_code,
-                    device_count=device_count,
-                    selected_alias=error.selected_alias,
-                    unlocked=None,
-                    foreground_app="unknown",
-                ),
-                2,
-                error.reason_code,
-                "probe",
-            )
-        except Exception:
-            log.record(
-                stage="probe",
-                result="failed",
-                reason_code=None,
-                error_category="internal",
-                duration_ms=elapsed_ms(stage_started),
-                mode=mode,
-                config_source=config_source,
-            )
-            return _finalize_output(
-                log,
-                started,
-                _error_payload("invalid_input"),
-                2,
-                "invalid_input",
-                "internal",
-            )
-        log.record(
-            stage="probe",
-            result="ok",
-            duration_ms=elapsed_ms(stage_started),
-            mode=mode,
-            config_source=config_source,
-        )
+        if early_exit is not None:
+            return early_exit
+        assert snapshot is not None
 
     try:
         result = run_doctor(snapshot)

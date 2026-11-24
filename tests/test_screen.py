@@ -41,6 +41,12 @@ class _Gate:
         if self.unavailable:
             raise DeviceGateUnavailable()
 
+    def verify(self) -> None:
+        """每条设备命令前复核占用，复用同一拒绝开关。"""
+        self.checks += 1
+        if self.unavailable:
+            raise DeviceGateUnavailable()
+
     def release(self) -> None:
         """记录释放次数。"""
         self.releases += 1
@@ -192,6 +198,26 @@ class ScreenAdapterTests(unittest.TestCase):
             )
         )
 
+    def test_reader_rechecks_gate_before_every_subprocess(self) -> None:
+        """dump/cat 与 screencap 的每条子命令前都调用共享门禁复核。"""
+        gate = _Gate(unavailable=False)
+        reader = AdbScreenReader(self.root / "evidence", gate=gate)
+        with patch(
+            "subprocess.run",
+            side_effect=[
+                subprocess.CompletedProcess([], 0, stdout="dumped"),
+                subprocess.CompletedProcess([], 0, stdout=PAGE_XML),
+            ],
+        ):
+            reader.dump_hierarchy(SERIAL)
+        self.assertEqual(gate.checks, 2)
+        with patch(
+            "subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, stdout=b"raw"),
+        ):
+            reader.capture_screen(SERIAL)
+        self.assertEqual(gate.checks, 3)
+
     def test_serial_is_required(self) -> None:
         """空 serial 在子进程启动前拒绝。"""
         reader = AdbScreenReader(self.root / "evidence")
@@ -250,7 +276,7 @@ class DeviceGateTests(unittest.TestCase):
             SERIAL,
             lambda xml: parse_page(xml, _profile(), BASE_TIME, SNAPSHOT_ID),
         )
-        self.assertEqual(gate.checks, 1)
+        self.assertEqual(gate.checks, 2)
         self.assertEqual(screen.dump_calls, 1)
         self.assertEqual(result.status, "ok")
 
