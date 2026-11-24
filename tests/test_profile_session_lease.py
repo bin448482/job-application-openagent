@@ -6,9 +6,10 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
-from app.adapters.sqlite.device_gate import SharedDeviceGate
+from app.adapters.sqlite.device_gate import SharedDeviceGate, guard_database_path
 from app.adapters.sqlite.profile_store import (
     SqliteProfileStore,
     profile_runtime_path,
@@ -160,6 +161,19 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         with self.assertRaises(DecisionRunError):
             self._decide(detached, bridge, NOW)
         self.assertEqual(bridge.calls, 1)
+
+    def _mutate_gate_nonce(self, nonce: str) -> None:
+        """只修改共享门禁行 nonce，模拟取得后共享会话身份变化。"""
+        path = guard_database_path(Path(self.root) / "appdata")
+        connection = sqlite3.connect(str(path))
+        try:
+            connection.execute(
+                "UPDATE device_guard SET nonce = ? WHERE device_key = 'primary'",
+                (nonce,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
 
     def _mutate_task_owner_pair(self) -> None:
         """把任务与设备两行 owner 同步改成另一合法且彼此相等的 owner。"""
@@ -337,6 +351,93 @@ class ProfileSessionLeaseTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason_code, "stale_decision")
         self.assertTrue(caught.exception.submitted)
         self.assertEqual(bridge.calls, 1)
+
+    def test_gate_nonce_change_before_bridge_has_zero_calls(self) -> None:
+        """共享门禁 nonce 在桥前变化时无租约且桥零调用。"""
+        self._mutate_gate_nonce("00000000-0000-4000-8000-000000000097")
+        port = ProfileSessionLease(
+            self.store,
+            self.lease,
+            profile_id="demo",
+            gate=self.gate,
+            profile_db_path=self.path,
+            clock=FixedClock(NOW),
+        )
+        bridge = _PreviewBridge()
+        self.assertIsNone(port.current_expiry())
+        with self.assertRaises(DecisionRunError):
+            self._decide(port, bridge, NOW)
+        self.assertEqual(bridge.calls, 0)
+
+    def test_gate_nonce_change_during_bridge_is_rejected_after_submission(self) -> None:
+        """桥期间共享门禁 nonce 变化时桥后拒绝，不重发。"""
+
+        class _GateMutatingBridge(_PreviewBridge):
+            """在返回决策前修改共享门禁 nonce。"""
+
+            def __init__(self, mutate: object) -> None:
+                """保存变异回调。"""
+                super().__init__()
+                self.mutate = mutate
+
+            def complete(self, **kwargs: object) -> str:
+                """先产生合法决策，再改共享门禁 nonce。"""
+                text = super().complete(**kwargs)
+                self.mutate("00000000-0000-4000-8000-000000000096")
+                return text
+
+        port = ProfileSessionLease(
+            self.store,
+            self.lease,
+            profile_id="demo",
+            gate=self.gate,
+            profile_db_path=self.path,
+            clock=FixedClock(NOW),
+        )
+        bridge = _GateMutatingBridge(self._mutate_gate_nonce)
+        with self.assertRaises(DecisionRunError) as caught:
+            self._decide(port, bridge, NOW)
+        self.assertEqual(caught.exception.reason_code, "stale_decision")
+        self.assertTrue(caught.exception.submitted)
+        self.assertEqual(bridge.calls, 1)
+
+    def test_wrong_task_key_or_app_cannot_borrow_nonce(self) -> None:
+        """同 profile 另一真实任务 key 或不支持 app 不能借原 nonce/owner。"""
+        queued = self.store.upsert_snapshot(
+            m1_helpers.make_result(
+                profile_id="demo",
+                contact="另一任务联系人",
+                snapshot_id="00000000-0000-4000-8000-000000000d01",
+            )
+        )
+        other_keys = [key for key in queued if key != self.lease.key]
+        self.assertEqual(len(other_keys), 1)
+        bridge = _PreviewBridge()
+        wrong_key = ProfileSessionLease(
+            self.store,
+            replace(self.lease, key=other_keys[0]),
+            profile_id="demo",
+            gate=self.gate,
+            profile_db_path=self.path,
+            clock=FixedClock(NOW),
+        )
+        self.assertIsNone(wrong_key.current_expiry())
+        with self.assertRaises(DecisionRunError):
+            self._decide(wrong_key, bridge, NOW)
+        self.assertEqual(bridge.calls, 0)
+
+        wrong_app = ProfileSessionLease(
+            self.store,
+            replace(self.lease, app="other"),
+            profile_id="demo",
+            gate=self.gate,
+            profile_db_path=self.path,
+            clock=FixedClock(NOW),
+        )
+        self.assertIsNone(wrong_app.current_expiry())
+        with self.assertRaises(DecisionRunError):
+            self._decide(wrong_app, bridge, NOW)
+        self.assertEqual(bridge.calls, 0)
 
     def test_bridge_crossing_expiry_is_rejected_after_submission(self) -> None:
         """桥调用期间真实租约跨截止时桥后拒绝，不重发。"""

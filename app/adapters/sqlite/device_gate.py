@@ -155,19 +155,7 @@ class SharedDeviceGate:
         started = time.perf_counter()
         self._record(operation, "started")
         try:
-            if self._nonce is None or self._owner is None:
-                raise DeviceGateError("device_not_held")
-            connection = self._connect(create=False)
-            try:
-                row = self._read_row(connection)
-            finally:
-                connection.close()
-            if row is None:
-                raise DeviceGateError("device_gate_mismatch")
-            if row["state"] == "quarantined":
-                raise DeviceGateError("device_quarantined")
-            if not self._matches_session(row):
-                raise DeviceGateError("device_gate_mismatch")
+            self._read_validated_row()
         except DeviceGateError as error:
             self._record(operation, "failed", started, error.reason_code)
             raise
@@ -227,22 +215,48 @@ class SharedDeviceGate:
         self._record(operation, "ok", started)
 
     def session_identity(self) -> DeviceSessionIdentity:
-        """复核本会话后返回 profile/原库/owner/nonce 的完整可信身份。"""
-        self.verify()
-        row = self.inspect()
+        """一次读取并完整核验同一行后返回 profile/原库/owner/nonce 身份。"""
+        operation = "verify"
+        started = time.perf_counter()
+        self._record(operation, "started")
+        try:
+            row = self._read_validated_row()
+            identity = DeviceSessionIdentity(
+                profile_id=str(row["profile_id"]),
+                profile_db_path=str(row["profile_db_path"]),
+                owner=Owner(
+                    id=str(row["owner_id"]),
+                    pid=int(row["owner_pid"]),
+                    host=str(row["owner_host"]),
+                ),
+                nonce=str(row["nonce"]),
+                state=str(row["state"]),
+            )
+        except DeviceGateError as error:
+            self._record(operation, "failed", started, error.reason_code)
+            raise
+        except Exception:
+            self._record(operation, "failed", started)
+            raise
+        self._record(operation, "ok", started)
+        return identity
+
+    def _read_validated_row(self) -> sqlite3.Row:
+        """读取一行并对同一行执行完整取得时身份/held 核验。"""
+        if self._nonce is None or self._owner is None:
+            raise DeviceGateError("device_not_held")
+        connection = self._connect(create=False)
+        try:
+            row = self._read_row(connection)
+        finally:
+            connection.close()
         if row is None:
             raise DeviceGateError("device_gate_mismatch")
-        return DeviceSessionIdentity(
-            profile_id=str(row["profile_id"]),
-            profile_db_path=str(row["profile_db_path"]),
-            owner=Owner(
-                id=str(row["owner_id"]),
-                pid=int(row["owner_pid"]),
-                host=str(row["owner_host"]),
-            ),
-            nonce=str(row["nonce"]),
-            state=str(row["state"]),
-        )
+        if row["state"] == "quarantined":
+            raise DeviceGateError("device_quarantined")
+        if not self._matches_session(row):
+            raise DeviceGateError("device_gate_mismatch")
+        return row
 
     def inspect(self) -> dict[str, object] | None:
         """只读返回固定白名单占用行；明确不存在返回 None，其它异常状态拒绝。"""

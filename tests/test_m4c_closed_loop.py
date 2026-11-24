@@ -418,6 +418,7 @@ class M4cClosedLoopTests(unittest.TestCase):
         real_lstat = os.lstat
 
         def gate_lstat(path: object) -> object:
+            """只对精确门禁路径注入 permission 错误，其它路径透传真实 lstat。"""
             if Path(path) == gate_path:
                 raise PermissionError("synthetic")
             return real_lstat(path)
@@ -433,6 +434,7 @@ class M4cClosedLoopTests(unittest.TestCase):
         profile_db = profile_runtime_path(self.root, PROFILE_ID)
 
         def profile_lstat(path: object) -> object:
+            """只对精确 profile 库路径注入 permission 错误，其它路径透传真实 lstat。"""
             if Path(path) == profile_db:
                 raise PermissionError("synthetic")
             return real_lstat(path)

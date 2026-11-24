@@ -8,6 +8,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.adapters.sqlite.activity import ProfilePolicyActivity
 from app.adapters.sqlite.device_gate import (
@@ -283,6 +284,40 @@ class SharedDeviceGateTests(unittest.TestCase):
             )
         finally:
             connection.close()
+
+    def test_session_identity_returns_the_same_validated_row(self) -> None:
+        """session_identity 只读并核验一次，不从第二次未校验读取构造身份。"""
+        gate = self._gate("alpha")
+        self._acquire(gate, "alpha")
+        identity = gate.session_identity()
+        self.assertEqual(identity.profile_id, "alpha")
+        self.assertEqual(identity.owner, _owner())
+        self.assertEqual(identity.state, "held")
+        with patch.object(
+            SharedDeviceGate,
+            "inspect",
+            side_effect=AssertionError("second read is forbidden"),
+        ):
+            again = gate.session_identity()
+        self.assertEqual(again, identity)
+
+    def test_session_identity_rejects_changed_nonce(self) -> None:
+        """session_identity 对同一行核验 nonce；篡改后不返回可信身份。"""
+        gate = self._gate("alpha")
+        self._acquire(gate, "alpha")
+        path = guard_database_path(self.os_root)
+        connection = sqlite3.connect(str(path))
+        try:
+            connection.execute(
+                "UPDATE device_guard SET nonce = ? WHERE device_key = 'primary'",
+                ("00000000-0000-4000-8000-000000000098",),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        with self.assertRaises(DeviceGateError) as caught:
+            gate.session_identity()
+        self.assertEqual(caught.exception.reason_code, "device_gate_mismatch")
 
     def test_unreadable_gate_library_never_claims_release(self) -> None:
         """门禁库损坏时复核与释放都固定 IO 失败，不伪造设备空闲。"""

@@ -506,6 +506,7 @@ class ProfileFactsCliTests(unittest.TestCase):
         real_lstat = os.lstat
 
         def denied(target: object) -> object:
+            """只对精确 profile 路径注入 permission 错误，其它路径透传真实 lstat。"""
             if Path(target) == path:
                 raise PermissionError("synthetic")
             return real_lstat(target)

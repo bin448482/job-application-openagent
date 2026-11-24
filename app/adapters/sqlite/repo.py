@@ -48,6 +48,7 @@ from app.domain.models import (
     validate_event_reason,
     validate_evidence,
     validate_lease,
+    validate_lease,
     validate_owner,
     validate_read_result,
 )
@@ -579,16 +580,16 @@ class SqliteStore:
         """只读重核任务/设备租约与取得时 Lease/Owner/nonce/到期；不匹配返回 None。"""
         if not isinstance(lease, Lease):
             raise StoreError("invalid_input")
-        if not is_uuid(lease.nonce):
-            raise StoreError("invalid_input")
         try:
+            validate_lease(lease)
             now_dt = parse_utc(now)
         except ValueError:
             raise StoreError("invalid_input") from None
         nonce = lease.nonce
         try:
             row = self._connection.execute(
-                "SELECT d.lease_owner AS task_owner, d.owner_pid AS task_pid, "
+                "SELECT d.app AS task_app, d.key AS task_key, "
+                "d.lease_owner AS task_owner, d.owner_pid AS task_pid, "
                 "d.owner_host AS task_host, d.nonce AS task_nonce, "
                 "d.lease_expires_at AS task_expiry, d.state AS task_state, "
                 "dl.lease_owner AS dev_owner, dl.owner_pid AS dev_pid, "
@@ -596,8 +597,9 @@ class SqliteStore:
                 "dl.lease_expires_at AS dev_expiry, "
                 "dl.reservation_state AS dev_state "
                 "FROM hr_discoveries d JOIN device_lease dl ON d.nonce = dl.nonce "
-                "WHERE d.nonce = ? AND d.state IN ('leased', 'running')",
-                (nonce,),
+                "WHERE d.app = ? AND d.key = ? AND d.nonce = ? "
+                "AND d.state IN ('leased', 'running')",
+                (lease.app, lease.key, nonce),
             ).fetchone()
         except sqlite3.OperationalError as error:
             raise map_locked_error(error) from None
@@ -610,6 +612,8 @@ class SqliteStore:
             device_expiry = str(row["dev_expiry"])
             valid = (
                 row["dev_state"] == "held"
+                and row["task_app"] == lease.app
+                and row["task_key"] == lease.key
                 and row["task_nonce"] == nonce
                 and row["dev_nonce"] == nonce
                 and row["task_owner"] == lease.owner.id
