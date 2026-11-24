@@ -574,12 +574,14 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         complete = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' scrollable="false" bounds="[0,0][1000,1800]">'
-            '<node text="合成联系人"><node text="消息" /></node></node></hierarchy>'
+            '<node text="合成联系人" bounds="[0,0][1000,200]">'
+            '<node text="消息" bounds="[10,10][500,60]" /></node></node></hierarchy>'
         )
         anchor_false = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' bounds="[0,0][1000,1800]">'
-            '<node class="android.widget.Button" scrollable="false" text="消息" />'
+            '<node class="android.widget.Button" scrollable="false"'
+            ' text="消息" bounds="[10,10][500,60]" />'
             '</node></hierarchy>'
         )
         runner, calls = self._custom_run((complete, complete, anchor_false))
@@ -597,12 +599,13 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         before = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' scrollable="false" bounds="[0,0][1000,1800]">'
-            '<node text="合成联系人"><node text="消息" /></node></node></hierarchy>'
+            '<node text="合成联系人" bounds="[0,0][1000,200]">'
+            '<node text="消息" bounds="[10,10][500,60]" /></node></node></hierarchy>'
         )
         after = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' scrollable="true" bounds="[0,0][1000,1800]">'
-            '<node text="消息" /></node></hierarchy>'
+            '<node text="消息" bounds="[10,10][500,60]" /></node></hierarchy>'
         )
         delete = ActionPlan(
             action_key=f"{CONVERSATION}:delete",
@@ -626,6 +629,204 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             derive_action_outcome(observation).evidence.outcome, "performed"
         )
 
+    def test_delete_other_row_or_external_clip_is_not_complete(self) -> None:
+        """其它行被列表容器裁剪或整个列表超出外层可见区域都不算完整。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+        target_row = (
+            '<node text="合成联系人" bounds="[0,0][1000,200]">'
+            '<node text="消息" bounds="[10,10][500,60]" /></node>'
+        )
+        other_row = '<node text="另一行" bounds="[0,1700][1000,2200]" />'
+        clipped_before = (
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="false" bounds="[0,0][1000,1800]">'
+            + target_row
+            + other_row
+            + '</node></hierarchy>'
+        )
+        runner, calls = self._custom_run(
+            (clipped_before, clipped_before, clipped_before)
+        )
+        with patch("subprocess.run", side_effect=runner):
+            executor.execute(delete)
+        self.assertEqual([c for c in calls if "tap" in c], [])
+
+        complete = (
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="false" bounds="[0,0][1000,1800]">'
+            + target_row
+            + '</node></hierarchy>'
+        )
+        clipped_after = (
+            '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="false" bounds="[0,0][1000,1800]">'
+            '<node text="消息" bounds="[10,10][500,60]" />'
+            '<node text="另一行" bounds="[0,1700][1000,2200]" />'
+            '</node></hierarchy>'
+        )
+        runner, calls = self._custom_run((complete, complete, clipped_after))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(delete)
+        self.assertEqual(len([c for c in calls if "tap" in c]), 3)
+        self.assertNotEqual(
+            derive_action_outcome(observation).evidence.outcome, "performed"
+        )
+
+        external = (
+            '<hierarchy bounds="[0,0][1000,1800]">'
+            '<node class="androidx.recyclerview.widget.RecyclerView"'
+            ' scrollable="false" bounds="[0,0][1000,2000]">'
+            + target_row
+            + '</node></hierarchy>'
+        )
+        runner, calls = self._custom_run((external, external, external))
+        with patch("subprocess.run", side_effect=runner):
+            executor.execute(delete)
+        self.assertEqual([c for c in calls if "tap" in c], [])
+
+    def test_delete_missing_bad_or_zero_bounds_is_not_complete(self) -> None:
+        """缺失、坏格式、零面积与自相矛盾 bounds 在不可逆点击前拒绝。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        delete = ActionPlan(
+            action_key=f"{CONVERSATION}:delete",
+            action_kind="delete_conversation",
+            target_key=CONVERSATION,
+            conversation_key=CONVERSATION,
+            body_text=None,
+            attachment_name=None,
+            target_label="合成联系人",
+            anchor_label="消息",
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=2,
+            tap_points=((1, 2), (3, 4), (5, 6)),
+        )
+        cases = {
+            "missing-target": (
+                '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+                ' scrollable="false" bounds="[0,0][1000,1800]">'
+                '<node text="合成联系人"><node text="消息" /></node>'
+                '</node></hierarchy>'
+            ),
+            "bad-container": (
+                '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+                ' scrollable="false" bounds="bad">'
+                '<node text="合成联系人" bounds="[0,0][1000,200]">'
+                '<node text="消息" bounds="[10,10][500,60]" /></node>'
+                '</node></hierarchy>'
+            ),
+            "zero-area": (
+                '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+                ' scrollable="false" bounds="[0,0][0,0]">'
+                '<node text="合成联系人" bounds="[0,0][1000,200]">'
+                '<node text="消息" bounds="[10,10][500,60]" /></node>'
+                '</node></hierarchy>'
+            ),
+            "self-contradictory": (
+                '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
+                ' scrollable="false" bounds="[100,100][50,50]">'
+                '<node text="合成联系人" bounds="[0,0][1000,200]">'
+                '<node text="消息" bounds="[10,10][500,60]" /></node>'
+                '</node></hierarchy>'
+            ),
+        }
+        for name, xml in cases.items():
+            with self.subTest(case=name):
+                runner, calls = self._custom_run((xml, xml, xml))
+                with patch("subprocess.run", side_effect=runner):
+                    executor.execute(delete)
+                self.assertEqual([c for c in calls if "tap" in c], [])
+
+    def test_two_same_type_slots_are_ambiguous_and_zero_tap(self) -> None:
+        """同一分组两个独立同类型槽位不得上溯合并，两个类型都零点击。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        before = (
+            '<hierarchy><node text="合成联系人">'
+            '<node><node text="微信" /><node text="交换微信"'
+            ' clickable="true" enabled="true" /></node>'
+            '<node><node text="微信" /><node text="交换微信"'
+            ' clickable="true" enabled="true" /></node>'
+            '<node text="消息" /></node></hierarchy>'
+        )
+        for kind, suffix in (("change_wechat", "wechat"), ("change_phone", "phone")):
+            contact = ActionPlan(
+                action_key=f"{CONVERSATION}:{suffix}",
+                action_kind=kind,
+                target_key=CONVERSATION,
+                conversation_key=CONVERSATION,
+                body_text=None,
+                attachment_name=None,
+                target_label="合成联系人",
+                anchor_label="消息",
+                ime_component=None,
+                ime_original=None,
+                irreversible_tap_index=1,
+                tap_points=((10, 20), (30, 40)),
+            )
+            runner, calls = self._custom_run((before, before, before))
+            with patch("subprocess.run", side_effect=runner):
+                executor.execute(contact)
+            self.assertEqual([c for c in calls if "tap" in c], [])
+
+    def test_disabled_after_button_still_proves_new_type_status(self) -> None:
+        """动作后按钮禁用但本类型精确新状态仍在同一槽位时证明 request_sent。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        for kind, suffix, marker, button in (
+            ("change_wechat", "wechat", "微信", "交换微信"),
+            ("change_phone", "phone", "电话", "交换电话"),
+        ):
+            before = (
+                '<hierarchy><node text="合成联系人">'
+                f'<node><node text="{marker}" /><node text="{button}"'
+                ' clickable="true" enabled="true" /></node>'
+                '<node text="消息" /></node></hierarchy>'
+            )
+            after = (
+                '<hierarchy><node text="合成联系人">'
+                f'<node><node text="{marker}" /><node text="{button}"'
+                ' clickable="true" enabled="false" /><node text="请求中" /></node>'
+                '<node text="消息" /></node></hierarchy>'
+            )
+            contact = ActionPlan(
+                action_key=f"{CONVERSATION}:{suffix}",
+                action_kind=kind,
+                target_key=CONVERSATION,
+                conversation_key=CONVERSATION,
+                body_text=None,
+                attachment_name=None,
+                target_label="合成联系人",
+                anchor_label="消息",
+                ime_component=None,
+                ime_original=None,
+                irreversible_tap_index=1,
+                tap_points=((10, 20), (30, 40)),
+            )
+            runner, calls = self._custom_run((before, before, after))
+            with patch("subprocess.run", side_effect=runner):
+                observation = executor.execute(contact)
+            self.assertEqual(len([c for c in calls if "tap" in c]), 2)
+            outcome = derive_action_outcome(observation)
+            self.assertEqual(outcome.evidence.outcome, "performed")
+            self.assertEqual(outcome.evidence.effect, "request_sent")
+
     def test_delete_complete_list_removal_is_performed(self) -> None:
         """完整列表内目标消失且锚点仍在时为 deleted 正例。"""
         gate = FakeGate()
@@ -633,12 +834,13 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         before = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' scrollable="false" bounds="[0,0][1000,1800]">'
-            '<node text="合成联系人"><node text="消息" /></node></node></hierarchy>'
+            '<node text="合成联系人" bounds="[0,0][1000,200]">'
+            '<node text="消息" bounds="[10,10][500,60]" /></node></node></hierarchy>'
         )
         after = (
             '<hierarchy><node class="androidx.recyclerview.widget.RecyclerView"'
             ' scrollable="false" bounds="[0,0][1000,1800]">'
-            '<node text="消息" /></node></hierarchy>'
+            '<node text="消息" bounds="[10,10][500,60]" /></node></hierarchy>'
         )
         delete = ActionPlan(
             action_key=f"{CONVERSATION}:delete",
@@ -904,6 +1106,164 @@ class AdbActionPrimitiveTests(unittest.TestCase):
             self.assertEqual(
                 [item["result"] for item in evidence],
                 ["started", "ok", "started", "ok", "started", "ok"],
+            )
+
+    def test_platform_bound_rejects_unproven_family_and_accepts_stopped(self) -> None:
+        """平台 Job 有界时以核验结果为准：残留活进程 unknown，空族才 stopped。"""
+        import tempfile
+        from pathlib import Path
+
+        from app.adapters.adb.command import CommandIdentityStore, run_adb
+
+        class Proc:
+            """最小 Popen 替身。"""
+
+            def __init__(self) -> None:
+                """固定 PID 与成功返回。"""
+                self.pid = 4100
+                self.returncode = 0
+
+            def communicate(self, timeout: float | None = None):
+                """返回成功输出。"""
+                return "ok", ""
+
+            def kill(self) -> None:
+                """无 kill。"""
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        class Bound:
+            """记录终止/关闭并返回固定活动进程数的 Job 替身。"""
+
+            def __init__(self, active: int, assign: bool = True) -> None:
+                """保存活动数与加入结果。"""
+                self._active = active
+                self._assign = assign
+                self.terminated = False
+                self.closed = False
+
+            def assign(self, pid: int) -> bool:
+                """记录加入结果。"""
+                return self._assign
+
+            def terminate(self) -> bool:
+                """记录终止。"""
+                self.terminated = True
+                return True
+
+            def active(self) -> int | None:
+                """返回固定活动进程数。"""
+                return self._active
+
+            def close(self) -> None:
+                """记录关闭。"""
+                self.closed = True
+
+        def run_case(active: int):
+            """用给定平台活动数跑一次真实 run_adb + 真实账本。"""
+            with tempfile.TemporaryDirectory() as directory:
+                store = CommandIdentityStore(Path(directory))
+                key = "boss:conv:test:resume"
+                bound = Bound(active)
+
+                def on_pid(pid: int) -> None:
+                    """启动时枚举不到后代。"""
+                    store.begin_family(key, pid, lambda p: [])
+
+                def on_done(pid: int, bounded: bool, proven: bool) -> None:
+                    """把平台有界/证明结果交给唯一账本闭合。"""
+                    store.finish_family(
+                        key, pid, lambda p: [], bounded=bounded, proven=proven
+                    )
+
+                with patch("subprocess.Popen", return_value=Proc()):
+                    run_adb(
+                        ["adb"],
+                        gate=FakeGate(),
+                        on_pid=on_pid,
+                        on_done=on_done,
+                        bound_factory=lambda: bound,
+                    )
+                state = store.check(key, 4100, lambda pid: "stopped")
+                return state, bound
+
+        state, bound = run_case(1)
+        self.assertTrue(bound.terminated)
+        self.assertTrue(bound.closed)
+        self.assertEqual(state, "unknown")
+
+        state, _bound = run_case(0)
+        self.assertEqual(state, "stopped")
+
+    def test_platform_bound_unavailable_stays_unknown_even_if_scan_sees_adult(self) -> None:
+        """无平台有界约束时即使枚举到后代也不得闭合为 stopped。"""
+        import tempfile
+        from pathlib import Path
+
+        from app.adapters.adb.command import CommandIdentityStore, run_adb
+
+        class Proc:
+            """最小 Popen 替身。"""
+
+            def __init__(self) -> None:
+                """固定 PID。"""
+                self.pid = 4100
+                self.returncode = 0
+
+            def communicate(self, timeout: float | None = None):
+                """返回成功输出。"""
+                return "ok", ""
+
+            def kill(self) -> None:
+                """无 kill。"""
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        class Bound:
+            """加入 Job 失败。"""
+
+            def assign(self, pid: int) -> bool:
+                """返回失败。"""
+                return False
+
+            def close(self) -> None:
+                """无关闭。"""
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = CommandIdentityStore(Path(directory))
+            key = "boss:conv:test:resume"
+
+            def on_pid(pid: int) -> None:
+                """启动时无后代。"""
+                store.begin_family(key, pid, lambda p: [])
+
+            def on_done(pid: int, bounded: bool, proven: bool) -> None:
+                """结束时发现仍挂树后代。"""
+                store.finish_family(
+                    key,
+                    pid,
+                    lambda p: [4200] if p == 4100 else [],
+                    bounded=bounded,
+                    proven=proven,
+                )
+
+            with patch("subprocess.Popen", return_value=Proc()):
+                run_adb(
+                    ["adb"],
+                    gate=FakeGate(),
+                    on_pid=on_pid,
+                    on_done=on_done,
+                    bound_factory=lambda: Bound(),
+                )
+            self.assertIn(4200, store.identities(key))
+            states = {4100: "stopped", 4200: "alive"}
+            self.assertEqual(
+                store.check(key, 4100, lambda pid: states.get(pid, "unknown")),
+                "unknown",
             )
 
     def test_run_adb_records_descendant_tree_through_pid_callback(self) -> None:

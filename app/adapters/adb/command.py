@@ -4,11 +4,142 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Callable
 
 ADB_TIMEOUT_SECONDS = 5
+
+
+class ProcessFamilyBound:
+    """用 Windows Job Object 对单条命令族做有限约束/核验；不可用时返回 None。"""
+
+    def __init__(self, handle: int) -> None:
+        """保存 Job 句柄；构造不启动或终止任何进程。"""
+        self._handle = handle
+
+    @classmethod
+    def create(cls) -> "ProcessFamilyBound | None":
+        """创建不限制退出行为的空 Job；非 Windows 或 API 不可用时返回 None。"""
+        if os.name != "nt":
+            return None
+        try:
+            import ctypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.CreateJobObjectW.argtypes = (ctypes.c_void_p, ctypes.c_wchar_p)
+            kernel32.CreateJobObjectW.restype = ctypes.c_void_p
+            handle = kernel32.CreateJobObjectW(None, None)
+            if not handle:
+                return None
+            return cls(int(handle))
+        except Exception:
+            return None
+
+    def assign(self, pid: int) -> bool:
+        """把命令进程加入 Job；失败表示无法获得有限族约束。"""
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.OpenProcess.argtypes = (
+                wintypes.DWORD,
+                wintypes.BOOL,
+                wintypes.DWORD,
+            )
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.AssignProcessToJobObject.argtypes = (
+                wintypes.HANDLE,
+                wintypes.HANDLE,
+            )
+            kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+            kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+            kernel32.CloseHandle.restype = wintypes.BOOL
+            process = kernel32.OpenProcess(
+                0x0100 | 0x0200, False, int(pid)
+            )  # SET_QUOTA | TERMINATE
+            if not process:
+                return False
+            try:
+                assigned = kernel32.AssignProcessToJobObject(
+                    self._handle, process
+                )
+            finally:
+                kernel32.CloseHandle(process)
+            return bool(assigned)
+        except Exception:
+            return False
+
+    def terminate(self) -> bool:
+        """终止 Job 内剩余进程，使命令族可证明停止。"""
+        try:
+            import ctypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.TerminateJobObject.argtypes = (
+                ctypes.c_void_p,
+                ctypes.c_uint,
+            )
+            kernel32.TerminateJobObject.restype = ctypes.c_int
+            return bool(kernel32.TerminateJobObject(self._handle, 1))
+        except Exception:
+            return False
+
+    def active(self) -> int | None:
+        """返回 Job 内活动进程数；查询失败返回 None。"""
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class Accounting(ctypes.Structure):
+                """JOBOBJECT_BASIC_ACCOUNTING_INFORMATION 固定字段。"""
+
+                _fields_ = [
+                    ("TotalUserTime", ctypes.c_longlong),
+                    ("TotalKernelTime", ctypes.c_longlong),
+                    ("ThisPeriodTotalUserTime", ctypes.c_longlong),
+                    ("ThisPeriodTotalKernelTime", ctypes.c_longlong),
+                    ("TotalPageFaultCount", wintypes.DWORD),
+                    ("TotalProcesses", wintypes.DWORD),
+                    ("ActiveProcesses", wintypes.DWORD),
+                    ("TotalTerminatedProcesses", wintypes.DWORD),
+                ]
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.QueryInformationJobObject.argtypes = (
+                ctypes.c_void_p,
+                ctypes.c_int,
+                ctypes.c_void_p,
+                ctypes.c_uint,
+                ctypes.c_void_p,
+            )
+            kernel32.QueryInformationJobObject.restype = ctypes.c_int
+            info = Accounting()
+            ok = kernel32.QueryInformationJobObject(
+                self._handle,
+                1,  # JobObjectBasicAccountingInformation
+                ctypes.byref(info),
+                ctypes.sizeof(info),
+                None,
+            )
+            return int(info.ActiveProcesses) if ok else None
+        except Exception:
+            return None
+
+    def close(self) -> None:
+        """关闭 Job 句柄；不保留常驻监控。"""
+        try:
+            import ctypes
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+            kernel32.CloseHandle.restype = ctypes.c_int
+            kernel32.CloseHandle(self._handle)
+        except Exception:
+            return
 
 
 class CommandIdentityStore:
@@ -47,13 +178,18 @@ class CommandIdentityStore:
         action_key: str,
         pid: int,
         child_scan: Callable[[int], list[int] | None],
+        *,
+        bounded: bool = False,
+        proven: bool = False,
     ) -> None:
-        """命令结束后再展开一次，只有完整枚举才写完成标记。"""
-        complete = self._expand(action_key, [pid], child_scan)
-        if complete:
-            self._append(action_key, {"complete": True})
-        else:
-            self.record_unresolved(action_key)
+        """命令结束：无平台有界约束或未证明族停止时保持 unknown，不假证 stopped。"""
+        if bounded:
+            self._append(
+                action_key, {"complete": True} if proven else {"unresolved": True}
+            )
+            return
+        self._expand(action_key, [pid], child_scan)
+        self.record_unresolved(action_key)
 
     def record_tree(
         self,
@@ -192,7 +328,8 @@ def run_adb(
     before: Callable[[], None] | None = None,
     binary: bool = False,
     on_pid: Callable[[int], None] | None = None,
-    on_done: Callable[[int], None] | None = None,
+    on_done: Callable[[int, bool, bool], None] | None = None,
+    bound_factory: Callable[[], ProcessFamilyBound | None] | None = None,
 ) -> subprocess.CompletedProcess:
     """在共享门禁复核后执行一次有界命令；可选记录进程身份，失败不重试。"""
     if before is not None:
@@ -242,6 +379,10 @@ def run_adb(
         except subprocess.TimeoutExpired:
             pass
         raise AdbCommandFailure("adb_oserror") from None
+    bound = (bound_factory or ProcessFamilyBound.create)()
+    if bound is not None and not bound.assign(process.pid):
+        bound.close()
+        bound = None
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -250,9 +391,9 @@ def run_adb(
             process.communicate(timeout=1)
         except subprocess.TimeoutExpired:
             process.wait(timeout=1)
-        _finalize(on_done, process.pid)
+        _finalize(on_done, process.pid, bound)
         raise AdbCommandFailure("adb_timeout") from None
-    _finalize(on_done, process.pid)
+    _finalize(on_done, process.pid, bound)
     completed = subprocess.CompletedProcess(
         args=args, returncode=process.returncode, stdout=stdout, stderr=stderr
     )
@@ -261,12 +402,34 @@ def run_adb(
     return completed
 
 
-def _finalize(on_done: Callable[[int], None] | None, pid: int) -> None:
-    """命令结束后尝试闭合命令族；闭合失败只让账本保持 unknown，不掩盖结果。"""
+def _finalize(
+    on_done: Callable[[int, bool, bool], None] | None,
+    pid: int,
+    bound: ProcessFamilyBound | None,
+) -> None:
+    """命令结束后先约束/核验命令族，再闭合账本；失败只让账本保持 unknown。"""
+    bounded = bound is not None
+    proven = False
+    if bound is not None:
+        try:
+            for _attempt in range(20):
+                if not bound.terminate():
+                    break
+                active = bound.active()
+                if active == 0:
+                    proven = True
+                    break
+                if active is None:
+                    break
+                time.sleep(0.025)
+        except Exception:
+            proven = False
+        finally:
+            bound.close()
     if on_done is None:
         return
     try:
-        on_done(pid)
+        on_done(pid, bounded, proven)
     except Exception:
         return
 

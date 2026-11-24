@@ -1036,8 +1036,8 @@ class CommandStopCheckerTests(unittest.TestCase):
                 "unknown",
             )
 
-    def test_command_identity_store_late_descendant_is_rejected(self) -> None:
-        """启动后晚生的后代在结束扫描时记录，仍存活则拒绝 stopped。"""
+    def test_command_identity_store_late_descendant_is_unknown(self) -> None:
+        """无平台有界时晚生后代即使被结束扫描记录也不得 stopped。"""
         from app.adapters.adb.command import CommandIdentityStore
 
         with tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-cmd5-") as directory:
@@ -1050,23 +1050,14 @@ class CommandStopCheckerTests(unittest.TestCase):
                 lambda pid: list(tree.get(pid, [])),
             )
             self.assertIn(4200, store.identities("boss:conv:test:resume"))
-            states = {4100: "stopped", 4200: "alive"}
+            states = {4100: "stopped", 4200: "stopped"}
             self.assertEqual(
                 store.check(
                     "boss:conv:test:resume",
                     4100,
                     lambda pid: states.get(pid, "unknown"),
                 ),
-                "alive",
-            )
-            states[4200] = "stopped"
-            self.assertEqual(
-                store.check(
-                    "boss:conv:test:resume",
-                    4100,
-                    lambda pid: states.get(pid, "unknown"),
-                ),
-                "stopped",
+                "unknown",
             )
 
 

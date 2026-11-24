@@ -26,7 +26,7 @@ from app.domain.models import Lease, Owner, is_hash, parse_utc
 from app.domain.policy import utc_now, v1_policy_tier
 from app.ports.actions import ActionExecutionError, ActionPlan, DeviceActionPort
 from app.ports.device_gate import SharedDeviceGatePort
-from app.ports.store import StorePort
+from app.ports.store import StoreError, StorePort
 from app.process_log import ProcessLog
 
 
@@ -262,6 +262,15 @@ def perform_action(
             "failed",
             reason_code=error.reason_code,
             error_category="action",
+        )
+        raise
+    except StoreError as error:
+        _log(
+            process_log,
+            "action_validate",
+            "failed",
+            reason_code=error.reason_code,
+            error_category="store",
         )
         raise
     _log(process_log, "action_validate", "ok")

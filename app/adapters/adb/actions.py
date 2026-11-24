@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 import uuid
 import json
@@ -18,6 +17,9 @@ from app.adapters.adb.command import (
     run_adb,
 )
 from app.adapters.adb.screen import AdbScreenReader
+from app.adapters.boss.support import parent_map as _support_parent_map
+from app.adapters.boss.support import parse_bounds as _support_parse_bounds
+from app.adapters.boss.support import rect_inside as _support_rect_inside
 from app.adapters.sqlite.repo import _child_processes
 from app.domain.actions import ActionObservation
 from app.ports.actions import ActionExecutionError, ActionPlan
@@ -721,7 +723,10 @@ class AdbActionExecutor:
 
     def _command_hooks(
         self,
-    ) -> tuple[Callable[[int], None] | None, Callable[[int], None] | None]:
+    ) -> tuple[
+        Callable[[int], None] | None,
+        Callable[[int, bool, bool], None] | None,
+    ]:
         """返回本次命令的开始/结束身份回调；无账本或未绑定动作时不记录。"""
         if self._command_store is None or self._current_action_key is None:
             return None, None
@@ -735,12 +740,16 @@ class AdbActionExecutor:
             self._current_action_key, pid, self._child_scan
         )
 
-    def _record_command_end(self, pid: int) -> None:
-        """命令结束后再展开命令族；完整才闭合，否则保留 unknown。"""
+    def _record_command_end(self, pid: int, bounded: bool, proven: bool) -> None:
+        """命令结束后闭合命令族；平台有界时以核验结果为准，否则有界枚举。"""
         if self._command_store is None or self._current_action_key is None:
             return
         self._command_store.finish_family(
-            self._current_action_key, pid, self._child_scan
+            self._current_action_key,
+            pid,
+            self._child_scan,
+            bounded=bounded,
+            proven=proven,
         )
 
     def _index_evidence(
@@ -885,67 +894,68 @@ LIST_CONTAINER_TOKENS = (
 
 
 def _list_complete(xml_text: str, label: str) -> bool:
-    """要求目标/锚点位于真正的列表容器内，且该容器显式非滚动并完整覆盖。
+    """要求目标/锚点所在真实列表容器显式非滚动，且全部可见行/子节点未被裁剪。
 
-    目标行/锚点按钮自身的 scrollable 或其它无关节点 false 不构成列表覆盖。
+    目标/锚点自身被容器包含只是必要条件；其它行或外层可见区域裁剪都不算完整。
+    缺失、坏格式、零面积或自相矛盾的 bounds 一律不默认成功。
     """
     try:
         root = ET.fromstring(xml_text)
     except (ET.ParseError, ValueError):
         return False
-    parents: dict[ET.Element, ET.Element] = {}
-    for parent in root.iter("node"):
-        for child in parent:
-            if child.tag == "node":
-                parents[child] = parent
-    found: ET.Element | None = None
-    for node in root.iter("node"):
-        if node.get("text") == label:
-            found = node
-            break
-    if found is None:
+    parents: dict[ET.Element, ET.Element] = _support_parent_map(root)
+    matches = [node for node in root.iter("node") if node.get("text") == label]
+    if len(matches) != 1:
         return False
-    containers: list[ET.Element] = []
+    found = matches[0]
+    found_rect = _support_parse_bounds(found)
+    if found_rect is None:
+        return False
+    container: ET.Element | None = None
     current = parents.get(found)
     while current is not None:
         cls = current.get("class") or ""
         if current.get("scrollable") is not None and any(
             token in cls for token in LIST_CONTAINER_TOKENS
         ):
-            containers.append(current)
+            container = current
+            break
         current = parents.get(current)
-    if not containers:
+    if container is None or container.get("scrollable") != "false":
         return False
-    if any(container.get("scrollable") != "false" for container in containers):
+    container_rect = _support_parse_bounds(container)
+    if container_rect is None:
         return False
-    inner = containers[0]
-    if not _bounds_contain(inner.get("bounds"), found.get("bounds")):
+    if not _support_rect_inside(found_rect, container_rect):
         return False
+    for row in container:
+        if row.tag != "node":
+            continue
+        row_rect = _support_parse_bounds(row)
+        if row_rect is None or not _support_rect_inside(row_rect, container_rect):
+            return False
+    for node in container.iter("node"):
+        if node is container:
+            continue
+        rect = _support_parse_bounds(node)
+        if rect is not None and not _support_rect_inside(rect, container_rect):
+            return False
+    current = parents.get(container)
+    while current is not None:
+        cls = current.get("class") or ""
+        if current.get("scrollable") == "true" and any(
+            token in cls for token in LIST_CONTAINER_TOKENS
+        ):
+            return False
+        if current.get("bounds") is not None:
+            outer_rect = _support_parse_bounds(current)
+            if outer_rect is None or not _support_rect_inside(
+                container_rect, outer_rect
+            ):
+                return False
+            break
+        current = parents.get(current)
     return True
-
-
-def _bounds_contain(outer: str | None, inner: str | None) -> bool:
-    """比较 `[x1,y1][x2,y2]`；缺失或不可解析时不额外拒绝。"""
-    outer_box = _parse_bounds(outer)
-    inner_box = _parse_bounds(inner)
-    if outer_box is None or inner_box is None:
-        return True
-    return (
-        outer_box[0] <= inner_box[0]
-        and outer_box[1] <= inner_box[1]
-        and outer_box[2] >= inner_box[2]
-        and outer_box[3] >= inner_box[3]
-    )
-
-
-def _parse_bounds(value: str | None) -> tuple[int, int, int, int] | None:
-    """解析 Android bounds 字符串为四元组；坏格式返回 None。"""
-    if not isinstance(value, str):
-        return None
-    match = re.fullmatch(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]", value)
-    if match is None:
-        return None
-    return tuple(int(part) for part in match.groups())  # type: ignore[return-value]
 
 
 def _slot_node(
@@ -954,7 +964,11 @@ def _slot_node(
     action_kind: str,
     identity_labels: tuple[str, ...] = (),
 ) -> ET.Element | None:
-    """返回本动作类型唯一槽位根：由可点按钮上溯到仅含本类型的最外层容器。"""
+    """返回本动作类型唯一槽位根；独立同类型控件并存时保留歧义并返回 None。
+
+    定位只看 clickable，不看 enabled，使动作后按钮禁用仍能定位同一槽位的效果；
+    可用性/确认另行要求 enabled 且未处理。
+    """
     node = _target_node(xml_text, target, identity_labels)
     if node is None or action_kind not in {"change_wechat", "change_phone"}:
         return None
@@ -977,18 +991,37 @@ def _slot_node(
             values.append(item.get("text") or "")
         return values
 
+    def controls(item: ET.Element) -> list[ET.Element]:
+        """返回容器内本类型 clickable 控件，用于阻止上溯合并独立槽位。"""
+        result: list[ET.Element] = []
+        for child in item.iter("node"):
+            if child.get("clickable") != "true":
+                continue
+            child_texts = texts(child)
+            if any(other in text for text in child_texts):
+                continue
+            if any(marker in text for text in child_texts):
+                result.append(child)
+        return result
+
     roots: list[ET.Element] = []
     for child in node.iter("node"):
-        if child.get("clickable") != "true" or child.get("enabled") != "true":
+        if child.get("clickable") != "true":
             continue
-        if not any(marker in text for text in texts(child)):
+        child_texts = texts(child)
+        if not any(marker in text for text in child_texts):
+            continue
+        if any(other in text for text in child_texts):
             continue
         top = child
         current = parents.get(child)
         while current is not None and current is not node:
-            if any(other in text for text in texts(current)):
+            current_texts = texts(current)
+            if any(other in text for text in current_texts):
                 break
-            if not any(marker in text for text in texts(current)):
+            if not any(marker in text for text in current_texts):
+                break
+            if len(controls(current)) > 1:
                 break
             top = current
             current = parents.get(current)

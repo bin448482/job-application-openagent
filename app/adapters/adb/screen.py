@@ -49,7 +49,7 @@ class AdbScreenReader:
         before_command: object | None = None,
         prefix: str = "hierarchy",
         on_pid: Callable[[int], None] | None = None,
-        on_done: Callable[[int], None] | None = None,
+        on_done: Callable[[int, bool, bool], None] | None = None,
     ) -> HierarchyCapture:
         """依次执行 dump 与 cat，保存 XML 证据并返回内存文本。"""
         self._require_gate()
@@ -105,7 +105,7 @@ class AdbScreenReader:
         command: str,
         before_command: object | None = None,
         on_pid: Callable[[int], None] | None = None,
-        on_done: Callable[[int], None] | None = None,
+        on_done: Callable[[int, bool, bool], None] | None = None,
     ) -> str:
         """执行一条不重试的文本 ADB 命令，失败统一为断连。"""
         completed = self._run(
@@ -133,7 +133,7 @@ class AdbScreenReader:
         binary: bool,
         before_command: object | None = None,
         on_pid: Callable[[int], None] | None = None,
-        on_done: Callable[[int], None] | None = None,
+        on_done: Callable[[int, bool, bool], None] | None = None,
     ) -> subprocess.CompletedProcess:
         """复用共享 ADB 边界；每条命令前复核门禁，单次 attempt 不重试。"""
         self._require_gate()

@@ -8,10 +8,10 @@
 
 - `__init__.py`：声明 ADB 适配器包。
 - `device.py`：`AdbDeviceProbe`、`DeviceProbeError`、设备清单解析、`isKeyguardShowing` 判定与 `mCurrentFocus` 前台判定。
-- `command.py`：M3/M5 共用 ADB 有界子进程边界；参数数组、`shell=False`、5 秒超时、单次 attempt、可选每命令 before 复核与共享门禁 verify，失败只返回固定类别；`CommandIdentityStore` 按动作以 begin→PID/后代→complete 分段记录命令族，结束时可再展开记录晚生后代，部分写/枚举失败/未闭合账本都返回 unknown；`on_pid` 持久化失败有界 kill/回收，超时后的 kill 与回收都带预算；`save_evidence` 只在调用方指定本机目录时落盘。
+- `command.py`：M3/M5 共用 ADB 有界子进程边界；参数数组、`shell=False`、5 秒超时、单次 attempt、可选每命令 before 复核与共享门禁 verify，失败只返回固定类别；`ProcessFamilyBound` 用 Windows Job Object 对单条命令族做有限约束/核验，结束有界终止并确认空族，不可用/未证明时不闭合；`CommandIdentityStore` 按动作以 begin→PID/后代→complete 分段记录，无平台有界或未证明族停止时保持 unknown，部分写/枚举失败同样 unknown；`on_pid` 持久化失败有界 kill/回收，超时后的 kill 与回收都带预算；`save_evidence` 只在调用方指定本机目录时落盘。
 - `screen.py`：`AdbScreenReader`；每次 dump/cat 或 screencap 复用 `command.py`，层级 XML 与原始 RGBA 保存到调用方指定的本机证据目录，文件名含独立 UUID，返回受控证据名与内存内容；dump/cat 可选接收同一命令身份回调，供动作适配器把共享采集命令纳入账本；证据保存记一次 `started` 与单一 `ok/failed`，before guard 拒绝记固定 `action_guard` 类别后再按原语义传播。
 - `recovery.py`：M5 `AdbRecoveryObserver`；在共享门禁下一次读取层级与当前 IME，输出 `ReconciliationObservation` 的现场/命令/IME 字段，复用既有采集器与 `read_current_ime`；坏 XML 不解析出收敛现场，不自行宣告动作效果或进程停止。
-- `actions.py`：M5 `AdbActionExecutor`；先解析 before 层级锁定唯一姓名+完整身份标签目标、显式列表容器覆盖、保护项、唯一 EditText 正文、附件名与本类型唯一联系方式槽位，再发不可逆点击；同一目标子树计算前后新增差分，槽位可用性/确认复核/效果共用唯一 `_slot_node`，另一类型已处理不污染本类型；既有提示/无关子树/同名重复/单 tap 计划不证明执行。`bind_action` 在首次设备命令前绑定动作上下文；每命令 begin/finish 命令族并在结束再展开，共享采集也接入同一回调。每一命令前由调用方 guard 复核，单次 attempt 不重试；输入前实际切换并读回目标 IME，早退/动作后恢复并读回原 IME；原始 XML 与内容 UUID/动作索引写入可选本机证据目录。当前 CLI 动作仍只接合成执行器，真实原语由 mock subprocess 测试。
+- `actions.py`：M5 `AdbActionExecutor`；先解析 before 层级锁定唯一姓名+完整身份标签目标、真实列表容器整体覆盖、保护项、唯一 EditText 正文、附件名与本类型唯一联系方式槽位，再发不可逆点击；列表覆盖要求容器显式非滚动、全部可见行/后代在容器内且容器未被外层裁剪，缺失/坏/零面积 bounds 不默认成功；槽位由 clickable 控件上溯且保留独立同类型歧义，可用/确认要求 enabled 且未处理，效果定位不要求按钮仍 enabled；另一类型已处理不污染本类型。`bind_action` 在首次设备命令前绑定动作上下文；每命令 begin/finish 命令族并与平台有界结果一致，共享采集也接入同一回调。每一命令前由调用方 guard 复核，单次 attempt 不重试；输入前实际切换并读回目标 IME，早退/动作后恢复并读回原 IME；原始 XML 与内容 UUID/动作索引写入可选本机证据目录。当前 CLI 动作仍只接合成执行器，真实原语由 mock subprocess 测试。
 
 ## 三、命令与安全契约
 

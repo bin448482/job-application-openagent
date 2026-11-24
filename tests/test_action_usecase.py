@@ -562,14 +562,43 @@ class ActionUseCaseTests(unittest.TestCase):
             self.assertEqual(result["state"], "performed")
             self.assertIn(7000, identity_store.identities(TEXT_KEY))
             self.assertIn(7999, identity_store.identities(TEXT_KEY))
-            self.assertEqual(
+            self.assertNotEqual(
                 identity_store.check(
                     TEXT_KEY,
                     self.lease.owner.pid,
                     lambda pid: "alive" if pid == 7999 else "stopped",
                 ),
-                "alive",
+                "stopped",
             )
+
+    def test_task_conversation_read_error_is_logged_and_safe(self) -> None:
+        """真实任务身份 SELECT 读错误在 validate 阶段安全闭合日志且不降级。"""
+        from unittest.mock import patch
+
+        executor = CountingExecutor()
+        log = ProcessLog(path=self.root / "validate-fault.jsonl")
+        with patch.object(
+            self.store,
+            "task_conversation",
+            side_effect=StoreError("store_io_error"),
+        ):
+            with self.assertRaises(StoreError) as caught:
+                self._perform(executor, process_log=log)
+        self.assertEqual(caught.exception.reason_code, "store_io_error")
+        self.assertEqual(executor.calls, 0)
+        self.assertEqual(self.store.pending_actions(), [])
+        records = [
+            json.loads(line)
+            for line in log.path.read_text("utf-8").splitlines()
+            if line.strip()
+        ]
+        validate = [
+            item for item in records if item["operation"] == "action_validate"
+        ]
+        self.assertEqual([item["result"] for item in validate], ["started", "failed"])
+        self.assertEqual(validate[-1]["reason_code"], "store_io_error")
+        self.assertEqual(validate[-1]["error_category"], "store")
+        self.assertFalse(log.degraded)
 
     def test_leased_without_start_has_zero_device_calls(self) -> None:
         """leased 未 start 时，即使需要 IME 也不读设备、不写 pending。"""
