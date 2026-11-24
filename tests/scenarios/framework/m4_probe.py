@@ -1294,6 +1294,7 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "reason_code": None,
             "batch": batch_id,
             "batch_suite_hash": batch.get("suite_hash") if isinstance(batch, dict) else None,
+            "batch_sample_fingerprints": batch.get("sample_fingerprints") if isinstance(batch, dict) else None,
             "batch_sample_count": batch.get("sample_count") if isinstance(batch, dict) else None,
             "batch_candidate_release": batch.get("candidate_release") if isinstance(batch, dict) else None,
         }
@@ -1378,6 +1379,7 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "reason_code": None,
             "batch": result.get("batch", {}).get("batch_id"),
             "batch_suite_hash": batch.get("suite_hash") if isinstance(batch, dict) else None,
+            "batch_sample_fingerprints": batch.get("sample_fingerprints") if isinstance(batch, dict) else None,
             "batch_sample_count": batch.get("sample_count") if isinstance(batch, dict) else None,
             "batch_candidate_release": batch.get("candidate_release") if isinstance(batch, dict) else None,
         }

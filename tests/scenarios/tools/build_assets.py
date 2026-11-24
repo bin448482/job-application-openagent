@@ -1778,13 +1778,27 @@ def build_support_fixtures() -> None:
         case["input"]["task_id"] = f"holdout-alt-task-{index}"
         case["input"]["nonce"] = f"00000000-0000-4000-8000-0000000007{index:02d}"
         case["input"]["inbound"] = str(case["input"]["inbound"]) + " alt-suite"
+    alt_suite = {
+        "schema_version": 1,
+        "suite": "holdout",
+        "version": "2026-11-24",
+        "cases": alt_cases,
+    }
+    write_json("fixtures/m4/eval/holdout_alt/suite.json", alt_suite)
     write_json(
-        "fixtures/m4/eval/holdout_alt/suite.json",
+        "fixtures/m4/hash/alt_registration.json",
         {
-            "schema_version": 1,
-            "suite": "holdout",
-            "version": "2026-11-24",
-            "cases": alt_cases,
+            "suite_hash": digest(alt_suite),
+            "sample_fingerprints": [
+                digest(
+                    {
+                        key: value
+                        for key, value in case["input"].items()
+                        if key not in ("case_id", "task_id", "nonce", "now")
+                    }
+                )
+                for case in alt_cases
+            ],
         },
     )
     write_json(
@@ -6361,6 +6375,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
             ),
         ],
     )
+    alt_registration_expected = json.loads(
+        (FIXTURES / "m4/hash/alt_registration.json").read_text(encoding="utf-8")
+    )
     holdout_suite_fixture = json.loads(
         (FIXTURES / "m4/eval/holdout/suite.json").read_text(encoding="utf-8")
     )
@@ -6590,7 +6607,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         probe_error("eval_failed", {"path": "registry_bytes_unchanged", "equals": True}),
                         probe_ok(
                             {"path": "batch", "equals": "synthetic-alt-other"},
-                            {"path": "batch_suite_hash", "pattern": "[0-9a-f]{64}"},
+                            {"path": "batch_suite_hash", "equals": alt_registration_expected["suite_hash"]},
+                            {"path": "batch_sample_fingerprints", "equals": alt_registration_expected["sample_fingerprints"]},
                             {"path": "batch_sample_count", "equals": 2},
                             {"path": "batch_candidate_release", "equals": "synthetic-alt-release"},
                         ),

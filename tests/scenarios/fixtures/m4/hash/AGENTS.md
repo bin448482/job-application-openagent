@@ -6,6 +6,7 @@
 
 ## 二、直接子项
 
+- `alt_registration.json`：合成输入文件。
 - `expected.json`：合成输入文件。
 
 ## 三、维护要求
