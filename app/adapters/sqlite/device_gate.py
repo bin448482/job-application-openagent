@@ -8,6 +8,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from typing import Callable
 
 from app.adapters.path_state import (
     PATH_FILE,
@@ -213,6 +214,93 @@ class SharedDeviceGate:
             self._record(operation, "failed", started)
             raise
         self._record(operation, "ok", started)
+
+    def recover(
+        self,
+        *,
+        profile_id: str,
+        profile_db_path: str,
+        owner: Owner,
+        confirm_stopped: bool,
+        stop_checker: Callable[[int], str],
+        now: str,
+    ) -> str:
+        """受控接管原 profile 的 held/quarantined 占用；需明确确认且原进程已停止。"""
+        operation = "recover"
+        started = time.perf_counter()
+        self._record(operation, "started")
+        try:
+            if profile_id != self._profile_id:
+                raise DeviceGateError("device_gate_mismatch")
+            if Path(profile_db_path).resolve() != Path(self._profile_db_path):
+                raise DeviceGateError("device_gate_mismatch")
+            if (
+                not is_uuid(owner.id)
+                or not is_hash(owner.host)
+                or type(owner.pid) is not int
+                or owner.pid <= 0
+            ):
+                raise ValueError("owner is invalid")
+            parse_utc(now)
+            if confirm_stopped is not True:
+                raise DeviceGateError("device_not_held")
+            if self._nonce is not None:
+                raise DeviceGateError("device_busy")
+            connection = self._connect(create=False)
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                row = self._read_row(connection)
+                if row is None:
+                    raise DeviceGateError("device_not_held")
+                if (
+                    row["profile_id"] != self._profile_id
+                    or Path(str(row["profile_db_path"])).resolve()
+                    != Path(self._profile_db_path)
+                    or row["state"] not in {"held", "quarantined"}
+                ):
+                    raise DeviceGateError("device_gate_mismatch")
+                try:
+                    pid = int(row["owner_pid"])
+                except (TypeError, ValueError):
+                    raise DeviceGateError("device_gate_io_error") from None
+                if stop_checker(pid) != "stopped":
+                    raise DeviceGateError("device_busy")
+                nonce = str(uuid.uuid4())
+                cursor = connection.execute(
+                    "UPDATE device_guard SET owner_id = ?, owner_pid = ?, "
+                    "owner_host = ?, nonce = ?, state = 'held', acquired_at = ?, "
+                    "updated_at = ? WHERE device_key = 'primary' AND nonce = ?",
+                    (
+                        owner.id,
+                        owner.pid,
+                        owner.host,
+                        nonce,
+                        now,
+                        now,
+                        str(row["nonce"]),
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    raise DeviceGateError("device_gate_mismatch")
+                connection.execute("COMMIT")
+            except DeviceGateError:
+                _rollback(connection)
+                raise
+            except (sqlite3.Error, OSError):
+                _rollback(connection)
+                raise DeviceGateError("device_gate_io_error") from None
+            finally:
+                connection.close()
+            self._nonce = nonce
+            self._owner = owner
+        except DeviceGateError as error:
+            self._record(operation, "failed", started, error.reason_code)
+            raise
+        except Exception:
+            self._record(operation, "failed", started)
+            raise
+        self._record(operation, "ok", started)
+        return self._nonce
 
     def session_identity(self) -> DeviceSessionIdentity:
         """一次读取并完整核验同一行后返回 profile/原库/owner/nonce 身份。"""

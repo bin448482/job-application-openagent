@@ -288,7 +288,7 @@ class SqliteProfileStore:
             raise ProfileError("profile_io_error") from None
 
     def pending_activity(self) -> dict[str, object]:
-        """只读统计现有 M1 任务的 leased/running/blocked 与设备行数量。"""
+        """只读统计 M1 任务、设备行与 M5 未决动作；v1 库视为无动作表。"""
         connection = self._require_connection()
         try:
             counts = {
@@ -303,6 +303,15 @@ class SqliteProfileStore:
             device_rows = int(
                 connection.execute("SELECT COUNT(*) FROM device_lease").fetchone()[0]
             )
+            try:
+                actions = int(
+                    connection.execute(
+                        "SELECT COUNT(*) FROM action_records "
+                        "WHERE state IN ('pending', 'unknown', 'cancelled')"
+                    ).fetchone()[0]
+                )
+            except sqlite3.OperationalError:
+                actions = 0
         except sqlite3.Error:
             raise ProfileError("profile_io_error") from None
         return {
@@ -310,6 +319,7 @@ class SqliteProfileStore:
             "running": counts["running"],
             "blocked": counts["blocked"],
             "device_lease": device_rows,
+            "actions": actions,
         }
 
     def _insert_event(

@@ -32,6 +32,7 @@ STAGES = frozenset(
         "facts",
         "profile",
         "device_gate",
+        "action",
         "run",
         "eval",
         "adb_hierarchy",
@@ -113,6 +114,25 @@ REASON_CODES = frozenset(
         "device_gate_mismatch",
         "device_quarantined",
         "run_io_error",
+        "invalid_action",
+        "invalid_observation",
+        "invalid_authorization",
+        "authorization_expired",
+        "action_conflict",
+        "action_not_found",
+        "action_not_ready",
+        "precondition_failed",
+        "quota_exceeded",
+        "cooldown_active",
+        "text_send_blocked",
+        "scene_unsettled",
+        "recovery_not_confirmed",
+        "action_mismatch",
+        "invalid_resolution",
+        "invalid_action_key",
+        "cancelled_before_action",
+        "result_unverified",
+        "executor_interrupted",
     }
 )
 ERROR_CATEGORIES = frozenset(
@@ -136,6 +156,7 @@ ERROR_CATEGORIES = frozenset(
         "pixel",
         "gate",
         "evidence",
+        "action",
         "internal",
         "adb_missing",
         "adb_timeout",
@@ -150,6 +171,7 @@ COMMANDS = frozenset(
         "adb_hierarchy_dump",
         "adb_hierarchy_cat",
         "adb_screencap",
+        "adb_action",
     }
 )
 MODES = frozenset({"fixture", "device"})
@@ -206,6 +228,18 @@ OPERATIONS = frozenset(
         "quarantine",
         "check",
         "current_lease_expiry",
+        "begin_action",
+        "complete_action",
+        "reconcile_action",
+        "get_action",
+        "pending_actions",
+        "text_admission",
+        "load_ime",
+        "task_conversation",
+        "perform",
+        "eligibility",
+        "card",
+        "reconcile",
     }
 )
 EVENT_KEYS = (

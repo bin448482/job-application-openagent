@@ -1,0 +1,28 @@
+{
+  "current_ime": "synthetic-ime-default",
+  "observation": {
+    "before_snapshot_id": "11111111-1111-4111-8111-111111111111",
+    "after_snapshot_id": "22222222-2222-4222-8222-222222222222",
+    "observed_at": "2026-11-24T00:00:00.000Z",
+    "clicked": true,
+    "error": null,
+    "scene_settled": true,
+    "command_quiet": true,
+    "confirmation_open": false,
+    "input_box_empty": true,
+    "ime_original": "synthetic-ime-default",
+    "ime_current": "synthetic-ime-default",
+    "body_readback_matches": true,
+    "echo_count_before": 0,
+    "echo_count_after": 1,
+    "attachment_name_matched": false,
+    "attachment_request_observed": false,
+    "delivery_observed": false,
+    "contact_slot_available": false,
+    "contact_slot_status": null,
+    "identity_unique": false,
+    "target_present_before": false,
+    "target_present_after": false,
+    "anchor_present_after": false
+  }
+}

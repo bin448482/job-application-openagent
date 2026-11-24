@@ -65,3 +65,16 @@ class SharedDeviceGatePort(Protocol):
     def session_identity(self) -> DeviceSessionIdentity:
         """复核本会话并返回 profile/原库/owner/nonce 的完整可信身份。"""
         ...
+
+    def recover(
+        self,
+        *,
+        profile_id: str,
+        profile_db_path: str,
+        owner: Owner,
+        confirm_stopped: bool,
+        stop_checker: object,
+        now: str,
+    ) -> str:
+        """受控接管原 profile 的 held/quarantined 占用并返回新 nonce。"""
+        ...

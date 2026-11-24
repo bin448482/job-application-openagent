@@ -17,6 +17,16 @@ STORE_REASON_CODES = frozenset(
         "store_io_error",
         "db_version_unsupported",
         "migration_failed",
+        "action_conflict",
+        "action_not_found",
+        "action_not_ready",
+        "quota_exceeded",
+        "cooldown_active",
+        "text_send_blocked",
+        "invalid_action_key",
+        "invalid_observation",
+        "scene_unsettled",
+        "recovery_not_confirmed",
     }
 )
 
@@ -72,4 +82,75 @@ class StorePort(Protocol):
 
     def current_lease_expiry(self, lease: Lease, *, now: str) -> str | None:
         """只读重核任务/设备租约与取得时 Lease/Owner/nonce/到期。"""
+        ...
+
+    def begin_action(
+        self,
+        lease: Lease,
+        *,
+        action_kind: str,
+        action_key: str,
+        target_key: str,
+        conversation_key: str,
+        authorization_json: str,
+        daily_sends: int,
+        reply_cooldown_seconds: int,
+        ime_original: str | None,
+        now: str,
+    ) -> dict[str, object]:
+        """原子校验准入、文本额度冷却并写入 pending 与唯一动作键锁。"""
+        ...
+
+    def complete_action(
+        self,
+        lease: Lease,
+        *,
+        action_key: str,
+        outcome: object,
+        now: str,
+    ) -> dict[str, object]:
+        """在同一事务提交动作证据、任务终态、设备行与审计事件。"""
+        ...
+
+    def reconcile_action(
+        self,
+        *,
+        action_key: str,
+        resolution: str,
+        evidence: Evidence | None,
+        command_quiet: bool,
+        scene_settled: bool,
+        confirmation_open: bool,
+        ime_restored: bool,
+        explicit_confirm: bool,
+        now: str,
+    ) -> dict[str, object]:
+        """经本轮确认与现场收敛后收敛 pending/unknown 动作。"""
+        ...
+
+    def get_action(self, action_key: str) -> dict[str, object] | None:
+        """只读返回一条动作记录；不存在返回 None。"""
+        ...
+
+    def pending_actions(self, app: str = "boss") -> list[dict[str, object]]:
+        """只读返回 pending/unknown/cancelled 动作记录。"""
+        ...
+
+    def text_admission_status(
+        self,
+        *,
+        now: str,
+        daily_sends: int,
+        reply_cooldown_seconds: int,
+        conversation_key: str,
+    ) -> dict[str, object]:
+        """只读计算文本日额度、全局 pending 与按会话冷却资格。"""
+        ...
+
+    def load_ime_state(self) -> dict[str, object] | None:
+        """只读返回切换前持久化的原 IME 状态；不存在返回 None。"""
+        ...
+
+    def task_conversation(self, lease: Lease, *, now: str) -> str | None:
+        """只读返回 running 任务的会话键；租约不符返回 None。"""
         ...

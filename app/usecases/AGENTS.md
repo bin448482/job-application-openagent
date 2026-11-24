@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-组织单次业务用例的输入校验与领域判定，不直接访问属性、文件、数据库或网络。当前包含 M0 `doctor`、M2 `sense` 的持久化/聚合结果编排、M3 `read` 的决策门禁/定向核对/JSON 组装、M4a `policy` 的初始化/校验/预览/列表/快照/恢复编排、M4b 单次决策桥编排与 `policy eval` 分层评测编排，以及 M4c 事实确认、验收复核与 `run check` 预检编排。
+组织单次业务用例的输入校验与领域判定，不直接访问属性、文件、数据库或网络。当前包含 M0 `doctor`、M2 `sense` 的持久化/聚合结果编排、M3 `read` 的决策门禁/定向核对/JSON 组装、M4a `policy` 的初始化/校验/预览/列表/快照/恢复编排、M4b 单次决策桥编排与 `policy eval` 分层评测编排、M4c 事实确认、验收复核与 `run check` 预检编排，以及 M5 单次动作执行、文本资格与人工对账编排。
 
 ## 二、当前文件
 
@@ -15,7 +15,8 @@
 - `decision.py`：`decide(...)` 调用既有 `verify_rendered_request`、`parse_decision`、`validate_decision`、`append_and_validate_reply` 与 `resolve_policy_tier`，不复制契约。桥前、重试前与桥后重读可信时钟、租约和当前 base/pack；重试前重新解析当前包并用唯一 `verify_rendered_request` 复核事实有效期/回显；桥期间跨截止、事实到期、包变化、坏回显/坏证据/披露或事实失败均丢弃输出；只有传输层证明进程未启动的 `bridge_start_failed` 重试一次，提交后超时映射 `decision_timeout` 不重发。未知桥异常映射 `bridge_protocol` 并写终态日志。返回 Decision、复验回复、最终档位与不含正文的审计摘要（attempts/submissions）。
 - `facts.py`：M4c 事实提案/确认/再显示/撤销/遗忘编排；未确认只返回提案，确认后从库重读并显示值，同键多来源转 conflict 待办，`--replace` 才显式作废旧来源；撤销保留历史，遗忘只保留来源 ID/无值审计；不把值写入日志/错误。
 - `acceptance.py`：M4c 只读读取本机 `data/evals/eval-<id>/acceptance.json`，比较当前 base/pack 与可选 provider/model/model_config_hash；缺失凭证 `authorization_required`，摘要/身份变化 `policy_changed`，不授予设备或发送权限。
-- `run.py`：M4c `check_preflight` 只在 read_only 本轮确认、draft 当前验收（provider/model/model_config 必须齐全）、A 档固定拒绝下做预检；先取得共享占用再打开 profile 库，跨库失败保留占用并隔离，profile 打开记录 started/终态；不探测设备、不调用模型、不执行动作、不预建 M5 表。
+- `run.py`：M4c `check_preflight` 只在 read_only 本轮确认、draft 当前验收（provider/model/model_config 必须齐全）、A 档固定拒绝下做预检；先取得共享占用再打开 profile 库，跨库失败保留占用并隔离，profile 打开记录 started/终态；不探测设备、不调用模型、不执行动作、不预建 M5 表。M5 起 profile 的 `pending/unknown/cancelled` 动作也视为未决，阻止预检通过。
+- `actions.py`：`perform_action` 复核授权/摘要/共享身份/running 租约后，原子调用仓储 `begin_action`（文本额度/冷却/pending/唯一键锁/IME 原值同一事务），再执行一次设备端口；执行器失败或坏观察保守收敛 unknown，不重试，最后 `complete_action` 一次提交证据/任务/设备/审计。`evaluate_text_eligibility` 只计算合成拟执行资格并保留固定 C/真实开关独立。`reconcile_action` 要求原 profile/原库共享身份与本轮确认，confirm 另需当前证据与现场/IME/命令收敛；abandon 只关任务、不解除锁。
 - `policy_eval.py`：`eval_pack` 实际加载当前包与公开/回归/留出套件，经同一 `decide`/`DecisionBridgePort` 逐例运行；每例使用 case_now+真实单调耗时的逻辑时钟；缺套件/零样本返回 not_measured 且零授权零调用；authorize 返回 false 在同一阶段记 started→failed；报告绑定 base/pack/profile/provider/model/model_config_hash/suite_hash 与 correlation_id，逐例只留 case_index/摘要/固定诊断；只有公开集全通过且非 simulated 才写验收凭证。留出在任何调用前锁内持久化 intent，完成/失败/中断/重复如实收尾；无上传合同必须绑定当前 model_id/model_config_hash 且所有禁用项为真；`register_holdout`/`retire_holdout` 维护样本身份占用、实际 regression 准入副本与整批退役；退役登记写失败保留未确认准入本机残留，由 registry 资格过滤使其不可运行，不删除其它 owner 文件。
 - `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
@@ -39,11 +40,12 @@
 - `decide` 只使用渲染请求的固定三消息与 `protocol` 回显，不把不可信输入变成 role/tool/message；桥返回内容只解析、不执行。桥启动失败可重试一次，重试前重读时钟/租约/包；进程启动后超时/schema/证据/回显失败不重试。所有失败只暴露固定原因码与字段诊断。
 - `eval_pack` 每例只把 `input` 投影进 envelope；断言、metadata、答案与其它案例不进入请求。报告/凭证只写 `data/evals`；`simulated` transport 永不写验收凭证。留出只允许 `local-process` 且必须有无上传合同，缺条件零调用；访问意向先持久化，失败/中断不恢复成未看；退役批次实际进入 regression 准入并被同一生产 regression 路径读取。
 - `--confirm-external-send` 仅是模型评测外发/计费的本轮确认，不授予设备、事实写入或业务发送权限；生产 CLI 在授权回调返回 false 时不启动桥。
+- M5 动作执行只在共享门禁已持有、任务 `running` 且租约有效时开始；`leased` 未 `start`、授权/摘要漂移、额度/冷却/未决文本或现场未收敛均在执行器调用前或提交边界拒绝。动作结果、任务状态与 `action_events`/`events` 在一个事务提交；`unknown`/未收敛 `pending` 保留动作锁并隔离设备，不自动重试。
 
 ## 四、测试
 
 ```powershell
-python -m unittest tests.test_doctor tests.test_sensor tests.test_sensor_store tests.test_read tests.test_screen tests.test_policy_store tests.test_profile_facts tests.test_device_gate tests.test_run_guard tests.test_profile_session_lease tests.test_m4c_closed_loop tests.test_bridge tests.test_policy_eval
+python -m unittest tests.test_doctor tests.test_sensor tests.test_sensor_store tests.test_read tests.test_screen tests.test_policy_store tests.test_profile_facts tests.test_device_gate tests.test_run_guard tests.test_profile_session_lease tests.test_m4c_closed_loop tests.test_bridge tests.test_policy_eval tests.test_action_domain tests.test_action_usecase tests.test_action_store tests.test_action_cli
 ```
 
 `tests/test_policy_store.py` 覆盖六命令文件事务、四键外层、坏 profile 库 unknown 拒绝、清单篡改、失败清理、日志阶段与零设备/网络/子进程。`tests/test_profile_facts.py` 覆盖事实提案/确认/冲突/撤销/遗忘/无值审计/值不进日志；`tests/test_device_gate.py` 覆盖共享门禁与 profile 活动检查；`tests/test_run_guard.py` 覆盖确认/验收/A 档/跨库隔离；`tests/test_m4c_closed_loop.py` 覆盖真实活动 restore、目录路径不发布、三值一致、事实/任务审计不重置、凭证失效、快照重核与实际 CLI 评估闭环；`tests/test_profile_session_lease.py` 覆盖唯一 SqliteStore 接入合法 profile 库与真实租约失效。`tests/test_bridge.py` 覆盖 A/B 参数数组子进程、固定三角色、一次启动重试、提交后超时、固定认证/额度/断连/角色/协议诊断与事实复验；`tests/test_policy_eval.py` 覆盖实包加载、报告绑定、分桶、留出冻结/访问/退役、模拟无凭证与 CLI help/授权拒绝。`RepositorySnapshot` 是 eval 与决策测试共用的唯一仓储快照实现，不再保留第二份 PolicyFileSnapshot。
@@ -56,5 +58,5 @@ python -m unittest tests.test_doctor tests.test_sensor tests.test_sensor_store t
 
 ## 六、已知限制
 
-- 当前只有 `doctor`、`sense`、`read`、M4a `policy`、M4b `policy eval`/`policy holdout` 与 M4c `facts`/验收复核/`run check`；M5 动作与 M6 调度尚未创建。M1 `store init` 由 CLI 直接调用 SQLite 适配器，不经本层。`run check` 只是预检，不执行完整 run。
-- 真实设备模式只复用 `doctor` 判定；M2 `sense` 只读合成夹具，M3 `read` 只读合成输入且不提供真实 `--device` 入口；M4a `policy` 只在合成项目根/临时目录验证，生产 `restore` 接真实活动检查，仅 stopped 允许；M4b 只用合成本机桥桩与模拟 transport；M4c `facts`/验收复核/`run check` 只用临时项目/OS 根与合成事实，真实 provider、私有留出、真机、真实活动对账与 M5 动作未接入。
+- 当前只有 `doctor`、`sense`、`read`、M4a `policy`、M4b `policy eval`/`policy holdout`、M4c `facts`/验收复核/`run check` 与 M5 `action perform/eligibility/card/reconcile`；M6 调度尚未创建。`run check` 只是预检，不执行完整 run 或动作。
+- 真实设备模式只复用 `doctor` 判定；M2 `sense` 只读合成夹具，M3 `read` 只读合成输入且不提供真实 `--device` 入口；M4a `policy` 只在合成项目根/临时目录验证，生产 `restore` 接真实活动检查，仅 stopped 允许；M4b 只用合成本机桥桩与模拟 transport；M4c `facts`/验收复核/`run check` 只用临时项目/OS 根与合成事实；M5 只用合成执行器、mock ADB 与临时 profile 库，真实 provider、私有留出、真机、真实活动对账与真实发送未接入。

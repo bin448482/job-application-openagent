@@ -92,7 +92,13 @@ def check_preflight(
             pass
         raise
     profile_store.close()
-    if pending["leased"] or pending["running"] or pending["blocked"] or pending["device_lease"]:
+    if (
+        pending["leased"]
+        or pending["running"]
+        or pending["blocked"]
+        or pending["device_lease"]
+        or pending.get("actions")
+    ):
         try:
             gate.release(now=now, converged=False)
         except Exception:

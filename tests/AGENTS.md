@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-存放 Python 标准库 `unittest` 测试与纯合成夹具。当前覆盖 M0 `doctor`、M1 状态库/租约、M2 合成传感器/落库、M3 离线读取/像素/跨屏身份/ADB 采集模拟、M4a 决策契约/策略包/文件事务、M4b A/B 桥/评测报告/留出生命周期，以及 M4c profile 事实/共享门禁/验收复核/运行预检/闭环；不连接真实设备、不调用真实模型或网络、不读取根 `config.json`。M1/M2 测试只使用临时合成 SQLite 库与合成 XML，M3 还使用合成 RGBA 与 mock subprocess，M4a 使用临时项目根与固定合成 preview 案例，M4b 使用合成本机桥桩与模拟 transport。
+存放 Python 标准库 `unittest` 测试与纯合成夹具。当前覆盖 M0 `doctor`、M1 状态库/租约、M2 合成传感器/落库、M3 离线读取/像素/跨屏身份/ADB 采集模拟、M4a 决策契约/策略包/文件事务、M4b A/B 桥/评测报告/留出生命周期、M4c profile 事实/共享门禁/验收复核/运行预检/闭环，以及 M5 五动作判据/动作账本/额度/合成执行器/人工对账/CLI 闭环；不连接真实设备、不调用真实模型或网络、不读取根 `config.json`。M1/M2 测试只使用临时合成 SQLite 库与合成 XML，M3 还使用合成 RGBA 与 mock subprocess，M4a 使用临时项目根与固定合成 preview 案例，M4b 使用合成本机桥桩与模拟 transport，M5 使用临时 profile 库、合成动作脚本与 mock ADB。
 
 ## 二、当前文件与子目录
 
@@ -25,9 +25,15 @@
 - `test_run_guard.py`：M4c `run check`：read_only 本轮确认、draft 当前验收、A 档固定拒绝、预检零子进程、跨库故障隔离与门禁/profile 打开日志 started/终态配对。
 - `test_profile_session_lease.py`：M4c 真实 profile 租约：合法 profile 库经唯一 SqliteStore 领取/续租/失效、`ProfileSessionLease` 与 decide 桥前后拒绝、跨门禁 profile/原库/owner、复制库且参数指向副本、任务两行 owner 同改、门禁 nonce 桥前/桥中变化、错误任务 key/app、任务 owner 篡改与错误 profile ID。
 - `test_m4c_closed_loop.py`：M4c 闭环：真实活动 restore、目录路径不发布、三值一致、同 profile 事实/任务审计不重置、旧凭证摘要变化拒绝、唯一仓储快照重核、实际受控合成桥 CLI eval→snapshot→restore→validate/preview→eval 串行。
+- `test_action_domain.py`：M5 动作键精确规则、观察→三态证据、前后快照/目标已存在/简历请求与交付/联系方式/删除锚点、现场与 IME 未收敛 pause、授权种类/摘要/期限/确认、人工卡。
+- `test_action_store.py`：M5 唯一仓储边界：pending 先落库、重复/同任务未决、leased 未 start 零准入、performed/unknown/pending/not_sent、设备隔离、事件/任务/设备故障回滚、过期租约、崩溃 pending、UTC 跨日/额度/冷却/调低/重启、人工确认/放弃与 v1→v2 备份迁移。
+- `test_action_usecase.py`：M5 生产用例：授权精确 target/action、unknown 只调用一次且不重放、performed 不改事实、同动作键新任务拒绝、人工确认要求当前证据。
+- `test_action_executor.py`：M5 ADB 原语参数数组/`shell=False`/5 秒/不重试/每命令门禁复核、点击前后失败事实、IME 恢复读回、合成执行器严格观察。
+- `test_action_cli.py`：M5 实际 CLI 组合根：五动作正例、read_only/未确认/未授权/包漂移拒绝、not_performed 与未收敛、unknown 不重放、资格正例与冷却负例、confirm/abandon 对账、人工卡与 restore unknown。
+- `action_helpers.py`：M5 测试共用的临时项目根、策略包/验收凭证、profile 匹配 seed、动作/对账脚本、合成观察与 CLI 运行辅助。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。
 - `policy_helpers.py`：M4a/M4b 测试共用仓库原文读取、临时项目根（含公开套件）、CLI 运行、合成包写入与有效 envelope/decision/租约截止构造；不调用模型、设备或网络。
-- `fixtures/`：M0/M2/M3/M4a/M4b 纯合成输入夹具；见 `fixtures/AGENTS.md`。M4b 桥桩含成功、错误、慢进程、2MiB stdout、大 stderr、不读 stdin 与短命继承 stdout 模式。
+- `fixtures/`：M0/M2/M3/M4a/M4b/M5 纯合成输入夹具；见 `fixtures/AGENTS.md`。M4b 桥桩含成功、错误、慢进程、2MiB stdout、大 stderr、不读 stdin 与短命继承 stdout 模式；M5 `fixtures/actions/` 只含合成观察脚本。
 - `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、范围边界
@@ -61,7 +67,7 @@ M0–M4b Python 测试不依赖 Node；`npm test` 验证既有 24 案例判据�
 
 ## 六、已知限制
 
-- 当前覆盖 M0–M4c；M5+ 动作、调度、完整 run、真实 provider/真机/真实 OS 门禁目录与 M5 对账开锁测试尚未实现。
-- 真实 ADB、真实机型、窗口/截图输出与真实消息稳定标识未验证；M1 停止检查器只用注入值或 mock ctypes；M2 只用合成 XML/profile；M3 只用合成 XML/RGBA 与 mock subprocess；M4a 只用临时项目根、合成 base/包/preview 与真实 stopped 检查；M4b 只用合成本机桥桩/模拟 transport；M4c 只用临时项目/OS 根、合成事实/凭证/桥桩与跨进程模拟，真实 provider、私有留出、真实租约、真实 OS 门禁目录与真机未测。
+- 当前覆盖 M0–M5；M6+ 调度、完整 run、真实 provider/真机/真实 OS 门禁目录与真实动作执行测试尚未实现。
+- 真实 ADB、真实机型、窗口/截图输出与真实消息稳定标识未验证；M1 停止检查器只用注入值或 mock ctypes；M2 只用合成 XML/profile；M3 只用合成 XML/RGBA 与 mock subprocess；M4a 只用临时项目根、合成 base/包/preview 与真实 stopped 检查；M4b 只用合成本机桥桩/模拟 transport；M4c 只用临时项目/OS 根、合成事实/凭证/桥桩与跨进程模拟；M5 只用合成动作脚本/mock ADB/临时 profile 库，真实 provider、私有留出、真实租约、真实 OS 门禁目录、真机动作与恢复时序未测。
 - 独立离线场景与私有回归测试不在本 Task 范围。
 - 日志测试验证的是本机 best-effort 行为，不代表磁盘故障时仍能保留完整日志。

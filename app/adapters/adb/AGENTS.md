@@ -9,6 +9,7 @@
 - `__init__.py`：声明 ADB 适配器包。
 - `device.py`：`AdbDeviceProbe`、`DeviceProbeError`、设备清单解析、`isKeyguardShowing` 判定与 `mCurrentFocus` 前台判定。
 - `screen.py`：`AdbScreenReader`；每次 dump/cat 或 screencap 只用参数数组、`shell=False`、5 秒超时、不重试；层级 XML 与原始 RGBA 保存到调用方指定的本机证据目录，文件名含独立 UUID，返回受控证据名与内存内容。
+- `actions.py`：M5 `AdbActionExecutor`；读取当前 IME、输入文本与前序点击使用参数数组、`shell=False`、5 秒超时；每条子命令前复核共享门禁，单次 attempt 不重试；`clicked` 只表示是否已发出不可逆点击；动作特有观察由前后层级文本差异构造，IME 恢复失败保持未知。当前 CLI 不暴露真实动作入口，只由 mock subprocess 测试。
 
 ## 三、命令与安全契约
 
@@ -26,7 +27,7 @@
 ## 四、测试
 
 ```powershell
-python -m unittest tests.test_doctor tests.test_screen
+python -m unittest tests.test_doctor tests.test_screen tests.test_action_executor
 ```
 
 覆盖 M0 探针成功调用顺序、`shell=False`、5 秒超时、无重试、断连/超时/非零及其日志类别；M3 覆盖 dump/cat/screencap 参数、二进制/文本捕获、证据保存与失败、单次 attempt、门禁先于采集。没有真实 ADB 调用。

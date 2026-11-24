@@ -73,6 +73,6 @@ class ProfilePolicyActivity:
             store.close()
         if pending["leased"] or pending["running"] or pending["device_lease"]:
             return "active"
-        if pending["blocked"]:
+        if pending["blocked"] or pending.get("actions"):
             return "unknown"
         return "stopped"
