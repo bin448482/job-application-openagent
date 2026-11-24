@@ -21,7 +21,7 @@ from app.adapters.files.policy import FilePolicyRepository
 from app.adapters.llm.bridge_a import ExternalAgentBridge
 from app.adapters.llm.bridge_b import LocalProcessBridge
 from app.adapters.sqlite.activity import ProfilePolicyActivity
-from app.adapters.sqlite.device_gate import SharedDeviceGate
+from app.adapters.sqlite.device_gate import SharedDeviceGate, inspect_gate_occupancy
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
 from app.adapters.sqlite.repo import SqliteStore
 from app.adapters.sqlite.schema import initialize_database
@@ -36,6 +36,7 @@ from app.domain.policy import FACT_KEYS, PolicyIssue, utc_now
 from app.process_log import ProcessLog, elapsed_ms
 from app.profile_open import open_profile_store
 from app.usecases import acceptance as acceptance_usecases
+from app.usecases import device as device_usecases
 from app.usecases import facts as facts_usecases
 from app.usecases import policy as policy_usecases
 from app.usecases import policy_eval as policy_eval_usecases
@@ -152,8 +153,8 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="python -m app",
         description=(
             "M0 只读 doctor、M1 store init、M2 sense、M3 read、M4a policy、M4b policy eval、"
-            "M4c facts/run check 与共享设备门禁；除显式 policy eval 本机桥或已确认的真实探针外，"
-            "默认不连接设备、不调用网络或模型。"
+            "M4c facts/run check、只读 device gate inspect 与共享设备门禁；除显式 policy eval "
+            "本机桥或已确认的真实探针外，默认不连接设备、不调用网络或模型。"
         ),
         allow_abbrev=False,
     )
@@ -332,6 +333,37 @@ def _build_parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--pack", action=_UniqueStore, metavar="<prompts/local/名称>", default=None
         )
+    device = subparsers.add_parser(
+        "device",
+        allow_abbrev=False,
+        help="只读查看共享设备门禁占用。",
+        description=(
+            "只读检查固定 OS 位置门禁库；不创建、不取得、不改写、不释放占用，"
+            "也不提供强制解锁。"
+        ),
+    )
+    device_commands = device.add_subparsers(
+        dest="device_command",
+        required=True,
+        parser_class=_StrictArgumentParser,
+    )
+    device_gate = device_commands.add_parser(
+        "gate",
+        allow_abbrev=False,
+        help="共享设备门禁的只读操作。",
+        description="只支持只读 inspect；强制解锁与对账入口尚未实现。",
+    )
+    gate_commands = device_gate.add_subparsers(
+        dest="gate_command",
+        required=True,
+        parser_class=_StrictArgumentParser,
+    )
+    gate_commands.add_parser(
+        "inspect",
+        allow_abbrev=False,
+        help="只读显示当前 primary 占用或空闲。",
+        description="只读；不创建库、不自动释放、不修改占用，不写设备或业务库。",
+    )
     run = subparsers.add_parser(
         "run",
         allow_abbrev=False,
@@ -1130,6 +1162,87 @@ def _gate_owner() -> Owner:
     )
 
 
+def _gate_row(
+    os_root: Path | None, profile_id: str, log: ProcessLog
+) -> dict[str, object] | None:
+    """只读读取同 profile 的共享占用行；不取得、不改写、不释放占用。
+
+    非 Windows 平台没有共享门禁库，本进程也不可能与本机设备会话同时存在，
+    因此把该唯一结构性不可用视为无占用；其它不可判定状态仍按失败关闭处理。
+    """
+    try:
+        gate = SharedDeviceGate(
+            profile_id=profile_id,
+            profile_db_path=profile_runtime_path(PROJECT_ROOT, profile_id),
+            os_root=os_root,
+            process_log=log,
+        )
+        return gate.inspect()
+    except DeviceGateError as error:
+        if error.reason_code == "device_gate_unavailable" and sys.platform != "win32":
+            return None
+        raise
+
+
+def _run_device(
+    log: ProcessLog, started: float, args: argparse.Namespace, os_root: Path | None
+) -> int:
+    """只读查看共享设备门禁占用；不创建、取得、改写或释放任何占用。"""
+    del args
+    stage_started = time.perf_counter()
+    log.record(stage="device_gate", operation="inspect", result="started")
+    try:
+        result = device_usecases.occupancy_payload(
+            inspect_gate_occupancy(os_root=os_root)
+        )
+    except DeviceGateError as error:
+        log.record(
+            stage="device_gate",
+            operation="inspect",
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="gate",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "gate",
+        )
+    except Exception:
+        log.record(
+            stage="device_gate",
+            operation="inspect",
+            result="failed",
+            error_category="internal",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("device_gate_io_error"),
+            2,
+            "device_gate_io_error",
+            "internal",
+        )
+    log.record(
+        stage="device_gate",
+        operation="inspect",
+        result="ok",
+        duration_ms=elapsed_ms(stage_started),
+    )
+    payload = {
+        "schema_version": 1,
+        "status": "ok",
+        "reason_code": None,
+        "result": result,
+    }
+    return _finalize_output(log, started, payload, 0, None, None)
+
+
 def _facts_pack(
     repo: FilePolicyRepository,
     pack_rel: str | None,
@@ -1145,7 +1258,10 @@ def _facts_pack(
 
 
 def _run_facts(
-    log: ProcessLog, started: float, args: argparse.Namespace
+    log: ProcessLog,
+    started: float,
+    args: argparse.Namespace,
+    os_root: Path | None,
 ) -> int:
     """执行 facts set/show/revoke/forget；值只进本机库与交互 stdout。"""
     operation = args.facts_command
@@ -1159,6 +1275,10 @@ def _run_facts(
         if pack is not None and pack.profile_id != args.profile:
             raise ProfileError("profile_mismatch")
         path = profile_runtime_path(PROJECT_ROOT, args.profile)
+        if operation in ("set", "revoke", "forget") and args.confirm:
+            device_usecases.require_profile_writable(
+                _gate_row(os_root, args.profile, log), profile_id=args.profile
+            )
         path_state = probe_path(path)
         if operation == "show" and path_state == PATH_MISSING:
             result: dict[str, object] = {
@@ -1236,6 +1356,23 @@ def _run_facts(
                     )
             else:
                 raise ProfileError("invalid_fact")
+    except DeviceGateError as error:
+        log.record(
+            stage="facts",
+            operation=operation,
+            result="failed",
+            reason_code=error.reason_code,
+            error_category="gate",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload(error.reason_code),
+            2,
+            error.reason_code,
+            "gate",
+        )
     except (ProfileError, PolicyError) as error:
         log.record(
             stage="facts",
@@ -1874,7 +2011,9 @@ def main(
     if args.command == "read":
         return _run_read(log, started, args)
     if args.command == "facts":
-        return _run_facts(log, started, args)
+        return _run_facts(log, started, args, os_root)
+    if args.command == "device":
+        return _run_device(log, started, args, os_root)
     if args.command == "run":
         return _run_run(log, started, args, os_root)
     if args.command == "policy":

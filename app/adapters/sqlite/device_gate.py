@@ -1,4 +1,4 @@
-"""实现固定 OS 位置共享 SQLite 设备门禁：全会话唯一 primary、先占后用、异常隔离。"""
+"""实现固定 OS 位置共享 SQLite 设备门禁：全会话唯一 primary、先占后用、异常隔离与只读占用查询。"""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ class SharedDeviceGate:
             connection = self._connect(create=True)
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                existing = self._read_row(connection)
+                existing = _read_gate_row(connection)
                 if existing is not None:
                     state = str(existing["state"])
                     connection.execute("ROLLBACK")
@@ -176,7 +176,7 @@ class SharedDeviceGate:
             connection = self._connect(create=False)
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                row = self._read_row(connection)
+                row = _read_gate_row(connection)
                 if row is None:
                     raise DeviceGateError("device_gate_mismatch")
                 if row["state"] == "quarantined":
@@ -247,7 +247,7 @@ class SharedDeviceGate:
             raise DeviceGateError("device_not_held")
         connection = self._connect(create=False)
         try:
-            row = self._read_row(connection)
+            row = _read_gate_row(connection)
         finally:
             connection.close()
         if row is None:
@@ -260,29 +260,7 @@ class SharedDeviceGate:
 
     def inspect(self) -> dict[str, object] | None:
         """只读返回固定白名单占用行；明确不存在返回 None，其它异常状态拒绝。"""
-        state = probe_path(self._path)
-        if state == PATH_MISSING:
-            return None
-        if state != PATH_FILE:
-            raise DeviceGateError("device_gate_io_error")
-        connection = self._connect(create=False)
-        try:
-            row = self._read_row(connection)
-        finally:
-            connection.close()
-        if row is None:
-            return None
-        return {
-            "profile_id": str(row["profile_id"]),
-            "profile_db_path": str(row["profile_db_path"]),
-            "owner_id": str(row["owner_id"]),
-            "owner_pid": int(row["owner_pid"]),
-            "owner_host": str(row["owner_host"]),
-            "nonce": str(row["nonce"]),
-            "state": str(row["state"]),
-            "acquired_at": str(row["acquired_at"]),
-            "updated_at": str(row["updated_at"]),
-        }
+        return _inspect_path(self._path)
 
     def _matches_session(self, row: sqlite3.Row) -> bool:
         """比较取得时完整 owner 身份、nonce、profile 绑定与 held 状态。"""
@@ -326,118 +304,162 @@ class SharedDeviceGate:
             return
 
     def _connect(self, *, create: bool) -> sqlite3.Connection:
-        """打开固定门禁库；首次创建允许少量本地文件/SQLite 竞争重试。"""
-        attempts = 3 if create else 1
-        last: DeviceGateError | None = None
-        for attempt in range(attempts):
-            try:
-                return self._connect_once(create=create)
-            except DeviceGateError as error:
-                last = error
-                if (
-                    error.reason_code != "device_gate_io_error"
-                    or attempt + 1 >= attempts
-                ):
-                    raise
-                time.sleep(0.02)
-        assert last is not None
-        raise last
+        """打开固定门禁库；委托模块级连接函数并保留实例路径。"""
+        return _connect_gate(self._path, create=create)
 
-    def _connect_once(self, *, create: bool) -> sqlite3.Connection:
-        """实际执行一次打开与建表/核验，失败关闭连接并映射固定错误。"""
-        state = probe_path(self._path)
-        if state == PATH_UNKNOWN:
-            raise DeviceGateError("device_gate_io_error")
-        if not create and state != PATH_FILE:
-            raise DeviceGateError("device_gate_io_error")
-        if create and state not in (PATH_MISSING, PATH_FILE):
-            raise DeviceGateError("device_gate_io_error")
-        try:
-            if create:
-                self._path.parent.mkdir(parents=True, exist_ok=True)
-            connection = sqlite3.connect(str(self._path), timeout=BUSY_TIMEOUT_MS / 1000)
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys = ON")
-            connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
-        except sqlite3.OperationalError:
-            raise DeviceGateError("device_gate_io_error") from None
-        except (sqlite3.Error, OSError):
-            raise DeviceGateError("device_gate_io_error") from None
-        try:
-            self._ensure_schema(connection, create=create)
-        except Exception:
-            connection.close()
-            raise
-        return connection
 
-    def _ensure_schema(self, connection: sqlite3.Connection, *, create: bool) -> None:
-        """只允许明确新空库初始化；已有库核验完整对象集与 DDL，不改写版本。"""
-        version, objects = self._read_schema(connection)
+def inspect_gate_occupancy(
+    *, os_root: Path | None = None, platform_name: str | None = None
+) -> dict[str, object] | None:
+    """只读返回固定门禁库唯一 primary 行；不创建、不改写、不释放。"""
+    return _inspect_path(guard_database_path(os_root, platform_name=platform_name))
+
+
+def _inspect_path(path: Path) -> dict[str, object] | None:
+    """按固定门禁路径只读读取占用行；明确缺失返回 None，其余异常拒绝。"""
+    state = probe_path(path)
+    if state == PATH_MISSING:
+        return None
+    if state != PATH_FILE:
+        raise DeviceGateError("device_gate_io_error")
+    connection = _connect_gate(path, create=False)
+    try:
+        row = _read_gate_row(connection)
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    return _gate_row_payload(row)
+
+
+def _gate_row_payload(row: sqlite3.Row) -> dict[str, object]:
+    """把唯一 primary 行投影为固定白名单字段，不追加其它列。"""
+    return {
+        "profile_id": str(row["profile_id"]),
+        "profile_db_path": str(row["profile_db_path"]),
+        "owner_id": str(row["owner_id"]),
+        "owner_pid": int(row["owner_pid"]),
+        "owner_host": str(row["owner_host"]),
+        "nonce": str(row["nonce"]),
+        "state": str(row["state"]),
+        "acquired_at": str(row["acquired_at"]),
+        "updated_at": str(row["updated_at"]),
+    }
+
+
+def _connect_gate(path: Path, *, create: bool) -> sqlite3.Connection:
+    """打开固定门禁库；首次创建允许少量本地文件/SQLite 竞争重试。"""
+    attempts = 3 if create else 1
+    last: DeviceGateError | None = None
+    for attempt in range(attempts):
+        try:
+            return _connect_gate_once(path, create=create)
+        except DeviceGateError as error:
+            last = error
+            if error.reason_code != "device_gate_io_error" or attempt + 1 >= attempts:
+                raise
+            time.sleep(0.02)
+    assert last is not None
+    raise last
+
+
+def _connect_gate_once(path: Path, *, create: bool) -> sqlite3.Connection:
+    """实际执行一次打开与建表/核验，失败关闭连接并映射固定错误。"""
+    state = probe_path(path)
+    if state == PATH_UNKNOWN:
+        raise DeviceGateError("device_gate_io_error")
+    if not create and state != PATH_FILE:
+        raise DeviceGateError("device_gate_io_error")
+    if create and state not in (PATH_MISSING, PATH_FILE):
+        raise DeviceGateError("device_gate_io_error")
+    try:
+        if create:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(str(path), timeout=BUSY_TIMEOUT_MS / 1000)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    except sqlite3.OperationalError:
+        raise DeviceGateError("device_gate_io_error") from None
+    except (sqlite3.Error, OSError):
+        raise DeviceGateError("device_gate_io_error") from None
+    try:
+        _ensure_gate_schema(connection, create=create)
+    except Exception:
+        connection.close()
+        raise
+    return connection
+
+
+def _ensure_gate_schema(connection: sqlite3.Connection, *, create: bool) -> None:
+    """只允许明确新空库初始化；已有库核验完整对象集与 DDL，不改写版本。"""
+    version, objects = _read_gate_schema(connection)
+    if objects:
+        _verify_gate_schema(version, objects)
+        return
+    if version != 0:
+        raise DeviceGateError("device_gate_io_error")
+    if not create:
+        raise DeviceGateError("device_gate_io_error")
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        version, objects = _read_gate_schema(connection)
         if objects:
-            self._verify_schema(version, objects)
-            return
-        if version != 0:
-            raise DeviceGateError("device_gate_io_error")
-        if not create:
-            raise DeviceGateError("device_gate_io_error")
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            version, objects = self._read_schema(connection)
-            if objects:
-                self._verify_schema(version, objects)
-            else:
-                if version != 0:
-                    raise DeviceGateError("device_gate_io_error")
-                connection.execute(GATE_TABLE_SQL)
-                connection.execute(f"PRAGMA user_version = {GATE_SCHEMA_VERSION}")
-                version, objects = self._read_schema(connection)
-                self._verify_schema(version, objects)
-            connection.execute("COMMIT")
-        except DeviceGateError:
-            _rollback(connection)
-            raise
-        except (sqlite3.Error, OSError):
-            _rollback(connection)
-            raise DeviceGateError("device_gate_io_error") from None
+            _verify_gate_schema(version, objects)
+        else:
+            if version != 0:
+                raise DeviceGateError("device_gate_io_error")
+            connection.execute(GATE_TABLE_SQL)
+            connection.execute(f"PRAGMA user_version = {GATE_SCHEMA_VERSION}")
+            version, objects = _read_gate_schema(connection)
+            _verify_gate_schema(version, objects)
+        connection.execute("COMMIT")
+    except DeviceGateError:
+        _rollback(connection)
+        raise
+    except (sqlite3.Error, OSError):
+        _rollback(connection)
+        raise DeviceGateError("device_gate_io_error") from None
 
-    def _read_schema(
-        self, connection: sqlite3.Connection
-    ) -> tuple[int, dict[str, tuple[str, str]]]:
-        """读取版本与完整用户对象集；读取失败固定为门禁 IO 错误。"""
-        try:
-            version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-            objects = {
-                str(row["name"]): (str(row["type"]), str(row["sql"]))
-                for row in connection.execute(
-                    "SELECT type, name, sql FROM sqlite_schema "
-                    "WHERE name NOT LIKE 'sqlite_%'"
-                )
-            }
-        except (sqlite3.Error, TypeError, ValueError):
-            raise DeviceGateError("device_gate_io_error") from None
-        return version, objects
 
-    def _verify_schema(
-        self, version: int, objects: dict[str, tuple[str, str]]
-    ) -> None:
-        """拒绝未知版本、额外/缺失对象或非本门禁 DDL。"""
-        if version != GATE_SCHEMA_VERSION or set(objects) != {"device_guard"}:
-            raise DeviceGateError("device_gate_io_error")
-        object_type, sql = objects["device_guard"]
-        if (
-            object_type != "table"
-            or _normalize_sql(sql) != _normalize_sql(GATE_TABLE_SQL)
-        ):
-            raise DeviceGateError("device_gate_io_error")
+def _read_gate_schema(
+    connection: sqlite3.Connection,
+) -> tuple[int, dict[str, tuple[str, str]]]:
+    """读取版本与完整用户对象集；读取失败固定为门禁 IO 错误。"""
+    try:
+        version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+        objects = {
+            str(row["name"]): (str(row["type"]), str(row["sql"]))
+            for row in connection.execute(
+                "SELECT type, name, sql FROM sqlite_schema "
+                "WHERE name NOT LIKE 'sqlite_%'"
+            )
+        }
+    except (sqlite3.Error, TypeError, ValueError):
+        raise DeviceGateError("device_gate_io_error") from None
+    return version, objects
 
-    def _read_row(self, connection: sqlite3.Connection) -> sqlite3.Row | None:
-        """读取唯一 primary 行；读取失败固定为门禁 IO 错误。"""
-        try:
-            return connection.execute(
-                "SELECT * FROM device_guard WHERE device_key = 'primary'"
-            ).fetchone()
-        except sqlite3.Error:
-            raise DeviceGateError("device_gate_io_error") from None
+
+def _verify_gate_schema(version: int, objects: dict[str, tuple[str, str]]) -> None:
+    """拒绝未知版本、额外/缺失对象或非本门禁 DDL。"""
+    if version != GATE_SCHEMA_VERSION or set(objects) != {"device_guard"}:
+        raise DeviceGateError("device_gate_io_error")
+    object_type, sql = objects["device_guard"]
+    if (
+        object_type != "table"
+        or _normalize_sql(sql) != _normalize_sql(GATE_TABLE_SQL)
+    ):
+        raise DeviceGateError("device_gate_io_error")
+
+
+def _read_gate_row(connection: sqlite3.Connection) -> sqlite3.Row | None:
+    """读取唯一 primary 行；读取失败固定为门禁 IO 错误。"""
+    try:
+        return connection.execute(
+            "SELECT * FROM device_guard WHERE device_key = 'primary'"
+        ).fetchone()
+    except sqlite3.Error:
+        raise DeviceGateError("device_gate_io_error") from None
 
 
 def _rollback(connection: sqlite3.Connection) -> None:

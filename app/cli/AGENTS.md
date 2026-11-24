@@ -2,12 +2,12 @@
 
 ## 一、目录用途
 
-提供 M0/M1/M2/M3/M4a/M4b/M4c 的命令行组合根：严格解析全局 `--config`、`doctor`、`store init`、`sense`、`read`、`policy`、`facts` 与 `run check` 子命令参数，校验项目内相对路径，加载最小配置与合成夹具，注入只读探针、SQLite 初始化、BOSS 合成解析、M3 读取、M4a 策略文件工作流、M4b A/B 子进程桥与评测文件存储，以及 M4c profile 事实库/共享设备门禁/活动检查/验收复核，并只向 stdout 输出一个 UTF-8 JSON 对象。
+提供 M0/M1/M2/M3/M4a/M4b/M4c 的命令行组合根：严格解析全局 `--config`、`doctor`、`store init`、`sense`、`read`、`policy`、`facts`、只读 `device gate inspect` 与 `run check` 子命令参数，校验项目内相对路径，加载最小配置与合成夹具，注入只读探针、SQLite 初始化、BOSS 合成解析、M3 读取、M4a 策略文件工作流、M4b A/B 子进程桥与评测文件存储，以及 M4c profile 事实库/共享设备门禁/活动检查/验收复核，并只向 stdout 输出一个 UTF-8 JSON 对象。
 
 ## 二、当前文件
 
 - `__init__.py`：声明命令行包。
-- `main.py`：`main(argv, process_log=..., os_root=...)` 入口（`os_root` 仅供测试注入临时应用数据根）、严格 argparse、配置校验/夹具读取、共享 JSON 重复键边界、fixture 与 ADB 组合、`store init --db` 接线、`sense --fixture/--db` 接线、`read --fixture` 接线、`policy init/validate/preview/list/snapshot/restore/eval/holdout/acceptance` 接线、`facts set/show/revoke/forget` 接线、`run check` 接线、共享设备门禁取得/复核/释放、唯一安全 JSON 输出、退出码与过程日志阶段记录。M4b `eval` 只接受 `external-agent`/`local-process` 显式 provider、参数数组桥程序与 `--confirm-external-send`；`holdout register/retire` 只维护本机冻结登记。
+- `main.py`：`main(argv, process_log=..., os_root=...)` 入口（`os_root` 仅供测试注入临时应用数据根）、严格 argparse、配置校验/夹具读取、共享 JSON 重复键边界、fixture 与 ADB 组合、`store init --db` 接线、`sense --fixture/--db` 接线、`read --fixture` 接线、`policy init/validate/preview/list/snapshot/restore/eval/holdout/acceptance` 接线、`facts set/show/revoke/forget` 接线、只读 `device gate inspect` 接线、`run check` 接线、共享设备门禁取得/复核/释放、唯一安全 JSON 输出、退出码与过程日志阶段记录。M4b `eval` 只接受 `external-agent`/`local-process` 显式 provider、参数数组桥程序与 `--confirm-external-send`；`holdout register/retire` 只维护本机冻结登记。
 - `CLAUDE.md`：仅引用同目录 `AGENTS.md`。
 
 ## 三、行为契约
@@ -28,6 +28,8 @@
 14. `policy` 只接受项目内相对路径：`init`/`restore` 目标为 `prompts/local/<profile>` 直接子目录，`snapshot` 目标为 `prompts/local/history/<snapshot-id>`，preview 案例固定 `tests/fixtures/policy-preview/<case>.json`，eval 套件固定 `evals/policy-suite/public.json` 与忽略的 `evals/private/`，验收凭证只读 `data/evals/eval-<32hex>/acceptance.json`。不读取根 `config.json`、设备、网络、模型或黄金答案；生产 `restore` 注入真实 `ProfilePolicyActivity`，active/unknown/坏库/未决均 `policy_changed`，不新增公开测试绕过参数。`facts` 只写 `data/runtime/profiles/<profile_id>/runtime.sqlite3`，带 `--pack` 时 pack.profile_id 必须等于 `--profile`，否则 `profile_mismatch`；路径存在但非普通文件时 `profile_io_error`，不伪造空结果。`run check` 用同一 profile 固定路径与临时/固定 OS 根门禁，不执行动作。
 15. `policy` 过程日志使用 `stage=policy`，命令操作 `init/validate/preview/list/snapshot/restore/eval/holdout/acceptance`，并由 usecase 在实际边界追加 `load/validate/render/publish` 与 `eval/suite|authorize|case|report|acceptance|holdout`、`decision/verify|bridge|validate` 阶段；`error_category=policy/eval/decision/bridge` 与固定原因码；`facts` 用 `stage=facts` 与 set/show/revoke/forget，并和 run/restore 一样经 `app/profile_open.py` 记录 `profile/open_profile` started/终态；`device_gate` 只由门禁适配器记录 acquire/verify/release/quarantine 的 started/终态，`run` 用 check；CLI 不重复记录门禁适配器同一操作；不写事实值、profile ID、门禁路径、正文、argv、凭据或异常原值；缺 public suite 的 suite 阶段与 authorize 拒绝均只记 started→failed，不先 ok；不写文件正文、事实值、回复、argv、凭据、绝对路径或原异常；日志失败不改变业务输出/退出码。报告写入同一 `correlation_id`，逐例只带安全 `case_index`。
 16. `policy eval --help` 必须列出受支持 provider 格式、协议版本、认证变量/端点边界（本程序不读取值）、本机要求、固定诊断、留出无上传合同路径与 `data/evals` 产物边界；`--confirm-external-send` 只确认本轮模型外发/计费，不授予设备、事实写入或业务发送权限，也不替代留出无上传许可。拒绝 `echo`、`reference-provider`/smoke 冒充与未知 provider。
+
+17. `device` 只有只读 `gate inspect`：成功输出三键对象加 `result.inspect_only/occupied/state/profile_id/owner_pid/acquired_at/updated_at`，无占用为 `occupied=false` 并退出 `0`；不创建库、不取得或释放占用、不输出库路径/host/nonce。明确缺失不建库，目录/权限/未知库/不可识别状态 `device_gate_io_error`、非 Windows 无固定位置 `device_gate_unavailable` 均退出 `2`，日志记 `device_gate/inspect`。facts 的 `--confirm` 写入先只读检查同 profile 占用：held/quarantined 分别返回 `device_busy`/`device_quarantined` 且不写库；未确认提案、`show` 与其他 profile 不受影响；门禁库不可读失败关闭，只有非 Windows 结构性无门禁才视为无会话。
 
 ## 四、测试
 

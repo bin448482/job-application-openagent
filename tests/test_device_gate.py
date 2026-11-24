@@ -16,6 +16,7 @@ from app.adapters.sqlite.device_gate import (
     GATE_DB_NAME,
     SharedDeviceGate,
     guard_database_path,
+    inspect_gate_occupancy,
 )
 from app.adapters.sqlite.profile_store import (
     SqliteProfileStore,
@@ -23,6 +24,8 @@ from app.adapters.sqlite.profile_store import (
 )
 from app.domain.models import Owner, canonical_hash
 from app.ports.device_gate import DeviceGateError
+from app.usecases.device import occupancy_payload, require_profile_writable
+from tests import policy_helpers
 
 NOW = "2026-11-24T00:00:00.000Z"
 LATER = "2030-11-24T00:00:00.000Z"
@@ -501,6 +504,135 @@ class ProfilePolicyActivityTests(unittest.TestCase):
             activity.assess_restore(profile_id="demo", dest_pack="prompts/local/x"),
             "unknown",
         )
+
+
+class GateReadOnlyTests(unittest.TestCase):
+    """覆盖只读占用查询命令、映射与同 profile 写入保护。"""
+
+    def setUp(self) -> None:
+        """创建独立项目根与独立 OS 应用数据根。"""
+        self.project_tmp = tempfile.TemporaryDirectory()
+        self.os_tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.project_tmp.name)
+        self.os_root = Path(self.os_tmp.name)
+        self.gate_path = self.os_root / GATE_APP_DIR / GATE_DB_NAME
+
+    def tearDown(self) -> None:
+        """只清理本次拥有的两个临时根。"""
+        self.project_tmp.cleanup()
+        self.os_tmp.cleanup()
+
+    def _hold(self, profile_id: str = "alpha") -> SharedDeviceGate:
+        """在临时 OS 根取得指定 profile 的共享占用。"""
+        path = profile_runtime_path(self.root, profile_id)
+        gate = SharedDeviceGate(
+            profile_id=profile_id,
+            profile_db_path=path,
+            os_root=self.os_root,
+        )
+        gate.acquire(
+            profile_id=profile_id,
+            profile_db_path=str(path),
+            owner=_owner(),
+            now=NOW,
+        )
+        return gate
+
+    def _run(self, argv: list[str]):
+        """在临时项目根运行 CLI 并注入临时 OS 根。"""
+        return policy_helpers.run_cli(self.root, argv, os_root=self.os_root)
+
+    def test_missing_gate_library_reports_free_without_creating_it(self) -> None:
+        """明确不存在门禁库时报告空闲，且只读命令不创建库。"""
+        code, payload, stderr = self._run(["device", "gate", "inspect"])
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        self.assertEqual(payload["status"], "ok")
+        result = payload["result"]
+        self.assertTrue(result["inspect_only"])
+        self.assertFalse(result["occupied"])
+        self.assertIsNone(result["state"])
+        self.assertIsNone(result["profile_id"])
+        self.assertIsNone(result["owner_pid"])
+        self.assertFalse(self.gate_path.exists())
+        self.assertIsNone(inspect_gate_occupancy(os_root=self.os_root))
+        self.assertFalse(self.gate_path.exists())
+
+    def test_held_occupancy_is_reported_without_paths(self) -> None:
+        """held 时只读显示状态、profile 与占用 PID，不输出库路径或 host。"""
+        gate = self._hold("alpha")
+        try:
+            code, payload, _ = self._run(["device", "gate", "inspect"])
+        finally:
+            gate.release(now=NOW, converged=True)
+        self.assertEqual(code, 0)
+        result = payload["result"]
+        self.assertTrue(result["occupied"])
+        self.assertEqual(result["state"], "held")
+        self.assertEqual(result["profile_id"], "alpha")
+        self.assertEqual(result["owner_pid"], 4242)
+        self.assertTrue(result["acquired_at"])
+        self.assertNotIn("profile_db_path", result)
+        self.assertNotIn("owner_host", result)
+        self.assertNotIn("nonce", result)
+        self.assertNotIn(str(self.os_root), str(payload))
+
+    def test_quarantined_occupancy_stays_visible(self) -> None:
+        """异常释放后的隔离行继续可见，不因查询被清除。"""
+        gate = self._hold("alpha")
+        gate.release(now=NOW, converged=False)
+        code, payload, _ = self._run(["device", "gate", "inspect"])
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["result"]["state"], "quarantined")
+        self.assertTrue(self.gate_path.is_file())
+
+    def test_unreadable_gate_path_fails_without_writing(self) -> None:
+        """门禁路径是目录时固定 IO 失败，且不改写该路径。"""
+        self.gate_path.mkdir(parents=True)
+        code, payload, _ = self._run(["device", "gate", "inspect"])
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["reason_code"], "device_gate_io_error")
+        self.assertTrue(self.gate_path.is_dir())
+
+    def test_unknown_platform_is_unavailable_not_free(self) -> None:
+        """非 Windows 无固定门禁位置时报告不可用，不伪造空闲结果。"""
+        with self.assertRaises(DeviceGateError) as caught:
+            inspect_gate_occupancy(platform_name="linux")
+        self.assertEqual(caught.exception.reason_code, "device_gate_unavailable")
+
+    def test_occupancy_payload_maps_free_and_rejects_unknown_state(self) -> None:
+        """空闲行映射为固定键；不可识别状态按 IO 错误拒绝。"""
+        free = occupancy_payload(None)
+        self.assertFalse(free["occupied"])
+        self.assertIsNone(free["state"])
+        with self.assertRaises(DeviceGateError) as caught:
+            occupancy_payload({"state": "released", "profile_id": "alpha"})
+        self.assertEqual(caught.exception.reason_code, "device_gate_io_error")
+
+    def test_write_guard_blocks_only_same_profile(self) -> None:
+        """同 profile 的 held/quarantined 拒绝写入，其它 profile 与无占用放行。"""
+        require_profile_writable(None, profile_id="alpha")
+        self._hold("alpha")
+        with self.assertRaises(DeviceGateError) as busy:
+            require_profile_writable(
+                {"state": "held", "profile_id": "alpha"}, profile_id="alpha"
+            )
+        self.assertEqual(busy.exception.reason_code, "device_busy")
+        require_profile_writable(
+            {"state": "held", "profile_id": "alpha"}, profile_id="beta"
+        )
+        with self.assertRaises(DeviceGateError) as quarantined:
+            require_profile_writable(
+                {"state": "quarantined", "profile_id": "alpha"}, profile_id="alpha"
+            )
+        self.assertEqual(
+            quarantined.exception.reason_code, "device_quarantined"
+        )
+        with self.assertRaises(DeviceGateError) as unknown:
+            require_profile_writable(
+                {"state": "released", "profile_id": "alpha"}, profile_id="alpha"
+            )
+        self.assertEqual(unknown.exception.reason_code, "device_gate_io_error")
 
 
 if __name__ == "__main__":

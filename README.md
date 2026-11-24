@@ -7,9 +7,9 @@
 旧的业务源码、Skills 与业务离线测试已清理，项目正在分阶段实现。当前已实现 M0 只读探针、M1 本机状态库/租约、M2 合成未读四源传感器、M3 离线读取阶梯/页面/职位/会话读取、M4a 策略包离线编辑/校验/预览/快照/恢复、M4b A/B 本机决策桥/分层 policy eval/留出冻结登记，以及 M4c profile 独立事实库/本机事实确认入口、固定 OS 共享 SQLite 设备门禁、真实 restore 活动检查、验收凭证复核与 `run check` 预检；仍未连接真实设备或模型，并已建立独立的 promptfoo 合成黄金测试集：
 
 - `pyproject.toml`、`requirements.txt`：Python 业务元数据；暂不引入第三方 Python 依赖。
-- `app/`：M0–M4c 分层程序，提供 `python -m app`、只读 `doctor`、`store init`、合成 `sense`、合成 `read`、`policy`（含 `eval`/`holdout`/`acceptance`）、本机 `facts` 与 `run check`，以及 `domain/` 纯模型/读取/策略/评测/事实契约、`adapters/sqlite/` 本机仓储/profile 库/共享设备门禁/活动检查、`adapters/boss/` 解析、`adapters/adb/` 采集、`adapters/files/` 策略/评测文件与 `adapters/llm/` A/B 子进程桥。
+- `app/`：M0–M4c 分层程序，提供 `python -m app`、只读 `doctor`、`store init`、合成 `sense`、合成 `read`、`policy`（含 `eval`/`holdout`/`acceptance`）、本机 `facts`、只读 `device gate inspect` 与 `run check`，以及 `domain/` 纯模型/读取/策略/评测/事实契约、`adapters/sqlite/` 本机仓储/profile 库/共享设备门禁/活动检查、`adapters/boss/` 解析、`adapters/adb/` 采集、`adapters/files/` 策略/评测文件与 `adapters/llm/` A/B 子进程桥。
 - `tests/`：M0–M4c 标准库 `unittest` 与纯合成夹具。
-- `docs/operator.md`：M0–M4c 探针、状态库、合成传感器、离线读取、策略包、桥/eval/留出、profile 事实、共享门禁、恢复检查、验收复核与 `run check` 预检说明。
+- `docs/operator.md`：M0–M4c 探针、状态库、合成传感器、离线读取、策略包、桥/eval/留出、profile 事实、共享门禁与只读占用查询、facts 写保护、恢复检查、验收复核与 `run check` 预检说明。
 - `docs/BOSS直聘_M3读取阶梯与最小数据契约_20261124.md`：M3 读取值类型、字段阶梯、像素标定、跨屏稳定消息身份与失败/门禁契约。
 - `prompts/`：公开 base、纯合成示例与 `policy init` 生成的本机策略包/history；`tests/fixtures/policy-preview/` 是 preview 的公开合成输入资源；`evals/policy-suite/` 是 eval 的公开套件与旧 24 映射。
 - `config.example.json`：可提交的示例配置，当前只描述未来 M4 的策略包引用，不是 M0 配置。
@@ -145,13 +145,14 @@ python -m app facts revoke --profile demo --key work_location --confirm
 python -m app facts forget --profile demo --key work_location --confirm
 python -m app policy acceptance check --pack prompts/local/demo --credential data/evals/eval-<id>/acceptance.json
 python -m app run check --pack prompts/local/demo --mode read_only --confirm-device
+python -m app device gate inspect
 ```
 
-`facts` 使用本机交互 CLI 逐字段录入长期事实：未带 `--confirm` 只输出提案，不写事实；确认后从库中重读并再次显示值。每条事实由程序生成来源 ID、记录确认时间与有效期；同键多个 active 来源不按较新时间自动择一，而是转 `conflict` 待办；显式 `--replace` 才作废旧来源。撤销保留历史来源，`forget` 删除当前事实行并只保留来源 ID/无值审计，明确不宣称擦除 SQLite WAL 或既有本机备份。事实值只写 `data/runtime/profiles/<profile_id>/runtime.sqlite3`，不进入策略包、过程日志、公开报告或错误文本；带 `--pack` 时 pack.profile_id 必须等于 `--profile`，否则固定 `profile_mismatch`；路径查询只有明确 `FileNotFoundError` 算缺失，目录/非普通文件/权限错误报 `profile_io_error`，不伪造空结果。不读取 HR 文本、旧合成库、根 `config.json` 或凭据。旧 `data/runtime/runtime.sqlite3` 不自动导入；合法 profile 库在完整校验后由唯一 `SqliteStore` 复用 M1 任务能力，旧普通 M1 库验证不放宽；profile 模式写入前拒绝另一 profile 的合法快照。
+`facts` 使用本机交互 CLI 逐字段录入长期事实：未带 `--confirm` 只输出提案，不写事实；确认后从库中重读并再次显示值。每条事实由程序生成来源 ID、记录确认时间与有效期；同键多个 active 来源不按较新时间自动择一，而是转 `conflict` 待办；显式 `--replace` 才作废旧来源。撤销保留历史来源，`forget` 删除当前事实行并只保留来源 ID/无值审计，明确不宣称擦除 SQLite WAL 或既有本机备份。事实值只写 `data/runtime/profiles/<profile_id>/runtime.sqlite3`，不进入策略包、过程日志、公开报告或错误文本；带 `--pack` 时 pack.profile_id 必须等于 `--profile`，否则固定 `profile_mismatch`；路径查询只有明确 `FileNotFoundError` 算缺失，目录/非普通文件/权限错误报 `profile_io_error`，不伪造空结果。同 profile 存在 held/quarantined 设备会话时，`set/revoke/forget --confirm` 固定返回 `device_busy`/`device_quarantined` 且不写库，未确认提案、`show` 与其他 profile 不受影响；门禁库不可读失败关闭，只有非 Windows 结构性无门禁时按无会话处理。不读取 HR 文本、旧合成库、根 `config.json` 或凭据。旧 `data/runtime/runtime.sqlite3` 不自动导入；合法 profile 库在完整校验后由唯一 `SqliteStore` 复用 M1 任务能力，旧普通 M1 库验证不放宽；profile 模式写入前拒绝另一 profile 的合法快照。
 
 共享设备门禁固定在 Windows `LOCALAPPDATA/job-application-openagent/device-guard.sqlite3`，不随仓库、worktree、clone、`--pack` 或配置改变；其它平台在支持前拒绝真实运行。整个真实会话（含 read_only）先 `BEGIN IMMEDIATE` 条件插入唯一 `primary` 行，存在任何状态即拒绝；acquire 保存完整 owner/pid/host/nonce/profile/路径，启动、续租与每条设备命令前复核完整身份与绑定。release 在写事务内再次比较同一完整身份，任一 owner/profile/路径变化都不删除原占用。只允许明确新空库初始化；未知版本、额外对象或旧占用表不改写，保留原内容。崩溃、PID 消失、TTL、库不可读、nonce 篡改或换 profile 都不自动解锁；正常释放只在该次操作明确收敛且无在途子命令时删除，异常保留原绑定并置 `quarantined`。`probe_path` 只有明确 `FileNotFoundError` 才算缺失；目录/不可读/权限错误等存在但不可判定路径返回 unknown，restore 不发布。M0 `doctor --device` 已纳入同一占用；M3 真实采集适配器缺 gate 时在零子进程处拒绝，并在每条子命令前复核，未取得门禁或未确认时任何 ADB 子进程都不启动。
 
-`policy acceptance check` 只读比较 M4b 验收凭证与当前 base/pack（可选 provider/model 摘要），任何变化以 `policy_changed` 拒绝旧凭证，不授予设备或发送权限。`run check` 是预检而非完整运行：read_only 要求本轮 `--confirm-device`，draft_only 另要求当前验收（provider/model/model_config 齐全），`auto_send_tier_a` 在 v1 固定 C 且缺独立前置判据时始终 `authorization_required`；它不探测设备、不调用模型、不执行 M5 动作，跨库失败会保留占用并隔离。门禁适配器唯一记录 acquire/verify/release/quarantine 的 started/终态，run/restore 的 profile 打开也有唯一 started/终态。真实 `ProfileSessionLease` 保存取得时 Lease/Owner/nonce，每次关联 profile 库、门禁 session identity 与任务/设备两行；门禁身份从一次已核行读取返回，任务选择复用 `validate_lease` 并匹配 app/key/nonce。跨 profile/原库/owner、复制库、门禁 nonce 桥前/桥中变化、错误任务 key/app 或桥期间 owner 变化均拒绝，桥前/桥后由 `decide` 拒绝且不重发。实际 CLI 合成桥 eval→snapshot→restore→validate/preview→eval 串行闭环已验证，三摘要一致且同 profile 既有事实/任务审计不变。M5–M8 的动作、调度、真机执行与真实 provider 仍未实现，完整 MVP 运行不可声称完成。
+`policy acceptance check` 只读比较 M4b 验收凭证与当前 base/pack（可选 provider/model 摘要），任何变化以 `policy_changed` 拒绝旧凭证，不授予设备或发送权限。`run check` 是预检而非完整运行：read_only 要求本轮 `--confirm-device`，draft_only 另要求当前验收（provider/model/model_config 齐全），`auto_send_tier_a` 在 v1 固定 C 且缺独立前置判据时始终 `authorization_required`；它不探测设备、不调用模型、不执行 M5 动作，跨库失败会保留占用并隔离。门禁适配器唯一记录 acquire/verify/release/quarantine 的 started/终态，只读 `device gate inspect` 由 CLI 记录同一 `device_gate` 阶段（不建库、不释放、不输出路径/host/nonce），run/restore 的 profile 打开也有唯一 started/终态。真实 `ProfileSessionLease` 保存取得时 Lease/Owner/nonce，每次关联 profile 库、门禁 session identity 与任务/设备两行；门禁身份从一次已核行读取返回，任务选择复用 `validate_lease` 并匹配 app/key/nonce。跨 profile/原库/owner、复制库、门禁 nonce 桥前/桥中变化、错误任务 key/app 或桥期间 owner 变化均拒绝，桥前/桥后由 `decide` 拒绝且不重发。实际 CLI 合成桥 eval→snapshot→restore→validate/preview→eval 串行闭环已验证，三摘要一致且同 profile 既有事实/任务审计不变。M5–M8 的动作、调度、真机执行与真实 provider 仍未实现，完整 MVP 运行不可声称完成。
 
 ## 开发环境
 

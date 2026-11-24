@@ -204,6 +204,7 @@ OPERATIONS = frozenset(
         "verify",
         "release",
         "quarantine",
+        "inspect",
         "check",
         "current_lease_expiry",
     }

@@ -11,9 +11,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from app.adapters.sqlite.device_gate import SharedDeviceGate
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
 from app.adapters.sqlite.schema import initialize_database
 from app.cli.main import main
+from app.domain.models import Owner, canonical_hash
 from app.domain.policy import parse_and_validate_pack
 from app.domain.profile import select_profile_facts
 from app.process_log import ProcessLog
@@ -160,10 +162,14 @@ class ProfileFactsCliTests(unittest.TestCase):
     """覆盖本机 CLI 提案/确认/再显示、包白名单待办与日志无值。"""
 
     def setUp(self) -> None:
-        """创建临时项目根并复制公开策略资源。"""
+        """创建临时项目根与临时 OS 根，并复制公开策略资源。"""
         self.tmp, self.root = policy_helpers.temp_project()
+        self.os_root = Path(self.tmp.name) / "os-root"
+        self.os_root.mkdir()
         code, _payload, _stderr = policy_helpers.run_cli(
-            self.root, ["policy", "init", "--dest", "prompts/local/demo"]
+            self.root,
+            ["policy", "init", "--dest", "prompts/local/demo"],
+            os_root=self.os_root,
         )
         self.assertEqual(code, 0)
         pack_path = self.root / "prompts/local/demo/pack.toml"
@@ -180,7 +186,134 @@ class ProfileFactsCliTests(unittest.TestCase):
 
     def _run(self, argv: list[str], log: ProcessLog | None = None):
         """在临时项目根运行 CLI 并返回退出码、JSON 与 stderr。"""
-        return policy_helpers.run_cli(self.root, argv, process_log=log)
+        return policy_helpers.run_cli(
+            self.root, argv, process_log=log, os_root=self.os_root
+        )
+
+    def _hold(self, profile_id: str = "demo") -> SharedDeviceGate:
+        """在临时 OS 根取得同 profile 的共享设备占用。"""
+        path = profile_runtime_path(self.root, profile_id)
+        gate = SharedDeviceGate(
+            profile_id=profile_id,
+            profile_db_path=path,
+            os_root=self.os_root,
+        )
+        gate.acquire(
+            profile_id=profile_id,
+            profile_db_path=str(path),
+            owner=Owner(
+                id="00000000-0000-4000-8000-000000000001",
+                pid=4242,
+                host=canonical_hash("synthetic-host"),
+            ),
+            now=NOW,
+        )
+        return gate
+
+    def test_confirmed_write_is_blocked_during_same_profile_device_session(self) -> None:
+        """设备会话期间拒绝确认写入；提案、只读与其它 profile 不受影响。"""
+        confirm = [
+            "facts",
+            "set",
+            "--profile",
+            "demo",
+            "--key",
+            "work_location",
+            "--value",
+            "合成城市甲",
+            "--confirm",
+        ]
+        gate = self._hold("demo")
+        try:
+            code, payload, stderr = self._run(confirm)
+            self.assertEqual(code, 2)
+            self.assertEqual(stderr, "")
+            self.assertEqual(payload["status"], "failed")
+            self.assertEqual(payload["reason_code"], "device_busy")
+
+            code, proposal, _ = self._run(confirm[:-1])
+            self.assertEqual(code, 0)
+            self.assertEqual(proposal["status"], "confirmation_required")
+
+            code, shown, _ = self._run(["facts", "show", "--profile", "demo"])
+            self.assertEqual(code, 0)
+            self.assertEqual(shown["result"]["facts"], [])
+
+            code, other, _ = self._run(
+                [
+                    "facts",
+                    "set",
+                    "--profile",
+                    "alpha",
+                    "--key",
+                    "work_location",
+                    "--value",
+                    "合成城市乙",
+                    "--confirm",
+                ]
+            )
+            self.assertEqual(code, 0)
+            self.assertTrue(other["result"]["result"]["source_id"])
+        finally:
+            gate.release(now=NOW, converged=True)
+
+        code, payload, _ = self._run(confirm)
+        self.assertEqual(code, 0)
+        self.assertTrue(payload["result"]["confirmed"])
+        self.assertEqual(payload["result"]["display_value"], "合成城市甲")
+
+    def test_quarantined_session_blocks_writes_with_fixed_reason(self) -> None:
+        """异常隔离的占用同样拒绝写入，不自动放行或解锁。"""
+        gate = self._hold("demo")
+        gate.release(now=NOW, converged=False)
+        code, payload, _ = self._run(
+            [
+                "facts",
+                "set",
+                "--profile",
+                "demo",
+                "--key",
+                "work_location",
+                "--value",
+                "合成城市甲",
+                "--confirm",
+            ]
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(payload["reason_code"], "device_quarantined")
+
+    def test_blocked_write_logs_gate_category_without_value(self) -> None:
+        """拒写日志使用 gate 类别与固定原因，不记录事实值。"""
+        log = ProcessLog(
+            self.root / "facts-blocked.jsonl", correlation_id="corr-facts-blocked"
+        )
+        gate = self._hold("demo")
+        try:
+            code, _payload, _ = self._run(
+                [
+                    "facts",
+                    "set",
+                    "--profile",
+                    "demo",
+                    "--key",
+                    "work_location",
+                    "--value",
+                    "合成日志城市",
+                    "--confirm",
+                ],
+                log=log,
+            )
+        finally:
+            gate.release(now=NOW, converged=True)
+        self.assertEqual(code, 2)
+        failed = [
+            event
+            for event in _events(log)
+            if event["stage"] == "facts" and event["result"] == "failed"
+        ]
+        self.assertEqual(failed[-1]["reason_code"], "device_busy")
+        self.assertEqual(failed[-1]["error_category"], "gate")
+        self.assertNotIn("合成日志城市", log.path.read_text(encoding="utf-8"))
 
     def test_set_requires_confirmation_and_redisplays_value(self) -> None:
         """未确认只给提案；确认后重读库并再显示同一值。"""
