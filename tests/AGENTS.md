@@ -27,8 +27,8 @@
 - `test_m4c_closed_loop.py`：M4c 闭环：真实活动 restore、目录路径不发布、三值一致、同 profile 事实/任务审计不重置、旧凭证摘要变化拒绝、唯一仓储快照重核、实际受控合成桥 CLI eval→snapshot→restore→validate/preview→eval 串行。
 - `test_action_domain.py`：M5 动作键精确规则、目标/动作绑定、观察→三态证据、前后快照/目标已存在/简历请求与交付/联系方式/删除锚点/列表完整/保护项、坏观察、现场与 IME 未收敛 pause、授权种类/摘要/期限/确认、人工卡。
 - `test_action_store.py`：M5 唯一仓储边界：pending 先落库、动作键-目标错配、leased 未 start 零准入、三态与设备处置、执行后失效冻结、合法真实续租后旧捕获 Lease 完成、事件/任务/设备故障回滚、过期租约、崩溃 pending、旧证据时间、UTC 跨日/额度/冷却/调低/重启、confirm/abandon/取消后受控 confirm、IME restored 账本、异 host/父子命令检查器与 v1→v2 备份迁移。
-- `test_action_usecase.py`：M5 生产用例：默认动态 clock、实际 store/profile/gate 绑定、验收四摘要漂移、leased 未 start 零设备调用、执行中/提交前包/共享身份漂移冻结 unknown、unknown 单次调用且不重放、performed 不改事实、同动作键新任务拒绝、完整七字段证据、坏观察 unknown、持久 IME 绑定/错误原值不收敛/正常恢复、原命令停止恢复门禁、成对 safe 日志。
-- `test_action_executor.py`：M5 ADB 原语参数数组/`shell=False`/5 秒/不重试/每命令门禁复核、唯一姓名+职位/唯一 editor/非滚动列表/可点未处理槽位/目标子树差分、单 tap 拒绝、既有/无关提示不算新变化、点击前后失败事实、IME 前置后切换/早退恢复/读回、固定命令标签、证据目录 XML+索引与合成执行器严格观察。
+- `test_action_usecase.py`：M5 生产用例：默认动态 clock、实际 store/profile/gate 绑定、验收四字段缺失/漂移、leased 未 start 零设备调用、执行中/提交前包/共享身份漂移冻结 unknown、unknown 单次调用且不重放、performed 不改事实、同动作键新任务拒绝、完整七字段证据、坏观察 unknown、持久 IME 绑定/错误原值不收敛/正常恢复、原命令停止恢复门禁、成对 safe 日志与单终态。
+- `test_action_executor.py`：M5 ADB 原语参数数组/`shell=False`/5 秒/不重试/每命令门禁复核、唯一姓名+职位/唯一目标 editor/非滚动完整列表/可点 enabled 未处理槽位/目标子树差分、单 tap 拒绝、既有/无关提示不算新变化、点击前后失败事实、IME 前置后切换/早退恢复/读回、固定命令标签、复用 screen 证据+动作索引与合成执行器严格观察。
 - `test_action_cli.py`：M5 实际 CLI 组合根：五动作正例、read_only/未确认/未授权/包漂移拒绝、not_performed 与未收敛、unknown 不重放、资格正例/同动作历史/冷却负例、confirm/abandon 对账、人工卡与 restore unknown。
 - `action_helpers.py`：M5 测试共用的临时项目根、策略包/验收凭证、profile 匹配 seed、动作/对账脚本、合成观察与 CLI 运行辅助。
 - `m1_helpers.py`：M1 测试专用的假时钟、合成快照/证据、固定合成 UUID owner/本机 host 摘要、临时库打开与只读行/事件查询辅助；不连接设备。

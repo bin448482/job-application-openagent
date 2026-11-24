@@ -256,6 +256,7 @@ OPERATIONS = frozenset(
         "action_execute",
         "action_derive",
         "action_commit",
+        "action_freeze",
         "action_reconcile_validate",
         "action_reconcile_commit",
     }

@@ -534,8 +534,14 @@ class ActionUseCaseTests(unittest.TestCase):
                 for item in action_records
                 if item["operation"] == operation
             ]
+            self.assertEqual(results.count("started"), 1, operation)
             self.assertEqual(results[0], "started")
             self.assertEqual(results[-1], "ok")
+            self.assertEqual(
+                len([r for r in results if r in {"ok", "failed", "undetermined"}]),
+                1,
+                operation,
+            )
         joined = log.path.read_text("utf-8")
         self.assertNotIn("合成回复正文", joined)
         self.assertNotIn(str(self.path), joined)
@@ -687,6 +693,39 @@ class ActionUseCaseTests(unittest.TestCase):
         )
         self.assertEqual(result["state"], "performed")
         self.assertTrue(self.store.load_ime_state()["restored"])
+
+    def test_missing_acceptance_fields_are_rejected(self) -> None:
+        """当前验收四字段缺失/None 不得用包摘要补成验收成功。"""
+        snapshot = {
+            "base_hash": DIGEST,
+            "pack_hash": DIGEST,
+            "acceptance_base_hash": DIGEST,
+            "acceptance_pack_hash": DIGEST,
+        }
+
+        class MissingAcceptance(CountingExecutor):
+            """执行开始时删除验收字段。"""
+
+            def execute(self, plan, *, before_command=None):
+                """删除验收 base/pack 后触发 guard。"""
+                self.calls += 1
+                snapshot.pop("acceptance_base_hash", None)
+                snapshot.pop("acceptance_pack_hash", None)
+                if before_command is not None:
+                    before_command()
+                return ActionObservation(
+                    action_key=TEXT_KEY,
+                    action_kind="send_text",
+                    **helpers.observation(observed_at=helpers.NOW),
+                )
+
+        executor = MissingAcceptance()
+        result = self._perform(
+            executor, reload_snapshot=lambda: dict(snapshot)
+        )
+        self.assertEqual(executor.calls, 1)
+        self.assertEqual(result["state"], "unknown")
+        self.assertFalse(result["gate_converged"])
 
     def test_unknown_is_single_call_and_not_replayed(self) -> None:
         """执行失败只调用一次；再次同键在同任务上被 action_conflict 拒绝。"""

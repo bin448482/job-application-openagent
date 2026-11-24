@@ -14,12 +14,14 @@ from typing import Callable
 from app.adapters.adb.command import (
     ADB_TIMEOUT_SECONDS,
     AdbCommandFailure,
+    CommandIdentityStore,
     run_adb,
 )
+from app.adapters.adb.screen import AdbScreenReader
 from app.domain.actions import ActionObservation
 from app.ports.actions import ActionExecutionError, ActionPlan
 from app.ports.device_gate import DeviceGateError
-from app.ports.screen import DeviceGate
+from app.ports.screen import DeviceGate, ScreenReadError
 from app.process_log import ProcessLog, elapsed_ms
 
 DEVICE_TMP_XML = "/data/local/tmp/m5-action-ui.xml"
@@ -41,8 +43,10 @@ class AdbActionExecutor:
         process_log: ProcessLog | None = None,
         timeout: float = ADB_TIMEOUT_SECONDS,
         evidence_dir: Path | None = None,
+        screen_reader: AdbScreenReader | None = None,
+        command_store: CommandIdentityStore | None = None,
     ) -> None:
-        """保存 serial、共享门禁、adb 名、日志、超时与可选本机证据目录。"""
+        """保存 serial、共享门禁、adb 名、日志、超时、证据目录、采集器与命令账本。"""
         if not isinstance(serial, str) or not serial.strip():
             raise ValueError("serial is required")
         self._serial = serial
@@ -51,6 +55,14 @@ class AdbActionExecutor:
         self._process_log = process_log
         self._timeout = timeout
         self._evidence_dir = Path(evidence_dir) if evidence_dir is not None else None
+        self._command_store = command_store
+        self._current_action_key: str | None = None
+        self._screen = screen_reader or AdbScreenReader(
+            evidence_dir=self._evidence_dir,
+            adb=adb,
+            process_log=process_log,
+            gate=gate,
+        )
 
     def read_current_ime(
         self, *, before_command: Callable[[], None] | None = None
@@ -91,22 +103,29 @@ class AdbActionExecutor:
         before_command: Callable[[], None] | None = None,
     ) -> ActionObservation:
         """先验证动作前置，再执行一次；只接受动作目标对应的前后新增变化。"""
+        self._current_action_key = plan.action_key
         before_xml = self._read_hierarchy(
-            clicked=False, before_command=before_command
+            plan.action_key,
+            phase="before",
+            clicked=False,
+            before_command=before_command,
         )
-        self._save_evidence(plan.action_key, "before", before_xml, clicked=False)
         before_texts = _node_texts(before_xml)
         target = plan.target_label or ""
         anchor = plan.anchor_label or ""
         identity_unique = bool(target) and before_texts.count(target) == 1
         target_present_before = bool(target) and target in before_texts
+        labels = plan.identity_labels
+        if labels and _target_node(before_xml, target, labels) is None:
+            identity_unique = False
         protections_clear = not any(
-            marker in text for text in _target_scope_texts(before_xml, target)
+            marker in text
+            for text in _target_scope_texts(before_xml, target, labels)
             for marker in PROTECTION_MARKERS
         )
         list_complete = _list_complete(before_xml)
         contact_slot_available = _slot_available(
-            before_xml, target, plan.action_kind
+            before_xml, target, plan.action_kind, labels
         )
         if plan.action_kind != "send_text" and plan.irreversible_tap_index == 0:
             return self._preflight_failure(
@@ -137,34 +156,17 @@ class AdbActionExecutor:
                         input_box_empty=True,
                     )
                 ime_current = switched
-            self._run(
-                [
-                    self._adb,
-                    "-s",
-                    self._serial,
-                    "shell",
-                    "input",
-                    "text",
-                    _escape_input_text(plan.body_text),
-                ],
-                clicked=False,
-                phase="input",
-                command="adb_action_input",
-                before_command=before_command,
-            )
-            readback_xml = self._read_hierarchy(
-                clicked=False, before_command=before_command, phase="input"
-            )
             try:
-                self._save_evidence(
-                    plan.action_key, "readback", readback_xml, clicked=False
+                readback_xml = self._input_and_readback(
+                    plan, before_command=before_command
                 )
-            except ActionExecutionError as error:
+            except (ActionExecutionError, DeviceGateError) as error:
                 restored = self._restore_ime(
                     plan.ime_original, before_command=before_command
                 )
+                reason_code = getattr(error, "reason_code", "device_disconnected")
                 raise ActionExecutionError(
-                    error.reason_code,
+                    reason_code,
                     clicked=False,
                     scene_settled=True,
                     input_box_empty=False,
@@ -176,7 +178,9 @@ class AdbActionExecutor:
                 ) from None
             readback_texts = _node_texts(readback_xml)
             body = plan.body_text
-            editors = _editor_texts(readback_xml)
+            editors = _editor_texts_in_target(
+                readback_xml, target, plan.identity_labels
+            )
             body_readback = (
                 editors is not None
                 and len(editors) == 1
@@ -243,19 +247,24 @@ class AdbActionExecutor:
                         break
                     if index == plan.irreversible_tap_index - 1:
                         dialog_xml = self._read_hierarchy(
+                            plan.action_key,
+                            phase="dialog",
                             clicked=False,
                             before_command=before_command,
-                            phase="dialog",
-                        )
-                        self._save_evidence(
-                            plan.action_key,
-                            "dialog",
-                            dialog_xml,
-                            clicked=False,
                         )
                         dialog_texts = _node_texts(dialog_xml)
+                        dialog_identity = (
+                            _target_node(
+                                dialog_xml, target, plan.identity_labels
+                            )
+                            is not None
+                        )
                         if plan.action_kind == "send_resume":
-                            if not plan.attachment_name or plan.attachment_name not in dialog_texts:
+                            if (
+                                not dialog_identity
+                                or not plan.attachment_name
+                                or plan.attachment_name not in dialog_texts
+                            ):
                                 return self._observation(
                                     plan,
                                     clicked=False,
@@ -275,11 +284,18 @@ class AdbActionExecutor:
                                 )
                             attachment_verified = True
                         elif plan.action_kind == "delete_conversation":
+                            dialog_protections_clear = not any(
+                                marker in text
+                                for text in _target_scope_texts(
+                                    dialog_xml, target, plan.identity_labels
+                                )
+                                for marker in PROTECTION_MARKERS
+                            )
                             if not (
-                                list_complete
+                                dialog_identity
+                                and list_complete
                                 and protections_clear
-                                and bool(target)
-                                and target in dialog_texts
+                                and dialog_protections_clear
                             ):
                                 return self._observation(
                                     plan,
@@ -298,8 +314,32 @@ class AdbActionExecutor:
                                     contact_slot_available=contact_slot_available,
                                     force_input_box_empty=True,
                                 )
+                        elif plan.action_kind in {
+                            "change_wechat",
+                            "change_phone",
+                        } and not dialog_identity:
+                            return self._observation(
+                                plan,
+                                clicked=False,
+                                before_texts=before_texts,
+                                after_texts=dialog_texts,
+                                after_xml=dialog_xml,
+                                ime_current=ime_current,
+                                body_readback_matches=False,
+                                identity_unique=identity_unique,
+                                list_complete=list_complete,
+                                protections_clear=protections_clear,
+                                target_present_before=target_present_before,
+                                target_present_after=target_present_before,
+                                attachment_name_matched=False,
+                                contact_slot_available=contact_slot_available,
+                                force_input_box_empty=True,
+                            )
             after_xml = self._read_hierarchy(
-                clicked=clicked, before_command=before_command
+                plan.action_key,
+                phase="after",
+                clicked=clicked,
+                before_command=before_command,
             )
         except DeviceGateError:
             raise ActionExecutionError(
@@ -327,7 +367,15 @@ class AdbActionExecutor:
             ) from None
 
         after_texts = _node_texts(after_xml)
-        self._save_evidence(plan.action_key, "after", after_xml, clicked=clicked)
+        if plan.action_kind == "delete_conversation":
+            list_complete = list_complete and _list_complete(after_xml)
+            protections_clear = protections_clear and not any(
+                marker in text
+                for text in _target_scope_texts(
+                    after_xml, target, plan.identity_labels
+                )
+                for marker in PROTECTION_MARKERS
+            )
         if plan.action_kind != "delete_conversation":
             identity_unique = identity_unique and after_texts.count(target) == 1
         if plan.action_kind == "send_resume":
@@ -384,6 +432,33 @@ class AdbActionExecutor:
             force_input_box_empty=input_box_empty,
         )
 
+    def _input_and_readback(
+        self, plan: ActionPlan, *, before_command: Callable[[], None] | None
+    ) -> str:
+        """输入正文并一次回读，保存原始 XML 后返回；任何失败由调用方恢复 IME。"""
+        self._run(
+            [
+                self._adb,
+                "-s",
+                self._serial,
+                "shell",
+                "input",
+                "text",
+                _escape_input_text(plan.body_text or ""),
+            ],
+            clicked=False,
+            phase="input",
+            command="adb_action_input",
+            before_command=before_command,
+        )
+        readback_xml = self._read_hierarchy(
+            plan.action_key,
+            phase="readback",
+            clicked=False,
+            before_command=before_command,
+        )
+        return readback_xml
+
     def _observation(
         self,
         plan: ActionPlan,
@@ -409,11 +484,11 @@ class AdbActionExecutor:
         body = plan.body_text or ""
         target = plan.target_label or ""
         before_scope = (
-            _target_scope_texts(before_xml, target)
+            _target_scope_texts(before_xml, target, plan.identity_labels)
             if before_xml is not None
             else before_texts
         )
-        after_scope = _target_scope_texts(after_xml, target)
+        after_scope = _target_scope_texts(after_xml, target, plan.identity_labels)
         request_before = before_scope.count(RESUME_REQUEST_MARKER)
         request_after = after_scope.count(RESUME_REQUEST_MARKER)
         delivered_before = before_scope.count(RESUME_DELIVERED_MARKER)
@@ -423,7 +498,9 @@ class AdbActionExecutor:
         if force_input_box_empty is not None:
             input_box_empty = force_input_box_empty
         elif plan.action_kind == "send_text":
-            editors = _editor_texts(after_xml)
+            editors = _editor_texts_in_target(
+                after_xml, target, plan.identity_labels
+            )
             input_box_empty = editors is not None and all(
                 not value for value in editors
             )
@@ -532,35 +609,49 @@ class AdbActionExecutor:
 
     def _read_hierarchy(
         self,
+        action_key: str,
         *,
+        phase: str,
         clicked: bool,
         before_command: Callable[[], None] | None,
-        phase: str | None = None,
     ) -> str:
-        """执行一次 dump 后 cat；两步共享有界边界且不重试。"""
-        active_phase = phase or ("clicked" if clicked else "idle")
-        self._run(
-            [
-                self._adb,
-                "-s",
+        """复用唯一采集器的 dump/cat 与证据保存，只补动作相位索引。"""
+        active_phase = "clicked" if clicked else "idle"
+        prefix = (
+            "action-"
+            + hashlib.sha256(action_key.encode("utf-8")).hexdigest()[:16]
+            + "-"
+            + phase
+        )
+        try:
+            capture = self._screen.dump_hierarchy(
                 self._serial,
-                "shell",
-                "uiautomator",
-                "dump",
-                DEVICE_TMP_XML,
-            ],
-            clicked=clicked,
-            phase=active_phase,
-            command="adb_action_dump",
-            before_command=before_command,
+                before_command=before_command,
+                prefix=prefix,
+            )
+        except ScreenReadError as error:
+            reason = (
+                "executor_interrupted"
+                if error.reason_code == "invalid_fixture"
+                else "device_disconnected"
+            )
+            raise ActionExecutionError(
+                reason, clicked=clicked, **_phase_flags(active_phase)
+            ) from None
+        except Exception:
+            raise ActionExecutionError(
+                "executor_interrupted",
+                clicked=clicked,
+                **_phase_flags(active_phase),
+            ) from None
+        self._index_evidence(
+            action_key,
+            phase,
+            capture.xml_text,
+            capture.evidence_name,
+            capture.byte_size,
         )
-        return self._run(
-            [self._adb, "-s", self._serial, "shell", "cat", DEVICE_TMP_XML],
-            clicked=clicked,
-            phase=active_phase,
-            command="adb_action_cat",
-            before_command=before_command,
-        )
+        return capture.xml_text
 
     def _run(
         self,
@@ -580,6 +671,11 @@ class AdbActionExecutor:
                 gate=self._gate,
                 timeout=self._timeout,
                 before=before_command,
+                on_pid=(
+                    self._record_command_pid
+                    if self._command_store is not None
+                    else None
+                ),
             )
         except AdbCommandFailure as error:
             self._record_failure(command, started, error.category)
@@ -599,17 +695,26 @@ class AdbActionExecutor:
         self._record(command, "ok", elapsed_ms(started))
         return completed.stdout
 
-    def _save_evidence(
-        self, action_key: str, phase: str, xml_text: str, *, clicked: bool
+    def _record_command_pid(self, pid: int) -> None:
+        """把本动作命令 PID 写入本机命令身份账本；不写命令参数。"""
+        if self._command_store is None or self._current_action_key is None:
+            return
+        try:
+            self._command_store.record(self._current_action_key, pid)
+        except (OSError, ValueError):
+            return
+
+    def _index_evidence(
+        self,
+        action_key: str,
+        phase: str,
+        xml_text: str,
+        evidence_name: str,
+        byte_size: int,
     ) -> None:
-        """把原始层级证据与 UUID/动作索引写入本机忽略目录；失败不假称保存。"""
+        """只追加动作相位到内容 UUID/采集证据名的本机索引，不重复保存 XML。"""
         if self._evidence_dir is None:
             return
-        snapshot_id = _snapshot_id(xml_text)
-        name = (
-            f"action-{hashlib.sha256(action_key.encode('utf-8')).hexdigest()[:16]}-"
-            f"{snapshot_id}-{phase}.xml"
-        )
         index_name = (
             "action-"
             + hashlib.sha256(action_key.encode("utf-8")).hexdigest()[:16]
@@ -617,7 +722,6 @@ class AdbActionExecutor:
         )
         try:
             self._evidence_dir.mkdir(parents=True, exist_ok=True)
-            (self._evidence_dir / name).write_bytes(xml_text.encode("utf-8"))
             with (self._evidence_dir / index_name).open(
                 "a", encoding="utf-8", newline="\n"
             ) as handle:
@@ -626,9 +730,9 @@ class AdbActionExecutor:
                         {
                             "action_key": action_key,
                             "phase": phase,
-                            "snapshot_id": snapshot_id,
-                            "evidence": name,
-                            "bytes": len(xml_text.encode("utf-8")),
+                            "snapshot_id": _snapshot_id(xml_text),
+                            "evidence": evidence_name,
+                            "bytes": byte_size,
                         },
                         ensure_ascii=False,
                         separators=(",", ":"),
@@ -637,7 +741,7 @@ class AdbActionExecutor:
                 )
         except OSError:
             raise ActionExecutionError(
-                "executor_interrupted", clicked=clicked
+                "executor_interrupted", clicked=True
             ) from None
 
     def _record(self, command: str, result: str, duration_ms: int) -> None:
@@ -696,8 +800,10 @@ def _node_texts(xml_text: str) -> list[str]:
     return _parse_texts(xml_text)
 
 
-def _target_node(xml_text: str, target: str) -> ET.Element | None:
-    """返回唯一文本等于目标的节点；缺失或重复返回 None。"""
+def _target_node(
+    xml_text: str, target: str, identity_labels: tuple[str, ...] = ()
+) -> ET.Element | None:
+    """返回唯一文本等于目标且含全部身份标签的节点；缺失/重复返回 None。"""
     if not target:
         return None
     try:
@@ -707,12 +813,20 @@ def _target_node(xml_text: str, target: str) -> ET.Element | None:
     matches = [node for node in root.iter("node") if node.get("text") == target]
     if len(matches) != 1:
         return None
-    return matches[0]
+    node = matches[0]
+    texts = {
+        child.get("text") or "" for child in node.iter("node") if child.get("text")
+    }
+    if any(label not in texts for label in identity_labels):
+        return None
+    return node
 
 
-def _target_scope_texts(xml_text: str, target: str) -> list[str]:
+def _target_scope_texts(
+    xml_text: str, target: str, identity_labels: tuple[str, ...] = ()
+) -> list[str]:
     """返回唯一目标节点子树内的文本，用于目标局部差分。"""
-    node = _target_node(xml_text, target)
+    node = _target_node(xml_text, target, identity_labels)
     if node is None:
         return []
     return [
@@ -723,25 +837,31 @@ def _target_scope_texts(xml_text: str, target: str) -> list[str]:
 
 
 def _list_complete(xml_text: str) -> bool:
-    """只有非滚动/非 viewport 的完整列表才可作为删除覆盖证明。"""
+    """要求显式非滚动列表且无任何可滚动容器，不能以属性缺失猜完整。"""
     try:
         root = ET.fromstring(xml_text)
     except (ET.ParseError, ValueError):
         return False
-    return not any(
-        node.get("scrollable") == "true" for node in root.iter("node")
-    )
+    nodes = list(root.iter("node"))
+    if any(node.get("scrollable") == "true" for node in nodes):
+        return False
+    return any(node.get("scrollable") == "false" for node in nodes)
 
 
-def _slot_available(xml_text: str, target: str, action_kind: str) -> bool:
-    """要求目标子树存在对应类型、可点击且未处理的联系方式槽位。"""
-    node = _target_node(xml_text, target)
+def _slot_available(
+    xml_text: str,
+    target: str,
+    action_kind: str,
+    identity_labels: tuple[str, ...] = (),
+) -> bool:
+    """要求目标子树存在对应类型、enabled 且可点击的未处理槽位。"""
+    node = _target_node(xml_text, target, identity_labels)
     if node is None:
         return False
     marker = "微信" if action_kind == "change_wechat" else "电话"
     if action_kind not in {"change_wechat", "change_phone"}:
         return True
-    texts = _target_scope_texts(xml_text, target)
+    texts = _target_scope_texts(xml_text, target, identity_labels)
     if any(
         item in text
         for text in texts
@@ -750,9 +870,30 @@ def _slot_available(xml_text: str, target: str, action_kind: str) -> bool:
         return False
     for child in node.iter("node"):
         text = child.get("text") or ""
-        if marker in text and child.get("clickable") == "true":
+        if (
+            marker in text
+            and child.get("clickable") == "true"
+            and child.get("enabled") == "true"
+        ):
             return True
     return False
+
+
+def _editor_texts_in_target(
+    xml_text: str, target: str, identity_labels: tuple[str, ...] = ()
+) -> list[str] | None:
+    """返回目标子树内 EditText 文本；无目标/无编辑器/畸形返回 None。"""
+    node = _target_node(xml_text, target, identity_labels)
+    if node is None:
+        return None
+    result: list[str] = []
+    found = False
+    for child in node.iter("node"):
+        if child.get("class") != "android.widget.EditText":
+            continue
+        found = True
+        result.append(child.get("text") or "")
+    return result if found else None
 
 
 def _editor_texts(xml_text: str) -> list[str] | None:

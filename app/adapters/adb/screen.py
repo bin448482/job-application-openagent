@@ -30,18 +30,24 @@ class AdbScreenReader:
 
     def __init__(
         self,
-        evidence_dir: Path,
+        evidence_dir: Path | None,
         adb: str = "adb",
         process_log: ProcessLog | None = None,
         gate: DeviceGate | None = None,
     ) -> None:
-        """保存 adb 文件名、证据目录、可选日志与共享门禁；构造不启动子进程。"""
+        """保存 adb 文件名、可选证据目录、日志与共享门禁；构造不启动子进程。"""
         self._adb = adb
-        self._evidence_dir = Path(evidence_dir)
+        self._evidence_dir = Path(evidence_dir) if evidence_dir is not None else None
         self._process_log = process_log
         self._gate = gate
 
-    def dump_hierarchy(self, serial: str) -> HierarchyCapture:
+    def dump_hierarchy(
+        self,
+        serial: str,
+        *,
+        before_command: object | None = None,
+        prefix: str = "hierarchy",
+    ) -> HierarchyCapture:
         """依次执行 dump 与 cat，保存 XML 证据并返回内存文本。"""
         self._require_gate()
         _require_serial(serial)
@@ -49,13 +55,15 @@ class AdbScreenReader:
             [self._adb, "-s", serial, "shell", "uiautomator", "dump", DEVICE_TMP_XML],
             stage="adb_hierarchy",
             command="adb_hierarchy_dump",
+            before_command=before_command,
         )
         xml_text = self._run_text(
             [self._adb, "-s", serial, "shell", "cat", DEVICE_TMP_XML],
             stage="adb_hierarchy",
             command="adb_hierarchy_cat",
+            before_command=before_command,
         )
-        name = f"hierarchy-{uuid.uuid4()}.xml"
+        name = f"{prefix}-{uuid.uuid4()}.xml"
         payload = xml_text.encode("utf-8")
         self._save(name, payload)
         return HierarchyCapture(
@@ -82,9 +90,22 @@ class AdbScreenReader:
         if self._gate is None:
             raise DeviceGateError("device_not_held")
 
-    def _run_text(self, args: list[str], *, stage: str, command: str) -> str:
+    def _run_text(
+        self,
+        args: list[str],
+        *,
+        stage: str,
+        command: str,
+        before_command: object | None = None,
+    ) -> str:
         """执行一条不重试的文本 ADB 命令，失败统一为断连。"""
-        completed = self._run(args, stage=stage, command=command, binary=False)
+        completed = self._run(
+            args,
+            stage=stage,
+            command=command,
+            binary=False,
+            before_command=before_command,
+        )
         return completed.stdout
 
     def _run_bytes(self, args: list[str], *, stage: str, command: str) -> bytes:
@@ -99,6 +120,7 @@ class AdbScreenReader:
         stage: str,
         command: str,
         binary: bool,
+        before_command: object | None = None,
     ) -> subprocess.CompletedProcess:
         """复用共享 ADB 边界；每条命令前复核门禁，单次 attempt 不重试。"""
         self._require_gate()
@@ -111,9 +133,13 @@ class AdbScreenReader:
                 gate=self._gate,
                 timeout=ADB_TIMEOUT_SECONDS,
                 binary=binary,
+                before=before_command,  # type: ignore[arg-type]
             )
         except AdbCommandFailure as error:
             self._record_failure(stage, command, started, error.category)
+            raise ScreenReadError("device_disconnected") from None
+        except DeviceGateError:
+            self._record_failure(stage, command, started, "adb_gate")
             raise ScreenReadError("device_disconnected") from None
         self._record(stage, command, "ok", elapsed_ms(started))
         return completed
@@ -122,7 +148,8 @@ class AdbScreenReader:
         """把证据写到调用方指定的本机目录；失败不伪造已保存。"""
         started = time.perf_counter()
         try:
-            save_evidence(self._evidence_dir, name, payload)
+            if self._evidence_dir is not None:
+                save_evidence(self._evidence_dir, name, payload)
         except OSError:
             self._record_evidence_failure(started)
             raise ScreenReadError("invalid_fixture") from None

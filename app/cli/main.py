@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import NoReturn
 
 from app.adapters.adb.device import AdbDeviceProbe, DeviceProbeError
+from app.adapters.adb.command import CommandIdentityStore
 from app.adapters.boss.list import load_and_parse_snapshot
 from app.adapters.boss.read import load_and_read_fixture
 from app.adapters.path_state import PATH_FILE, PATH_MISSING, probe_path
@@ -1891,6 +1892,16 @@ def _run_action(
             now=now,
             confirmed=bool(args.confirm_action),
         )
+        if command_stop_checker is None and stop_checker is None:
+            tracker = CommandIdentityStore(
+                PROJECT_ROOT / "data" / "runtime" / "action-commands"
+            )
+
+            def tracker_checker(pid: int) -> str:
+                """同时检查原 owner 与已记录命令 PID 的停止状态。"""
+                return tracker.check(args.action_key, pid, default_command_stop_checker)
+
+            command_checker = tracker_checker
         result = action_usecases.reconcile_action(
             store=store,
             gate=gate,

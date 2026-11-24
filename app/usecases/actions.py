@@ -21,7 +21,7 @@ from app.domain.actions import (
     validate_action_target,
     validate_reconciliation_observation,
 )
-from app.domain.models import Lease, Owner, parse_utc
+from app.domain.models import Lease, Owner, is_hash, parse_utc
 from app.domain.policy import utc_now, v1_policy_tier
 from app.ports.actions import ActionExecutionError, ActionPlan, DeviceActionPort
 from app.ports.device_gate import SharedDeviceGatePort
@@ -193,6 +193,14 @@ def perform_action(
         """在每个设备调用与提交前重核当前包/验收/仓储/共享/租约条件。"""
         current_now = active_clock()
         snapshot = reload_snapshot() if reload_snapshot is not None else current
+        for field in (
+            "base_hash",
+            "pack_hash",
+            "acceptance_base_hash",
+            "acceptance_pack_hash",
+        ):
+            if field not in snapshot or not is_hash(snapshot[field]):
+                raise ActionError("policy_changed")
         authorize(
             authorization,
             action_kind=action_kind,
@@ -288,9 +296,9 @@ def perform_action(
         raise
     _log(process_log, "action_admit", "ok")
 
+    _log(process_log, "action_execute", "started")
     ime_original: str | None = None
     if ime_component is not None:
-        _log(process_log, "action_execute", "started")
         try:
             ime_original = executor.read_current_ime(before_command=guard)
             if not isinstance(ime_original, str) or not ime_original:
@@ -332,11 +340,8 @@ def perform_action(
                 now=active_clock(),
                 process_log=process_log,
             )
-        _log(process_log, "action_execute", "ok")
-
     try:
         guard()
-        _log(process_log, "action_execute", "started")
         observation = executor.execute(plan, before_command=guard)
         if (
             observation.action_key != action_key
@@ -403,20 +408,13 @@ def perform_action(
         _log(process_log, "action_execute", "ok")
     try:
         guard()
-    except Exception as error:
+    except Exception:
         observation = _failed_observation(
             plan=plan,
             reason_code="executor_interrupted",
             clicked=True,
             now=now,
             ime_original=ime_original,
-        )
-        _log(
-            process_log,
-            "action_commit",
-            "failed",
-            reason_code=getattr(error, "reason_code", "executor_interrupted"),
-            error_category="action",
         )
     return _commit(
         store=store,
@@ -507,6 +505,7 @@ def _commit(
             error_category="action",
         )
         if reason in {"stale_lease", "action_not_ready", "invalid_observation"}:
+            _log(process_log, "action_freeze", "started")
             try:
                 frozen = store.freeze_attempted_action(
                     lease,
@@ -517,7 +516,7 @@ def _commit(
             except Exception as freeze_error:
                 _log(
                     process_log,
-                    "action_commit",
+                    "action_freeze",
                     "failed",
                     reason_code=getattr(
                         freeze_error, "reason_code", "store_io_error"
@@ -525,7 +524,7 @@ def _commit(
                     error_category="action",
                 )
                 raise
-            _log(process_log, "action_commit", "ok")
+            _log(process_log, "action_freeze", "ok")
             record = store.get_action(action_key)
             frozen["card"] = (
                 human_card(record)
@@ -728,14 +727,6 @@ def reconcile_action(
             reason_code=getattr(error, "reason_code", "store_io_error"),
             error_category="action",
         )
-        _log(
-            process_log,
-            "action_reconcile_validate",
-            "failed",
-            reason_code=getattr(error, "reason_code", "store_io_error"),
-            error_category="action",
-        )
         raise
-    _log(process_log, "action_reconcile_validate", "ok")
     _log(process_log, "action_reconcile_commit", "ok")
     return result

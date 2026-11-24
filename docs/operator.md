@@ -379,7 +379,7 @@ python -m app action reconcile --profile demo --pack prompts/local/demo --mode d
 - `pending/unknown/cancelled` 生成固定人工卡 `{task_id,action_key,reason_code,snapshot_ids,allowed_resolutions}`，处置固定 `confirm_performed/confirm_not_performed/abandon`。confirm 需本轮显式确认、当前证据、原 host、原父子命令停止检查器与现场/IME 收敛；成功文本 `confirm_performed` 只计一次额度。`abandon` 只把任务置 cancelled，动作锁与共享/profile 设备隔离保留；之后仍可对 cancelled 动作受控 confirm 清锁，但不重开任务。
 - 受控接管隔离占用必须在原 profile/原库身份下，显式 `--confirm-recovery`，并由原 PID 停止检查器确认；生产默认父子命令检查器返回 unknown，不用单 PID 猜测解锁。原 IME 在输入前实际切换并读回，动作后恢复并读回；恢复失败保持未知，完成/对账事务更新 IME 恢复账本。
 - `action eligibility` 只计算拟执行资格：有效本轮授权 + 无同动作历史/未决 + 未到冷却为 `eligible=true`，同时 `policy_tier="C"`、`production_auto_send=false`、`actions_performed=0`。合成资格为真不代表真实 A 档或发送授权。
-- 第2轮返修补充：公开 `perform_action` 省略 clock 时默认使用动态当前时间；guard 同时核对当前验收 base/pack 与包/base 四摘要。执行后共享/租约/验收/包失效统一按原 owner/nonce/任务身份冻结 unknown、blocked、设备隔离与人工卡，不使用正常完成或新 owner/TTL 解锁；合法真实 `renew` 后的旧捕获 Lease 在同库当前截止下仍可完成。真实适配器按唯一姓名+职位目标、唯一 EditText 回读、非滚动完整列表、可点未处理槽位与目标子树新增差分判定；单 tap 简历/联系方式/删除在点击前拒绝。完成观察的原 IME 必须匹配已持久化原值，失败不写 restored；IME 在无需设备改变的前置之后才切换，切换后早退/异常在有界命令内恢复并读回。动作证据原始 XML 与内容 UUID/动作索引可写入指定本机目录；门禁/guard 失败使用白名单日志类别。生产命令停止检查器同时检查原父 PID 与直接子进程。
+- 第3轮返修补充：公开 guard 要求当前快照四个验收字段都存在且为有效摘要，缺字段/None/坏类型不拿包摘要补齐；目标定位支持并校验姓名+职位标签，文本只认可目标子树内唯一 editor，联系方式要求对应类型 enabled/clickable 未处理槽位，确认阶段重核目标/保护，删除要求显式非滚动完整覆盖及删除后覆盖；已切换 IME 的所有早退/输入非零/超时进入一个有界原 IME 恢复并读回；命令身份按动作保存供恢复检查原父子/已脱离子孙；同一真实阶段只记一次 started 与一个终态，冻结使用独立 `action_freeze`；动作层级采集/保存复用 `AdbScreenReader`，仅追加动作相位索引。
 
 ## 八、显式真实设备模式
 只有同时给出 `--device`、`--serial` 与 `--confirm-device` 才启用真实探针：

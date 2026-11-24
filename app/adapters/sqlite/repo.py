@@ -1841,36 +1841,13 @@ class SqliteStore:
         *,
         allow_expired: bool,
     ) -> tuple[sqlite3.Row, sqlite3.Row]:
-        """核对任务与 held 设备行的持有者、nonce、截止时间；不匹配即 stale。"""
-        try:
-            validate_lease(lease)
-        except ValueError:
-            raise StoreError("invalid_input") from None
-        row = self._connection.execute(
-            "SELECT * FROM hr_discoveries WHERE app = ? AND \"key\" = ?",
-            (lease.app, lease.key),
-        ).fetchone()
-        device = self._select_device()
-        if row is None or device is None:
-            raise StoreError("stale_lease")
+        """核对任务与 held 设备行的持有者、nonce 与取得时截止；不匹配即 stale。"""
+        row, device = self._match_current_lease(
+            lease, states, now_dt, allow_expired=allow_expired
+        )
         if (
-            str(row["state"]) not in states
-            or row["lease_owner"] != lease.owner.id
-            or row["owner_pid"] != lease.owner.pid
-            or row["owner_host"] != lease.owner.host
-            or row["nonce"] != lease.nonce
-            or row["lease_expires_at"] != lease.expires_at
-            or str(device["reservation_state"]) != "held"
-            or device["lease_owner"] != lease.owner.id
-            or device["owner_pid"] != lease.owner.pid
-            or device["owner_host"] != lease.owner.host
-            or device["nonce"] != lease.nonce
-            or device["lease_expires_at"] != lease.expires_at
-        ):
-            raise StoreError("stale_lease")
-        if not allow_expired and (
-            now_dt >= parse_utc(str(row["lease_expires_at"]))
-            or now_dt >= parse_utc(str(device["lease_expires_at"]))
+            str(row["lease_expires_at"]) != lease.expires_at
+            or str(device["lease_expires_at"]) != lease.expires_at
         ):
             raise StoreError("stale_lease")
         return row, device

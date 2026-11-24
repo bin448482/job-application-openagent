@@ -28,6 +28,7 @@ class ActionPlan:
     ime_original: str | None
     irreversible_tap_index: int
     tap_points: tuple[tuple[int, int], ...]
+    identity_labels: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         """校验动作类型与可选文本形状，拒绝未知动作。"""
@@ -64,6 +65,11 @@ class ActionPlan:
                 or any(type(value) is not int or value < 0 for value in point)
             ):
                 raise ValueError("tap point is invalid")
+        if not isinstance(self.identity_labels, tuple) or any(
+            not isinstance(label, str) or not label
+            for label in self.identity_labels
+        ):
+            raise ValueError("identity labels are invalid")
 
 
 class ActionExecutionError(Exception):

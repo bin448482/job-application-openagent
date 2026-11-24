@@ -942,6 +942,30 @@ class CommandStopCheckerTests(unittest.TestCase):
             self.assertEqual(repo_module.default_command_stop_checker(1), "stopped")
 
 
+    def test_command_identity_store_checks_saved_descendants(self) -> None:
+        """已保存的脱离子孙 PID 仍参与恢复检查，非 stopped 拒绝。"""
+        from app.adapters.adb.command import CommandIdentityStore
+
+        with tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-cmd-") as directory:
+            store = CommandIdentityStore(Path(directory))
+            for pid in (4100, 4200, 4300):
+                store.record("boss:conv:test:resume", pid)
+            states = {4100: "stopped", 4200: "stopped", 4300: "alive"}
+            self.assertEqual(
+                store.check(
+                    "boss:conv:test:resume", 4100, lambda pid: states.get(pid, "unknown")
+                ),
+                "alive",
+            )
+            states[4300] = "stopped"
+            self.assertEqual(
+                store.check(
+                    "boss:conv:test:resume", 4100, lambda pid: states.get(pid, "unknown")
+                ),
+                "stopped",
+            )
+
+
 class ProfileMigrationTests(unittest.TestCase):
     """v1 八表 profile 库可备份迁移；普通 M1 库与未知对象不宽放。"""
 

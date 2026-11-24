@@ -26,13 +26,13 @@ BEFORE_XML = (
     '<hierarchy><node text="合成联系人"><node text="消息" /></node></hierarchy>'
 )
 READBACK_XML = (
-    '<hierarchy><node text="合成联系人"><node text="消息" /></node>'
-    '<node class="android.widget.EditText" text="您好" /></hierarchy>'
+    '<hierarchy><node text="合成联系人"><node text="消息" />'
+    '<node class="android.widget.EditText" text="您好" /></node></hierarchy>'
 )
 AFTER_XML = (
     '<hierarchy><node text="合成联系人"><node text="消息" />'
-    '<node text="您好" /></node>'
-    '<node class="android.widget.EditText" text="" /></hierarchy>'
+    '<node text="您好" /><node class="android.widget.EditText" text="" />'
+    '</node></hierarchy>'
 )
 
 
@@ -167,8 +167,8 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         with patch("subprocess.run", side_effect=runner) as run:
             observation = executor.execute(plan())
         self.assertEqual(run.call_count, 8)
-        self.assertEqual(calls[0][-3:], ["uiautomator", "dump", "/data/local/tmp/m5-action-ui.xml"])
-        self.assertEqual(calls[1][-2:], ["cat", "/data/local/tmp/m5-action-ui.xml"])
+        self.assertEqual(calls[0][-3:], ["uiautomator", "dump", "/data/local/tmp/m3-ui.xml"])
+        self.assertEqual(calls[1][-2:], ["cat", "/data/local/tmp/m3-ui.xml"])
         self.assertEqual(calls[2][-3:], ["input", "text", "您好"])
         self.assertEqual(calls[5][-4:], ["input", "tap", "10", "20"])
         for call in run.call_args_list:
@@ -451,6 +451,17 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         self.assertEqual(set_commands[-1][-1], "com.example.default/.Ime")
         self.assertEqual(observation.ime_current, "com.example.default/.Ime")
 
+    def test_identity_labels_reject_wrong_job(self) -> None:
+        """同名但缺少目标职位标签时前置失败，不点击。"""
+        gate = FakeGate()
+        executor = AdbActionExecutor(serial="<serial>", gate=gate)
+        labeled = replace(plan(), identity_labels=("错误职位",))
+        runner, calls = self._custom_run((BEFORE_XML, BEFORE_XML, BEFORE_XML))
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(labeled)
+        self.assertEqual([c for c in calls if "tap" in c], [])
+        self.assertFalse(observation.clicked)
+
     def test_failure_before_click_does_not_retry(self) -> None:
         """首条命令非零退出即停止，只调用一次并标记未点击。"""
         gate = FakeGate()
@@ -509,8 +520,8 @@ class AdbActionPrimitiveTests(unittest.TestCase):
         commands = {item["command"] for item in records}
         self.assertTrue(
             {
-                "adb_action_dump",
-                "adb_action_cat",
+                "adb_hierarchy_dump",
+                "adb_hierarchy_cat",
                 "adb_action_input",
                 "adb_action_tap",
                 "adb_action_ime_set",
