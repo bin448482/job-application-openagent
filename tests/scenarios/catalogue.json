@@ -20990,14 +20990,47 @@
       ],
       "offline_subscenarios": [
         "role_partition",
+        "contract_role_partition",
         "injection_no_escalation",
+        "contract_injection_no_escalation",
         "subject_required"
       ],
       "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "role_partition",
-          "label": "三区固定",
+          "label": "三区固定完整流程",
+          "layer": "F",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
+          "steps": [],
+          "fixture": null,
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D07/role_partition",
+          "device_gate": false,
+          "assertions": [
+            "原文只在 user JSON 字符串",
+            "不支持分区拒绝",
+            "无工具/无跨例历史"
+          ],
+          "acceptance": null,
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": "缺少事实持久化/设备动作观察端口，完整原流程待 M4c/M5",
+          "module_evidence": null,
+          "shared_inputs": [],
+          "local_packs": {},
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "contract_role_partition",
+          "label": "三区固定决策子证据",
           "layer": "F",
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
@@ -21013,15 +21046,13 @@
           "fixture": "fixtures/m4/probe/d07_role.json",
           "setup": null,
           "required_api": null,
-          "expected_ref": "SC-D07/role_partition",
+          "expected_ref": "SC-D07/contract_role_partition",
           "device_gate": false,
           "assertions": [
             "真实 Local/External 适配器捕获固定三角色",
             "工具/历史为空",
             "user 等于原始 envelope 投影且正文只在 user",
-            "原文只在 user JSON 字符串",
-            "不支持分区拒绝",
-            "无工具/无跨例历史"
+            "M4a/b 无事实持久化/设备动作端口，本变体只作决策/传输子证据"
           ],
           "acceptance": {
             "steps": [
@@ -21094,8 +21125,28 @@
                     "length_equals": 0
                   },
                   {
+                    "path": "user_is_json",
+                    "equals": true
+                  },
+                  {
                     "path": "user_equals_rendered",
                     "equals": true
+                  },
+                  {
+                    "path": "inbound_only_user",
+                    "equals": true
+                  },
+                  {
+                    "path": "system_is_base",
+                    "equals": true
+                  },
+                  {
+                    "path": "echo_keys",
+                    "equals": [
+                      "input_hash",
+                      "nonce",
+                      "task_id"
+                    ]
                   }
                 ]
               },
@@ -21119,8 +21170,32 @@
                     "length_equals": 0
                   },
                   {
+                    "path": "history",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "user_is_json",
+                    "equals": true
+                  },
+                  {
                     "path": "user_equals_rendered",
                     "equals": true
+                  },
+                  {
+                    "path": "inbound_only_user",
+                    "equals": true
+                  },
+                  {
+                    "path": "system_is_base",
+                    "equals": true
+                  },
+                  {
+                    "path": "echo_keys",
+                    "equals": [
+                      "input_hash",
+                      "nonce",
+                      "task_id"
+                    ]
                   }
                 ]
               },
@@ -21144,8 +21219,32 @@
                     "length_equals": 0
                   },
                   {
+                    "path": "history",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "user_is_json",
+                    "equals": true
+                  },
+                  {
                     "path": "user_equals_rendered",
                     "equals": true
+                  },
+                  {
+                    "path": "inbound_only_user",
+                    "equals": true
+                  },
+                  {
+                    "path": "system_is_base",
+                    "equals": true
+                  },
+                  {
+                    "path": "echo_keys",
+                    "equals": [
+                      "input_hash",
+                      "nonce",
+                      "task_id"
+                    ]
                   }
                 ]
               },
@@ -21169,8 +21268,32 @@
                     "length_equals": 0
                   },
                   {
+                    "path": "history",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "user_is_json",
+                    "equals": true
+                  },
+                  {
                     "path": "user_equals_rendered",
                     "equals": true
+                  },
+                  {
+                    "path": "inbound_only_user",
+                    "equals": true
+                  },
+                  {
+                    "path": "system_is_base",
+                    "equals": true
+                  },
+                  {
+                    "path": "echo_keys",
+                    "equals": [
+                      "input_hash",
+                      "nonce",
+                      "task_id"
+                    ]
                   }
                 ]
               },
@@ -21194,8 +21317,32 @@
                     "length_equals": 0
                   },
                   {
+                    "path": "history",
+                    "length_equals": 0
+                  },
+                  {
+                    "path": "user_is_json",
+                    "equals": true
+                  },
+                  {
                     "path": "user_equals_rendered",
                     "equals": true
+                  },
+                  {
+                    "path": "inbound_only_user",
+                    "equals": true
+                  },
+                  {
+                    "path": "system_is_base",
+                    "equals": true
+                  },
+                  {
+                    "path": "echo_keys",
+                    "equals": [
+                      "input_hash",
+                      "nonce",
+                      "task_id"
+                    ]
                   }
                 ]
               },
@@ -21234,7 +21381,37 @@
         },
         {
           "id": "injection_no_escalation",
-          "label": "注入不提升权限",
+          "label": "注入不提升权限完整流程",
+          "layer": "F",
+          "asset_status": "DEFERRED",
+          "entry_state": "deferred",
+          "steps": [],
+          "fixture": null,
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D07/injection_no_escalation",
+          "device_gate": false,
+          "assertions": [
+            "schema 合法也不提升 C/事实/授权",
+            "设备和事实写入 0"
+          ],
+          "acceptance": null,
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": "缺少事实持久化/设备动作观察端口，完整原流程待 M4c/M5",
+          "module_evidence": null,
+          "shared_inputs": [],
+          "local_packs": {},
+          "fixture_copies": {},
+          "junctions": {}
+        },
+        {
+          "id": "contract_injection_no_escalation",
+          "label": "注入不提升权限决策子证据",
           "layer": "F",
           "asset_status": "READY_FOR_APP",
           "entry_state": "frozen",
@@ -21246,12 +21423,12 @@
           "fixture": "fixtures/m4/probe/d07_injection.json",
           "setup": null,
           "required_api": null,
-          "expected_ref": "SC-D07/injection_no_escalation",
+          "expected_ref": "SC-D07/contract_injection_no_escalation",
           "device_gate": false,
           "assertions": [
             "schema 合法也不提升 C/事实/授权",
-            "设备和事实写入 0",
-            "伪 JSON/伪确认/角色注入均隔离"
+            "伪 JSON/伪确认/角色注入均隔离",
+            "M4a/b 无事实/设备写端口，本变体只作决策子证据"
           ],
           "acceptance": {
             "steps": [
@@ -21268,14 +21445,6 @@
                   },
                   {
                     "path": "fact_count",
-                    "equals": 0
-                  },
-                  {
-                    "path": "fact_writes",
-                    "equals": 0
-                  },
-                  {
-                    "path": "device_calls",
                     "equals": 0
                   },
                   {
@@ -21298,14 +21467,6 @@
                   {
                     "path": "fact_count",
                     "equals": 0
-                  },
-                  {
-                    "path": "fact_writes",
-                    "equals": 0
-                  },
-                  {
-                    "path": "device_calls",
-                    "equals": 0
                   }
                 ]
               },
@@ -21322,14 +21483,6 @@
                   },
                   {
                     "path": "fact_count",
-                    "equals": 0
-                  },
-                  {
-                    "path": "fact_writes",
-                    "equals": 0
-                  },
-                  {
-                    "path": "device_calls",
                     "equals": 0
                   }
                 ]
@@ -22500,6 +22653,7 @@
         "public_contract_terms",
         "holdout_freeze",
         "holdout_first_failure",
+        "holdout_conflicts",
         "holdout_io_failures",
         "no_provider",
         "unknown_case",
@@ -22626,6 +22780,10 @@
                     "equals": 0
                   },
                   {
+                    "path": "expected_marker_count",
+                    "equals": 1
+                  },
+                  {
                     "path": "bridge_calls",
                     "equals": 6
                   }
@@ -22661,6 +22819,7 @@
           "steps": [
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_duplicate.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_same_batch.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_first.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_repeat.json",
             "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_holdout_failed_access.json",
@@ -22722,6 +22881,19 @@
                 "stdout_paths": [
                   {
                     "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
                     "equals": "ok"
                   },
                   {
@@ -22739,6 +22911,20 @@
                   {
                     "path": "acceptance",
                     "equals": false
+                  },
+                  {
+                    "path": "bridge_intent_all_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "bridge_rounds",
+                    "equals": [
+                      1
+                    ]
+                  },
+                  {
+                    "path": "bridge_attempt_ids",
+                    "length_equals": 1
                   }
                 ]
               },
@@ -22760,6 +22946,16 @@
                   {
                     "path": "acceptance",
                     "equals": false
+                  },
+                  {
+                    "path": "bridge_intent_all_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "bridge_rounds",
+                    "equals": [
+                      2
+                    ]
                   }
                 ]
               },
@@ -22831,6 +23027,16 @@
                   {
                     "path": "acceptance",
                     "equals": false
+                  },
+                  {
+                    "path": "bridge_intent_all_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "bridge_rounds",
+                    "equals": [
+                      4
+                    ]
                   }
                 ]
               },
@@ -23103,6 +23309,16 @@
                   {
                     "path": "holdout.new_evidence",
                     "equals": false
+                  },
+                  {
+                    "path": "bridge_intent_all_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "bridge_rounds",
+                    "equals": [
+                      2
+                    ]
                   }
                 ]
               },
@@ -23152,6 +23368,103 @@
           "fixture_copies": {
             "evals/private/holdout": "m4/eval/holdout",
             "data/evals": "m4/eval/attestation"
+          },
+          "junctions": {}
+        },
+        {
+          "id": "holdout_conflicts",
+          "label": "批次/样本/候选发布冲突",
+          "layer": "F",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_same_batch.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_duplicate.json",
+            "python tests/scenarios/framework/m4_probe.py --request tests/scenarios/fixtures/m4/probe/d11_register_alt.json"
+          ],
+          "fixture": "fixtures/m4/eval/holdout/suite.json",
+          "setup": null,
+          "required_api": null,
+          "expected_ref": "SC-D11/holdout_conflicts",
+          "device_gate": false,
+          "assertions": [
+            "同批重复、跨批样本占用、candidate_release 冻结冲突分别拒绝",
+            "旧 registry 不变"
+          ],
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "batch",
+                    "equals": "synthetic-batch"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  }
+                ]
+              },
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "error"
+                  },
+                  {
+                    "path": "reason_code",
+                    "equals": "eval_failed"
+                  }
+                ]
+              }
+            ]
+          },
+          "forbidden": [
+            "不得以资产自检代替产品执行",
+            "未执行或 BLOCKED 时不得记 PASS"
+          ],
+          "expected_missing_inputs": [],
+          "observations_ref": null,
+          "deferred_to": null,
+          "module_evidence": null,
+          "shared_inputs": [
+            "prompts/base"
+          ],
+          "local_packs": {
+            "eval": "m4/policy/packs/eval"
+          },
+          "fixture_copies": {
+            "evals/private/holdout": "m4/eval/holdout",
+            "evals/private/holdout-alt": "m4/eval/holdout_alt"
           },
           "junctions": {}
         },
@@ -23217,6 +23530,16 @@
                   {
                     "path": "replace_hits",
                     "equals": 1
+                  },
+                  {
+                    "path": "matched_targets",
+                    "equals": [
+                      "holdout-registry.local.json"
+                    ]
+                  },
+                  {
+                    "path": "source_existed",
+                    "equals": true
                   }
                 ]
               },
@@ -23273,6 +23596,16 @@
                     "equals": 1
                   },
                   {
+                    "path": "matched_targets",
+                    "equals": [
+                      "regression-admissions/synthetic-batch/suite.json"
+                    ]
+                  },
+                  {
+                    "path": "source_existed",
+                    "equals": true
+                  },
+                  {
                     "path": "admission_written",
                     "equals": false
                   }
@@ -23312,6 +23645,16 @@
                   {
                     "path": "replace_hits",
                     "equals": 1
+                  },
+                  {
+                    "path": "matched_targets",
+                    "equals": [
+                      "holdout-registry.local.json"
+                    ]
+                  },
+                  {
+                    "path": "source_existed",
+                    "equals": true
                   },
                   {
                     "path": "admission_written",

@@ -38,7 +38,8 @@
         ],
         "reply_nonempty": true,
         "reply_contains_any": [
-          "苏州"
+          "苏州",
+          "M4-EXPECTED-MARKER-UNIQUE"
         ],
         "escalate_in": [
           null

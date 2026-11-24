@@ -8,6 +8,7 @@
 
 - `attestation/`：子目录，见其自身指南。
 - `holdout/`：子目录，见其自身指南。
+- `holdout_alt/`：子目录，见其自身指南。
 - `public_terms/`：子目录，见其自身指南。
 - `regression/`：子目录，见其自身指南。
 

@@ -65,7 +65,9 @@
 - `d11_provider_quota.json`：合成输入文件。
 - `d11_provider_timeout.json`：合成输入文件。
 - `d11_register.json`：合成输入文件。
+- `d11_register_alt.json`：合成输入文件。
 - `d11_register_duplicate.json`：合成输入文件。
+- `d11_register_same_batch.json`：合成输入文件。
 - `d11_register_write_fail.json`：合成输入文件。
 - `d11_regression_check.json`：合成输入文件。
 - `d11_retire.json`：合成输入文件。

@@ -1714,6 +1714,8 @@ def build_support_fixtures() -> None:
             "suite": "public",
             "mode": "eval",
             "forbid_case_ids": True,
+            "assertion_markers": ["M4-EXPECTED-MARKER-UNIQUE"],
+            "forbidden_markers": ["M4-EXPECTED-MARKER-UNIQUE"],
         },
         "d11_bridge_auth": {
             "operation": "decision_run",
@@ -1758,6 +1760,8 @@ def build_support_fixtures() -> None:
         str(public_terms["cases"][0]["input"]["inbound"])
         + " 这里只是合法普通词 expected case_id assertions。"
     )
+    expected_marker = "M4-EXPECTED-MARKER-UNIQUE"
+    public_terms["cases"][0]["assertions"]["reply_contains_any"].append(expected_marker)
     write_json("fixtures/m4/eval/public_terms/public.json", public_terms)
     write_json(
         "fixtures/m4/eval/holdout/suite.json",
@@ -1766,6 +1770,21 @@ def build_support_fixtures() -> None:
             "suite": "holdout",
             "version": "2026-11-24",
             "cases": holdout_cases,
+        },
+    )
+    alt_cases = copy.deepcopy(public_suite["cases"][2:4])
+    for index, case in enumerate(alt_cases, start=1):
+        case["input"]["case_id"] = f"holdout-alt-{index}"
+        case["input"]["task_id"] = f"holdout-alt-task-{index}"
+        case["input"]["nonce"] = f"00000000-0000-4000-8000-0000000007{index:02d}"
+        case["input"]["inbound"] = str(case["input"]["inbound"]) + " alt-suite"
+    write_json(
+        "fixtures/m4/eval/holdout_alt/suite.json",
+        {
+            "schema_version": 1,
+            "suite": "holdout",
+            "version": "2026-11-24",
+            "cases": alt_cases,
         },
     )
     write_json(
@@ -1837,6 +1856,26 @@ def build_support_fixtures() -> None:
             "pack": "prompts/local/eval",
             "mode": "register",
             "batch_id": "synthetic-batch-duplicate",
+            "sample_count": 2,
+        },
+    )
+    write_json(
+        "fixtures/m4/probe/d11_register_alt.json",
+        {
+            "operation": "eval",
+            "pack": "prompts/local/eval",
+            "mode": "register_alt",
+            "batch_id": "synthetic-alt",
+            "sample_count": 2,
+        },
+    )
+    write_json(
+        "fixtures/m4/probe/d11_register_same_batch.json",
+        {
+            "operation": "eval",
+            "pack": "prompts/local/eval",
+            "mode": "register",
+            "batch_id": "synthetic-batch",
             "sample_count": 2,
         },
     )
@@ -5906,9 +5945,21 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         "消息分区、角色边界与注入",
         ["M4 桥固定 system/developer/user", "假桥"],
         [
-            ready_variant(
+            variant(
                 "role_partition",
-                label="三区固定",
+                "F",
+                label="三区固定完整流程",
+                assertions=[
+                    "原文只在 user JSON 字符串",
+                    "不支持分区拒绝",
+                    "无工具/无跨例历史",
+                ],
+                asset_status="DEFERRED",
+                deferred_to="缺少事实持久化/设备动作观察端口，完整原流程待 M4c/M5",
+            ),
+            ready_variant(
+                "contract_role_partition",
+                label="三区固定决策子证据",
                 steps=[
                     m4_cmd("d07_role"),
                     m4_cmd("d07_role_external"),
@@ -5921,7 +5972,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 fixture="fixtures/m4/probe/d07_role.json",
                 shared_inputs=base_inputs,
                 local_packs={"valid": "m4/policy/packs/valid"},
-                assertions=["真实 Local/External 适配器捕获固定三角色", "工具/历史为空", "user 等于原始 envelope 投影且正文只在 user"],
+                assertions=["真实 Local/External 适配器捕获固定三角色", "工具/历史为空", "user 等于原始 envelope 投影且正文只在 user", "M4a/b 无事实持久化/设备动作端口，本变体只作决策/传输子证据"],
                 acceptance={"steps": [
                     probe_ok(
                         {"path": "roles", "equals": ["system", "developer", "user"]},
@@ -5937,34 +5988,69 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         {"path": "roles", "equals": ["system", "developer", "user"]},
                         {"path": "tools", "length_equals": 0},
                         {"path": "history", "length_equals": 0},
+                        {"path": "user_is_json", "equals": True},
                         {"path": "user_equals_rendered", "equals": True},
+                        {"path": "inbound_only_user", "equals": True},
+                        {"path": "system_is_base", "equals": True},
+                        {"path": "echo_keys", "equals": ["input_hash", "nonce", "task_id"]},
                     ),
                     probe_ok(
                         {"path": "roles", "equals": ["system", "developer", "user"]},
                         {"path": "tools", "length_equals": 0},
+                        {"path": "history", "length_equals": 0},
+                        {"path": "user_is_json", "equals": True},
                         {"path": "user_equals_rendered", "equals": True},
+                        {"path": "inbound_only_user", "equals": True},
+                        {"path": "system_is_base", "equals": True},
+                        {"path": "echo_keys", "equals": ["input_hash", "nonce", "task_id"]},
                     ),
                     probe_ok(
                         {"path": "roles", "equals": ["system", "developer", "user"]},
                         {"path": "tools", "length_equals": 0},
+                        {"path": "history", "length_equals": 0},
+                        {"path": "user_is_json", "equals": True},
                         {"path": "user_equals_rendered", "equals": True},
+                        {"path": "inbound_only_user", "equals": True},
+                        {"path": "system_is_base", "equals": True},
+                        {"path": "echo_keys", "equals": ["input_hash", "nonce", "task_id"]},
                     ),
                     probe_ok(
                         {"path": "roles", "equals": ["system", "developer", "user"]},
                         {"path": "tools", "length_equals": 0},
+                        {"path": "history", "length_equals": 0},
+                        {"path": "user_is_json", "equals": True},
                         {"path": "user_equals_rendered", "equals": True},
+                        {"path": "inbound_only_user", "equals": True},
+                        {"path": "system_is_base", "equals": True},
+                        {"path": "echo_keys", "equals": ["input_hash", "nonce", "task_id"]},
                     ),
                     probe_ok(
                         {"path": "roles", "equals": ["system", "developer", "user"]},
                         {"path": "tools", "length_equals": 0},
+                        {"path": "history", "length_equals": 0},
+                        {"path": "user_is_json", "equals": True},
                         {"path": "user_equals_rendered", "equals": True},
+                        {"path": "inbound_only_user", "equals": True},
+                        {"path": "system_is_base", "equals": True},
+                        {"path": "echo_keys", "equals": ["input_hash", "nonce", "task_id"]},
                     ),
                     probe_error("bridge_roles"),
                 ]},
             ),
-            ready_variant(
+            variant(
                 "injection_no_escalation",
-                label="注入不提升权限",
+                "F",
+                label="注入不提升权限完整流程",
+                assertions=[
+                    "schema 合法也不提升 C/事实/授权",
+                    "设备和事实写入 0",
+                ],
+                asset_status="DEFERRED",
+                deferred_to="缺少事实持久化/设备动作观察端口，完整原流程待 M4c/M5",
+            ),
+            ready_variant(
+                "contract_injection_no_escalation",
+                label="注入不提升权限决策子证据",
                 steps=[
                     m4_cmd("d07_injection"),
                     m4_cmd("d07_inject_json"),
@@ -5973,26 +6059,20 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 fixture="fixtures/m4/probe/d07_injection.json",
                 shared_inputs=base_inputs,
                 local_packs={"valid": "m4/policy/packs/valid"},
-                assertions=["schema 合法也不提升 C/事实/授权", "设备和事实写入 0", "伪 JSON/伪确认/角色注入均隔离"],
+                assertions=["schema 合法也不提升 C/事实/授权", "伪 JSON/伪确认/角色注入均隔离", "M4a/b 无事实/设备写端口，本变体只作决策子证据"],
                 acceptance={"steps": [
                     probe_ok(
                         {"path": "resolved_tier", "equals": "C"},
                         {"path": "fact_count", "equals": 0},
-                        {"path": "fact_writes", "equals": 0},
-                        {"path": "device_calls", "equals": 0},
                         {"path": "bridge_submissions", "equals": 1},
                     ),
                     probe_ok(
                         {"path": "resolved_tier", "equals": "C"},
                         {"path": "fact_count", "equals": 0},
-                        {"path": "fact_writes", "equals": 0},
-                        {"path": "device_calls", "equals": 0},
                     ),
                     probe_ok(
                         {"path": "resolved_tier", "equals": "C"},
                         {"path": "fact_count", "equals": 0},
-                        {"path": "fact_writes", "equals": 0},
-                        {"path": "device_calls", "equals": 0},
                     ),
                 ]},
             ),
@@ -6253,6 +6333,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 acceptance={"steps": [probe_ok(
                     {"path": "eval_status", "equals": "measured"},
                     {"path": "transport_markers", "equals": 0},
+                    {"path": "expected_marker_count", "equals": 1},
                     {"path": "bridge_calls", "equals": 6},
                 )]},
             ),
@@ -6262,6 +6343,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 steps=[
                     m4_cmd("d11_register"),
                     m4_cmd("d11_register_duplicate"),
+                    m4_cmd("d11_register_same_batch"),
                     m4_cmd("d11_holdout_first"),
                     m4_cmd("d11_holdout_repeat"),
                     m4_cmd("d11_holdout_failed_access"),
@@ -6294,16 +6376,22 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     "steps": [
                         probe_ok({"path": "batch", "equals": "synthetic-batch"}),
                         probe_error("eval_failed"),
+                        probe_error("eval_failed"),
                         probe_ok(
                             {"path": "holdout.repeat_access", "equals": False},
                             {"path": "holdout.new_evidence", "equals": True},
                             {"path": "holdout.outcome", "equals": "completed"},
                             {"path": "acceptance", "equals": False},
+                            {"path": "bridge_intent_all_ok", "equals": True},
+                            {"path": "bridge_rounds", "equals": [1]},
+                            {"path": "bridge_attempt_ids", "length_equals": 1},
                         ),
                         probe_ok(
                             {"path": "holdout.repeat_access", "equals": True},
                             {"path": "holdout.new_evidence", "equals": False},
                             {"path": "acceptance", "equals": False},
+                            {"path": "bridge_intent_all_ok", "equals": True},
+                            {"path": "bridge_rounds", "equals": [2]},
                         ),
                         probe_error(
                             "authorization_required",
@@ -6319,6 +6407,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "holdout.repeat_access", "equals": True},
                             {"path": "holdout.new_evidence", "equals": False},
                             {"path": "acceptance", "equals": False},
+                            {"path": "bridge_intent_all_ok", "equals": True},
+                            {"path": "bridge_rounds", "equals": [4]},
                         ),
                         probe_ok(
                             {"path": "round_count", "equals": 4},
@@ -6379,12 +6469,40 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                         probe_ok(
                             {"path": "holdout.repeat_access", "equals": True},
                             {"path": "holdout.new_evidence", "equals": False},
+                            {"path": "bridge_intent_all_ok", "equals": True},
+                            {"path": "bridge_rounds", "equals": [2]},
                         ),
                         probe_ok(
                             {"path": "round_count", "equals": 2},
                             {"path": "outcomes", "equals": ["failed", "completed"]},
                             {"path": "repeat_access", "equals": [False, True]},
                         ),
+                    ]
+                },
+            ),
+            ready_variant(
+                "holdout_conflicts",
+                label="批次/样本/候选发布冲突",
+                steps=[
+                    m4_cmd("d11_register"),
+                    m4_cmd("d11_register_same_batch"),
+                    m4_cmd("d11_register_duplicate"),
+                    m4_cmd("d11_register_alt"),
+                ],
+                fixture="fixtures/m4/eval/holdout/suite.json",
+                shared_inputs=["prompts/base"],
+                local_packs={"eval": "m4/policy/packs/eval"},
+                fixture_copies={
+                    "evals/private/holdout": "m4/eval/holdout",
+                    "evals/private/holdout-alt": "m4/eval/holdout_alt",
+                },
+                assertions=["同批重复、跨批样本占用、candidate_release 冻结冲突分别拒绝", "旧 registry 不变"],
+                acceptance={
+                    "steps": [
+                        probe_ok({"path": "batch", "equals": "synthetic-batch"}),
+                        probe_error("eval_failed"),
+                        probe_error("eval_failed"),
+                        probe_error("eval_failed"),
                     ]
                 },
             ),
@@ -6416,6 +6534,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "tmp_files_after", "equals": 0},
                             {"path": "injection_hits", "equals": 1},
                             {"path": "replace_hits", "equals": 1},
+                            {"path": "matched_targets", "equals": ["holdout-registry.local.json"]},
+                            {"path": "source_existed", "equals": True},
                         ),
                         probe_ok({"path": "batch", "equals": "synthetic-batch"}),
                         probe_error(
@@ -6427,6 +6547,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "regression_error", "equals": "policy_io_error"},
                             {"path": "injection_hits", "equals": 1},
                             {"path": "link_hits", "equals": 1},
+                            {"path": "matched_targets", "equals": ["regression-admissions/synthetic-batch/suite.json"]},
+                            {"path": "source_existed", "equals": True},
                             {"path": "admission_written", "equals": False},
                         ),
                         probe_error(
@@ -6437,6 +6559,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                             {"path": "regression_case_count", "equals": 0},
                             {"path": "injection_hits", "equals": 1},
                             {"path": "replace_hits", "equals": 1},
+                            {"path": "matched_targets", "equals": ["holdout-registry.local.json"]},
+                            {"path": "source_existed", "equals": True},
                             {"path": "admission_written", "equals": True},
                         ),
                         probe_ok(

@@ -26,6 +26,7 @@ from app.adapters.files.policy import FilePolicyRepository
 from app.adapters.llm import support as bridge_support
 from app.adapters.llm.bridge_a import ExternalAgentBridge
 from app.adapters.llm.bridge_b import LocalProcessBridge
+from app.domain.eval import suite_hash
 from app.domain.models import add_seconds
 from app.domain.policy import (
     DecisionError,
@@ -743,8 +744,6 @@ def _bridge_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         "bridge_attempts": run["audit"]["bridge_attempts"],
         "bridge_submissions": run["audit"]["bridge_submissions"],
         "fact_count": len(envelope["allowed_facts"]),
-        "fact_writes": 0,
-        "device_calls": 0,
     }
 
 
@@ -1037,6 +1036,22 @@ def _transport_marker_count(bridge: _EvalBridge, markers: list[str]) -> int:
     return total
 
 
+def _bridge_observation_summary(bridge: _EvalBridge) -> dict[str, Any]:
+    """汇总每次实际 bridge 调用前观察到的 intent/viewed/attempt。"""
+    observations = bridge.bridge_observations
+    return {
+        "bridge_intent_all_ok": bool(observations)
+        and all(
+            item["viewed"] and item["intent_count"] == 1 and bool(item["attempt_id"])
+            for item in observations
+        ),
+        "bridge_rounds": sorted({item["rounds"] for item in observations}),
+        "bridge_attempt_ids": sorted(
+            {str(item["attempt_id"]) for item in observations if item["attempt_id"]}
+        ),
+    }
+
+
 def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
     """用真实 eval_pack/留出事务与模拟桥运行合成套件，不写真实凭证。"""
     repo = FilePolicyRepository(ROOT)
@@ -1051,6 +1066,27 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
         bridge = _EvalBridge(
             str(request.get("surface", "public")), request.get("bridge_error")
         )
+        if suite == "holdout":
+            try:
+                raw_holdout = store.read_suite("holdout")
+                digest = suite_hash(raw_holdout)
+                registry = store.read_holdout_registry()
+                batches = registry.get("batches") or []
+                batch = next(
+                    (
+                        item
+                        for item in batches
+                        if isinstance(item, dict)
+                        and item.get("suite_hash") == digest
+                        and item.get("status") == "frozen"
+                    ),
+                    None,
+                )
+                if isinstance(batch, dict):
+                    bridge.store = store
+                    bridge.batch_id = str(batch.get("batch_id"))
+            except Exception:
+                pass
         confirmed = bool(request.get("authorize", True))
         markers = [str(item) for item in request.get("forbidden_markers", [])]
         metadata_case_ids: list[str] = []
@@ -1067,10 +1103,25 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             except (OSError, ValueError):
                 metadata_case_ids = []
             markers.extend(metadata_case_ids)
+        expected_marker_count = 0
+        assertion_markers = [str(item) for item in request.get("assertion_markers", [])]
+        if assertion_markers:
+            suite_path = (
+                ROOT / "evals/policy-suite/public.json"
+                if suite == "public"
+                else ROOT / "evals/private/holdout/suite.json"
+            )
+            try:
+                suite_data = json.loads(suite_path.read_text(encoding="utf-8"))
+                assertion_text = json.dumps(suite_data.get("cases", []), ensure_ascii=False)
+                expected_marker_count = sum(assertion_text.count(item) for item in assertion_markers)
+            except (OSError, ValueError):
+                expected_marker_count = 0
         observed = {
             "authorize_viewed": None,
             "authorize_rounds": None,
             "metadata_case_id_count": len(metadata_case_ids),
+            "expected_marker_count": expected_marker_count,
         }
 
         def authorize(_plan: dict[str, object]) -> bool:
@@ -1084,7 +1135,7 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                             item
                             for item in batches
                             if isinstance(item, dict)
-                            and item.get("batch_id") == "synthetic-batch"
+                            and item.get("batch_id") == bridge.batch_id
                         ),
                         None,
                     )
@@ -1129,6 +1180,7 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 "case_reasons": reasons,
                 "bridge_calls": bridge.calls,
                 "transport_markers": _transport_marker_count(bridge, markers),
+                **_bridge_observation_summary(bridge),
                 **observed,
             }
         holdout = None
@@ -1150,9 +1202,31 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
             "descriptor_simulated": bridge.descriptor().simulated,
             "transport_markers": _transport_marker_count(bridge, markers),
             "role_call_count": len(bridge.role_payloads),
+            **_bridge_observation_summary(bridge),
             **observed,
             "holdout": holdout,
         }
+    if mode == "register_alt":
+        holdout_path = ROOT / "evals/private/holdout/suite.json"
+        alt_path = ROOT / "evals/private/holdout-alt/suite.json"
+        original = holdout_path.read_bytes()
+        try:
+            holdout_path.write_bytes(alt_path.read_bytes())
+            result = eval_usecases.register_holdout(
+                store,
+                batch_id=str(request.get("batch_id", "synthetic-alt")),
+                version="2026-11-24",
+                sample_count=int(request.get("sample_count", 2)),
+                annotator="synthetic-annotator",
+                maintainer="synthetic-maintainer",
+                frozen_at="2026-11-24T00:00:00.000Z",
+                candidate_release="synthetic-release",
+            )
+        except Exception as error:
+            return {"status": "error", "reason_code": getattr(error, "reason_code", None)}
+        finally:
+            holdout_path.write_bytes(original)
+        return {"status": "ok", "reason_code": None, "batch": result.get("batch", {}).get("batch_id")}
     if mode == "register":
         try:
             result = eval_usecases.register_holdout(
@@ -1254,19 +1328,50 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
     if mode in {"register_write_fail", "retire_admission_fail", "retire_registry_fail"}:
         import app.adapters.files.evals as evals_module
 
-        hits = {"replace": 0, "link": 0}
+        hits = {"replace": 0, "link": 0, "non_target": 0}
+        matched_targets: list[str] = []
+        source_existed = False
+        original_replace = evals_module.os.replace
+        original_link = evals_module.os.link
+        registry_target = (ROOT / "data/evals/holdout-registry.local.json").resolve()
+        admission_target = (
+            ROOT
+            / "data/evals/regression-admissions"
+            / str(request.get("batch_id", "synthetic-batch"))
+            / "suite.json"
+        ).resolve()
 
-        def failing_replace(*args, **kwargs):
-            """在真实 registry 原子替换边界注入 OSError 并计数。"""
-            del args, kwargs
-            hits["replace"] += 1
-            raise OSError("synthetic replace failure")
+        def failing_replace(source, destination, *args, **kwargs):
+            """只对本次合成 registry 目标注入 OSError，其余调用原实现。"""
+            nonlocal source_existed
+            try:
+                target = Path(destination).resolve()
+            except OSError:
+                target = None
+            if target == registry_target:
+                hits["replace"] += 1
+                source_existed = Path(source).is_file()
+                matched_targets.append("holdout-registry.local.json")
+                raise OSError("synthetic replace failure")
+            hits["non_target"] += 1
+            return original_replace(source, destination, *args, **kwargs)
 
-        def failing_link(*args, **kwargs):
-            """在真实准入副本 link 边界注入 OSError 并计数。"""
-            del args, kwargs
-            hits["link"] += 1
-            raise OSError("synthetic link failure")
+        def failing_link(source, destination, *args, **kwargs):
+            """只对本次合成 admission 目标注入 OSError，其余调用原实现。"""
+            nonlocal source_existed
+            try:
+                target = Path(destination).resolve()
+            except OSError:
+                target = None
+            if target == admission_target:
+                hits["link"] += 1
+                source_existed = Path(source).is_file()
+                matched_targets.append(
+                    f"regression-admissions/{admission_target.parent.name}/suite.json"
+                )
+                raise OSError("synthetic link failure")
+            hits["non_target"] += 1
+            return original_link(source, destination, *args, **kwargs)
 
         before = _registry_snapshot(store)
         registry_path = ROOT / "data/evals/holdout-registry.local.json"
@@ -1323,6 +1428,9 @@ def _eval_operation(request: Mapping[str, Any]) -> dict[str, Any]:
                 "injection_hits": hits["replace"] + hits["link"],
                 "replace_hits": hits["replace"],
                 "link_hits": hits["link"],
+                "non_target_calls": hits["non_target"],
+                "matched_targets": matched_targets,
+                "source_existed": source_existed,
                 "admission_written": admission_root.exists()
                 and any(admission_root.glob("*/suite.json")),
             }
@@ -1342,6 +1450,9 @@ class _EvalBridge(DecisionBridgePort):
         self.calls = 0
         self.user_messages: list[str] = []
         self.role_payloads: list[dict[str, Any]] = []
+        self.store: FileEvalStore | None = None
+        self.batch_id: str | None = None
+        self.bridge_observations: list[dict[str, Any]] = []
 
     def descriptor(self) -> BridgeDescriptor:
         """返回 simulated 摘要，永不生成验收凭证。"""
@@ -1365,6 +1476,36 @@ class _EvalBridge(DecisionBridgePort):
                 "echo": dict(echo),
             }
         )
+        if self.store is not None and self.batch_id is not None:
+            try:
+                registry = self.store.read_holdout_registry()
+                batches = registry.get("batches") or []
+                batch = next(
+                    (
+                        item
+                        for item in batches
+                        if isinstance(item, dict) and item.get("batch_id") == self.batch_id
+                    ),
+                    None,
+                )
+                rounds = batch.get("access_rounds") or [] if isinstance(batch, dict) else []
+                intent = [
+                    item
+                    for item in rounds
+                    if isinstance(item, dict) and item.get("phase") == "intent"
+                ]
+                self.bridge_observations.append(
+                    {
+                        "viewed": bool(batch.get("viewed")) if isinstance(batch, dict) else False,
+                        "rounds": len(rounds),
+                        "intent_count": len(intent),
+                        "attempt_id": intent[0].get("attempt_id") if intent else None,
+                    }
+                )
+            except Exception:
+                self.bridge_observations.append(
+                    {"viewed": False, "rounds": 0, "intent_count": 0, "attempt_id": None}
+                )
         if self._error:
             raise BridgeError(self._error, submitted=True)
         data = json.loads(user_message)

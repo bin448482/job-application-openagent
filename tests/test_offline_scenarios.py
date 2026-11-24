@@ -2048,7 +2048,7 @@ class M1DriverBoundaryTests(unittest.TestCase):
         from app.adapters.llm import support as bridge_support
 
         assets = load_assets()
-        oracle = assets.oracles["variants"]["SC-D07/role_partition"]["acceptance"]["steps"][0]
+        oracle = assets.oracles["variants"]["SC-D07/contract_role_partition"]["acceptance"]["steps"][0]
         request = json.loads(
             (SCENARIO_ROOT / "fixtures/m4/probe/d07_role.json").read_text(encoding="utf-8")
         )
@@ -2173,6 +2173,89 @@ class M1DriverBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root), mock.patch.object(
+                m4_probe._EvalBridge, "complete", leaking_complete
+            ):
+                actual = m4_probe._eval_operation(request)
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("transport_markers" in item for item in differences), differences)
+
+    def test_real_m4_bridge_intent_clear_mutant_is_caught_by_d11_oracle(self) -> None:
+        """桥窗口把本次 intent/viewed 清空时，D11 bridge 边界观察必须拒绝。"""
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D11/holdout_freeze"]["acceptance"]["steps"][3]
+        requests = {
+            name: json.loads(
+                (SCENARIO_ROOT / f"fixtures/m4/probe/{name}.json").read_text(encoding="utf-8")
+            )
+            for name in ("d11_register", "d11_holdout_first")
+        }
+        original = m4_probe._EvalBridge.complete
+
+        def clearing_complete(self, **kwargs):
+            """只在真实桥窗口把 registry 的 rounds/viewed 清空。"""
+            original_read = self.store.read_holdout_registry
+            self.store.read_holdout_registry = lambda: {"schema_version": 1, "batches": []}
+            try:
+                return original(self, **kwargs)
+            finally:
+                self.store.read_holdout_registry = original_read
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            with mock.patch.object(m4_probe, "ROOT", root):
+                m4_probe._eval_operation(requests["d11_register"])
+                with mock.patch.object(
+                    m4_probe._EvalBridge, "complete", clearing_complete
+                ):
+                    actual = m4_probe._eval_operation(requests["d11_holdout_first"])
+        invocation = {
+            "exit_code": 0,
+            "stdout_json": {"schema_version": 1, "status": actual["status"], **{
+                key: value for key, value in actual.items() if key != "status"
+            }},
+            "stdout_json_ok": True,
+            "stdout_text": "",
+            "stderr": "",
+        }
+        differences = compare_invocation(invocation, oracle)
+        self.assertTrue(any("bridge_intent" in item for item in differences), differences)
+
+    def test_real_m4_expected_marker_leak_is_caught_by_terms_oracle(self) -> None:
+        """评测 assertion 侧唯一 expected 标记进入 developer 时，terms oracle 必须拒绝。"""
+        assets = load_assets()
+        oracle = assets.oracles["variants"]["SC-D11/public_contract_terms"]["acceptance"]["steps"][0]
+        request = json.loads(
+            (SCENARIO_ROOT / "fixtures/m4/probe/d11_eval_terms.json").read_text(encoding="utf-8")
+        )
+        original = m4_probe._EvalBridge.complete
+
+        def leaking_complete(self, **kwargs):
+            """在真实桥入参中追加评测侧唯一 expected 标记。"""
+            leaked = dict(kwargs)
+            leaked["developer_message"] = (
+                str(kwargs.get("developer_message", "")) + " M4-EXPECTED-MARKER-UNIQUE"
+            )
+            return original(self, **leaked)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _make_m4_project(root)
+            shutil.copytree(
+                SCENARIO_ROOT / "fixtures/m4/eval/public_terms",
+                root / "evals/policy-suite",
+                dirs_exist_ok=True,
+            )
             with mock.patch.object(m4_probe, "ROOT", root), mock.patch.object(
                 m4_probe._EvalBridge, "complete", leaking_complete
             ):

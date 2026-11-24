@@ -3,5 +3,11 @@
   "pack": "prompts/local/eval",
   "suite": "public",
   "mode": "eval",
-  "forbid_case_ids": true
+  "forbid_case_ids": true,
+  "assertion_markers": [
+    "M4-EXPECTED-MARKER-UNIQUE"
+  ],
+  "forbidden_markers": [
+    "M4-EXPECTED-MARKER-UNIQUE"
+  ]
 }
