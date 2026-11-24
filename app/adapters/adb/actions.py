@@ -62,6 +62,7 @@ class AdbActionExecutor:
         self._command_store = command_store
         self._child_scan = child_scan or _child_processes
         self._current_action_key: str | None = None
+        self._current_command_label: str | None = None
         self._family_unproven = False
         self._screen = screen_reader or AdbScreenReader(
             evidence_dir=self._evidence_dir,
@@ -655,6 +656,7 @@ class AdbActionExecutor:
             + phase
         )
         try:
+            self._current_command_label = None
             hooks = self._command_hooks()
             capture = self._screen.dump_hierarchy(
                 self._serial,
@@ -700,6 +702,7 @@ class AdbActionExecutor:
     ) -> str:
         """每条命令前重核条件，单次有界执行；失败立即停止且不重发。"""
         started = time.perf_counter()
+        self._current_command_label = command
         self._record(command, "started", 0)
         try:
             hooks = self._command_hooks()
@@ -785,6 +788,8 @@ class AdbActionExecutor:
             return
         if not bounded or not proven:
             self._family_unproven = True
+        started = time.perf_counter()
+        self._record_finish("started", 0)
         try:
             self._command_store.finish_family(
                 self._current_action_key,
@@ -795,7 +800,38 @@ class AdbActionExecutor:
             )
         except Exception:
             self._family_unproven = True
+            self._record_finish(
+                "failed",
+                elapsed_ms(started),
+                reason_code="store_io_error",
+                error_category="store",
+            )
             raise
+        self._record_finish("ok", elapsed_ms(started))
+
+    def _record_finish(
+        self,
+        result: str,
+        duration_ms: int,
+        *,
+        reason_code: str | None = None,
+        error_category: str | None = None,
+    ) -> None:
+        """记录唯一账本闭合步骤的固定终态；故障不写异常/参数/现场原文。"""
+        if self._process_log is None:
+            return
+        try:
+            self._process_log.record(
+                stage="action",
+                result=result,
+                operation="action_finish_command",
+                reason_code=reason_code,
+                error_category=error_category,
+                duration_ms=duration_ms,
+                command=self._current_command_label,
+            )
+        except Exception:
+            return
 
     def _index_evidence(
         self,

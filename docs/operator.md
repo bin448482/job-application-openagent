@@ -385,6 +385,7 @@ python -m app action reconcile --profile demo --pack prompts/local/demo --mode d
 - 第6轮返修补充：列表覆盖要求容器内全部可见行/后代都在容器范围内、容器未被外层可见区域裁剪，缺失/坏/零面积/自相矛盾 bounds 不默认成功；同分组两个独立同类型槽位保留歧义并零点击，效果定位不要求按钮动作后仍 enabled，本类型精确新状态仍可证明 `request_sent`。命令族使用 Windows Job Object 做有限有界终止/核验，无平台有界或未证明族停止时保持 unknown 与隔离；`store.task_conversation` 读取故障在 validate 阶段记录 started→单一固定失败终态并保持 `store_io_error`、零设备、零 pending。
 - 第7轮返修补充：列表覆盖对容器内所有有可见意义的后代强制可解析 bounds，并逐层核验全部祖先的 bounds 与滚动事实（不再遇首个合法祖先即停止）。命令族在 Popen 前先建 Job，进程以 `CREATE_SUSPENDED` 启动、加入 Job 后恢复主线程，权限为 `PROCESS_SET_QUOTA|PROCESS_TERMINATE`；任一命令未证明族停止时公开观察 `command_quiet=false`，保留已证动作效果但不报 `gate_converged`、不释放共享占用，生成人工卡；本机自有合成 Python 子孙的真实 Job 正常停止正例单独验证。
 - 第8轮返修补充：列表覆盖把 `content-desc` 计入可见意义，并按每个有意义节点的真实祖先链逐层核验中间/外层裁剪与 `scrollable` 事实；命令边界在 Popen 前先写账本未闭合事实，assign 失败不恢复执行，assign/resume/首次 PID/二次超时/wait 再超时/OSError 统一走有界 finally 并终止/关闭专属 Job；finish 写失败与空 IME 早退都保持 `command_quiet=false`，未证明全停时动作记录 unknown、任务暂停、profile/共享隔离与人工卡一致保留，已证效果不改写。
+- 第9轮返修补充：唯一账本闭合步骤在真实 complete 写失败时记录 `stage=action/operation=action_finish_command` 的 started→failed 固定安全终态（`reason_code=store_io_error`、`error_category=store`），可由同一 ProcessLog/correlation 关联，不写异常原文、参数、现场或绝对路径；公开仍保持 unknown/隔离、已证效果与人工卡。
 
 ## 八、显式真实设备模式
 只有同时给出 `--device`、`--serial` 与 `--confirm-device` 才启用真实探针：

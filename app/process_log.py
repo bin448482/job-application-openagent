@@ -259,6 +259,7 @@ OPERATIONS = frozenset(
         "action_freeze",
         "action_reconcile_validate",
         "action_reconcile_commit",
+        "action_finish_command",
     }
 )
 EVENT_KEYS = (

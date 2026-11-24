@@ -753,6 +753,158 @@ class ActionUseCaseTests(unittest.TestCase):
         self.assertFalse(result["gate_converged"])
         self.assertIsNotNone(result["card"])
 
+    def test_complete_write_failure_emits_safe_failed_log_and_isolates(self) -> None:
+        """一次账本 complete 写失败留下固定 failed 终态且公开保持未收敛。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+        from app.adapters.adb.command import CommandIdentityStore, ProcessFamilyBound
+
+        ime = "com.example.default/.Ime"
+        before = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" /></node></hierarchy>'
+        )
+        readback = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" />'
+            '<node class="android.widget.EditText" text="合成回复正文" />'
+            '</node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node text="合成联系人"><node text="合成公司" />'
+            '<node text="合成职位" /><node text="消息" />'
+            '<node text="合成回复正文" />'
+            '<node class="android.widget.EditText" text="" /></node></hierarchy>'
+        )
+        state = {"cat": 0, "ime": ime}
+
+        class Proc:
+            """合成 Popen，按参数返回 IME 或 before/readback/after。"""
+
+            def __init__(self, args: list[str]) -> None:
+                """保存参数与 PID。"""
+                self.args = args
+                self.pid = 9100
+                self.returncode = 0
+
+            def communicate(self, timeout: float | None = None):
+                """返回合成输出。"""
+                if "ime" in self.args and "set" in self.args:
+                    state["ime"] = self.args[-1]
+                    return "", ""
+                if "settings" in self.args:
+                    return state["ime"], ""
+                if "cat" in self.args:
+                    index = state["cat"]
+                    state["cat"] = index + 1
+                    return (before, readback, after)[min(index, 2)], ""
+                return "", ""
+
+            def kill(self) -> None:
+                """无 kill。"""
+
+            def wait(self, timeout: float | None = None) -> int:
+                """立即回收。"""
+                return 0
+
+        class Bound:
+            """成功约束并证明空族的 Job 替身。"""
+
+            def assign(self, pid: int) -> bool:
+                """成功加入。"""
+                return True
+
+            def resume(self, pid: int) -> bool:
+                """成功恢复。"""
+                return True
+
+            def terminate(self) -> bool:
+                """成功终止。"""
+                return True
+
+            def active(self) -> int:
+                """空族。"""
+                return 0
+
+            def close(self) -> None:
+                """无关闭。"""
+
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m5-logtrace-"
+        ) as directory:
+            store = CommandIdentityStore(Path(directory))
+            original_append = store._append
+            hits = {"count": 0}
+
+            def flaky_append(action_key: str, item: dict[str, object]) -> None:
+                """只在首次 complete 追加注入一次真实 OSError。"""
+                if item.get("complete") is True and hits["count"] == 0:
+                    hits["count"] += 1
+                    raise OSError("synthetic ledger failure")
+                original_append(action_key, item)
+
+            store._append = flaky_append  # type: ignore[method-assign]
+            log = ProcessLog(path=self.root / "finish-fault.jsonl")
+            executor = AdbActionExecutor(
+                serial="<serial>",
+                gate=self.gate,
+                process_log=log,
+                command_store=store,
+                child_scan=lambda pid: [],
+            )
+            with (
+                patch.object(
+                    ProcessFamilyBound, "create", return_value=Bound()
+                ),
+                patch(
+                    "app.adapters.adb.command._is_real_process",
+                    return_value=True,
+                ),
+                patch(
+                    "subprocess.Popen",
+                    side_effect=lambda args, **kwargs: Proc(args),
+                ),
+                patch(
+                    "app.adapters.adb.actions._utc_now",
+                    return_value=self.clock.now(),
+                ),
+            ):
+                result = self._perform(
+                    executor, ime_component="com.example/.Ime"
+                )
+        self.assertEqual(hits["count"], 1)
+        self.assertEqual(result["evidence"]["outcome"], "performed")
+        self.assertEqual(result["evidence"]["effect"], "sent")
+        self.assertEqual(result["state"], "unknown")
+        self.assertFalse(result["gate_converged"])
+        self.assertIsNotNone(result["card"])
+        self.assertEqual(self.gate.released, [])
+        record = self.store.get_action(TEXT_KEY)
+        self.assertIsNotNone(record)
+        self.assertEqual(record["state"], "unknown")
+        records = [
+            json.loads(line)
+            for line in log.path.read_text("utf-8").splitlines()
+            if line.strip()
+        ]
+        finish = [
+            item for item in records if item["operation"] == "action_finish_command"
+        ]
+        results = [item["result"] for item in finish]
+        self.assertEqual(results.count("failed"), 1)
+        self.assertEqual(results.count("started"), results.count("ok") + 1)
+        failed = [item for item in finish if item["result"] == "failed"][0]
+        self.assertEqual(failed["reason_code"], "store_io_error")
+        self.assertEqual(failed["error_category"], "store")
+        self.assertEqual(
+            len([item for item in records if item["result"] == "failed"]), 1
+        )
+        self.assertFalse(log.degraded)
+        raw = log.path.read_text("utf-8")
+        self.assertNotIn("synthetic ledger failure", raw)
+        self.assertNotIn("OSError", raw)
+
     def test_leased_without_start_has_zero_device_calls(self) -> None:
         """leased 未 start 时，即使需要 IME 也不读设备、不写 pending。"""
         other_tmp = tempfile.TemporaryDirectory(dir=helpers.ROOT, prefix=".m5-leased-")
