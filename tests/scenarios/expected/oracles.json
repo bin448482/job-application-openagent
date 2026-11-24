@@ -2,7 +2,47 @@
   "schema_version": 1,
   "variants": {
     "SC-A01/A01_FA": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A01_FA",
+                "path": "case"
+              },
+              {
+                "equals": "send_text",
+                "path": "action_kind"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": 0,
+                "path": "remote.all_commands"
+              },
+              {
+                "equals": null,
+                "path": "record"
+              },
+              {
+                "length_equals": 0,
+                "path": "events"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "not_performed+none",
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
@@ -31,7 +71,51 @@
       "variant_id": "A01_FA"
     },
     "SC-A01/A01_FB": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A01_FB",
+                "path": "case"
+              },
+              {
+                "equals": "send_text",
+                "path": "action_kind"
+              },
+              {
+                "equals": true,
+                "path": "interrupted"
+              },
+              {
+                "equals": "pending",
+                "path": "after_interrupt.state"
+              },
+              {
+                "equals": 0,
+                "path": "remote_after_interrupt.irreversible"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": null,
+                "path": "replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "pending 残留保锁",
         "不能凭无返回降为 not_sent",
@@ -60,7 +144,67 @@
       "variant_id": "A01_FB"
     },
     "SC-A01/A01_FC": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A01_FC",
+                "path": "case"
+              },
+              {
+                "equals": "send_text",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "remote.failed_after_irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "Evidence.unknown",
         "原因限 device_disconnected/executor_interrupted",
@@ -90,7 +234,55 @@
       "variant_id": "A01_FC"
     },
     "SC-A01/A01_FD": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A01_FD",
+                "path": "case"
+              },
+              {
+                "equals": "send_text",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "unknown/result_unverified",
         "Toast/确认框/空返回不证明成功",
@@ -119,7 +311,59 @@
       "variant_id": "A01_FD"
     },
     "SC-A01/A01_FE": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A01_FE",
+                "path": "case"
+              },
+              {
+                "equals": "send_text",
+                "path": "action_kind"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "pending",
+                "path": "record.state"
+              },
+              {
+                "length_equals": 1,
+                "path": "events"
+              },
+              {
+                "equals": "action_pending",
+                "path": "events.0.event"
+              },
+              {
+                "equals": "held",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "远端可能已执行",
         "本地回滚不撤销远端动作",
@@ -149,7 +393,59 @@
       "variant_id": "A01_FE"
     },
     "SC-A01/A01_base": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A01_base",
+                "path": "case"
+              },
+              {
+                "equals": "send_text",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "sent",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              },
+              {
+                "equals": null,
+                "path": "gate_after_release"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "本次前后证据充分才 performed+sent",
         "先写 pending",
@@ -234,7 +530,47 @@
       "variant_id": "A01_no_send_control"
     },
     "SC-A02/A02_FA": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A02_FA",
+                "path": "case"
+              },
+              {
+                "equals": "send_resume",
+                "path": "action_kind"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": 0,
+                "path": "remote.all_commands"
+              },
+              {
+                "equals": null,
+                "path": "record"
+              },
+              {
+                "length_equals": 0,
+                "path": "events"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "not_performed+none",
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
@@ -263,7 +599,51 @@
       "variant_id": "A02_FA"
     },
     "SC-A02/A02_FB": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A02_FB",
+                "path": "case"
+              },
+              {
+                "equals": "send_resume",
+                "path": "action_kind"
+              },
+              {
+                "equals": true,
+                "path": "interrupted"
+              },
+              {
+                "equals": "pending",
+                "path": "after_interrupt.state"
+              },
+              {
+                "equals": 0,
+                "path": "remote_after_interrupt.irreversible"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": null,
+                "path": "replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "pending 残留保锁",
         "不能凭无返回降为 not_sent",
@@ -292,7 +672,67 @@
       "variant_id": "A02_FB"
     },
     "SC-A02/A02_FC": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A02_FC",
+                "path": "case"
+              },
+              {
+                "equals": "send_resume",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "remote.failed_after_irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "Evidence.unknown",
         "原因限 device_disconnected/executor_interrupted",
@@ -322,7 +762,55 @@
       "variant_id": "A02_FC"
     },
     "SC-A02/A02_FD": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A02_FD",
+                "path": "case"
+              },
+              {
+                "equals": "send_resume",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "unknown/result_unverified",
         "Toast/确认框/空返回不证明成功",
@@ -351,7 +839,59 @@
       "variant_id": "A02_FD"
     },
     "SC-A02/A02_FE": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A02_FE",
+                "path": "case"
+              },
+              {
+                "equals": "send_resume",
+                "path": "action_kind"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "pending",
+                "path": "record.state"
+              },
+              {
+                "length_equals": 1,
+                "path": "events"
+              },
+              {
+                "equals": "action_pending",
+                "path": "events.0.event"
+              },
+              {
+                "equals": "held",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "远端可能已执行",
         "本地回滚不撤销远端动作",
@@ -381,7 +921,59 @@
       "variant_id": "A02_FE"
     },
     "SC-A02/A02_base": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A02_base",
+                "path": "case"
+              },
+              {
+                "equals": "send_resume",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "request_sent",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              },
+              {
+                "equals": null,
+                "path": "gate_after_release"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "本次前后证据充分才 performed+request_sent",
         "先写 pending",
@@ -410,7 +1002,55 @@
       "variant_id": "A02_base"
     },
     "SC-A02/A02_delivered": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A02_delivered",
+                "path": "case"
+              },
+              {
+                "equals": "send_resume",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "sent",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "才可 performed+sent",
         "确认框/Toast 不算交付"
@@ -438,7 +1078,59 @@
       "variant_id": "A02_delivered"
     },
     "SC-A02/A02_request_only": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A02_request_only",
+                "path": "case"
+              },
+              {
+                "equals": "send_resume",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "request_sent",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              },
+              {
+                "equals": null,
+                "path": "gate_after_release"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "performed+request_sent",
         "不得记 sent"
@@ -466,7 +1158,47 @@
       "variant_id": "A02_request_only"
     },
     "SC-A03/A03_FA": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A03_FA",
+                "path": "case"
+              },
+              {
+                "equals": "change_wechat",
+                "path": "action_kind"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": 0,
+                "path": "remote.all_commands"
+              },
+              {
+                "equals": null,
+                "path": "record"
+              },
+              {
+                "length_equals": 0,
+                "path": "events"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "not_performed+none",
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
@@ -495,7 +1227,51 @@
       "variant_id": "A03_FA"
     },
     "SC-A03/A03_FB": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A03_FB",
+                "path": "case"
+              },
+              {
+                "equals": "change_wechat",
+                "path": "action_kind"
+              },
+              {
+                "equals": true,
+                "path": "interrupted"
+              },
+              {
+                "equals": "pending",
+                "path": "after_interrupt.state"
+              },
+              {
+                "equals": 0,
+                "path": "remote_after_interrupt.irreversible"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": null,
+                "path": "replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "pending 残留保锁",
         "不能凭无返回降为 not_sent",
@@ -524,7 +1300,67 @@
       "variant_id": "A03_FB"
     },
     "SC-A03/A03_FC": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A03_FC",
+                "path": "case"
+              },
+              {
+                "equals": "change_wechat",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "remote.failed_after_irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "Evidence.unknown",
         "原因限 device_disconnected/executor_interrupted",
@@ -554,7 +1390,55 @@
       "variant_id": "A03_FC"
     },
     "SC-A03/A03_FD": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A03_FD",
+                "path": "case"
+              },
+              {
+                "equals": "change_wechat",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "unknown/result_unverified",
         "Toast/确认框/空返回不证明成功",
@@ -583,7 +1467,59 @@
       "variant_id": "A03_FD"
     },
     "SC-A03/A03_FE": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A03_FE",
+                "path": "case"
+              },
+              {
+                "equals": "change_wechat",
+                "path": "action_kind"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "pending",
+                "path": "record.state"
+              },
+              {
+                "length_equals": 1,
+                "path": "events"
+              },
+              {
+                "equals": "action_pending",
+                "path": "events.0.event"
+              },
+              {
+                "equals": "held",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "远端可能已执行",
         "本地回滚不撤销远端动作",
@@ -613,7 +1549,59 @@
       "variant_id": "A03_FE"
     },
     "SC-A03/A03_base": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A03_base",
+                "path": "case"
+              },
+              {
+                "equals": "change_wechat",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "request_sent",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              },
+              {
+                "equals": null,
+                "path": "gate_after_release"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "本次前后证据充分才 performed+request_sent",
         "先写 pending",
@@ -642,7 +1630,59 @@
       "variant_id": "A03_base"
     },
     "SC-A03/A03_confirm_dialog": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A03_confirm_dialog",
+                "path": "case"
+              },
+              {
+                "equals": "change_wechat",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "request_sent",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              },
+              {
+                "equals": null,
+                "path": "gate_after_release"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "确认前后都检查 pending",
         "只记 request_sent"
@@ -698,7 +1738,47 @@
       "variant_id": "A03_direct_send"
     },
     "SC-A04/A04_FA": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A04_FA",
+                "path": "case"
+              },
+              {
+                "equals": "change_phone",
+                "path": "action_kind"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": 0,
+                "path": "remote.all_commands"
+              },
+              {
+                "equals": null,
+                "path": "record"
+              },
+              {
+                "length_equals": 0,
+                "path": "events"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "not_performed+none",
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
@@ -727,7 +1807,51 @@
       "variant_id": "A04_FA"
     },
     "SC-A04/A04_FB": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A04_FB",
+                "path": "case"
+              },
+              {
+                "equals": "change_phone",
+                "path": "action_kind"
+              },
+              {
+                "equals": true,
+                "path": "interrupted"
+              },
+              {
+                "equals": "pending",
+                "path": "after_interrupt.state"
+              },
+              {
+                "equals": 0,
+                "path": "remote_after_interrupt.irreversible"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": null,
+                "path": "replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "pending 残留保锁",
         "不能凭无返回降为 not_sent",
@@ -756,7 +1880,67 @@
       "variant_id": "A04_FB"
     },
     "SC-A04/A04_FC": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A04_FC",
+                "path": "case"
+              },
+              {
+                "equals": "change_phone",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "remote.failed_after_irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "Evidence.unknown",
         "原因限 device_disconnected/executor_interrupted",
@@ -786,7 +1970,55 @@
       "variant_id": "A04_FC"
     },
     "SC-A04/A04_FD": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A04_FD",
+                "path": "case"
+              },
+              {
+                "equals": "change_phone",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "unknown/result_unverified",
         "Toast/确认框/空返回不证明成功",
@@ -815,7 +2047,59 @@
       "variant_id": "A04_FD"
     },
     "SC-A04/A04_FE": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A04_FE",
+                "path": "case"
+              },
+              {
+                "equals": "change_phone",
+                "path": "action_kind"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "pending",
+                "path": "record.state"
+              },
+              {
+                "length_equals": 1,
+                "path": "events"
+              },
+              {
+                "equals": "action_pending",
+                "path": "events.0.event"
+              },
+              {
+                "equals": "held",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "远端可能已执行",
         "本地回滚不撤销远端动作",
@@ -845,7 +2129,59 @@
       "variant_id": "A04_FE"
     },
     "SC-A04/A04_base": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A04_base",
+                "path": "case"
+              },
+              {
+                "equals": "change_phone",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "request_sent",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              },
+              {
+                "equals": null,
+                "path": "gate_after_release"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "本次前后证据充分才 performed+request_sent",
         "先写 pending",
@@ -874,7 +2210,59 @@
       "variant_id": "A04_base"
     },
     "SC-A04/A04_confirm_dialog": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A04_confirm_dialog",
+                "path": "case"
+              },
+              {
+                "equals": "change_phone",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "request_sent",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              },
+              {
+                "equals": null,
+                "path": "gate_after_release"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "独立授权",
         "只记 request_sent"
@@ -929,7 +2317,47 @@
       "variant_id": "A04_direct_send"
     },
     "SC-A05/A05_FA": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A05_FA",
+                "path": "case"
+              },
+              {
+                "equals": "delete_conversation",
+                "path": "action_kind"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": 0,
+                "path": "remote.all_commands"
+              },
+              {
+                "equals": null,
+                "path": "record"
+              },
+              {
+                "length_equals": 0,
+                "path": "events"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "not_performed+none",
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
@@ -958,7 +2386,51 @@
       "variant_id": "A05_FA"
     },
     "SC-A05/A05_FB": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A05_FB",
+                "path": "case"
+              },
+              {
+                "equals": "delete_conversation",
+                "path": "action_kind"
+              },
+              {
+                "equals": true,
+                "path": "interrupted"
+              },
+              {
+                "equals": "pending",
+                "path": "after_interrupt.state"
+              },
+              {
+                "equals": 0,
+                "path": "remote_after_interrupt.irreversible"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": null,
+                "path": "replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "pending 残留保锁",
         "不能凭无返回降为 not_sent",
@@ -987,7 +2459,67 @@
       "variant_id": "A05_FB"
     },
     "SC-A05/A05_FC": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A05_FC",
+                "path": "case"
+              },
+              {
+                "equals": "delete_conversation",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "remote.failed_after_irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "Evidence.unknown",
         "原因限 device_disconnected/executor_interrupted",
@@ -1017,7 +2549,55 @@
       "variant_id": "A05_FC"
     },
     "SC-A05/A05_FD": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A05_FD",
+                "path": "case"
+              },
+              {
+                "equals": "delete_conversation",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "none",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "quarantined",
+                "path": "gate_after_release.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "unknown/result_unverified",
         "Toast/确认框/空返回不证明成功",
@@ -1046,7 +2626,59 @@
       "variant_id": "A05_FD"
     },
     "SC-A05/A05_FE": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A05_FE",
+                "path": "case"
+              },
+              {
+                "equals": "delete_conversation",
+                "path": "action_kind"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "pending",
+                "path": "record.state"
+              },
+              {
+                "length_equals": 1,
+                "path": "events"
+              },
+              {
+                "equals": "action_pending",
+                "path": "events.0.event"
+              },
+              {
+                "equals": "held",
+                "path": "gate_after_release.state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "远端可能已执行",
         "本地回滚不撤销远端动作",
@@ -1076,7 +2708,59 @@
       "variant_id": "A05_FE"
     },
     "SC-A05/A05_base": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A05_base",
+                "path": "case"
+              },
+              {
+                "equals": "delete_conversation",
+                "path": "action_kind"
+              },
+              {
+                "equals": null,
+                "path": "observed.raised"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "deleted",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              },
+              {
+                "equals": null,
+                "path": "gate_after_release"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "本次前后证据充分才 performed+deleted",
         "先写 pending",
@@ -1123,7 +2807,8 @@
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
-        "处理中到达未读仍按安全点"
+        "处理中到达未读仍按安全点",
+        "依赖 M6 apply_job 冻结入口"
       ],
       "scenario_id": "SC-A06",
       "source": [
@@ -1152,7 +2837,8 @@
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
-        "处理中到达未读仍按安全点"
+        "处理中到达未读仍按安全点",
+        "依赖 M6 apply_job 冻结入口"
       ],
       "scenario_id": "SC-A06",
       "source": [
@@ -1182,7 +2868,8 @@
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
-        "处理中到达未读仍按安全点"
+        "处理中到达未读仍按安全点",
+        "依赖 M6 apply_job 冻结入口"
       ],
       "scenario_id": "SC-A06",
       "source": [
@@ -1211,7 +2898,8 @@
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
-        "处理中到达未读仍按安全点"
+        "处理中到达未读仍按安全点",
+        "依赖 M6 apply_job 冻结入口"
       ],
       "scenario_id": "SC-A06",
       "source": [
@@ -1241,7 +2929,8 @@
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
-        "处理中到达未读仍按安全点"
+        "处理中到达未读仍按安全点",
+        "依赖 M6 apply_job 冻结入口"
       ],
       "scenario_id": "SC-A06",
       "source": [
@@ -1270,7 +2959,8 @@
       "observations_ref": null,
       "preconditions": [
         "M5 职位沟通",
-        "处理中到达未读仍按安全点"
+        "处理中到达未读仍按安全点",
+        "依赖 M6 apply_job 冻结入口"
       ],
       "scenario_id": "SC-A06",
       "source": [
@@ -1281,7 +2971,47 @@
       "variant_id": "A06_base"
     },
     "SC-A07/abandon": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "abandon",
+                "path": "case"
+              },
+              {
+                "equals": "unknown",
+                "path": "first.state"
+              },
+              {
+                "equals": "cancelled",
+                "path": "reconciled.state"
+              },
+              {
+                "equals": "cancelled",
+                "path": "reconciled.task_state"
+              },
+              {
+                "equals": true,
+                "path": "reconciled.lock_retained"
+              },
+              {
+                "equals": false,
+                "path": "reconciled.gate_converged"
+              },
+              {
+                "equals": "cancelled",
+                "path": "record_after_reconcile.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "放弃不解锁动作键",
         "不解除设备隔离"
@@ -1309,7 +3039,43 @@
       "variant_id": "abandon"
     },
     "SC-A07/confirm_not_performed": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "confirm_not_performed",
+                "path": "case"
+              },
+              {
+                "equals": "unknown",
+                "path": "first.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "record_after_first.state"
+              },
+              {
+                "equals": "not_performed",
+                "path": "reconciled.state"
+              },
+              {
+                "equals": "not_sent",
+                "path": "reconciled.task_state"
+              },
+              {
+                "equals": "not_performed",
+                "path": "record_after_reconcile.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "可收敛 not_sent",
         "不自动重发"
@@ -1337,7 +3103,51 @@
       "variant_id": "confirm_not_performed"
     },
     "SC-A07/confirm_performed": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "confirm_performed",
+                "path": "case"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "first.raised"
+              },
+              {
+                "equals": "pending",
+                "path": "record_after_first.state"
+              },
+              {
+                "equals": 1,
+                "path": "remote_after_first"
+              },
+              {
+                "equals": "performed",
+                "path": "reconciled.state"
+              },
+              {
+                "equals": "done",
+                "path": "reconciled.task_state"
+              },
+              {
+                "equals": true,
+                "path": "reconciled.gate_converged"
+              },
+              {
+                "equals": "performed",
+                "path": "record_after_reconcile.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "只凭独立证据收敛",
         "关闭任务但保留动作证据"
@@ -1365,7 +3175,43 @@
       "variant_id": "confirm_performed"
     },
     "SC-A07/reconnect": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "reconnect",
+                "path": "case"
+              },
+              {
+                "equals": "unknown",
+                "path": "first.state"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record_after_replay.state"
+              },
+              {
+                "equals": true,
+                "path": "gate_still_occupied"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "先核对锁屏/IME/身份/在途命令",
         "不自动续跑或重发"
@@ -1393,7 +3239,55 @@
       "variant_id": "reconnect"
     },
     "SC-A08/missing_snapshot": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "missing_snapshot",
+                "path": "case"
+              },
+              {
+                "equals": "contract_domain_plus_real_store_lock",
+                "path": "layer"
+              },
+              {
+                "equals": "unknown",
+                "path": "outcome"
+              },
+              {
+                "equals": "none",
+                "path": "effect"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.pending_state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "real_lock.replay_raised"
+              },
+              {
+                "equals": 0,
+                "path": "real_lock.replay_irreversible"
+              },
+              {
+                "equals": true,
+                "path": "real_lock.gate_occupied"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.record_after_replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "拒绝伪成功"
       ],
@@ -1419,7 +3313,51 @@
       "variant_id": "missing_snapshot"
     },
     "SC-A08/not_performed_sent": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "not_performed_sent",
+                "path": "case"
+              },
+              {
+                "equals": "contract_domain_plus_real_store_lock",
+                "path": "layer"
+              },
+              {
+                "equals": true,
+                "path": "rejected"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.pending_state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "real_lock.replay_raised"
+              },
+              {
+                "equals": 0,
+                "path": "real_lock.replay_irreversible"
+              },
+              {
+                "equals": true,
+                "path": "real_lock.gate_occupied"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.record_after_replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "拒绝"
       ],
@@ -1445,7 +3383,51 @@
       "variant_id": "not_performed_sent"
     },
     "SC-A08/performed_none": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "performed_none",
+                "path": "case"
+              },
+              {
+                "equals": "contract_domain_plus_real_store_lock",
+                "path": "layer"
+              },
+              {
+                "equals": true,
+                "path": "rejected"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.pending_state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "real_lock.replay_raised"
+              },
+              {
+                "equals": 0,
+                "path": "real_lock.replay_irreversible"
+              },
+              {
+                "equals": true,
+                "path": "real_lock.gate_occupied"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.record_after_replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "非法组合转 unknown"
       ],
@@ -1471,7 +3453,55 @@
       "variant_id": "performed_none"
     },
     "SC-A08/read_ok_no_action_delta": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "read_ok_no_action_delta",
+                "path": "case"
+              },
+              {
+                "equals": "contract_domain_plus_real_store_lock",
+                "path": "layer"
+              },
+              {
+                "equals": "not_performed",
+                "path": "outcome"
+              },
+              {
+                "equals": "none",
+                "path": "effect"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.pending_state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "real_lock.replay_raised"
+              },
+              {
+                "equals": 0,
+                "path": "real_lock.replay_irreversible"
+              },
+              {
+                "equals": true,
+                "path": "real_lock.gate_occupied"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.record_after_replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "不得 performed",
         "保锁"
@@ -1498,7 +3528,59 @@
       "variant_id": "read_ok_no_action_delta"
     },
     "SC-A08/same_snapshot": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "same_snapshot",
+                "path": "case"
+              },
+              {
+                "equals": "contract_domain_plus_real_store_lock",
+                "path": "layer"
+              },
+              {
+                "equals": "unknown",
+                "path": "outcome"
+              },
+              {
+                "equals": "none",
+                "path": "effect"
+              },
+              {
+                "equals": "result_unverified",
+                "path": "reason"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.pending_state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "real_lock.replay_raised"
+              },
+              {
+                "equals": 0,
+                "path": "real_lock.replay_irreversible"
+              },
+              {
+                "equals": true,
+                "path": "real_lock.gate_occupied"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.record_after_replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "拒绝 performed",
         "转 unknown/result_unverified"
@@ -1525,7 +3607,55 @@
       "variant_id": "same_snapshot"
     },
     "SC-A08/screenshot_only": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "screenshot_only",
+                "path": "case"
+              },
+              {
+                "equals": "contract_domain_plus_real_store_lock",
+                "path": "layer"
+              },
+              {
+                "equals": "unknown",
+                "path": "outcome"
+              },
+              {
+                "equals": "none",
+                "path": "effect"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.pending_state"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "real_lock.replay_raised"
+              },
+              {
+                "equals": 0,
+                "path": "real_lock.replay_irreversible"
+              },
+              {
+                "equals": true,
+                "path": "real_lock.gate_occupied"
+              },
+              {
+                "equals": "pending",
+                "path": "real_lock.record_after_replay.state"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "不构成动作证据"
       ],

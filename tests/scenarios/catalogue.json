@@ -26403,18 +26403,20 @@
         "A01_input_method_shift",
         "A01_no_send_control"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "A01_base",
-          "label": "发文本成功路径",
+          "label": "发文本 base",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "合成唯一身份/有效授权/前后快照；动作键 app:message_key:reply",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A01_base --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A01/A01_base",
           "device_gate": false,
           "assertions": [
@@ -26422,7 +26424,59 @@
             "先写 pending",
             "重复请求被动作键锁拒绝"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A01_base"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_text"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "sent"
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "gate_after_release",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26439,14 +26493,16 @@
         },
         {
           "id": "A01_FA",
-          "label": "发文本/F-A",
+          "label": "发文本/FA",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-A；动作键 app:message_key:reply",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A01_FA --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A01/A01_FA",
           "device_gate": false,
           "assertions": [
@@ -26454,7 +26510,47 @@
             "原因限 authorization_missing/precondition_failed/cancelled_before_action",
             "独立 oracle 证明未点击任何写入控件"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A01_FA"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_text"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "authorization_required"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "remote.all_commands",
+                    "equals": 0
+                  },
+                  {
+                    "path": "record",
+                    "equals": null
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26471,14 +26567,16 @@
         },
         {
           "id": "A01_FB",
-          "label": "发文本/F-B",
+          "label": "发文本/FB",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-B；动作键 app:message_key:reply",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A01_FB --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A01/A01_FB",
           "device_gate": false,
           "assertions": [
@@ -26486,7 +26584,51 @@
             "不能凭无返回降为 not_sent",
             "人工核对"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A01_FB"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_text"
+                  },
+                  {
+                    "path": "interrupted",
+                    "equals": true
+                  },
+                  {
+                    "path": "after_interrupt.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote_after_interrupt.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.state",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26503,14 +26645,16 @@
         },
         {
           "id": "A01_FC",
-          "label": "发文本/F-C",
+          "label": "发文本/FC",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-C；动作键 app:message_key:reply",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A01_FC --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A01/A01_FC",
           "device_gate": false,
           "assertions": [
@@ -26519,7 +26663,67 @@
             "blocked+设备隔离",
             "执行次数最多 1，不重放"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A01_FC"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_text"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "remote.failed_after_irreversible",
+                    "equals": true
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "precondition_failed"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26536,14 +26740,16 @@
         },
         {
           "id": "A01_FD",
-          "label": "发文本/F-D",
+          "label": "发文本/FD",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-D；动作键 app:message_key:reply",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A01_FD --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A01/A01_FD",
           "device_gate": false,
           "assertions": [
@@ -26551,7 +26757,55 @@
             "Toast/确认框/空返回不证明成功",
             "不换会话继续"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A01_FD"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_text"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26568,14 +26822,16 @@
         },
         {
           "id": "A01_FE",
-          "label": "发文本/F-E",
+          "label": "发文本/FE",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-E；动作键 app:message_key:reply",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A01_FE --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A01/A01_FE",
           "device_gate": false,
           "assertions": [
@@ -26584,7 +26840,59 @@
             "保留可对账 pending 锁",
             "不执行第二次，失败不得标 done"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A01_FE"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_text"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "store_io_error"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "events.0.event",
+                    "equals": "action_pending"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26686,18 +26994,20 @@
         "A02_request_only",
         "A02_delivered"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "A02_base",
-          "label": "发简历成功路径",
+          "label": "发简历 base",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "合成唯一身份/有效授权/前后快照；动作键 conversation:resume",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A02_base --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A02/A02_base",
           "device_gate": false,
           "assertions": [
@@ -26705,7 +27015,59 @@
             "先写 pending",
             "重复请求被动作键锁拒绝"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A02_base"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_resume"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "request_sent"
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "gate_after_release",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26722,14 +27084,16 @@
         },
         {
           "id": "A02_FA",
-          "label": "发简历/F-A",
+          "label": "发简历/FA",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-A；动作键 conversation:resume",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A02_FA --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A02/A02_FA",
           "device_gate": false,
           "assertions": [
@@ -26737,7 +27101,47 @@
             "原因限 authorization_missing/precondition_failed/cancelled_before_action",
             "独立 oracle 证明未点击任何写入控件"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A02_FA"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_resume"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "authorization_required"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "remote.all_commands",
+                    "equals": 0
+                  },
+                  {
+                    "path": "record",
+                    "equals": null
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26754,14 +27158,16 @@
         },
         {
           "id": "A02_FB",
-          "label": "发简历/F-B",
+          "label": "发简历/FB",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-B；动作键 conversation:resume",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A02_FB --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A02/A02_FB",
           "device_gate": false,
           "assertions": [
@@ -26769,7 +27175,51 @@
             "不能凭无返回降为 not_sent",
             "人工核对"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A02_FB"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_resume"
+                  },
+                  {
+                    "path": "interrupted",
+                    "equals": true
+                  },
+                  {
+                    "path": "after_interrupt.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote_after_interrupt.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.state",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26786,14 +27236,16 @@
         },
         {
           "id": "A02_FC",
-          "label": "发简历/F-C",
+          "label": "发简历/FC",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-C；动作键 conversation:resume",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A02_FC --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A02/A02_FC",
           "device_gate": false,
           "assertions": [
@@ -26802,7 +27254,67 @@
             "blocked+设备隔离",
             "执行次数最多 1，不重放"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A02_FC"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_resume"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "remote.failed_after_irreversible",
+                    "equals": true
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "precondition_failed"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26819,14 +27331,16 @@
         },
         {
           "id": "A02_FD",
-          "label": "发简历/F-D",
+          "label": "发简历/FD",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-D；动作键 conversation:resume",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A02_FD --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A02/A02_FD",
           "device_gate": false,
           "assertions": [
@@ -26834,7 +27348,55 @@
             "Toast/确认框/空返回不证明成功",
             "不换会话继续"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A02_FD"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_resume"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26851,14 +27413,16 @@
         },
         {
           "id": "A02_FE",
-          "label": "发简历/F-E",
+          "label": "发简历/FE",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-E；动作键 conversation:resume",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A02_FE --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A02/A02_FE",
           "device_gate": false,
           "assertions": [
@@ -26867,7 +27431,59 @@
             "保留可对账 pending 锁",
             "不执行第二次，失败不得标 done"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A02_FE"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_resume"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "store_io_error"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "events.0.event",
+                    "equals": "action_pending"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26884,21 +27500,75 @@
         },
         {
           "id": "A02_request_only",
-          "label": "仅请求系统行",
+          "label": "发简历 request_only",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "只出现“请求中”槽位/请求系统行",
-          "required_api": "M5 附件动作",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A02_request_only --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A02/A02_request_only",
           "device_gate": false,
           "assertions": [
             "performed+request_sent",
             "不得记 sent"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A02_request_only"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_resume"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "request_sent"
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "gate_after_release",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26915,21 +27585,71 @@
         },
         {
           "id": "A02_delivered",
-          "label": "真实交付节点",
+          "label": "发简历 delivered",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "出现本次附件节点/系统证据",
-          "required_api": "M5 附件动作",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A02_delivered --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A02/A02_delivered",
           "device_gate": false,
           "assertions": [
             "才可 performed+sent",
             "确认框/Toast 不算交付"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A02_delivered"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "send_resume"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "sent"
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -26969,18 +27689,20 @@
         "A03_confirm_dialog",
         "A03_direct_send"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "A03_base",
-          "label": "换微信成功路径",
+          "label": "换微信 base",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "合成唯一身份/有效授权/前后快照；动作键 conversation:wechat",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A03_base --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A03/A03_base",
           "device_gate": false,
           "assertions": [
@@ -26988,7 +27710,59 @@
             "先写 pending",
             "重复请求被动作键锁拒绝"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A03_base"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_wechat"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "request_sent"
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "gate_after_release",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27005,14 +27779,16 @@
         },
         {
           "id": "A03_FA",
-          "label": "换微信/F-A",
+          "label": "换微信/FA",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-A；动作键 conversation:wechat",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A03_FA --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A03/A03_FA",
           "device_gate": false,
           "assertions": [
@@ -27020,7 +27796,47 @@
             "原因限 authorization_missing/precondition_failed/cancelled_before_action",
             "独立 oracle 证明未点击任何写入控件"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A03_FA"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_wechat"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "authorization_required"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "remote.all_commands",
+                    "equals": 0
+                  },
+                  {
+                    "path": "record",
+                    "equals": null
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27037,14 +27853,16 @@
         },
         {
           "id": "A03_FB",
-          "label": "换微信/F-B",
+          "label": "换微信/FB",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-B；动作键 conversation:wechat",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A03_FB --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A03/A03_FB",
           "device_gate": false,
           "assertions": [
@@ -27052,7 +27870,51 @@
             "不能凭无返回降为 not_sent",
             "人工核对"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A03_FB"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_wechat"
+                  },
+                  {
+                    "path": "interrupted",
+                    "equals": true
+                  },
+                  {
+                    "path": "after_interrupt.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote_after_interrupt.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.state",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27069,14 +27931,16 @@
         },
         {
           "id": "A03_FC",
-          "label": "换微信/F-C",
+          "label": "换微信/FC",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-C；动作键 conversation:wechat",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A03_FC --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A03/A03_FC",
           "device_gate": false,
           "assertions": [
@@ -27085,7 +27949,67 @@
             "blocked+设备隔离",
             "执行次数最多 1，不重放"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A03_FC"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_wechat"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "remote.failed_after_irreversible",
+                    "equals": true
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "precondition_failed"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27102,14 +28026,16 @@
         },
         {
           "id": "A03_FD",
-          "label": "换微信/F-D",
+          "label": "换微信/FD",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-D；动作键 conversation:wechat",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A03_FD --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A03/A03_FD",
           "device_gate": false,
           "assertions": [
@@ -27117,7 +28043,55 @@
             "Toast/确认框/空返回不证明成功",
             "不换会话继续"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A03_FD"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_wechat"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27134,14 +28108,16 @@
         },
         {
           "id": "A03_FE",
-          "label": "换微信/F-E",
+          "label": "换微信/FE",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-E；动作键 conversation:wechat",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A03_FE --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A03/A03_FE",
           "device_gate": false,
           "assertions": [
@@ -27150,7 +28126,59 @@
             "保留可对账 pending 锁",
             "不执行第二次，失败不得标 done"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A03_FE"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_wechat"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "store_io_error"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "events.0.event",
+                    "equals": "action_pending"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27167,21 +28195,75 @@
         },
         {
           "id": "A03_confirm_dialog",
-          "label": "有确认框",
+          "label": "换微信 confirm_dialog",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "槽位点击后出现确认框",
-          "required_api": "M5 联系方式动作",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A03_confirm_dialog --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A03/A03_confirm_dialog",
           "device_gate": false,
           "assertions": [
             "确认前后都检查 pending",
             "只记 request_sent"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A03_confirm_dialog"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_wechat"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "request_sent"
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "gate_after_release",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27204,7 +28286,7 @@
           "entry_state": "unfrozen",
           "steps": [],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "无确认框直接请求",
+          "setup": "M5 执行器要求非文本动作先有可逆槽位点击，直接单次不可逆点击无冻结入口",
           "required_api": "M5 联系方式动作",
           "expected_ref": "SC-A03/A03_direct_send",
           "device_gate": false,
@@ -27252,18 +28334,20 @@
         "A04_confirm_dialog",
         "A04_direct_send"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "A04_base",
-          "label": "换电话成功路径",
+          "label": "换电话 base",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "合成唯一身份/有效授权/前后快照；动作键 conversation:phone",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A04_base --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A04/A04_base",
           "device_gate": false,
           "assertions": [
@@ -27271,7 +28355,59 @@
             "先写 pending",
             "重复请求被动作键锁拒绝"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A04_base"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_phone"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "request_sent"
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "gate_after_release",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27288,14 +28424,16 @@
         },
         {
           "id": "A04_FA",
-          "label": "换电话/F-A",
+          "label": "换电话/FA",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-A；动作键 conversation:phone",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A04_FA --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A04/A04_FA",
           "device_gate": false,
           "assertions": [
@@ -27303,7 +28441,47 @@
             "原因限 authorization_missing/precondition_failed/cancelled_before_action",
             "独立 oracle 证明未点击任何写入控件"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A04_FA"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_phone"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "authorization_required"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "remote.all_commands",
+                    "equals": 0
+                  },
+                  {
+                    "path": "record",
+                    "equals": null
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27320,14 +28498,16 @@
         },
         {
           "id": "A04_FB",
-          "label": "换电话/F-B",
+          "label": "换电话/FB",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-B；动作键 conversation:phone",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A04_FB --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A04/A04_FB",
           "device_gate": false,
           "assertions": [
@@ -27335,7 +28515,51 @@
             "不能凭无返回降为 not_sent",
             "人工核对"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A04_FB"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_phone"
+                  },
+                  {
+                    "path": "interrupted",
+                    "equals": true
+                  },
+                  {
+                    "path": "after_interrupt.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote_after_interrupt.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.state",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27352,14 +28576,16 @@
         },
         {
           "id": "A04_FC",
-          "label": "换电话/F-C",
+          "label": "换电话/FC",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-C；动作键 conversation:phone",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A04_FC --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A04/A04_FC",
           "device_gate": false,
           "assertions": [
@@ -27368,7 +28594,67 @@
             "blocked+设备隔离",
             "执行次数最多 1，不重放"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A04_FC"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_phone"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "remote.failed_after_irreversible",
+                    "equals": true
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "precondition_failed"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27385,14 +28671,16 @@
         },
         {
           "id": "A04_FD",
-          "label": "换电话/F-D",
+          "label": "换电话/FD",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-D；动作键 conversation:phone",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A04_FD --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A04/A04_FD",
           "device_gate": false,
           "assertions": [
@@ -27400,7 +28688,55 @@
             "Toast/确认框/空返回不证明成功",
             "不换会话继续"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A04_FD"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_phone"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27417,14 +28753,16 @@
         },
         {
           "id": "A04_FE",
-          "label": "换电话/F-E",
+          "label": "换电话/FE",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-E；动作键 conversation:phone",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A04_FE --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A04/A04_FE",
           "device_gate": false,
           "assertions": [
@@ -27433,7 +28771,59 @@
             "保留可对账 pending 锁",
             "不执行第二次，失败不得标 done"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A04_FE"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_phone"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "store_io_error"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "events.0.event",
+                    "equals": "action_pending"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27450,21 +28840,75 @@
         },
         {
           "id": "A04_confirm_dialog",
-          "label": "有确认框",
+          "label": "换电话 confirm_dialog",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "电话槽位确认框",
-          "required_api": "M5 联系方式动作",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A04_confirm_dialog --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A04/A04_confirm_dialog",
           "device_gate": false,
           "assertions": [
             "独立授权",
             "只记 request_sent"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A04_confirm_dialog"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "change_phone"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "request_sent"
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "gate_after_release",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27487,7 +28931,7 @@
           "entry_state": "unfrozen",
           "steps": [],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "电话槽位直接请求",
+          "setup": "M5 执行器要求非文本动作先有可逆槽位点击，直接单次不可逆点击无冻结入口",
           "required_api": "M5 联系方式动作",
           "expected_ref": "SC-A04/A04_direct_send",
           "device_gate": false,
@@ -27532,18 +28976,20 @@
         "A05_FD",
         "A05_FE"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "A05_base",
-          "label": "删会话成功路径",
+          "label": "删会话 base",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "合成唯一身份/有效授权/前后快照；动作键 conversation:delete",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A05_base --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A05/A05_base",
           "device_gate": false,
           "assertions": [
@@ -27551,7 +28997,59 @@
             "先写 pending",
             "重复请求被动作键锁拒绝"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A05_base"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "delete_conversation"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "deleted"
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "gate_after_release",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27568,14 +29066,16 @@
         },
         {
           "id": "A05_FA",
-          "label": "删会话/F-A",
+          "label": "删会话/FA",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-A；动作键 conversation:delete",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A05_FA --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A05/A05_FA",
           "device_gate": false,
           "assertions": [
@@ -27583,7 +29083,47 @@
             "原因限 authorization_missing/precondition_failed/cancelled_before_action",
             "独立 oracle 证明未点击任何写入控件"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A05_FA"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "delete_conversation"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "authorization_required"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "remote.all_commands",
+                    "equals": 0
+                  },
+                  {
+                    "path": "record",
+                    "equals": null
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27600,14 +29140,16 @@
         },
         {
           "id": "A05_FB",
-          "label": "删会话/F-B",
+          "label": "删会话/FB",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-B；动作键 conversation:delete",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A05_FB --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A05/A05_FB",
           "device_gate": false,
           "assertions": [
@@ -27615,7 +29157,51 @@
             "不能凭无返回降为 not_sent",
             "人工核对"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A05_FB"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "delete_conversation"
+                  },
+                  {
+                    "path": "interrupted",
+                    "equals": true
+                  },
+                  {
+                    "path": "after_interrupt.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote_after_interrupt.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.state",
+                    "equals": null
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27632,14 +29218,16 @@
         },
         {
           "id": "A05_FC",
-          "label": "删会话/F-C",
+          "label": "删会话/FC",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-C；动作键 conversation:delete",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A05_FC --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A05/A05_FC",
           "device_gate": false,
           "assertions": [
@@ -27648,7 +29236,67 @@
             "blocked+设备隔离",
             "执行次数最多 1，不重放"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A05_FC"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "delete_conversation"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "remote.failed_after_irreversible",
+                    "equals": true
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "precondition_failed"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27665,14 +29313,16 @@
         },
         {
           "id": "A05_FD",
-          "label": "删会话/F-D",
+          "label": "删会话/FD",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-D；动作键 conversation:delete",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A05_FD --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A05/A05_FD",
           "device_gate": false,
           "assertions": [
@@ -27680,7 +29330,55 @@
             "Toast/确认框/空返回不证明成功",
             "不换会话继续"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A05_FD"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "delete_conversation"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": null
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "quarantined"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27697,14 +29395,16 @@
         },
         {
           "id": "A05_FE",
-          "label": "删会话/F-E",
+          "label": "删会话/FE",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-E；动作键 conversation:delete",
-          "required_api": "M5 动作执行与 Evidence",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A05_FE --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A05/A05_FE",
           "device_gate": false,
           "assertions": [
@@ -27713,7 +29413,59 @@
             "保留可对账 pending 锁",
             "不执行第二次，失败不得标 done"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A05_FE"
+                  },
+                  {
+                    "path": "action_kind",
+                    "equals": "delete_conversation"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "store_io_error"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "events",
+                    "length_equals": 1
+                  },
+                  {
+                    "path": "events.0.event",
+                    "equals": "action_pending"
+                  },
+                  {
+                    "path": "gate_after_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -27741,7 +29493,8 @@
       ],
       "preconditions": [
         "M5 职位沟通",
-        "处理中到达未读仍按安全点"
+        "处理中到达未读仍按安全点",
+        "依赖 M6 apply_job 冻结入口"
       ],
       "offline_subscenarios": [
         "A06_base",
@@ -27761,7 +29514,7 @@
           "entry_state": "unfrozen",
           "steps": [],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "合成唯一身份/有效授权/前后快照；动作键 app:job_key:apply",
+          "setup": "依赖 M6 apply_job 组合入口；当前仅保留人工判据",
           "required_api": "M5 动作执行与 Evidence",
           "expected_ref": "SC-A06/A06_base",
           "device_gate": false,
@@ -27793,7 +29546,7 @@
           "entry_state": "unfrozen",
           "steps": [],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-A；动作键 app:job_key:apply",
+          "setup": "依赖 M6 apply_job；注入 F-A",
           "required_api": "M5 动作执行与 Evidence",
           "expected_ref": "SC-A06/A06_FA",
           "device_gate": false,
@@ -27825,7 +29578,7 @@
           "entry_state": "unfrozen",
           "steps": [],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-B；动作键 app:job_key:apply",
+          "setup": "依赖 M6 apply_job；注入 F-B",
           "required_api": "M5 动作执行与 Evidence",
           "expected_ref": "SC-A06/A06_FB",
           "device_gate": false,
@@ -27857,7 +29610,7 @@
           "entry_state": "unfrozen",
           "steps": [],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-C；动作键 app:job_key:apply",
+          "setup": "依赖 M6 apply_job；注入 F-C",
           "required_api": "M5 动作执行与 Evidence",
           "expected_ref": "SC-A06/A06_FC",
           "device_gate": false,
@@ -27890,7 +29643,7 @@
           "entry_state": "unfrozen",
           "steps": [],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-D；动作键 app:job_key:apply",
+          "setup": "依赖 M6 apply_job；注入 F-D",
           "required_api": "M5 动作执行与 Evidence",
           "expected_ref": "SC-A06/A06_FD",
           "device_gate": false,
@@ -27922,7 +29675,7 @@
           "entry_state": "unfrozen",
           "steps": [],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
-          "setup": "注入 F-E；动作键 app:job_key:apply",
+          "setup": "依赖 M6 apply_job；注入 F-E",
           "required_api": "M5 动作执行与 Evidence",
           "expected_ref": "SC-A06/A06_FE",
           "device_gate": false,
@@ -27968,25 +29721,71 @@
         "abandon",
         "reconnect"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "confirm_performed",
           "label": "确认已发生",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "独立证据证明已执行",
-          "required_api": "M5 人工收敛",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case confirm_performed --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A07/confirm_performed",
           "device_gate": false,
           "assertions": [
             "只凭独立证据收敛",
             "关闭任务但保留动作证据"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "confirm_performed"
+                  },
+                  {
+                    "path": "first.raised",
+                    "equals": "store_io_error"
+                  },
+                  {
+                    "path": "record_after_first.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote_after_first",
+                    "equals": 1
+                  },
+                  {
+                    "path": "reconciled.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "reconciled.task_state",
+                    "equals": "done"
+                  },
+                  {
+                    "path": "reconciled.gate_converged",
+                    "equals": true
+                  },
+                  {
+                    "path": "record_after_reconcile.state",
+                    "equals": "performed"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -28005,19 +29804,57 @@
           "id": "confirm_not_performed",
           "label": "确认未发生",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "独立证据证明未点击",
-          "required_api": "M5 人工收敛",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case confirm_not_performed --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A07/confirm_not_performed",
           "device_gate": false,
           "assertions": [
             "可收敛 not_sent",
             "不自动重发"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "confirm_not_performed"
+                  },
+                  {
+                    "path": "first.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "record_after_first.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "reconciled.state",
+                    "equals": "not_performed"
+                  },
+                  {
+                    "path": "reconciled.task_state",
+                    "equals": "not_sent"
+                  },
+                  {
+                    "path": "record_after_reconcile.state",
+                    "equals": "not_performed"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -28036,19 +29873,61 @@
           "id": "abandon",
           "label": "放弃",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "人工放弃任务",
-          "required_api": "M5 人工收敛",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case abandon --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A07/abandon",
           "device_gate": false,
           "assertions": [
             "放弃不解锁动作键",
             "不解除设备隔离"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "abandon"
+                  },
+                  {
+                    "path": "first.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "reconciled.state",
+                    "equals": "cancelled"
+                  },
+                  {
+                    "path": "reconciled.task_state",
+                    "equals": "cancelled"
+                  },
+                  {
+                    "path": "reconciled.lock_retained",
+                    "equals": true
+                  },
+                  {
+                    "path": "reconciled.gate_converged",
+                    "equals": false
+                  },
+                  {
+                    "path": "record_after_reconcile.state",
+                    "equals": "cancelled"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -28067,19 +29946,57 @@
           "id": "reconnect",
           "label": "重连后不自动续跑",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "device/offline/unauthorized 恢复",
-          "required_api": "M5 重连对账",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case reconnect --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A07/reconnect",
           "device_gate": false,
           "assertions": [
             "先核对锁屏/IME/身份/在途命令",
             "不自动续跑或重发"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "reconnect"
+                  },
+                  {
+                    "path": "first.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "precondition_failed"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "record_after_replay.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "gate_still_occupied",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -28116,25 +30033,79 @@
         "read_ok_no_action_delta",
         "screenshot_only"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "same_snapshot",
           "label": "前后同一快照",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "before=after",
-          "required_api": "M5 Evidence 校验",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case same_snapshot --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A08/same_snapshot",
           "device_gate": false,
           "assertions": [
             "拒绝 performed",
             "转 unknown/result_unverified"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "same_snapshot"
+                  },
+                  {
+                    "path": "layer",
+                    "equals": "contract_domain_plus_real_store_lock"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "reason",
+                    "equals": "result_unverified"
+                  },
+                  {
+                    "path": "real_lock.pending_state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "real_lock.replay_raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "real_lock.replay_irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_lock.gate_occupied",
+                    "equals": true
+                  },
+                  {
+                    "path": "real_lock.record_after_replay.state",
+                    "equals": "pending"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -28153,18 +30124,68 @@
           "id": "missing_snapshot",
           "label": "缺快照",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "before/after 缺失",
-          "required_api": "M5 Evidence 校验",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case missing_snapshot --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A08/missing_snapshot",
           "device_gate": false,
           "assertions": [
             "拒绝伪成功"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "missing_snapshot"
+                  },
+                  {
+                    "path": "layer",
+                    "equals": "contract_domain_plus_real_store_lock"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "real_lock.pending_state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "real_lock.replay_raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "real_lock.replay_irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_lock.gate_occupied",
+                    "equals": true
+                  },
+                  {
+                    "path": "real_lock.record_after_replay.state",
+                    "equals": "pending"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -28183,18 +30204,64 @@
           "id": "performed_none",
           "label": "performed+none",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "effect=none",
-          "required_api": "M5 Evidence 校验",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case performed_none --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A08/performed_none",
           "device_gate": false,
           "assertions": [
             "非法组合转 unknown"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "performed_none"
+                  },
+                  {
+                    "path": "layer",
+                    "equals": "contract_domain_plus_real_store_lock"
+                  },
+                  {
+                    "path": "rejected",
+                    "equals": true
+                  },
+                  {
+                    "path": "real_lock.pending_state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "real_lock.replay_raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "real_lock.replay_irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_lock.gate_occupied",
+                    "equals": true
+                  },
+                  {
+                    "path": "real_lock.record_after_replay.state",
+                    "equals": "pending"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -28213,18 +30280,64 @@
           "id": "not_performed_sent",
           "label": "not_performed+sent",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "矛盾组合",
-          "required_api": "M5 Evidence 校验",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case not_performed_sent --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A08/not_performed_sent",
           "device_gate": false,
           "assertions": [
             "拒绝"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "not_performed_sent"
+                  },
+                  {
+                    "path": "layer",
+                    "equals": "contract_domain_plus_real_store_lock"
+                  },
+                  {
+                    "path": "rejected",
+                    "equals": true
+                  },
+                  {
+                    "path": "real_lock.pending_state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "real_lock.replay_raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "real_lock.replay_irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_lock.gate_occupied",
+                    "equals": true
+                  },
+                  {
+                    "path": "real_lock.record_after_replay.state",
+                    "equals": "pending"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -28243,19 +30356,69 @@
           "id": "read_ok_no_action_delta",
           "label": "读取 ok 无动作增量",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "ReadResult.ok 冒充 Evidence",
-          "required_api": "M5 Evidence 校验",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case read_ok_no_action_delta --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A08/read_ok_no_action_delta",
           "device_gate": false,
           "assertions": [
             "不得 performed",
             "保锁"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "read_ok_no_action_delta"
+                  },
+                  {
+                    "path": "layer",
+                    "equals": "contract_domain_plus_real_store_lock"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "not_performed"
+                  },
+                  {
+                    "path": "effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "real_lock.pending_state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "real_lock.replay_raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "real_lock.replay_irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_lock.gate_occupied",
+                    "equals": true
+                  },
+                  {
+                    "path": "real_lock.record_after_replay.state",
+                    "equals": "pending"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -28274,18 +30437,68 @@
           "id": "screenshot_only",
           "label": "仅截图/高置信",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
-          "setup": "无系统行/槽位证据",
-          "required_api": "M5 Evidence 校验",
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case screenshot_only --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
+          "fixture": "fixtures/m5/stimuli/actions.json",
+          "setup": null,
+          "required_api": null,
           "expected_ref": "SC-A08/screenshot_only",
           "device_gate": false,
           "assertions": [
             "不构成动作证据"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "screenshot_only"
+                  },
+                  {
+                    "path": "layer",
+                    "equals": "contract_domain_plus_real_store_lock"
+                  },
+                  {
+                    "path": "outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "effect",
+                    "equals": "none"
+                  },
+                  {
+                    "path": "real_lock.pending_state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "real_lock.replay_raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "real_lock.replay_irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_lock.gate_occupied",
+                    "equals": true
+                  },
+                  {
+                    "path": "real_lock.record_after_replay.state",
+                    "equals": "pending"
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"

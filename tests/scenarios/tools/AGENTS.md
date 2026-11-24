@@ -8,7 +8,7 @@
 
 - `m2_requests.py`：生成 M2 now 注入、seed 与 inspect 请求。
 - `m1_requests.py`：生成 M1 纯合成 JSON 请求脚本（初始化/种子/租约/故障/竞争/inspect），供隔离探针读取；不含任意 SQL 文本。
-- `build_assets.py`：定义 M0–M8 的 73 个场景、全部变体、预期断言与夹具生成逻辑；默认重建 `fixtures/` 后写出 `catalogue.json` 与 `expected/oracles.json`。M3 read 预期对 rows/cards/messages/field_evidence 的每个元素声明固定键与必要类型，并为非首项身份/摘要/证据写独立值；日志预期按单次 CLI 调用登记完整有序事件序列。M4 从公开 base/示例生成合成策略包与正负包、公开/留出套件和受限探针请求；M4c 生成事实负例/待办、共享门禁崩溃/篡改/换 profile/失败、真实租约桥前后、真实 restore/acceptance 的隔离请求；不把 expected 或真实私有样本写入夹具。
+- `build_assets.py`：定义 M0–M8 的 73 个场景、全部变体、预期断言与夹具生成逻辑；默认重建 `fixtures/` 后写出 `catalogue.json` 与 `expected/oracles.json`。M3 read 预期对 rows/cards/messages/field_evidence 的每个元素声明固定键与必要类型，并为非首项身份/摘要/证据写独立值；日志预期按单次 CLI 调用登记完整有序事件序列。M4 从公开 base/示例生成合成策略包与正负包、公开/留出套件和受限探针请求；M4c 生成事实负例/待办、共享门禁崩溃/篡改/换 profile/失败、真实租约桥前后、真实 restore/acceptance 的隔离请求；不把 expected 或真实私有样本写入夹具；M5 另生成不含产品结论的原始 XML/IME/点击序列刺激 `fixtures/m5/stimuli/actions.json`。
 - `AGENTS.md`：本文件。
 - `CLAUDE.md`：只包含 `@AGENTS.md`。
 

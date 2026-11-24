@@ -7433,29 +7433,166 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         "F-D": ["unknown/result_unverified", "Toast/确认框/空返回不证明成功", "不换会话继续"],
         "F-E": ["远端可能已执行", "本地回滚不撤销远端动作", "保留可对账 pending 锁", "不执行第二次，失败不得标 done"],
     }
+    action_kinds = {
+        "A01": "send_text",
+        "A02": "send_resume",
+        "A03": "change_wechat",
+        "A04": "change_phone",
+        "A05": "delete_conversation",
+    }
+    stimuli = "fixtures/m5/stimuli/actions.json"
+
+    def m5_cmd(case: str) -> str:
+        """构造真实 M5 探针步骤；只传案例名与纯合成刺激。"""
+        return (
+            "python tests/scenarios/framework/m5_probe.py "
+            f"--case {case} --stimuli tests/scenarios/{stimuli}"
+        )
+
+    def m5_ok(case: str, *paths: dict[str, Any]) -> dict[str, Any]:
+        """构造 M5 探针单步成功预期，状态与案例名先于具体事实。"""
+        return {
+            "steps": [
+                {
+                    "exit_code": 0,
+                    "stdout_paths": [
+                        {"path": "status", "equals": "ok"},
+                        {"path": "case", "equals": case},
+                        *paths,
+                    ],
+                }
+            ]
+        }
+
+    def action_ready(
+        action_id: str,
+        action_name: str,
+        key: str,
+        effect: str,
+        suffix: str,
+        assertions: list[str],
+        *paths: dict[str, Any],
+    ) -> dict[str, Any]:
+        """构造一个已接真实 perform_action 的动作变体与独立预期。"""
+        case = f"{action_id}_{suffix}"
+        return ready_variant(
+            case,
+            label=(
+                f"{action_name}/{suffix}"
+                if suffix not in {"base", "request_only", "delivered", "confirm_dialog", "direct_send"}
+                else f"{action_name} {suffix}"
+            ),
+            steps=[m5_cmd(case)],
+            fixture=stimuli,
+            assertions=assertions,
+            acceptance=m5_ok(
+                case,
+                {"path": "action_kind", "equals": action_kinds[action_id]},
+                *paths,
+            ),
+        )
+
+    base_effect = {
+        "A01": "sent",
+        "A02": "request_sent",
+        "A03": "request_sent",
+        "A04": "request_sent",
+        "A05": "deleted",
+    }
+
+    def base_paths(action_id: str) -> list[dict[str, Any]]:
+        """构造成功路径的独立观察判据。"""
+        return [
+            {"path": "observed.raised", "equals": None},
+            {"path": "observed.state", "equals": "performed"},
+            {"path": "observed.evidence.outcome", "equals": "performed"},
+            {"path": "observed.evidence.effect", "equals": base_effect[action_id]},
+            {"path": "pending_before_execute", "equals": "pending"},
+            {"path": "remote.irreversible", "equals": 1},
+            {"path": "record.state", "equals": "performed"},
+            {"path": "gate_after_release", "equals": None},
+        ]
+
+    def fault_paths(action_id: str, fault: str) -> list[dict[str, Any]]:
+        """构造各故障窗口的独立原始观察判据。"""
+        if fault == "FA":
+            return [
+                {"path": "observed.raised", "equals": "authorization_required"},
+                {"path": "remote.irreversible", "equals": 0},
+                {"path": "remote.all_commands", "equals": 0},
+                {"path": "record", "equals": None},
+                {"path": "events", "length_equals": 0},
+            ]
+        if fault == "FB":
+            return [
+                {"path": "interrupted", "equals": True},
+                {"path": "after_interrupt.state", "equals": "pending"},
+                {"path": "remote_after_interrupt.irreversible", "equals": 0},
+                {"path": "replay.raised", "equals": "action_conflict"},
+                {"path": "replay.irreversible", "equals": 0},
+                {"path": "replay.state", "equals": None},
+            ]
+        if fault == "FC":
+            return [
+                {"path": "observed.raised", "equals": None},
+                {"path": "observed.state", "equals": "unknown"},
+                {"path": "observed.evidence.outcome", "equals": "unknown"},
+                {"path": "observed.evidence.effect", "equals": "none"},
+                {"path": "remote.irreversible", "equals": 1},
+                {"path": "remote.failed_after_irreversible", "equals": True},
+                {"path": "record.state", "equals": "unknown"},
+                {"path": "gate_after_release.state", "equals": "quarantined"},
+                {"path": "replay.raised", "equals": "precondition_failed"},
+                {"path": "replay.irreversible", "equals": 0},
+            ]
+        if fault == "FD":
+            return [
+                {"path": "observed.raised", "equals": None},
+                {"path": "observed.state", "equals": "unknown"},
+                {"path": "observed.evidence.outcome", "equals": "unknown"},
+                {"path": "observed.evidence.effect", "equals": "none"},
+                {"path": "remote.irreversible", "equals": 1},
+                {"path": "record.state", "equals": "unknown"},
+                {"path": "gate_after_release.state", "equals": "quarantined"},
+            ]
+        if fault == "FE":
+            return [
+                {"path": "observed.raised", "equals": "store_io_error"},
+                {"path": "remote.irreversible", "equals": 1},
+                {"path": "record.state", "equals": "pending"},
+                {"path": "events", "length_equals": 1},
+                {"path": "events.0.event", "equals": "action_pending"},
+                {"path": "gate_after_release.state", "equals": "held"},
+                {"path": "replay.raised", "equals": "action_conflict"},
+                {"path": "replay.irreversible", "equals": 0},
+            ]
+        raise ValueError(f"unknown fault {fault}")
+
     action_variants: list[dict[str, Any]] = []
     for action_id, action_slug, action_name, key, effect in action_rows:
+        if action_id == "A06":
+            continue
         action_variants.append(
-            variant(
-                f"{action_id}_base",
-                "F",
-                label=f"{action_name}成功路径",
-                fixture="fixtures/m5/actions/fault-matrix.json",
-                setup=f"合成唯一身份/有效授权/前后快照；动作键 {key}",
-                required_api="M5 动作执行与 Evidence",
-                assertions=[f"本次前后证据充分才 performed+{effect}", "先写 pending", "重复请求被动作键锁拒绝"],
+            action_ready(
+                action_id,
+                action_name,
+                key,
+                effect,
+                "base",
+                [f"本次前后证据充分才 performed+{effect}", "先写 pending", "重复请求被动作键锁拒绝"],
+                *base_paths(action_id),
             )
         )
         for fault, assertions in fault_assertions.items():
             action_variants.append(
-                variant(
-                    f"{action_id}_{fault.replace('-', '')}",
-                    "F",
-                    label=f"{action_name}/{fault}",
-                    fixture="fixtures/m5/actions/fault-matrix.json",
-                    setup=f"注入 {fault}；动作键 {key}",
-                    required_api="M5 动作执行与 Evidence",
-                    assertions=assertions,
+                action_ready(
+                    action_id,
+                    action_name,
+                    key,
+                    effect,
+                    fault.replace("-", ""),
+                    assertions,
+                    *fault_paths(action_id, fault.replace("-", "")),
                 )
             )
     add(
@@ -7476,8 +7613,22 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         ["M5 附件动作", "F 使用假设备边界"],
         [item for item in action_variants if item["id"].startswith("A02_")]
         + [
-            variant("A02_request_only", "F", label="仅请求系统行", fixture="fixtures/m5/actions/fault-matrix.json", setup="只出现“请求中”槽位/请求系统行", required_api="M5 附件动作", assertions=["performed+request_sent", "不得记 sent"]),
-            variant("A02_delivered", "F", label="真实交付节点", fixture="fixtures/m5/actions/fault-matrix.json", setup="出现本次附件节点/系统证据", required_api="M5 附件动作", assertions=["才可 performed+sent", "确认框/Toast 不算交付"]),
+            action_ready(
+                "A02", "发简历", "conversation:resume", "request_sent", "request_only",
+                ["performed+request_sent", "不得记 sent"],
+                *base_paths("A02"),
+            ),
+            action_ready(
+                "A02", "发简历", "conversation:resume", "sent", "delivered",
+                ["才可 performed+sent", "确认框/Toast 不算交付"],
+                {"path": "observed.raised", "equals": None},
+                {"path": "observed.state", "equals": "performed"},
+                {"path": "observed.evidence.outcome", "equals": "performed"},
+                {"path": "observed.evidence.effect", "equals": "sent"},
+                {"path": "pending_before_execute", "equals": "pending"},
+                {"path": "remote.irreversible", "equals": 1},
+                {"path": "record.state", "equals": "performed"},
+            ),
         ],
     )
     add(
@@ -7487,8 +7638,20 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         ["M5 联系方式动作", "独立授权"],
         [item for item in action_variants if item["id"].startswith("A03_")]
         + [
-            variant("A03_confirm_dialog", "F", label="有确认框", fixture="fixtures/m5/actions/fault-matrix.json", setup="槽位点击后出现确认框", required_api="M5 联系方式动作", assertions=["确认前后都检查 pending", "只记 request_sent"]),
-            variant("A03_direct_send", "F", label="直接发出版本", fixture="fixtures/m5/actions/fault-matrix.json", setup="无确认框直接请求", required_api="M5 联系方式动作", assertions=["无确认框不视为未发生", "动作键锁防重"]),
+            action_ready(
+                "A03", "换微信", "conversation:wechat", "request_sent", "confirm_dialog",
+                ["确认前后都检查 pending", "只记 request_sent"],
+                *base_paths("A03"),
+            ),
+            variant(
+                "A03_direct_send",
+                "F",
+                label="直接发出版本",
+                fixture="fixtures/m5/actions/fault-matrix.json",
+                setup="M5 执行器要求非文本动作先有可逆槽位点击，直接单次不可逆点击无冻结入口",
+                required_api="M5 联系方式动作",
+                assertions=["无确认框不视为未发生", "动作键锁防重"],
+            ),
         ],
     )
     add(
@@ -7498,8 +7661,20 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         ["M5 联系方式动作", "独立授权，不复用微信授权"],
         [item for item in action_variants if item["id"].startswith("A04_")]
         + [
-            variant("A04_confirm_dialog", "F", label="有确认框", fixture="fixtures/m5/actions/fault-matrix.json", setup="电话槽位确认框", required_api="M5 联系方式动作", assertions=["独立授权", "只记 request_sent"]),
-            variant("A04_direct_send", "F", label="直接发出版本", fixture="fixtures/m5/actions/fault-matrix.json", setup="电话槽位直接请求", required_api="M5 联系方式动作", assertions=["不能用微信槽位证明成功"]),
+            action_ready(
+                "A04", "换电话", "conversation:phone", "request_sent", "confirm_dialog",
+                ["独立授权", "只记 request_sent"],
+                *base_paths("A04"),
+            ),
+            variant(
+                "A04_direct_send",
+                "F",
+                label="直接发出版本",
+                fixture="fixtures/m5/actions/fault-matrix.json",
+                setup="M5 执行器要求非文本动作先有可逆槽位点击，直接单次不可逆点击无冻结入口",
+                required_api="M5 联系方式动作",
+                assertions=["不能用微信槽位证明成功"],
+            ),
         ],
     )
     add(
@@ -7513,8 +7688,34 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         "SC-A06",
         "M5",
         "职位沟通动作与故障窗口",
-        ["M5 职位沟通", "处理中到达未读仍按安全点"],
-        [item for item in action_variants if item["id"].startswith("A06_")],
+        ["M5 职位沟通", "处理中到达未读仍按安全点", "依赖 M6 apply_job 冻结入口"],
+        [
+            variant(
+                "A06_base",
+                "F",
+                label="职位沟通成功路径",
+                fixture="fixtures/m5/actions/fault-matrix.json",
+                setup="依赖 M6 apply_job 组合入口；当前仅保留人工判据",
+                required_api="M5 动作执行与 Evidence",
+                assertions=[
+                    "本次前后证据充分才 performed+applied",
+                    "先写 pending",
+                    "重复请求被动作键锁拒绝",
+                ],
+            ),
+            *[
+                variant(
+                    f"A06_{fault.replace('-', '')}",
+                    "F",
+                    label=f"职位沟通/{fault}",
+                    fixture="fixtures/m5/actions/fault-matrix.json",
+                    setup=f"依赖 M6 apply_job；注入 {fault}",
+                    required_api="M5 动作执行与 Evidence",
+                    assertions=assertions,
+                )
+                for fault, assertions in fault_assertions.items()
+            ],
+        ],
     )
     add(
         "SC-A07",
@@ -7522,10 +7723,65 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         "人工收敛与重连",
         ["M5 人工核对卡", "每个 pending/unknown 都有卡"],
         [
-            variant("confirm_performed", "F", label="确认已发生", setup="独立证据证明已执行", required_api="M5 人工收敛", assertions=["只凭独立证据收敛", "关闭任务但保留动作证据"]),
-            variant("confirm_not_performed", "F", label="确认未发生", setup="独立证据证明未点击", required_api="M5 人工收敛", assertions=["可收敛 not_sent", "不自动重发"]),
-            variant("abandon", "F", label="放弃", setup="人工放弃任务", required_api="M5 人工收敛", assertions=["放弃不解锁动作键", "不解除设备隔离"]),
-            variant("reconnect", "F", label="重连后不自动续跑", setup="device/offline/unauthorized 恢复", required_api="M5 重连对账", assertions=["先核对锁屏/IME/身份/在途命令", "不自动续跑或重发"]),
+            ready_variant(
+                "confirm_performed", label="确认已发生",
+                steps=[m5_cmd("confirm_performed")],
+                fixture=stimuli,
+                assertions=["只凭独立证据收敛", "关闭任务但保留动作证据"],
+                acceptance=m5_ok(
+                    "confirm_performed",
+                    {"path": "first.raised", "equals": "store_io_error"},
+                    {"path": "record_after_first.state", "equals": "pending"},
+                    {"path": "remote_after_first", "equals": 1},
+                    {"path": "reconciled.state", "equals": "performed"},
+                    {"path": "reconciled.task_state", "equals": "done"},
+                    {"path": "reconciled.gate_converged", "equals": True},
+                    {"path": "record_after_reconcile.state", "equals": "performed"},
+                ),
+            ),
+            ready_variant(
+                "confirm_not_performed", label="确认未发生",
+                steps=[m5_cmd("confirm_not_performed")],
+                fixture=stimuli,
+                assertions=["可收敛 not_sent", "不自动重发"],
+                acceptance=m5_ok(
+                    "confirm_not_performed",
+                    {"path": "first.state", "equals": "unknown"},
+                    {"path": "record_after_first.state", "equals": "unknown"},
+                    {"path": "reconciled.state", "equals": "not_performed"},
+                    {"path": "reconciled.task_state", "equals": "not_sent"},
+                    {"path": "record_after_reconcile.state", "equals": "not_performed"},
+                ),
+            ),
+            ready_variant(
+                "abandon", label="放弃",
+                steps=[m5_cmd("abandon")],
+                fixture=stimuli,
+                assertions=["放弃不解锁动作键", "不解除设备隔离"],
+                acceptance=m5_ok(
+                    "abandon",
+                    {"path": "first.state", "equals": "unknown"},
+                    {"path": "reconciled.state", "equals": "cancelled"},
+                    {"path": "reconciled.task_state", "equals": "cancelled"},
+                    {"path": "reconciled.lock_retained", "equals": True},
+                    {"path": "reconciled.gate_converged", "equals": False},
+                    {"path": "record_after_reconcile.state", "equals": "cancelled"},
+                ),
+            ),
+            ready_variant(
+                "reconnect", label="重连后不自动续跑",
+                steps=[m5_cmd("reconnect")],
+                fixture=stimuli,
+                assertions=["先核对锁屏/IME/身份/在途命令", "不自动续跑或重发"],
+                acceptance=m5_ok(
+                    "reconnect",
+                    {"path": "first.state", "equals": "unknown"},
+                    {"path": "replay.raised", "equals": "precondition_failed"},
+                    {"path": "replay.irreversible", "equals": 0},
+                    {"path": "record_after_replay.state", "equals": "unknown"},
+                    {"path": "gate_still_occupied", "equals": True},
+                ),
+            ),
         ],
     )
     add(
@@ -7535,21 +7791,73 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         ["M5 Evidence 校验"],
         [
             *[
-                variant(
+                ready_variant(
                     name,
-                    "F",
                     label=label,
-                    setup=setup,
-                    required_api="M5 Evidence 校验",
+                    steps=[m5_cmd(name)],
+                    fixture=stimuli,
                     assertions=assertions,
+                    acceptance=m5_ok(
+                        name,
+                        {"path": "layer", "equals": "contract_domain_plus_real_store_lock"},
+                        *paths,
+                        {"path": "real_lock.pending_state", "equals": "pending"},
+                        {"path": "real_lock.replay_raised", "equals": "action_conflict"},
+                        {"path": "real_lock.replay_irreversible", "equals": 0},
+                        {"path": "real_lock.gate_occupied", "equals": True},
+                        {"path": "real_lock.record_after_replay.state", "equals": "pending"},
+                    ),
                 )
-                for name, label, setup, assertions in (
-                    ("same_snapshot", "前后同一快照", "before=after", ["拒绝 performed", "转 unknown/result_unverified"]),
-                    ("missing_snapshot", "缺快照", "before/after 缺失", ["拒绝伪成功"]),
-                    ("performed_none", "performed+none", "effect=none", ["非法组合转 unknown"]),
-                    ("not_performed_sent", "not_performed+sent", "矛盾组合", ["拒绝"]),
-                    ("read_ok_no_action_delta", "读取 ok 无动作增量", "ReadResult.ok 冒充 Evidence", ["不得 performed", "保锁"]),
-                    ("screenshot_only", "仅截图/高置信", "无系统行/槽位证据", ["不构成动作证据"]),
+                for name, label, assertions, paths in (
+                    (
+                        "same_snapshot",
+                        "前后同一快照",
+                        ["拒绝 performed", "转 unknown/result_unverified"],
+                        [
+                            {"path": "outcome", "equals": "unknown"},
+                            {"path": "effect", "equals": "none"},
+                            {"path": "reason", "equals": "result_unverified"},
+                        ],
+                    ),
+                    (
+                        "missing_snapshot",
+                        "缺快照",
+                        ["拒绝伪成功"],
+                        [
+                            {"path": "outcome", "equals": "unknown"},
+                            {"path": "effect", "equals": "none"},
+                        ],
+                    ),
+                    (
+                        "performed_none",
+                        "performed+none",
+                        ["非法组合转 unknown"],
+                        [{"path": "rejected", "equals": True}],
+                    ),
+                    (
+                        "not_performed_sent",
+                        "not_performed+sent",
+                        ["拒绝"],
+                        [{"path": "rejected", "equals": True}],
+                    ),
+                    (
+                        "read_ok_no_action_delta",
+                        "读取 ok 无动作增量",
+                        ["不得 performed", "保锁"],
+                        [
+                            {"path": "outcome", "equals": "not_performed"},
+                            {"path": "effect", "equals": "none"},
+                        ],
+                    ),
+                    (
+                        "screenshot_only",
+                        "仅截图/高置信",
+                        ["不构成动作证据"],
+                        [
+                            {"path": "outcome", "equals": "unknown"},
+                            {"path": "effect", "equals": "none"},
+                        ],
+                    ),
                 )
             ],
         ],
@@ -8756,6 +9064,255 @@ ORIGINAL_ASSERTIONS = {
 }
 
 
+def _m5_node(
+    *,
+    text: str | None = None,
+    cls: str | None = None,
+    bounds: str = "0,0,1080,1920",
+    clickable: bool | None = None,
+    enabled: bool | None = None,
+    scrollable: bool | None = None,
+    children: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """构造纯合成 UI 节点；只描述外部原始层级，不含任何产品结论。"""
+    return {
+        "text": text,
+        "cls": cls,
+        "bounds": bounds,
+        "clickable": clickable,
+        "enabled": enabled,
+        "scrollable": scrollable,
+        "children": children or [],
+    }
+
+
+def _m5_xml(node: dict[str, Any]) -> str:
+    """把节点树序列化为单层 hierarchy 原始 XML 字符串。"""
+    def render(item: dict[str, Any]) -> str:
+        """递归渲染一个 node 元素，把矩形写成 Android 的 [l,t][r,b] 形式。"""
+        left, top, right, bottom = item["bounds"].split(",")
+        attrs = [f'bounds="[{left},{top}][{right},{bottom}]"']
+        for key, name in (
+            ("text", "text"),
+            ("cls", "class"),
+            ("scrollable", "scrollable"),
+            ("clickable", "clickable"),
+            ("enabled", "enabled"),
+        ):
+            value = item.get(key)
+            if value is None:
+                continue
+            rendered = str(value).lower() if isinstance(value, bool) else str(value)
+            attrs.append(f'{name}="{xml_escape(rendered)}"')
+        inner = "".join(render(child) for child in item["children"])
+        return f'<node {" ".join(attrs)}>{inner}</node>'
+
+    return f'<hierarchy rotation="0">{render(node)}</hierarchy>'
+
+
+def _m5_target(children: list[dict[str, Any]]) -> dict[str, Any]:
+    """构造唯一会话目标节点，含固定姓名/公司/职位身份标签。"""
+    identity = [
+        _m5_node(text="合成机构甲", bounds="20,120,1060,140"),
+        _m5_node(text="合成岗位甲", bounds="20,140,1060,160"),
+    ]
+    return _m5_node(
+        text="合成联系人甲",
+        bounds="10,100,1070,400",
+        children=identity + children,
+    )
+
+
+def build_m5_stimuli() -> None:
+    """生成 M5 纯外部原始刺激：XML/IME/点击序列与故障变形，不含期望。"""
+    def text_pair(after_extra: list[dict[str, Any]]) -> dict[str, Any]:
+        """构造文本动作的 before/readback/after 三段原始层级。"""
+        before = _m5_xml(
+            _m5_target(
+                [
+                    _m5_node(text="消息", bounds="20,160,1060,180"),
+                    _m5_node(
+                        cls="android.widget.EditText",
+                        text="",
+                        bounds="20,180,1060,220",
+                    ),
+                    _m5_node(text="发送", bounds="20,220,1060,260", clickable=True, enabled=True),
+                ]
+            )
+        )
+        readback = _m5_xml(
+            _m5_target(
+                [
+                    _m5_node(text="消息", bounds="20,160,1060,180"),
+                    _m5_node(
+                        cls="android.widget.EditText",
+                        text="合成回复正文",
+                        bounds="20,180,1060,220",
+                    ),
+                    _m5_node(text="发送", bounds="20,220,1060,260", clickable=True, enabled=True),
+                ]
+            )
+        )
+        after = _m5_xml(
+            _m5_target(
+                [
+                    _m5_node(text="消息", bounds="20,160,1060,180"),
+                    *after_extra,
+                    _m5_node(
+                        cls="android.widget.EditText",
+                        text="",
+                        bounds="20,180,1060,220",
+                    ),
+                ]
+            )
+        )
+        return {
+            "ime": "com.example.default/.Ime",
+            "target_ime": "com.example.synthetic/.Ime",
+            "xml_sequence": [before, readback, after],
+            "taps": [[10, 20]],
+            "irreversible_index": 0,
+        }
+
+    def dialog_pair(slug: str) -> dict[str, Any]:
+        """构造两击动作（简历/联系方式/删除）的 before/dialog/after。"""
+        if slug == "resume":
+            before = _m5_xml(
+                _m5_target(
+                    [
+                        _m5_node(text="消息", bounds="20,160,1060,180"),
+                        _m5_node(text="发简历", bounds="20,200,1060,240", clickable=True, enabled=True),
+                    ]
+                )
+            )
+            dialog = _m5_xml(
+                _m5_target(
+                    [
+                        _m5_node(text="合成附件简历.pdf", bounds="20,200,1060,240"),
+                        _m5_node(text="确认", bounds="20,240,1060,280", clickable=True, enabled=True),
+                    ]
+                )
+            )
+            after = _m5_xml(
+                _m5_target(
+                    [
+                        _m5_node(text="消息", bounds="20,160,1060,180"),
+                        _m5_node(text="附件简历请求已发送", bounds="20,200,1060,240"),
+                    ]
+                )
+            )
+            after_request = after
+            after_delivered = _m5_xml(
+                _m5_target(
+                    [
+                        _m5_node(text="消息", bounds="20,160,1060,180"),
+                        _m5_node(text="附件简历已发送", bounds="20,200,1060,240"),
+                    ]
+                )
+            )
+        elif slug in {"wechat", "phone"}:
+            marker = "微信" if slug == "wechat" else "电话"
+            before = _m5_xml(
+                _m5_target(
+                    [
+                        _m5_node(text="消息", bounds="20,160,1060,180"),
+                        _m5_node(
+                            text=marker,
+                            bounds="20,200,400,240",
+                            clickable=True,
+                            enabled=True,
+                        ),
+                    ]
+                )
+            )
+            dialog = before
+            after = _m5_xml(
+                _m5_target(
+                    [
+                        _m5_node(text="消息", bounds="20,160,1060,180"),
+                        _m5_node(
+                            text=marker,
+                            bounds="20,200,400,240",
+                            clickable=True,
+                            enabled=True,
+                            children=[
+                                _m5_node(text="请求中", bounds="20,200,400,240")
+                            ],
+                        ),
+                    ]
+                )
+            )
+            after_request = after
+            after_delivered = after
+        else:
+            def rows(
+                include_target: bool, *, include_anchor: bool = True
+            ) -> dict[str, Any]:
+                """构造显式非滚动列表容器及唯一锚点行。"""
+                items = (
+                    [_m5_node(text="合成邻居乙", bounds="0,0,1080,200")]
+                    if include_anchor
+                    else []
+                )
+                if include_target:
+                    items.append(
+                        _m5_node(
+                            text="合成联系人甲",
+                            bounds="0,200,1080,400",
+                            children=[
+                                _m5_node(text="合成机构甲", bounds="20,220,1060,240"),
+                                _m5_node(text="合成岗位甲", bounds="20,240,1060,260"),
+                                _m5_node(text="消息", bounds="20,260,1060,280"),
+                            ],
+                        )
+                    )
+                container = _m5_node(
+                    cls="androidx.recyclerview.widget.RecyclerView",
+                    bounds="0,0,1080,1920",
+                    scrollable=False,
+                    children=items,
+                )
+                return container
+
+            before = _m5_xml(rows(True))
+            dialog = before
+            after = _m5_xml(rows(False))
+            after_request = after
+            after_delivered = after
+            after_missing_anchor = _m5_xml(
+                rows(False, include_anchor=False)
+            )
+        return {
+            "ime": "com.example.default/.Ime",
+            "target_ime": None,
+            "xml_sequence": [before, dialog, after],
+            "taps": [[10, 20], [30, 40]],
+            "irreversible_index": 1,
+            "after_request_only": after_request,
+            "after_delivered": after_delivered,
+            "after_missing_anchor": locals().get("after_missing_anchor", after),
+        }
+
+    text_base = text_pair(
+        [_m5_node(text="合成回复正文", bounds="20,200,1060,240")]
+    )
+    text_base["after_request_only"] = text_base["xml_sequence"][-1]
+    text_base["after_delivered"] = text_base["xml_sequence"][-1]
+    text_base["after_missing_anchor"] = text_base["xml_sequence"][-1]
+    value = {
+        "schema_version": 1,
+        "description": "M5 纯合成原始设备刺激；不含 performed/隔离/重试等产品结论",
+        "actions": {
+            "text": text_base,
+            "resume": dialog_pair("resume"),
+            "wechat": dialog_pair("wechat"),
+            "phone": dialog_pair("phone"),
+            "delete": dialog_pair("delete"),
+        },
+    }
+    write_json("fixtures/m5/stimuli/actions.json", value)
+
+
 def build_catalogue() -> dict[str, Any]:
     """生成场景清单与独立预期的完整内容，供落盘或自检复用。"""
     import shutil
@@ -8770,6 +9327,7 @@ def build_catalogue() -> dict[str, Any]:
     build_m0_fixtures()
     sensor = build_sensor_cases()
     build_support_fixtures()
+    build_m5_stimuli()
     m3 = build_m3_fixtures()
     build_m1_fixtures()
     build_m2_requests()

@@ -12,6 +12,7 @@ import io
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -931,11 +932,13 @@ class IsolationTripwireTests(unittest.TestCase):
 class P2M0BindingTests(unittest.TestCase):
     """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
 
-    def test_milestone_gate_blocks_unimplemented_m5(self) -> None:
-        """M5 未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
+    def test_milestone_gate_blocks_unimplemented_m6(self) -> None:
+        """M6 未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
         load_assets()
-        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4"})
-        scenario = {"id": "SC-R99", "milestone": "M5"}
+        self.assertEqual(
+            runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4", "M5"}
+        )
+        scenario = {"id": "SC-R99", "milestone": "M6"}
         variant = {
             "id": "synthetic",
             "layer": "F",
@@ -3104,6 +3107,261 @@ class BuilderProvenanceTests(unittest.TestCase):
         self.assertTrue((SCENARIO_ROOT / relative).is_file())
         spec = importlib.util.spec_from_file_location("build_assets", SCENARIO_ROOT / relative)
         self.assertIsNotNone(spec)
+
+
+class FactsCliPersistenceTests(unittest.TestCase):
+    """用真实 `python -m app facts` 与合成 LOCALAPPDATA 验证持久写入/拒写。"""
+
+    def setUp(self) -> None:
+        """建立独立临时项目根与合成 OS 根，不读真实配置或门禁。"""
+        self.temporary = tempfile.TemporaryDirectory(
+            dir=TESTS_DIR.parent, prefix=".m5-facts-"
+        )
+        self.root = Path(self.temporary.name)
+        (self.root / "localappdata").mkdir()
+        shutil.copytree(TESTS_DIR.parent / "app", self.root / "app")
+        self._held = None
+
+    def tearDown(self) -> None:
+        """只清理本测试自建临时根。"""
+        self.temporary.cleanup()
+
+    def _env(self) -> dict[str, str]:
+        """构造最小环境：仅合成 LOCALAPPDATA/HOME 与项目 PYTHONPATH。"""
+        env = {
+            key: os.environ[key]
+            for key in ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT")
+            if key in os.environ
+        }
+        env.update(
+            {
+                "PYTHONPATH": str(self.root),
+                "PYTHONNOUSERSITE": "1",
+                "LOCALAPPDATA": str(self.root / "localappdata"),
+                "APPDATA": str(self.root / "appdata"),
+                "HOME": str(self.root / "home"),
+                "USERPROFILE": str(self.root / "home"),
+                "TEMP": str(self.root / "tmp"),
+                "TMP": str(self.root / "tmp"),
+                "PATH": "",
+                "PYTHONIOENCODING": "utf-8",
+            }
+        )
+        for name in ("appdata", "home", "tmp"):
+            (self.root / name).mkdir(exist_ok=True)
+        return env
+
+    def _cli(self, *args: str) -> subprocess.CompletedProcess:
+        """运行真实 facts CLI，返回 stdout JSON 与退出码。"""
+        return subprocess.run(
+            [sys.executable, "-m", "app", "facts", *args],
+            cwd=self.root,
+            env=self._env(),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            shell=False,
+            check=False,
+        )
+
+    def _profile_db(self, profile_id: str = "demo") -> Path:
+        """返回隔离根内真实 profile 库路径。"""
+        return (
+            self.root
+            / "data"
+            / "runtime"
+            / "profiles"
+            / profile_id
+            / "runtime.sqlite3"
+        )
+
+    def _fact_rows(self, profile_id: str = "demo") -> list[tuple]:
+        """只读返回事实值与事件的无正文投影，用于前后比较。"""
+        connection = sqlite3.connect(str(self._profile_db(profile_id)))
+        try:
+            facts = connection.execute(
+                "SELECT fact_key, state, value, source_id, updated_at "
+                "FROM profile_facts ORDER BY fact_key, source_id"
+            ).fetchall()
+            events = connection.execute(
+                "SELECT fact_key, action, source_id, created_at "
+                "FROM profile_fact_events ORDER BY fact_key, action, source_id"
+            ).fetchall()
+        finally:
+            connection.close()
+        return [tuple(row) for row in facts] + [tuple(row) for row in events]
+
+    def _gate(self, profile_id: str):
+        """建立指向隔离 OS 根的真实共享门禁对象。"""
+        from app.adapters.sqlite.device_gate import SharedDeviceGate
+
+        return SharedDeviceGate(
+            profile_id=profile_id,
+            profile_db_path=self._profile_db(profile_id),
+            os_root=self.root / "localappdata",
+        )
+
+    def _acquire(self, profile_id: str):
+        """以本进程合成 owner 真实取得唯一 primary 占用并保留持有对象。"""
+        from app.domain.models import Owner
+
+        gate = self._gate(profile_id)
+        gate.acquire(
+            profile_id=profile_id,
+            profile_db_path=str(self._profile_db(profile_id)),
+            owner=Owner("00000000-0000-4000-8000-0000000000b1", 5150, "d" * 64),
+            now="2026-11-24T00:00:00.000Z",
+        )
+        return gate
+
+    def test_idle_set_revoke_forget_persists_without_values_in_audit(self) -> None:
+        """空闲合法正例：真实 set/revoke/forget 持久化且遗忘不保留值。"""
+        set_result = self._cli(
+            "set", "--profile", "demo", "--key", "work_location",
+            "--value", "合成地点甲", "--confirm",
+        )
+        self.assertEqual(set_result.returncode, 0, set_result.stdout)
+        payload = json.loads(set_result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["result"]["display_value"], "合成地点甲")
+        self.assertTrue(self._profile_db().is_file())
+        rows = self._fact_rows()
+        self.assertTrue(any(row[1] == "active" for row in rows if row[0] == "work_location"))
+        revoke = self._cli(
+            "revoke", "--profile", "demo", "--key", "work_location", "--confirm"
+        )
+        self.assertEqual(revoke.returncode, 0, revoke.stdout)
+        self.assertFalse(
+            any(row[1] == "active" for row in self._fact_rows() if row[0] == "work_location")
+        )
+        forget = self._cli(
+            "forget", "--profile", "demo", "--key", "work_location", "--confirm"
+        )
+        self.assertEqual(forget.returncode, 0, forget.stdout)
+        connection = sqlite3.connect(str(self._profile_db()))
+        try:
+            remaining = connection.execute(
+                "SELECT COUNT(*) FROM profile_facts WHERE value = ?",
+                ("合成地点甲",),
+            ).fetchone()[0]
+            audit_columns = connection.execute(
+                "SELECT COUNT(*) FROM profile_fact_events "
+                "WHERE previous_source_ids_json LIKE ?",
+                ("%合成地点甲%",),
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        # 产品只承诺删除事实行与无值审计，不宣称擦除 WAL/空闲页；这里只核对表内值。
+        self.assertEqual(remaining, 0)
+        self.assertEqual(audit_columns, 0)
+
+    def test_held_same_profile_refuses_all_writes_and_keeps_rows(self) -> None:
+        """同 profile held 时 set/revoke/forget 均拒写，事实/事件/门禁行不变。"""
+        self.assertEqual(
+            self._cli(
+                "set", "--profile", "demo", "--key", "work_location",
+                "--value", "合成地点甲", "--confirm",
+            ).returncode,
+            0,
+        )
+        before_rows = self._fact_rows()
+        self._acquire("demo")
+        gate = self._gate("demo")
+        before_gate = gate.inspect()
+        attempts = (
+            ("set", "--profile", "demo", "--key", "work_location",
+             "--value", "合成地点乙", "--confirm"),
+            ("revoke", "--profile", "demo", "--key", "work_location", "--confirm"),
+            ("forget", "--profile", "demo", "--key", "work_location", "--confirm"),
+        )
+        for args in attempts:
+            completed = self._cli(*args)
+            self.assertNotEqual(completed.returncode, 0, args)
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["status"], "failed", args)
+            self.assertEqual(payload["reason_code"], "device_busy", args)
+        self.assertEqual(self._fact_rows(), before_rows)
+        self.assertEqual(gate.inspect(), before_gate)
+
+    def test_quarantined_same_profile_refuses_without_creating_profile(self) -> None:
+        """同 profile quarantined 时拒写且不创建目标 profile 库。"""
+        gate = self._acquire("fresh")
+        gate.release(now="2026-11-24T00:00:00.000Z", converged=False)
+        before_gate = gate.inspect()
+        completed = self._cli(
+            "set", "--profile", "fresh", "--key", "work_location",
+            "--value", "合成地点甲", "--confirm",
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["reason_code"], "device_quarantined")
+        self.assertFalse(self._profile_db("fresh").exists())
+        self.assertEqual(gate.inspect(), before_gate)
+
+    def test_unknown_gate_path_refuses_before_any_profile_write(self) -> None:
+        """门禁路径不可判定时失败关闭，不建立新 profile。"""
+        from app.adapters.sqlite.device_gate import guard_database_path
+
+        database = guard_database_path(self.root / "localappdata")
+        database.parent.mkdir(parents=True, exist_ok=True)
+        database.mkdir()
+        completed = self._cli(
+            "set", "--profile", "fresh", "--key", "work_location",
+            "--value", "合成地点甲", "--confirm",
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "failed")
+        self.assertIn(
+            payload["reason_code"], {"device_gate_io_error", "device_busy"}
+        )
+        self.assertFalse(self._profile_db("fresh").exists())
+
+    def test_gate_exclusive_lock_refuses_without_partial_writes(self) -> None:
+        """真实 SQLite 排他锁下 CLI 拒写且已有事实/门禁行不变。"""
+        self.assertEqual(
+            self._cli(
+                "set", "--profile", "demo", "--key", "work_location",
+                "--value", "合成地点甲", "--confirm",
+            ).returncode,
+            0,
+        )
+        self._acquire("other-gate")
+        before_rows = self._fact_rows()
+        gate = self._gate("other-gate")
+        before_gate = gate.inspect()
+        from app.adapters.sqlite.device_gate import guard_database_path
+
+        lock = sqlite3.connect(str(guard_database_path(self.root / "localappdata")))
+        try:
+            lock.execute("BEGIN EXCLUSIVE")
+            completed = self._cli(
+                "set", "--profile", "demo", "--key", "salary_expectation",
+                "--value", "合成薪资甲", "--confirm",
+            )
+        finally:
+            lock.rollback()
+            lock.close()
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["reason_code"], "device_busy")
+        self.assertEqual(self._fact_rows(), before_rows)
+        self.assertEqual(gate.inspect(), before_gate)
+
+    def test_synthetic_localappdata_is_not_real_os_root(self) -> None:
+        """全部路径都在临时根内，未触碰真实 LOCALAPPDATA。"""
+        completed = self._cli(
+            "set", "--profile", "demo", "--key", "work_location",
+            "--value", "合成地点甲", "--confirm",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stdout)
+        from app.adapters.sqlite.device_gate import guard_database_path
+
+        database = guard_database_path(self.root / "localappdata")
+        self.assertTrue(str(database).startswith(str(self.root)))
+        self.assertTrue(self._profile_db().is_file())
 
 
 if __name__ == "__main__":
