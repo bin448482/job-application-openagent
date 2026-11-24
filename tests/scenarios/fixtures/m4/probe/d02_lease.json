@@ -1,0 +1,4 @@
+{
+  "operation": "lease",
+  "os_root": "data/runtime/os-gate"
+}

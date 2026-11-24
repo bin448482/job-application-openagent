@@ -1,0 +1,5 @@
+{
+  "operation": "lease_decide",
+  "mode": "lost_after",
+  "os_root": "data/runtime/os-gate"
+}

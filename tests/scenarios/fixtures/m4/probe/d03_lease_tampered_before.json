@@ -1,0 +1,5 @@
+{
+  "operation": "lease_decide",
+  "mode": "tampered_before",
+  "os_root": "data/runtime/os-gate"
+}

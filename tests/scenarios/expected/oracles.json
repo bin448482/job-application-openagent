@@ -3324,6 +3324,100 @@
       ],
       "variant_id": "long_reply"
     },
+    "SC-D02/m4c_lease_adapter": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "results.valid"
+              },
+              {
+                "equals": true,
+                "path": "results.renewed"
+              },
+              {
+                "equals": true,
+                "path": "results.expired"
+              },
+              {
+                "equals": true,
+                "path": "results.wrong_owner"
+              },
+              {
+                "equals": true,
+                "path": "results.wrong_app"
+              },
+              {
+                "equals": true,
+                "path": "results.wrong_key"
+              },
+              {
+                "equals": true,
+                "path": "results.wrong_nonce"
+              },
+              {
+                "equals": true,
+                "path": "results.wrong_profile"
+              },
+              {
+                "equals": true,
+                "path": "results.wrong_path"
+              },
+              {
+                "equals": true,
+                "path": "results.gate_lost"
+              },
+              {
+                "equals": true,
+                "path": "results.gate_tampered"
+              },
+              {
+                "equals": true,
+                "path": "released_row_absent"
+              },
+              {
+                "equals": true,
+                "path": "tampered_row_preserved"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "真实 claim/start/renew 后 ProfileSessionLease 返回截止时间",
+        "错 owner/app/key/nonce/profile/路径/过期/失占用均拒绝",
+        "真实共享行篡改不自动释放"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "真实 claim/start/renew 后 ProfileSessionLease 返回截止时间",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 校验器已交付",
+        "合成 envelope"
+      ],
+      "scenario_id": "SC-D02",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_lease_adapter"
+    },
     "SC-D02/missing_key": {
       "acceptance": {
         "steps": [
@@ -3651,6 +3745,289 @@
         "场景方案 §8"
       ],
       "variant_id": "input_too_large"
+    },
+    "SC-D03/m4c_lease_bridge": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 1,
+                "path": "submissions"
+              },
+              {
+                "equals": true,
+                "path": "expiry_after"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "in": [
+                  "stale_lease",
+                  "lease_expired",
+                  "stale_decision"
+                ],
+                "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 0,
+                "path": "submissions"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "in": [
+                  "stale_lease",
+                  "lease_expired",
+                  "stale_decision"
+                ],
+                "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 0,
+                "path": "submissions"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "in": [
+                  "stale_lease",
+                  "lease_expired",
+                  "stale_decision"
+                ],
+                "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 0,
+                "path": "submissions"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "in": [
+                  "stale_lease",
+                  "lease_expired",
+                  "stale_decision"
+                ],
+                "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 0,
+                "path": "submissions"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "in": [
+                  "stale_lease",
+                  "lease_expired",
+                  "stale_decision"
+                ],
+                "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 0,
+                "path": "submissions"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "in": [
+                  "stale_lease",
+                  "lease_expired",
+                  "stale_decision"
+                ],
+                "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 0,
+                "path": "submissions"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "in": [
+                  "stale_lease",
+                  "lease_expired",
+                  "stale_decision"
+                ],
+                "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 0,
+                "path": "submissions"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "in": [
+                  "stale_lease",
+                  "lease_expired",
+                  "stale_decision"
+                ],
+                "path": "reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 0,
+                "path": "submissions"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "in": [
+                  "stale_lease",
+                  "lease_expired",
+                  "stale_decision"
+                ],
+                "path": "reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "bridge_calls"
+              },
+              {
+                "equals": 1,
+                "path": "submissions"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "合法真实租约允许一次决策",
+        "桥前失去占用/错 owner/篡改均零桥调用拒绝",
+        "桥内失去占用后拒绝且不重发"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "合法真实租约允许一次决策",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 桥超时契约",
+        "假桥不连接真实模型"
+      ],
+      "scenario_id": "SC-D03",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_lease_bridge"
     },
     "SC-D03/post_submit_timeout": {
       "acceptance": {
@@ -4128,6 +4505,14 @@
                 "path": "after_revoke_count"
               },
               {
+                "equals": 0,
+                "path": "raw_fact_rows_after_forget"
+              },
+              {
+                "equals": 3,
+                "path": "raw_fact_events_after_forget"
+              },
+              {
                 "equals": true,
                 "path": "value_visible_in_local_show"
               }
@@ -4163,6 +4548,160 @@
         "场景方案 §8"
       ],
       "variant_id": "m4c_facts_flow"
+    },
+    "SC-D04/m4c_facts_negative": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": false,
+                "path": "propose_confirmed"
+              },
+              {
+                "equals": 0,
+                "path": "propose_raw_rows"
+              },
+              {
+                "equals": "invalid_fact",
+                "path": "expired_rejected"
+              },
+              {
+                "equals": "invalid_fact",
+                "path": "invalid_key_rejected"
+              },
+              {
+                "equals": "invalid_fact",
+                "path": "contact_value_rejected"
+              },
+              {
+                "equals": "invalid_fact",
+                "path": "control_value_rejected"
+              },
+              {
+                "equals": 1,
+                "path": "after_apply_active"
+              },
+              {
+                "equals": true,
+                "path": "conflict_flag"
+              },
+              {
+                "equals": [
+                  [
+                    "salary_expectation",
+                    "missing"
+                  ],
+                  [
+                    "work_location",
+                    "conflict"
+                  ]
+                ],
+                "path": "conflict_pending"
+              },
+              {
+                "equals": 2,
+                "path": "replaced_count"
+              },
+              {
+                "equals": 1,
+                "path": "after_replace_active"
+              },
+              {
+                "equals": false,
+                "path": "external_allowed"
+              },
+              {
+                "equals": false,
+                "path": "external_pending"
+              },
+              {
+                "equals": 0,
+                "path": "missing_facts_count"
+              },
+              {
+                "equals": [
+                  [
+                    "salary_expectation",
+                    "missing"
+                  ],
+                  [
+                    "work_location",
+                    "missing"
+                  ]
+                ],
+                "path": "missing_pending"
+              },
+              {
+                "equals": false,
+                "path": "expired_allowed"
+              },
+              {
+                "equals": [
+                  [
+                    "salary_expectation",
+                    "expired"
+                  ],
+                  [
+                    "work_location",
+                    "missing"
+                  ]
+                ],
+                "path": "expired_pending"
+              },
+              {
+                "equals": 1,
+                "path": "expired_raw_rows"
+              },
+              {
+                "equals": 0,
+                "path": "cross_profile_count"
+              },
+              {
+                "equals": true,
+                "path": "source_all_user_confirmed"
+              },
+              {
+                "equals": true,
+                "path": "synthetic_source_rejected"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "过期/非法键/联系方式/控制字符拒绝且零写入",
+        "同键冲突与显式替换由真实库状态独立核对",
+        "白名单外不进入 allowed/pending，跨 profile 不共享",
+        "合成来源被拒绝，真实行来源固定 user_confirmed"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "过期/非法键/联系方式/控制字符拒绝且零写入",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 策略与事实门禁",
+        "v1 固定 C"
+      ],
+      "scenario_id": "SC-D04",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_facts_negative"
     },
     "SC-D04/missing_fact": {
       "acceptance": null,
@@ -5636,6 +6175,75 @@
       ],
       "variant_id": "m4c_facts_entry"
     },
+    "SC-D06/m4c_facts_pending": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": 0,
+                "path": "facts_count"
+              },
+              {
+                "equals": 0,
+                "path": "allowed_count"
+              },
+              {
+                "equals": [
+                  [
+                    "salary_expectation",
+                    "missing"
+                  ],
+                  [
+                    "work_location",
+                    "missing"
+                  ]
+                ],
+                "path": "pending"
+              },
+              {
+                "equals": "invalid_fact",
+                "path": "hr_key_rejected"
+              },
+              {
+                "equals": 0,
+                "path": "raw_rows"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "空库按包白名单直接生成无值待办",
+        "HR 指令键不进入事实库且零写入"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "空库按包白名单直接生成无值待办",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 policy 工具已交付"
+      ],
+      "scenario_id": "SC-D06",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_facts_pending"
+    },
     "SC-D06/missing_fact_entry": {
       "acceptance": null,
       "assertions": [
@@ -6605,6 +7213,267 @@
       ],
       "variant_id": "crash_unknown"
     },
+    "SC-D09/m4c_gate_crash_ttl_pid": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "held",
+                "path": "outcome"
+              },
+              {
+                "equals": 999999,
+                "path": "owner_pid"
+              },
+              {
+                "equals": true,
+                "path": "nonce_present"
+              },
+              {
+                "equals": "held",
+                "path": "shared_state"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "busy",
+                "path": "outcome"
+              },
+              {
+                "equals": "synthetic-abandon",
+                "path": "shared_profile_id"
+              },
+              {
+                "equals": 999999,
+                "path": "shared_owner_pid"
+              },
+              {
+                "equals": "held",
+                "path": "shared_state"
+              },
+              {
+                "equals": true,
+                "path": "shared_profile_matches_expected"
+              }
+            ]
+          },
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "present"
+              },
+              {
+                "equals": "synthetic-abandon",
+                "path": "profile_id"
+              },
+              {
+                "equals": "00000000-0000-4000-8000-000000000081",
+                "path": "owner_id"
+              },
+              {
+                "equals": 999999,
+                "path": "owner_pid"
+              },
+              {
+                "equals": "held",
+                "path": "state"
+              },
+              {
+                "equals": true,
+                "path": "nonce_present"
+              },
+              {
+                "equals": true,
+                "path": "nonce_pattern"
+              },
+              {
+                "equals": true,
+                "path": "profile_path_matches_expected"
+              },
+              {
+                "equals": "2026-11-24T00:00:00.000Z",
+                "path": "acquired_at"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "进程退出后真实共享行仍 held",
+        "仅推进时钟与合成 PID 不存在不释放",
+        "另一 profile 重启后仍 device_busy"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "进程退出后真实共享行仍 held",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 共享门禁未交付前真实 run BLOCKED"
+      ],
+      "scenario_id": "SC-D09",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_gate_crash_ttl_pid"
+    },
+    "SC-D09/m4c_gate_failure": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "profile_io_error",
+                "path": "failure_reason"
+              },
+              {
+                "equals": true,
+                "path": "held_at_open"
+              },
+              {
+                "equals": "held",
+                "path": "state_at_open"
+              },
+              {
+                "equals": "quarantined",
+                "path": "post_state"
+              },
+              {
+                "equals": true,
+                "path": "row_preserved"
+              },
+              {
+                "equals": "device_quarantined",
+                "path": "retry_reason"
+              },
+              {
+                "equals": false,
+                "path": "retry_held"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "profile 打开失败发生在共享占用之后",
+        "失败保留 quarantined 行，不补偿为空闲",
+        "后续取得返回 device_quarantined"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "profile 打开失败发生在共享占用之后",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 共享门禁未交付前真实 run BLOCKED"
+      ],
+      "scenario_id": "SC-D09",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_gate_failure"
+    },
+    "SC-D09/m4c_gate_profile_switch": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "device_busy",
+                "path": "second_blocked_reason"
+              },
+              {
+                "equals": true,
+                "path": "original_profile_preserved"
+              },
+              {
+                "equals": false,
+                "path": "second_accepted_before_release"
+              },
+              {
+                "equals": true,
+                "path": "second_acquired_after_release"
+              },
+              {
+                "equals": true,
+                "path": "final_empty"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "原 profile 占用时第二 profile 得到 device_busy",
+        "共享行仍绑定原 profile",
+        "原占用释放后第二 profile 才可取得"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "原 profile 占用时第二 profile 得到 device_busy",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 共享门禁未交付前真实 run BLOCKED"
+      ],
+      "scenario_id": "SC-D09",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_gate_profile_switch"
+    },
     "SC-D09/m4c_gate_release": {
       "acceptance": {
         "steps": [
@@ -6649,6 +7518,63 @@
       ],
       "variant_id": "m4c_gate_release"
     },
+    "SC-D09/m4c_gate_tamper": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "all_verify_rejected"
+              },
+              {
+                "equals": true,
+                "path": "all_release_rejected"
+              },
+              {
+                "equals": true,
+                "path": "all_rows_preserved"
+              },
+              {
+                "equals": true,
+                "path": "all_tampered"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "owner/nonce/profile/host/pid 任一篡改后 verify 拒绝",
+        "release 不删除原行且保持 held",
+        "每种篡改均由独立合成库步骤核对"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "owner/nonce/profile/host/pid 任一篡改后 verify 拒绝",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 共享门禁未交付前真实 run BLOCKED"
+      ],
+      "scenario_id": "SC-D09",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_gate_tamper"
+    },
     "SC-D09/m4c_preflight": {
       "acceptance": {
         "steps": [
@@ -6668,12 +7594,20 @@
                 "path": "mode"
               },
               {
-                "equals": null,
-                "path": "actions"
+                "equals": 0,
+                "path": "actions_performed"
               },
               {
                 "equals": 0,
-                "path": "decisions"
+                "path": "decisions_performed"
+              },
+              {
+                "equals": true,
+                "path": "held_during_open"
+              },
+              {
+                "equals": "held",
+                "path": "state_during_open"
               },
               {
                 "equals": true,
@@ -6728,6 +7662,21 @@
                       "busy"
                     ],
                     "path": "outcome"
+                  },
+                  {
+                    "equals": "00000000-0000-4000-8000-000000000081",
+                    "path": "shared_owner_id"
+                  },
+                  {
+                    "in": [
+                      "synthetic-alpha",
+                      "synthetic-beta"
+                    ],
+                    "path": "shared_profile_id"
+                  },
+                  {
+                    "equals": "held",
+                    "path": "shared_state"
                   }
                 ]
               },
@@ -6744,6 +7693,21 @@
                       "busy"
                     ],
                     "path": "outcome"
+                  },
+                  {
+                    "equals": "00000000-0000-4000-8000-000000000081",
+                    "path": "shared_owner_id"
+                  },
+                  {
+                    "in": [
+                      "synthetic-alpha",
+                      "synthetic-beta"
+                    ],
+                    "path": "shared_profile_id"
+                  },
+                  {
+                    "equals": "held",
+                    "path": "shared_state"
                   }
                 ]
               }
@@ -6952,6 +7916,72 @@
       ],
       "variant_id": "interrupted_copy"
     },
+    "SC-D10/m4c_acceptance_change": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": null,
+                "path": "current"
+              },
+              {
+                "equals": "policy_changed",
+                "path": "base_changed"
+              },
+              {
+                "equals": "policy_changed",
+                "path": "pack_changed"
+              },
+              {
+                "equals": "policy_changed",
+                "path": "model_changed"
+              },
+              {
+                "equals": "policy_changed",
+                "path": "provider_changed"
+              },
+              {
+                "equals": "model_eval_only",
+                "path": "credential_scope"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "当前 base/pack/provider/model 摘要通过",
+        "改 base、包或 model/provider 后旧凭证均 policy_changed",
+        "凭证只覆盖 model eval，不是设备或发送授权"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "当前 base/pack/provider/model 摘要通过",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 snapshot/restore 已交付",
+        "合成包"
+      ],
+      "scenario_id": "SC-D10",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_acceptance_change"
+    },
     "SC-D10/m4c_activity": {
       "acceptance": {
         "steps": [
@@ -6967,11 +7997,16 @@
                 "path": "stopped_assessment"
               },
               {
-                "in": [
-                  "active",
-                  "unknown"
-                ],
+                "equals": "active",
                 "path": "active_assessment"
+              },
+              {
+                "equals": "unknown",
+                "path": "unknown_assessment"
+              },
+              {
+                "equals": "unknown",
+                "path": "directory_profile_assessment"
               }
             ]
           }
@@ -7004,6 +8039,96 @@
         "场景方案 §8"
       ],
       "variant_id": "m4c_activity"
+    },
+    "SC-D10/m4c_restore_activity": {
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": true,
+                "path": "stopped_restored"
+              },
+              {
+                "equals": true,
+                "path": "stopped_hash_matches"
+              },
+              {
+                "equals": true,
+                "path": "snapshot_hash_matches"
+              },
+              {
+                "equals": true,
+                "path": "three_hashes_equal"
+              },
+              {
+                "path": "stopped_target_files",
+                "type": "integer"
+              },
+              {
+                "equals": "policy_changed",
+                "path": "active_reason"
+              },
+              {
+                "equals": "active",
+                "path": "active_state"
+              },
+              {
+                "equals": false,
+                "path": "active_dest_exists"
+              },
+              {
+                "equals": "policy_changed",
+                "path": "unknown_reason"
+              },
+              {
+                "equals": "unknown",
+                "path": "unknown_state"
+              },
+              {
+                "equals": false,
+                "path": "unknown_dest_exists"
+              },
+              {
+                "equals": true,
+                "path": "base_hash_matches"
+              }
+            ]
+          }
+        ]
+      },
+      "assertions": [
+        "stopped 时真实 restore 成功且目标摘要一致",
+        "active 拒绝且目标目录不半写",
+        "损坏 profile 归 unknown 并拒绝，不归 missing/stopped"
+      ],
+      "deferred_to": null,
+      "device_gate": false,
+      "expected_summary": "stopped 时真实 restore 成功且目标摘要一致",
+      "forbidden": [
+        "不得以资产自检代替产品执行",
+        "未执行或 BLOCKED 时不得记 PASS"
+      ],
+      "layer": "F",
+      "module_evidence": null,
+      "observations_ref": null,
+      "preconditions": [
+        "M4 snapshot/restore 已交付",
+        "合成包"
+      ],
+      "scenario_id": "SC-D10",
+      "source": [
+        "P M4",
+        "A §5.1–5.2、§5.6",
+        "K §2.2、§3–8",
+        "场景方案 §8"
+      ],
+      "variant_id": "m4c_restore_activity"
     },
     "SC-D10/missing_manifest": {
       "acceptance": null,

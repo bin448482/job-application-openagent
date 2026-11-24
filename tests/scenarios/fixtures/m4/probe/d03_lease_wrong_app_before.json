@@ -1,0 +1,5 @@
+{
+  "operation": "lease_decide",
+  "mode": "wrong_app_before",
+  "os_root": "data/runtime/os-gate"
+}

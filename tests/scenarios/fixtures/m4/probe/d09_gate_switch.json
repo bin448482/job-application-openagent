@@ -1,0 +1,6 @@
+{
+  "operation": "gate_profile_switch",
+  "profile_id": "synthetic-switch-a",
+  "second_profile_id": "synthetic-switch-b",
+  "os_root": "data/runtime/os-gate"
+}

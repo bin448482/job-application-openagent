@@ -1,0 +1,7 @@
+{
+  "operation": "gate_probe",
+  "profile_id": "synthetic-beta",
+  "expected_profile_id": "synthetic-abandon",
+  "now": "2026-11-24T02:00:00.000Z",
+  "os_root": "data/runtime/os-gate"
+}

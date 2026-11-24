@@ -1,0 +1,4 @@
+{
+  "operation": "gate_tamper",
+  "os_root": "data/runtime/os-gate"
+}

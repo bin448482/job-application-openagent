@@ -25,7 +25,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, m4_probe, model, replay, runner  # noqa: E402
+from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, m4_probe, m4c_probe, model, replay, runner  # noqa: E402
 from scenarios.framework.compare import compare_invocation, compare_step, strict_equal  # noqa: E402
 
 SCENARIO_ROOT = TESTS_DIR / "scenarios"
@@ -2568,6 +2568,175 @@ class M1DriverBoundaryTests(unittest.TestCase):
                 target = target[int(part)] if part.isdigit() else target[part]
             target[parts[-1]] = wrong
             self.assertTrue(compare_step(broken, step_expect), path)
+
+
+class P2M4CProbeBoundaryTests(unittest.TestCase):
+    """验证 M4c 探针真正拒绝越界/链接请求，并能正常执行受控接口。"""
+
+    def _temporary_root(self) -> tempfile.TemporaryDirectory:
+        """在忽略的运行目录下创建探针临时根。"""
+        base = TESTS_DIR.parent / "data" / "evals" / "probe-selftest"
+        base.mkdir(parents=True, exist_ok=True)
+        return tempfile.TemporaryDirectory(dir=base)
+
+    def _junction(self, root: Path, name: str, target: Path) -> Path:
+        """在 Windows 合成隔离根内创建 junction；不可用时跳过。"""
+        if sys.platform != "win32":
+            self.skipTest("junction 自检只在 Windows 执行")
+        junction = root / name
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(junction), str(target)],
+            capture_output=True,
+            text=True,
+            shell=False,
+            check=False,
+        )
+        if completed.returncode != 0 or not junction.is_dir():
+            self.skipTest("本机不允许创建合成 junction")
+        return junction
+
+    def test_relative_accepts_normal_request(self) -> None:
+        """隔离根内普通请求路径被接受。"""
+        with self._temporary_root() as temporary:
+            root = Path(temporary).resolve()
+            (root / "request.json").write_text("{}", encoding="utf-8")
+            with mock.patch.object(m4c_probe, "ROOT", root):
+                resolved = m4c_probe._relative(
+                    "request.json", "request", must_exist=True
+                )
+            self.assertEqual(resolved, root / "request.json")
+
+    def test_relative_rejects_absolute_and_dotdot(self) -> None:
+        """绝对路径与 .. 在读取前拒绝。"""
+        with self._temporary_root() as temporary:
+            root = Path(temporary).resolve()
+            with mock.patch.object(m4c_probe, "ROOT", root):
+                with self.assertRaises(m4c_probe.ProbeError):
+                    m4c_probe._relative(str(root / "request.json"), "request")
+                with self.assertRaises(m4c_probe.ProbeError):
+                    m4c_probe._relative("../outside.json", "request")
+
+    def test_junction_leaf_and_barrier_are_rejected(self) -> None:
+        """request/os_root/barrier 的 leaf/祖先 junction 在 resolve 前拒绝。"""
+        with self._temporary_root() as temporary:
+            root = Path(temporary).resolve()
+            target = root / "junction-target"
+            target.mkdir()
+            plain = root / "plain" / "nested"
+            plain.mkdir(parents=True)
+            junction = self._junction(root, "junction", target)
+            try:
+                with mock.patch.object(m4c_probe, "ROOT", root):
+                    with self.assertRaises(m4c_probe.ProbeError):
+                        m4c_probe._relative("junction/request.json", "request")
+                    with self.assertRaises(m4c_probe.ProbeError):
+                        m4c_probe._relative("junction", "os_root")
+                    with self.assertRaises(m4c_probe.ProbeError):
+                        m4c_probe._relative("junction/child", "os_root")
+                    self.assertEqual(
+                        m4c_probe._relative("plain/nested", "os_root"),
+                        plain,
+                    )
+                    env = {
+                        "M1_BARRIER_DIR": str(junction),
+                        "M1_BARRIER_NAME": "0",
+                    }
+                    with mock.patch.dict(os.environ, env, clear=False):
+                        with self.assertRaises(m4c_probe.ProbeError):
+                            m4c_probe._barrier()
+                self.assertFalse((junction / "0.ready").exists())
+            finally:
+                junction.rmdir()
+
+    def test_main_runs_normal_gate_lifecycle(self) -> None:
+        """临时根内正常 gate_lifecycle 探针返回 ok 且释放。"""
+        with self._temporary_root() as temporary:
+            root = Path(temporary).resolve()
+            request = {
+                "operation": "gate_lifecycle",
+                "profile_id": "synthetic-release",
+                "os_root": "data/runtime/os-gate",
+            }
+            (root / "request.json").write_text(
+                json.dumps(request), encoding="utf-8"
+            )
+            output = io.StringIO()
+            with mock.patch.object(m4c_probe, "ROOT", root):
+                with redirect_stdout(output):
+                    code = m4c_probe.main(["--request", "request.json"])
+            payload = json.loads(output.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["released"], True)
+
+    def test_main_rejects_outside_request(self) -> None:
+        """越界请求由 main 返回固定错误，不读取根外文件。"""
+        with self._temporary_root() as temporary:
+            root = Path(temporary).resolve()
+            output = io.StringIO()
+            with mock.patch.object(m4c_probe, "ROOT", root):
+                with redirect_stdout(output):
+                    code = m4c_probe.main(["--request", "../outside.json"])
+            payload = json.loads(output.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["status"], "error")
+            self.assertEqual(payload["reason_code"], "ProbeError")
+
+    def test_preflight_oracle_rejects_action_mutant(self) -> None:
+        """预检 oracle 拒绝把 actions_performed 从 0 改成 1 的变异。"""
+        assets = load_assets()
+        expected = assets.oracles["variants"]["SC-D09/m4c_preflight"]["acceptance"]["steps"][0]
+        payload = {
+            "status": "ok",
+            "preflight_only": True,
+            "mode": "read_only",
+            "actions_performed": 0,
+            "decisions_performed": 0,
+            "held_during_open": True,
+            "state_during_open": "held",
+            "gate_released": True,
+        }
+        self.assertEqual(compare_step(payload, expected), [])
+        mutated = dict(payload, actions_performed=1)
+        errors = compare_step(mutated, expected)
+        self.assertTrue(any("actions_performed" in error for error in errors), errors)
+
+    def test_facts_oracle_rejects_forget_residue(self) -> None:
+        """事实 oracle 拒绝 forget 后仍残留事实行的变异。"""
+        assets = load_assets()
+        expected = assets.oracles["variants"]["SC-D04/m4c_facts_flow"]["acceptance"]["steps"][0]
+        payload = {
+            "status": "ok",
+            "propose_action": "set",
+            "propose_confirmed": False,
+            "apply_action": "set",
+            "apply_confirmed": True,
+            "after_count": 1,
+            "after_revoke_count": 0,
+            "raw_fact_rows_after_forget": 0,
+            "raw_fact_events_after_forget": 3,
+            "value_visible_in_local_show": True,
+        }
+        self.assertEqual(compare_step(payload, expected), [])
+        mutated = dict(payload, raw_fact_rows_after_forget=1)
+        errors = compare_step(mutated, expected)
+        self.assertTrue(any("raw_fact_rows_after_forget" in error for error in errors), errors)
+
+    def test_shared_gate_oracle_rejects_identity_mutant(self) -> None:
+        """共享门禁 oracle 拒绝篡改 owner 或把 active/unknown 当 stopped。"""
+        assets = load_assets()
+        expected = assets.oracles["variants"]["SC-D10/m4c_activity"]["acceptance"]["steps"][0]
+        payload = {
+            "status": "ok",
+            "stopped_assessment": "stopped",
+            "active_assessment": "active",
+            "unknown_assessment": "unknown",
+            "directory_profile_assessment": "unknown",
+        }
+        self.assertEqual(compare_step(payload, expected), [])
+        mutated = dict(payload, active_assessment="unknown")
+        errors = compare_step(mutated, expected)
+        self.assertTrue(any("active_assessment" in error for error in errors), errors)
 
 
 class BuilderProvenanceTests(unittest.TestCase):

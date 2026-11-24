@@ -1,0 +1,5 @@
+{
+  "operation": "acceptance",
+  "pack": "prompts/local/valid",
+  "changed_pack": "prompts/local/eval"
+}
