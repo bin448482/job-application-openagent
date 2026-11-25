@@ -98,6 +98,8 @@ def check_preflight(
         or pending["blocked"]
         or pending["device_lease"]
         or pending.get("actions")
+        or pending.get("jobs")
+        or pending.get("batches")
     ):
         try:
             gate.release(now=now, converged=False)
@@ -121,7 +123,7 @@ def check_preflight(
         "acceptance": acceptance,
         "limitations": [
             "real_device_action_entry_not_delivered",
-            "m6_scheduling_not_implemented",
+            "m6_runtime_execute_fixture_only",
             "m8_run_not_implemented",
             "device_probe_not_run",
         ],

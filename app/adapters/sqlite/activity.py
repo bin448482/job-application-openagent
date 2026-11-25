@@ -71,8 +71,18 @@ class ProfilePolicyActivity:
             return "unknown"
         finally:
             store.close()
-        if pending["leased"] or pending["running"] or pending["device_lease"]:
+        if (
+            pending["leased"]
+            or pending["running"]
+            or pending["device_lease"]
+            or pending.get("jobs")
+        ):
             return "active"
-        if pending["blocked"] or pending.get("actions"):
+        if (
+            pending["blocked"]
+            or pending.get("actions")
+            or pending.get("queued_jobs")
+            or pending.get("batches")
+        ):
             return "unknown"
         return "stopped"

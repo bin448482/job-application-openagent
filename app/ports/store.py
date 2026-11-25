@@ -49,7 +49,15 @@ class StorePort(Protocol):
         """保存完整未读快照，并返回写后仍 queued 的发现键（升序）。"""
         ...
 
-    def claim(self, app: str, kind: str, owner: Owner, now: str) -> Lease | None:
+    def claim(
+        self,
+        app: str,
+        kind: str,
+        owner: Owner,
+        now: str,
+        key: str | None = None,
+        conversation_key: str | None = None,
+    ) -> Lease | None:
         """原子领取一条 queued 发现并持有全局 primary 设备租约。"""
         ...
 
@@ -97,6 +105,7 @@ class StorePort(Protocol):
         reply_cooldown_seconds: int,
         ime_original: str | None,
         now: str,
+        apply_allowance: int | None = None,
     ) -> dict[str, object]:
         """原子校验准入、文本额度冷却并写入 pending 与唯一动作键锁。"""
         ...

@@ -26,6 +26,11 @@ from app.adapters.files.policy import FilePolicyRepository
 from app.adapters.llm.bridge_a import ExternalAgentBridge
 from app.adapters.llm.bridge_b import LocalProcessBridge
 from app.adapters.simulated.actions import ScriptedActionExecutor
+from app.adapters.simulated.runtime import (
+    FixtureM3Read,
+    StimulusRuntimeScene,
+    SyntheticDecisionBridge,
+)
 from app.adapters.sqlite.activity import ProfilePolicyActivity
 from app.adapters.sqlite.device_gate import SharedDeviceGate, inspect_gate_occupancy
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
@@ -44,6 +49,7 @@ from app.domain.actions import (
     human_card,
 )
 from app.domain.models import APP, Evidence, Owner, add_seconds, canonical_hash
+from app.domain.runtime import BudgetLimits
 from app.ports.device import ProbeSnapshot
 from app.ports.device_gate import DeviceGateError
 from app.ports.policy import PolicyError
@@ -65,7 +71,9 @@ from app.usecases import device as device_usecases
 from app.usecases import facts as facts_usecases
 from app.usecases import policy as policy_usecases
 from app.usecases import policy_eval as policy_eval_usecases
+from app.usecases.policy_eval import RepositorySnapshot
 from app.usecases import run as run_usecases
+from app.usecases import runtime as runtime_usecases
 from app.usecases.doctor import build_result, parse_probe_input, run_doctor
 from app.usecases.read import build_read_payload
 from app.usecases.sense import build_sense_payload, persist_and_aggregate
@@ -440,6 +448,55 @@ def _build_parser() -> argparse.ArgumentParser:
     run_check.add_argument(
         "--model-config-hash", action=_UniqueStore, metavar="<摘要>", default=None
     )
+    run_prepare = run_commands.add_parser(
+        "prepare",
+        allow_abbrev=False,
+        help="显式准备/升级本机 profile 运行库；先取得共享排他。",
+        description="只做显式 schema 准备，不探测设备、不调用模型、不执行动作。",
+    )
+    run_prepare.add_argument(
+        "--pack", action=_UniqueStore, required=True, metavar="<prompts/local/名称>"
+    )
+    run_execute = run_commands.add_parser(
+        "execute",
+        allow_abbrev=False,
+        help="执行一次有界运行；当前只接纯合成场景刺激。",
+        description=(
+            "整轮先取得共享排他；read_only 只读可见观察且零业务写；"
+            "draft_only 不自动 apply/send；不调用真实设备或 provider。"
+        ),
+    )
+    run_execute.add_argument(
+        "--pack", action=_UniqueStore, required=True, metavar="<prompts/local/名称>"
+    )
+    run_execute.add_argument(
+        "--mode",
+        action=_UniqueStore,
+        required=True,
+        choices=("read_only", "draft_only", "auto_send_tier_a"),
+        metavar="<mode>",
+    )
+    run_execute.add_argument(
+        "--fixture", action=_UniqueStore, required=True, metavar="<合成场景>"
+    )
+    run_execute.add_argument(
+        "--confirm-device",
+        action=_UniqueStoreTrue,
+        default=False,
+        help="确认本轮设备独占；未确认时不取得共享占用。",
+    )
+    run_execute.add_argument(
+        "--credential", action=_UniqueStore, metavar="<验收凭证>", default=None
+    )
+    run_execute.add_argument(
+        "--provider", action=_UniqueStore, metavar="<provider_id>", default=None
+    )
+    run_execute.add_argument(
+        "--model-id", action=_UniqueStore, metavar="<model_id>", default=None
+    )
+    run_execute.add_argument(
+        "--model-config-hash", action=_UniqueStore, metavar="<摘要>", default=None
+    )
     action = subparsers.add_parser(
         "action",
         allow_abbrev=False,
@@ -476,6 +533,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "change_wechat",
             "change_phone",
             "delete_conversation",
+            "apply_job",
         ),
         metavar="<动作>",
     )
@@ -514,6 +572,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "change_wechat",
             "change_phone",
             "delete_conversation",
+            "apply_job",
         ),
         metavar="<动作>",
         help="本轮仅对该动作类型授权；可重复，文本授权不覆盖其它动作。",
@@ -1734,6 +1793,8 @@ def _action_key(
         return action_key_for(
             action_kind, app=APP, message_key=target_key
         )
+    if action_kind == "apply_job":
+        return action_key_for(action_kind, app=APP, message_key=target_key)
     if target_key != conversation_key:
         raise ActionError("invalid_action")
     return action_key_for(
@@ -1899,6 +1960,10 @@ def _run_action(
             return _action_success(log, started, stage_started, result, operation)
 
         if operation == "perform":
+            if args.action_kind == "apply_job":
+                # 第六动作的 pending/授权/证据生命周期已接同一权威；生产配额合同
+                # 尚未定义，因此在任何 profile/门禁/设备写入前固定失败关闭。
+                raise ActionError("apply_quota_contract_missing")
             if args.mode != "draft_only":
                 raise ActionError("authorization_required")
             if not args.confirm_device or not args.confirm_action:
@@ -2339,12 +2404,13 @@ def _run_run(
     args: argparse.Namespace,
     os_root: Path | None,
 ) -> int:
-    """执行 run check 预检；不探测设备、不调用模型、不执行动作。"""
+    """分派 run check/prepare/execute；只有 execute 是有界实际运行。"""
+    operation = args.run_command
     stage_started = time.perf_counter()
-    log.record(stage="run", operation="check", result="started")
+    log.record(stage="run", operation=operation, result="started")
     now = utc_now()
     try:
-        if args.run_command != "check":
+        if operation not in {"check", "prepare", "execute"}:
             raise PolicyError("invalid_input")
         repo = FilePolicyRepository(PROJECT_ROOT)
         _pack_rel, base_files, _files, _guides, pack = (
@@ -2357,30 +2423,105 @@ def _run_run(
             os_root=os_root,
             process_log=log,
         )
-        profile_store = SqliteProfileStore(
-            PROJECT_ROOT, pack.profile_id, create=True, now=now
-        )
-        result = run_usecases.check_preflight(
-            base_files=base_files,
-            pack=pack,
-            mode=args.mode,
-            confirm_device=args.confirm_device,
-            gate=gate,
-            profile_store=profile_store,
-            owner=_gate_owner(),
-            profile_db_path=str(profile_path),
-            now=now,
-            eval_store=FileEvalStore(PROJECT_ROOT),
-            credential_rel=args.credential,
-            provider_id=args.provider,
-            model_id=args.model_id,
-            model_config_hash=args.model_config_hash,
-            process_log=log,
-        )
-    except (PolicyError, DeviceGateError, ProfileError) as error:
+        if operation == "check":
+            profile_store = SqliteProfileStore(
+                PROJECT_ROOT, pack.profile_id, create=True, now=now
+            )
+            result = run_usecases.check_preflight(
+                base_files=base_files,
+                pack=pack,
+                mode=args.mode,
+                confirm_device=args.confirm_device,
+                gate=gate,
+                profile_store=profile_store,
+                owner=_gate_owner(),
+                profile_db_path=str(profile_path),
+                now=now,
+                eval_store=FileEvalStore(PROJECT_ROOT),
+                credential_rel=args.credential,
+                provider_id=args.provider,
+                model_id=args.model_id,
+                model_config_hash=args.model_config_hash,
+                process_log=log,
+            )
+        elif operation == "prepare":
+            profile_store = SqliteProfileStore(
+                PROJECT_ROOT, pack.profile_id, create=True, now=now
+            )
+            result = runtime_usecases.prepare_profile(
+                base_files=base_files,
+                pack=pack,
+                gate=gate,
+                profile_store=profile_store,
+                owner=_gate_owner(),
+                profile_db_path=str(profile_path),
+                now=now,
+                process_log=log,
+            )
+        else:
+            fixture_path = _resolve_project_path(args.fixture)
+            spec = _load_json_object(fixture_path.read_text(encoding="utf-8"))
+            scene = StimulusRuntimeScene(spec, profile_id=pack.profile_id)
+            read = FixtureM3Read(PROJECT_ROOT)
+            owner = _gate_owner()
+            profile_store = SqliteProfileStore(
+                PROJECT_ROOT, pack.profile_id, create=False, now=now
+            )
+            runtime_provider = args.provider or "local-process"
+            runtime_model = args.model_id or "synthetic-runtime"
+            runtime_config = args.model_config_hash or canonical_hash(
+                {"synthetic": "runtime-model-config"}
+            )
+            snapshot = RepositorySnapshot(
+                FilePolicyRepository(PROJECT_ROOT), _pack_rel
+            )
+
+            def bridge_factory(stimulus: object) -> object:
+                """为当前步骤构造合成 bridge transport，由唯一 decide 校验。"""
+                return SyntheticDecisionBridge(
+                    stimulus,  # type: ignore[arg-type]
+                    provider_id=runtime_provider,
+                    model_id=runtime_model,
+                    model_config_hash=runtime_config,
+                )
+
+            def open_store() -> SqliteStore:
+                """在共享门禁已持有、profile 已打开后打开唯一运行仓储。"""
+                return SqliteStore(
+                    profile_path,
+                    profile_id=pack.profile_id,
+                    local_host=owner.host,
+                    process_log=log,
+                    require_runtime=True,
+                )
+
+            result = runtime_usecases.execute_run(
+                base_files=base_files,
+                pack=pack,
+                mode=args.mode,
+                confirm_device=args.confirm_device,
+                gate=gate,
+                profile_store=profile_store,
+                profile_db_path=str(profile_path),
+                owner=owner,
+                now=now,
+                scene=scene,
+                read=read,
+                bridge_factory=bridge_factory,  # type: ignore[arg-type]
+                snapshot=snapshot,
+                open_store=open_store,
+                limits=BudgetLimits(),
+                provider_id=runtime_provider,
+                model_id=runtime_model,
+                model_config_hash=runtime_config,
+                eval_store=FileEvalStore(PROJECT_ROOT),
+                credential_rel=args.credential,
+                process_log=log,
+            )
+    except (PolicyError, DeviceGateError, ProfileError, StoreError) as error:
         log.record(
             stage="run",
-            operation="check",
+            operation=operation,
             result="failed",
             reason_code=error.reason_code,
             error_category="run",
@@ -2394,10 +2535,27 @@ def _run_run(
             error.reason_code,
             "run",
         )
+    except ValueError:
+        log.record(
+            stage="run",
+            operation=operation,
+            result="failed",
+            reason_code="invalid_input",
+            error_category="run",
+            duration_ms=elapsed_ms(stage_started),
+        )
+        return _finalize_output(
+            log,
+            started,
+            _error_payload("invalid_input"),
+            2,
+            "invalid_input",
+            "run",
+        )
     except Exception:
         log.record(
             stage="run",
-            operation="check",
+            operation=operation,
             result="failed",
             error_category="internal",
             duration_ms=elapsed_ms(stage_started),
@@ -2412,7 +2570,7 @@ def _run_run(
         )
     log.record(
         stage="run",
-        operation="check",
+        operation=operation,
         result="ok",
         duration_ms=elapsed_ms(stage_started),
     )

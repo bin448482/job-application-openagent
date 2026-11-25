@@ -66,7 +66,7 @@ TASK_REASON_CODES = (
     | READ_UNDETERMINED_REASONS
     | EVIDENCE_NOT_PERFORMED_REASONS
     | EVIDENCE_UNKNOWN_REASONS
-    | {"candidate_superseded", "recovery_requires_reconciliation"}
+    | {"candidate_superseded", "recovery_requires_reconciliation", "invalid_decision", "human_review_required", "stale_decision", "policy_changed", "input_too_large", "decision_timeout"}
 )
 
 LEASE_SECONDS = 60
@@ -305,6 +305,19 @@ def is_discovery_key(app: object, key: object) -> bool:
     return key.startswith(prefix) and is_hash(key[len(prefix):])
 
 
+def is_job_task_key(key: object) -> bool:
+    """判断是否为规范职位任务键；不导入 reading 以保持领域模型无环依赖。"""
+    if not isinstance(key, str):
+        return False
+    prefix = f"{APP}:job:"
+    return key.startswith(prefix) and is_hash(key[len(prefix):])
+
+
+def is_task_key(key: object) -> bool:
+    """判断是否为发现的会话任务键或职位任务键。"""
+    return is_discovery_key(APP, key) or is_job_task_key(key)
+
+
 def validate_owner(owner: object) -> None:
     """校验租约持有者的 UUID、正整数 PID 与本机摘要 host。"""
     if not isinstance(owner, Owner):
@@ -328,6 +341,20 @@ def validate_lease(lease: object) -> None:
     if not isinstance(lease.app, str) or lease.app not in APPS:
         raise ValueError("lease app is invalid")
     if not is_discovery_key(lease.app, lease.key):
+        raise ValueError("lease key is invalid")
+    validate_owner(lease.owner)
+    if not is_uuid(lease.nonce):
+        raise ValueError("lease nonce is invalid")
+    parse_utc(lease.expires_at)
+
+
+def validate_task_lease(lease: object) -> None:
+    """校验发现或职位任务的租约；职位不得伪装为发现键。"""
+    if not isinstance(lease, Lease):
+        raise ValueError("lease is invalid")
+    if not isinstance(lease.app, str) or lease.app not in APPS:
+        raise ValueError("lease app is invalid")
+    if not is_task_key(lease.key):
         raise ValueError("lease key is invalid")
     validate_owner(lease.owner)
     if not is_uuid(lease.nonce):

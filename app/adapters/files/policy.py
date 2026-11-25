@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -52,6 +54,8 @@ class FilePolicyRepository:
         """保存项目根并准备本次操作自有路径集合，构造阶段不访问文件。"""
         self.root = Path(root).resolve()
         self._owned: set[str] = set()
+        self._owned_stat: dict[str, tuple[int, int]] = {}
+        self._owned_digest: dict[str, str] = {}
 
     def _normalize_rel(self, value: str) -> str:
         """只做纯字符串项目内相对路径检查，不访问文件系统。"""
@@ -323,6 +327,12 @@ class FilePolicyRepository:
         except OSError:
             raise PolicyError("policy_io_error", [_issue(parent, None, "format")]) from None
         self._owned.add(rel)
+        try:
+            stat = path.stat()
+            self._owned_stat[rel] = (stat.st_dev, stat.st_ino)
+            self._owned_digest[rel] = _tree_digest(path)
+        except OSError:
+            raise PolicyError("policy_io_error", [_issue(rel, None, "format")]) from None
         return rel
 
     def write_text_exact(self, rel_path: str, text: str) -> None:
@@ -340,26 +350,87 @@ class FilePolicyRepository:
         except OSError:
             raise PolicyError("policy_io_error", [_issue(posix, None, "format")]) from None
         self._owned.add(posix)
+        updated = False
+        for owned in list(self._owned_stat):
+            if posix.startswith(owned + "/"):
+                try:
+                    self._owned_digest[owned] = _tree_digest(self.root / owned)
+                except OSError:
+                    raise PolicyError(
+                        "policy_io_error", [_issue(posix, None, "format")]
+                    ) from None
+                updated = True
+        if not updated:
+            try:
+                stat = path.stat()
+                self._owned_stat[posix] = (stat.st_dev, stat.st_ino)
+                self._owned_digest[posix] = _tree_digest(path)
+            except OSError:
+                raise PolicyError(
+                    "policy_io_error", [_issue(posix, None, "format")]
+                ) from None
 
     def read_text_exact(self, rel_path: str) -> str:
         """按 UTF-8 原字节读取文件，用于暂存副本复核。"""
         return self._read_text(rel_path, max_bytes=BASE_MAX_BYTES)
 
     def promote(self, staging_rel: str, dest_rel: str) -> None:
-        """把暂存路径同卷改名为目标；目标存在时拒绝且不覆盖。"""
+        """把暂存路径同卷改名为目标；Windows 短暂占用时有界重试且不覆盖。"""
         staging_path, staging = self._resolve(staging_rel)
         dest_path, dest = self._resolve(dest_rel, missing_ok=True)
-        if not any(part.startswith(STAGING_PREFIX) for part in staging.split("/")):
+        if (
+            staging not in self._owned
+            or not any(part.startswith(STAGING_PREFIX) for part in staging.split("/"))
+        ):
             raise PolicyError("invalid_input", [_issue(staging, None, "path")])
-        if dest_path.exists():
-            raise PolicyError("policy_exists", [_issue(dest, None, "conflict")])
-        try:
-            staging_path.rename(dest_path)
-        except FileExistsError:
-            raise PolicyError("policy_exists", [_issue(dest, None, "conflict")]) from None
-        except OSError:
-            raise PolicyError("policy_io_error", [_issue(dest, None, "format")]) from None
-        self._owned.add(dest)
+        attempts = 3
+        for attempt in range(attempts):
+            # 每次尝试前重核当前路径形状、链接/替换与目标不存在，绝不复用旧解析结果发布。
+            current_staging, _ = self._resolve(staging_rel)
+            current_dest, _ = self._resolve(dest_rel, missing_ok=True)
+            if _is_link_like(current_staging) or not current_staging.exists():
+                raise PolicyError("invalid_input", [_issue(staging, None, "path")])
+            try:
+                stat = current_staging.stat()
+                expected_stat = self._owned_stat.get(staging)
+                if (
+                    expected_stat is None
+                    or (stat.st_dev, stat.st_ino) != expected_stat
+                    or _tree_digest(current_staging)
+                    != self._owned_digest.get(staging)
+                ):
+                    raise PolicyError(
+                        "invalid_input", [_issue(staging, None, "path")]
+                    )
+            except OSError:
+                raise PolicyError(
+                    "invalid_input", [_issue(staging, None, "path")]
+                ) from None
+            if current_dest.exists():
+                raise PolicyError("policy_exists", [_issue(dest, None, "conflict")])
+            try:
+                current_staging.rename(current_dest)
+            except FileExistsError:
+                raise PolicyError("policy_exists", [_issue(dest, None, "conflict")]) from None
+            except PermissionError as error:
+                if (
+                    os.name != "nt"
+                    or getattr(error, "winerror", None) not in {5, 32}
+                    or attempt == attempts - 1
+                ):
+                    raise PolicyError(
+                        "policy_io_error", [_issue(dest, None, "format")]
+                    ) from None
+                # 仅对 Windows 短暂删除共享冲突做有界等待；不关闭外部句柄或改权限。
+                time.sleep(0.05 if attempt == 0 else 0.1)
+                continue
+            except OSError:
+                raise PolicyError(
+                    "policy_io_error", [_issue(dest, None, "format")]
+                ) from None
+            self._owned.add(dest)
+            return
+        raise PolicyError("policy_io_error", [_issue(dest, None, "format")])
 
     def remove_owned(self, rel_path: str) -> None:
         """仅清理本次操作登记过的暂存或已发布路径，避免误删用户数据。"""
@@ -381,3 +452,24 @@ class FilePolicyRepository:
         """把清单按固定紧凑 JSON 写入暂存文件，再由调用方同卷发布。"""
         text = json.dumps(manifest, ensure_ascii=False, separators=(",", ":")) + "\n"
         self.write_text_exact(staging_rel, text)
+
+
+def _tree_digest(path: Path) -> str:
+    """计算目录内相对路径与原字节的稳定摘要，用于发布前对象身份复核。"""
+    digest = hashlib.sha256()
+    if path.is_file() and not _is_link_like(path):
+        digest.update(path.read_bytes())
+        return digest.hexdigest()
+    for item in sorted(path.rglob("*")):
+        if _is_link_like(item):
+            raise OSError("staging contains link")
+        rel = item.relative_to(path).as_posix()
+        digest.update(rel.encode("utf-8"))
+        digest.update(b"\0")
+        if item.is_file():
+            try:
+                digest.update(item.read_bytes())
+            except OSError:
+                raise
+        digest.update(b"\0")
+    return digest.hexdigest()

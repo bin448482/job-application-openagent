@@ -125,7 +125,16 @@ class ScriptedActionExecutor:
         if not is_action_key(plan.action_kind, plan.action_key):
             raise ActionExecutionError("executor_interrupted", clicked=False)
         data = dict(self._observation)
-        if set(data) != set(_OBSERVATION_FIELDS):
+        expected_fields = set(_OBSERVATION_FIELDS)
+        allowed_fields = set(expected_fields)
+        if plan.action_kind == "apply_job":
+            expected_fields |= {"apply_available_before", "apply_completed_after"}
+            allowed_fields |= {
+                "apply_available_before",
+                "apply_completed_before",
+                "apply_completed_after",
+            }
+        if not expected_fields <= set(data) or set(data) - allowed_fields:
             raise ValueError("observation fields are invalid")
         for name in ("before_snapshot_id", "after_snapshot_id"):
             value = data[name]
@@ -135,10 +144,17 @@ class ScriptedActionExecutor:
         data["observed_at"] = _utc_now()
         if data["ime_original"] is None:
             data["ime_original"] = self._current_ime
+        payload = {name: data[name] for name in _OBSERVATION_FIELDS}
+        if plan.action_kind == "apply_job":
+            payload["apply_available_before"] = data["apply_available_before"]
+            payload["apply_completed_before"] = data.get(
+                "apply_completed_before", False
+            )
+            payload["apply_completed_after"] = data["apply_completed_after"]
         return ActionObservation(
             action_key=plan.action_key,
             action_kind=plan.action_kind,
-            **{name: data[name] for name in _OBSERVATION_FIELDS},
+            **payload,
         )
 
 
@@ -151,3 +167,58 @@ def _utc_now() -> str:
         .isoformat(timespec="milliseconds")
         .replace("+00:00", "Z")
     )
+class CommandLedgerActionExecutor:
+    """用真实 CommandIdentityStore 包裹合成执行器，验证动作命令账本边界。"""
+
+    def __init__(
+        self,
+        inner: ScriptedActionExecutor,
+        command_store: object,
+        *,
+        commands: list[str] | None = None,
+    ) -> None:
+        """保存合成执行器、真实账本与可选命令记录。"""
+        self._inner = inner
+        self._store = command_store
+        self._walked = commands if commands is not None else []
+        self._bound: str | None = None
+        self._pid = __import__("os").getpid()
+
+    def bind_action(self, action_key: str) -> None:
+        """在首个设备命令前绑定动作键。"""
+        if not isinstance(action_key, str) or not action_key:
+            raise ValueError("action key is invalid")
+        self._bound = action_key
+
+    def read_current_ime(self, *, before_command=None) -> str:
+        """返回合成 IME；动作绑定后必须已有账本。"""
+        if before_command is not None:
+            before_command()
+        if self._bound is None or self._store is None:
+            raise __import__("app.ports.actions", fromlist=["ActionExecutionError"]).ActionExecutionError(
+                "executor_interrupted", clicked=False
+            )
+        return self._inner.read_current_ime()
+
+    def execute(self, plan, *, before_command=None):
+        """实际记录 begin→PID→complete 后回放合成观察。"""
+        from app.ports.actions import ActionExecutionError
+
+        if self._bound != plan.action_key or self._store is None:
+            raise ActionExecutionError("executor_interrupted", clicked=False)
+        if before_command is not None:
+            try:
+                before_command()
+            except Exception:
+                raise ActionExecutionError("executor_interrupted", clicked=False) from None
+        self._store.mark_started(plan.action_key)
+        self._store.record(plan.action_key, self._pid)
+        self._walked.append(plan.action_key)
+        self._store.finish_family(
+            plan.action_key,
+            self._pid,
+            lambda _pid: [],
+            bounded=True,
+            proven=True,
+        )
+        return self._inner.execute(plan, before_command=before_command)

@@ -120,7 +120,7 @@ class RunGuardTests(unittest.TestCase):
         self.assertIn(
             "real_device_action_entry_not_delivered", result["limitations"]
         )
-        self.assertIn("m6_scheduling_not_implemented", result["limitations"])
+        self.assertIn("m6_runtime_execute_fixture_only", result["limitations"])
         self.assertIn("m8_run_not_implemented", result["limitations"])
         self.assertIsNone(self._gate().inspect())
 

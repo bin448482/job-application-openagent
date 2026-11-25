@@ -2,7 +2,7 @@
 
 ## 一、目录用途
 
-承载 M1 起的纯领域模型与无 IO 校验：任务状态、读取三态、未读快照、候选、动作证据和租约，M2 的未读聚合/停止原因，M3 的读取值类型、字段阶梯与稳定消息身份，M4a 的 DecisionEnvelope/Decision 契约、策略包校验、摘要与受限渲染，M4b 的评测套件/断言/留出生命周期校验，以及 M4c 的 profile 事实输入/状态筛选/待办。该目录不导入 `sqlite3`、`adapters/`、`adb` 或具体应用控件，只依赖标准库与自身。
+承载 M1 起的纯领域模型与无 IO 校验：任务状态、读取三态、未读快照、候选、动作证据和租约，M2 的未读聚合/停止原因，M3 的读取值类型、字段阶梯与稳定消息身份，M4a 的 DecisionEnvelope/Decision 契约、策略包校验、摘要与受限渲染，M4b 的评测套件/断言/留出生命周期校验，以及 M4c 的 profile 事实输入/状态筛选/待办、M5 第六动作 `apply_job` 的独立 `ApplyQuotaContract` 与 M6 调度规则。该目录不导入 `sqlite3`、`adapters/`、`adb` 或具体应用控件，只依赖标准库与自身。
 
 ## 二、当前文件
 
@@ -11,8 +11,9 @@
 - `json_input.py`：CLI 与 BOSS 适配器共用的严格 JSON 解析；`load_json_object(text)` 固定使用 `reject_duplicate_keys`，在顶层/嵌套对象遇到重复键时抛 `ValueError`，不接受可配置 hook，也不负责文件 IO 或调用方错误分类。
 - `reading.py`：M3 读取值类型 `FieldEvidence/PageSnapshot/JobCard/JobList/JobDetail/UnreadRowRead/UnreadRead/ChatMessage/Conversation`、稳定职位键/消息键算法、跨快照 `new_message_keys` 与各值类型严格校验；`validate_read_value` 是 `ReadResult.value` 的唯一分派入口。稳定消息身份只来自 profile 验证过的应用 `content-desc` 原值，内容摘要不生成消息键；不保存正文到日志/库。
 - `ladder.py`：`FieldReading/FieldResolution` 与纯 `resolve_field`；层级→像素→视觉→人工顺序，reading 的 source 必须与调用槽位一致，前级 failed 在上下文比较前保留，跨级冲突/上下文不一致转 undetermined/人工且只携带主上下文证据，视觉默认关闭且无独立交叉证据不放行；枚举/原因/计数/flag 先做类型检查，坏类型统一 ValueError。
-- `actions.py`：M5 五动作键（文本 `app:message_key:reply`、其余 `conversation:action`）与严格键/动作类型校验；`ActionIdentity` 固定姓名/公司/职位三元组，重算 `boss:conv:<H>` 供公开用例与真实持久任务会话逐字核对；`validate_action_target` 按唯一 `action_key_for` 核对实际目标；`ActionObservation` 全字段类型/枚举/UUID/时间校验（含唯一身份、列表完整、保护项、编辑器/确认框/IME/在途命令）；`derive_action_outcome` 只按动作特有前后差分给出 performed，未点击/未收敛/坏观察保持 not_performed/pending/unknown；`ActionAuthorization` 分动作授权与摘要/任务/动作键/截止/确认复验；`human_card` 固定五项与三项处置；`ReconciliationObservation` 与 `reconciliation_converged` 校验人工确认的现场/IME/命令收敛。
+- `actions.py`：M5 五动作键（文本 `app:message_key:reply`、其余 `conversation:action`）与严格键/动作类型校验；`ActionIdentity` 固定姓名/公司/职位三元组，重算 `boss:conv:<H>` 供公开用例与真实持久任务会话逐字核对；`validate_action_target` 按唯一 `action_key_for` 核对实际目标；`ActionObservation` 全字段类型/枚举/UUID/时间校验（含唯一身份、列表完整、保护项、编辑器/确认框/IME/在途命令、apply 的 before/after 完成状态）；`derive_action_outcome` 只按动作特有前后差分给出 performed，apply 必须 before 未完成→after 明确完成，既有 done 或无关 sibling 变化不证明本次成功；未点击/未收敛/坏观察保持 not_performed/pending/unknown；`ActionAuthorization` 分动作授权与摘要/任务/动作键/截止/确认复验；`human_card` 固定五项与三项处置；`ReconciliationObservation` 与 `reconciliation_converged` 校验人工确认的现场/IME/命令收敛。
 - `scheduler.py`：`aggregate_unread(snapshot, unresolved_keys)` 只重算 `unread_state`；`stop_reason_for(snapshot, queued_keys)` 按 M2 有序判据返回 `null/unread_unverified/needs_targeted_verification`。两者均无 IO，非法参数抛 `ValueError`。
+- `runtime.py`：M6 纯调度规则：`BudgetLimits/BudgetState`（900s/200 设备调用/20 候选/30s 职位/5 抢占，等号停止新工作；在途超支保留负值并可持久化/报告）、七条件 `SafePoint`、`select_task` 固定优先级与一次未读核对、`BatchCursor` 身份游标与预算持久化、`observe_unread`/`build_stage_preempted` 单调等待、检测间隔与双时钟漂移；不访问数据库、设备或模型。
 - `policy.py`：M4a `DecisionEnvelope`/`Decision` 严格校验、`parse_envelope`/`parse_decision`、租约参数位置 `validate_decision(..., *, now, lease_expires_at)`；TOML+三 md schema、45 组合唯一覆盖与 A/B/C 硬下限、`effective_limits`、`resolve_policy_tier(pack, intent, sub_intents, escalate, upper_tier)`；`compute_base_hash/compute_pack_hash/compute_prompt_hash/compute_input_hash` 与无自引用投影；固定 system/developer/user `render_request` 与唯一 `{base,pack,data}` 内容对象；`verify_rendered_request` 复用同一渲染逐字段重核；`append_and_validate_reply` 追加披露并复验码点/控制字符/联系方式/禁谈项/事实值；`validate_policy_guides` 检查可选双指南编码/控制字符/联系方式；`v1_policy_tier()` 固定 C。只有标准库与自身依赖。
 - `profile.py`：M4c 事实键/值/有效期校验（单行、1–200 字符、拒绝联系方式/控制字符/孤立代理）、active 行输入校验；`select_profile_facts` 只把 active 行投影为四键并交给 `policy.py` 的唯一 `select_allowed_facts_with_reasons`，据其 allowed/missing/expired/conflict 结果组织无值待办，不复制有效期/冲突选择。`has_contact` 在 `policy.py` 公开同一联系方式模式，供事实录入与回复复验共用。
 - `eval.py`：M4b 公开/回归/留出套件与单例断言 schema、`validate_suite`、`suite_hash`、`project_case`、`sample_fingerprint`/`suite_fingerprints`、`evaluate_assertions`；留出登记 `validate_holdout_registry`、`register_holdout_batch`、`frozen_holdout_batch`、`check_holdout_access`、`begin_holdout_access`、`finish_holdout_access`、`retire_holdout_batch`、`validate_holdout_attestation`。样本身份排除 case/task/nonce/now 运行字段；所有历史批次占用样本不可换名/换候选/拆子集重冻结；访问意向先于调用持久化，退役写实际 regression 引用；不读取文件。
@@ -59,5 +60,5 @@ python -m unittest tests.test_store tests.test_migrations tests.test_sensor test
 
 ## 六、已知限制
 
-- M2 只实现合成快照聚合；M3 只实现合成页面/职位/未读/会话读取、像素字段后备与跨屏稳定身份；M4a 只实现纯契约、策略包/摘要/渲染与回复复验；M4b 增加评测套件/断言/留出生命周期与渲染重核；M4c 增加事实状态筛选/待办；M5 增加动作键/观察→三态证据/分动作授权/人工卡纯判据。真实设备采集、导航、视觉、正文持久化、真实模型桥、事实对账开锁与运行时调度仍未实现。
+- M2 只实现合成快照聚合；M3 只实现合成页面/职位/未读/会话读取、像素字段后备与跨屏稳定身份；M4a 只实现纯契约、策略包/摘要/渲染与回复复验；M4b 增加评测套件/断言/留出生命周期与渲染重核；M4c 增加事实状态筛选/待办；M5 增加动作键/观察→三态证据/分动作授权/人工卡纯判据与 apply 独立配额合同；M6 增加预算/安全点/身份游标/抢占审计纯规则，超支负数不钳零。真实设备采集、导航、视觉、正文持久化、真实模型桥、事实对账开锁与真实运行时调度仍未实现。
 - `unread_state=present` 不证明候选可点击或计数完整；`unknown` 不得当成无未读。M3 `actionable=true` 只是离线门禁，不提供发送授权。M4a/M4b 的 pattern/长度/禁谈检查只是有限确定性门禁，未命中不等于语义安全，最终档位固定 C。

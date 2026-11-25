@@ -51,6 +51,9 @@ from app.domain.models import (
     format_utc,
     is_hash,
     is_int,
+    is_discovery_key,
+    is_job_task_key,
+    is_task_key,
     is_uuid,
     is_conversation_key,
     is_nonempty_text,
@@ -60,10 +63,12 @@ from app.domain.models import (
     validate_lease,
     validate_owner,
     validate_read_result,
+    validate_task_lease,
 )
+from app.domain.runtime import BatchCursor, BudgetLimits, PAUSE_REASONS
 from app.ports.store import StoreError
 from app.process_log import ProcessLog, elapsed_ms
-from app.domain.reading import is_message_key
+from app.domain.reading import is_message_key, is_job_key
 
 StopChecker = Callable[[int], str]
 FaultHook = Callable[[str, sqlite3.Connection], None]
@@ -280,6 +285,7 @@ class SqliteStore:
         fault_hook: FaultHook | None = None,
         process_log: ProcessLog | None = None,
         profile_id: str | None = None,
+        require_runtime: bool = False,
     ) -> None:
         """打开并核验 v1 库或已校验 profile 库，保存本机身份/时钟/日志。
 
@@ -303,7 +309,10 @@ class SqliteStore:
                 self._connection = connect_database(path)
             else:
                 self._connection = connect_profile_database(
-                    Path(path), profile_id, require_actions=True
+                    Path(path),
+                    profile_id,
+                    require_actions=True,
+                    require_runtime=require_runtime,
                 )
 
     def close(self) -> None:
@@ -415,15 +424,29 @@ class SqliteStore:
 
     @_store_operation("claim")
     def claim(
-        self, app: str, kind: str, owner: Owner, now: str
+        self,
+        app: str,
+        kind: str,
+        owner: Owner,
+        now: str,
+        key: str | None = None,
+        conversation_key: str | None = None,
     ) -> Lease | None:
-        """在全局设备空闲时原子领取最高优先级 queued 发现。"""
+        """在全局设备空闲时原子领取 queued 发现（可指定任务或会话身份）。"""
         now_dt = self._prepare_now(now)
         try:
             if app != APP:
                 raise ValueError("app is invalid")
             if not isinstance(kind, str) or kind not in DISCOVERY_KINDS:
                 raise ValueError("kind is invalid")
+            if key is not None and conversation_key is not None:
+                raise ValueError("claim target is ambiguous")
+            if key is not None and not is_discovery_key(app, key):
+                raise ValueError("key is invalid")
+            if conversation_key is not None and not is_conversation_key(
+                app, conversation_key
+            ):
+                raise ValueError("conversation key is invalid")
             validate_owner(owner)
             if owner.host != self._local_host:
                 raise ValueError("owner host is not local")
@@ -434,12 +457,27 @@ class SqliteStore:
         with self._write():
             if self._select_device() is not None:
                 raise StoreError("lease_busy")
-            row = self._connection.execute(
-                "SELECT \"key\" FROM hr_discoveries "
-                "WHERE app = ? AND kind = ? AND state = 'queued' "
-                "ORDER BY priority DESC, created_at, \"key\" LIMIT 1",
-                (app, kind),
-            ).fetchone()
+            if key is not None:
+                row = self._connection.execute(
+                    "SELECT \"key\" FROM hr_discoveries "
+                    "WHERE app = ? AND kind = ? AND state = 'queued' AND \"key\" = ?",
+                    (app, kind, key),
+                ).fetchone()
+            elif conversation_key is not None:
+                row = self._connection.execute(
+                    "SELECT \"key\" FROM hr_discoveries "
+                    "WHERE app = ? AND kind = ? AND state = 'queued' "
+                    "AND conversation_key = ? "
+                    "ORDER BY priority DESC, created_at, \"key\" LIMIT 1",
+                    (app, kind, conversation_key),
+                ).fetchone()
+            else:
+                row = self._connection.execute(
+                    "SELECT \"key\" FROM hr_discoveries "
+                    "WHERE app = ? AND kind = ? AND state = 'queued' "
+                    "ORDER BY priority DESC, created_at, \"key\" LIMIT 1",
+                    (app, kind),
+                ).fetchone()
             if row is None:
                 return None
             key = str(row["key"])
@@ -757,26 +795,955 @@ class SqliteStore:
         if not isinstance(lease, Lease):
             raise StoreError("invalid_input")
         try:
-            validate_lease(lease)
+            validate_task_lease(lease)
             now_dt = parse_utc(now)
         except ValueError:
             raise StoreError("invalid_input") from None
         if self.current_lease_expiry(lease, now=now) is None:
             return None
         try:
-            row = self._connection.execute(
-                "SELECT conversation_key FROM hr_discoveries "
-                "WHERE app = ? AND \"key\" = ? AND state = 'running' AND nonce = ?",
-                (lease.app, lease.key, lease.nonce),
-            ).fetchone()
+            row = self._select_task_row(lease.key)
         except sqlite3.OperationalError as error:
             raise map_locked_error(error) from None
         except sqlite3.Error:
             raise StoreError("store_io_error") from None
-        if row is None:
+        if (
+            row is None
+            or str(row["state"]) != "running"
+            or str(row["nonce"]) != lease.nonce
+        ):
             return None
         del now_dt
+        if is_job_task_key(lease.key):
+            conversation = row["conversation_key"]
+            return str(conversation) if conversation is not None else lease.key
         return str(row["conversation_key"])
+
+    @_store_operation("ensure_batch")
+    def ensure_batch(
+        self, batch_id: str, limits: BudgetLimits, now: str
+    ) -> dict[str, object]:
+        """幂等创建批次游标；已存在时只读返回，不重置预算或历史。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None or not is_uuid(batch_id):
+            raise StoreError("invalid_input")
+        if not isinstance(limits, BudgetLimits):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        initial = BatchCursor.initial(batch_id, limits)
+        with self._write():
+            self._connection.execute(
+                "INSERT INTO job_batches(batch_id, profile_id, cursor_json, state, "
+                "pause_reason, last_checkpoint_id, created_at, updated_at) "
+                "VALUES (?, ?, ?, 'active', NULL, NULL, ?, ?) "
+                "ON CONFLICT(batch_id) DO NOTHING",
+                (
+                    batch_id,
+                    self.profile_id,
+                    json.dumps(initial.to_json(), sort_keys=True),
+                    now,
+                    now,
+                ),
+            )
+            row = self._connection.execute(
+                "SELECT * FROM job_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+        return self._batch_payload(row)
+
+    @_store_operation("load_batch")
+    def load_batch(self, batch_id: str) -> dict[str, object] | None:
+        """只读返回批次游标与状态；不存在返回 None。"""
+        if not is_uuid(batch_id):
+            raise StoreError("invalid_input")
+        row = self._connection.execute(
+            "SELECT * FROM job_batches WHERE batch_id = ?", (batch_id,)
+        ).fetchone()
+        return None if row is None else self._batch_payload(row)
+
+    @_store_operation("resume_batch")
+    def resume_batch(self, batch_id: str, now: str) -> dict[str, object]:
+        """把 paused 批次原子转回 active，保留游标/预算/访问历史。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None or not is_uuid(batch_id):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row = self._connection.execute(
+                "SELECT * FROM job_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if row is None or str(row["profile_id"]) != self.profile_id:
+                raise StoreError("invalid_input")
+            if str(row["state"]) in {"paused", "completed"}:
+                self._connection.execute(
+                    "UPDATE job_batches SET state = 'active', pause_reason = NULL, "
+                    "updated_at = ? WHERE batch_id = ? AND state IN ('paused', 'completed')",
+                    (now, batch_id),
+                )
+                self._insert_scheduler_event(
+                    batch_id=batch_id,
+                    task_key=None,
+                    event="batch_resumed",
+                    reason_code=None,
+                    created_at=now,
+                    payload={"pause_reason": row["pause_reason"]},
+                )
+                row = self._connection.execute(
+                    "SELECT * FROM job_batches WHERE batch_id = ?", (batch_id,)
+                ).fetchone()
+        return self._batch_payload(row)
+
+    @_store_operation("complete_batch")
+    def complete_batch(
+        self, batch_id: str, cursor: BatchCursor, now: str
+    ) -> dict[str, object]:
+        """正常安全结束：保存游标并把批次置 completed，不重置预算/历史。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None or not isinstance(cursor, BatchCursor):
+            raise StoreError("invalid_input")
+        if cursor.batch_id != batch_id:
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row = self._connection.execute(
+                "SELECT profile_id FROM job_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if row is None or str(row["profile_id"]) != self.profile_id:
+                raise StoreError("invalid_input")
+            self._connection.execute(
+                "UPDATE job_batches SET cursor_json = ?, state = 'completed', "
+                "pause_reason = NULL, updated_at = ? WHERE batch_id = ?",
+                (json.dumps(cursor.to_json(), sort_keys=True), now, batch_id),
+            )
+        return {"batch_id": batch_id, "state": "completed"}
+
+    @_store_operation("checkpoint_status")
+    def checkpoint_status(self, batch_id: str) -> dict[str, object]:
+        """只读返回最后检查点与已提交事件计数，供安全点证据派生。"""
+        if not is_uuid(batch_id):
+            raise StoreError("invalid_input")
+        row = self._connection.execute(
+            "SELECT last_checkpoint_id FROM job_batches WHERE batch_id = ?",
+            (batch_id,),
+        ).fetchone()
+        if row is None:
+            raise StoreError("invalid_input")
+        count = int(
+            self._connection.execute(
+                "SELECT COUNT(*) FROM scheduler_events WHERE batch_id = ? "
+                "AND event = 'checkpoint_committed'",
+                (batch_id,),
+            ).fetchone()[0]
+        )
+        return {
+            "last_checkpoint_id": row["last_checkpoint_id"],
+            "checkpoint_events": count,
+        }
+
+    def _batch_payload(self, row: sqlite3.Row) -> dict[str, object]:
+        """把批次行投影为固定对象；游标重新严格解析后再输出。"""
+        cursor = BatchCursor.from_json(json.loads(str(row["cursor_json"])))
+        if (
+            self.profile_id is not None
+            and str(row["profile_id"]) != self.profile_id
+        ):
+            raise StoreError("invalid_input")
+        return {
+            "batch_id": str(row["batch_id"]),
+            "profile_id": str(row["profile_id"]),
+            "state": str(row["state"]),
+            "pause_reason": row["pause_reason"],
+            "last_checkpoint_id": row["last_checkpoint_id"],
+            "cursor": cursor,
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
+        }
+
+    @_store_operation("enqueue_jobs")
+    def enqueue_jobs(
+        self, batch_id: str, job_keys: tuple[str, ...], now: str
+    ) -> int:
+        """把当前可见职位身份加入批次队列；已存在的身份不改状态或预算。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None or not is_uuid(batch_id):
+            raise StoreError("invalid_input")
+        if not isinstance(job_keys, tuple) or any(
+            not is_job_key(key) for key in job_keys
+        ):
+            raise StoreError("invalid_input")
+        if len(set(job_keys)) != len(job_keys):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        inserted = 0
+        with self._write():
+            batch = self._connection.execute(
+                "SELECT * FROM job_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if batch is None or (
+                self.profile_id is not None
+                and str(batch["profile_id"]) != self.profile_id
+            ):
+                raise StoreError("invalid_input")
+            for key in job_keys:
+                cursor = self._connection.execute(
+                    "INSERT INTO jobs(app, job_key, dedupe_key, batch_id, "
+                    "conversation_key, state, priority, created_at, updated_at, "
+                    "attempt) VALUES (?, ?, ?, ?, NULL, 'queued', 0, ?, ?, 0) "
+                    "ON CONFLICT(app, job_key) DO NOTHING",
+                    (APP, key, key, batch_id, now, now),
+                )
+                inserted += cursor.rowcount
+        return inserted
+
+    @_store_operation("claim_job")
+    def claim_job(
+        self,
+        batch_id: str,
+        owner: Owner,
+        now: str,
+        key: str | None = None,
+    ) -> Lease | None:
+        """在全局设备空闲时领取本批次 queued 职位（可选指定身份）。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None or not is_uuid(batch_id):
+            raise StoreError("invalid_input")
+        if key is not None and not is_job_key(key):
+            raise StoreError("invalid_input")
+        try:
+            validate_owner(owner)
+            if owner.host != self._local_host:
+                raise ValueError("owner host is not local")
+        except ValueError:
+            raise StoreError("invalid_input") from None
+        self._check_clock(now_dt)
+        with self._write():
+            batch = self._connection.execute(
+                "SELECT * FROM job_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if batch is None or (
+                self.profile_id is not None
+                and str(batch["profile_id"]) != self.profile_id
+            ):
+                raise StoreError("invalid_input")
+            if str(batch["state"]) != "active":
+                return None
+            if self._select_device() is not None:
+                raise StoreError("lease_busy")
+            row = self._connection.execute(
+                "SELECT job_key FROM jobs WHERE app = ? AND batch_id = ? "
+                "AND state = 'queued' "
+                + ("AND job_key = ? " if key is not None else "")
+                + "ORDER BY priority DESC, created_at, job_key LIMIT 1",
+                ((APP, batch_id, key) if key is not None else (APP, batch_id)),
+            ).fetchone()
+            if row is None:
+                return None
+            key = str(row["job_key"])
+            nonce = str(uuid.uuid4())
+            expires_at = add_seconds(now, LEASE_SECONDS)
+            cursor = self._connection.execute(
+                "UPDATE jobs SET state = 'leased', lease_owner = ?, "
+                "owner_pid = ?, owner_host = ?, nonce = ?, lease_expires_at = ?, "
+                "attempt = attempt + 1, updated_at = ? "
+                "WHERE app = ? AND job_key = ? AND state = 'queued'",
+                (owner.id, owner.pid, owner.host, nonce, expires_at, now, APP, key),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("stale_lease")
+            self._connection.execute(
+                "INSERT INTO device_lease (device_key, lease_owner, owner_pid, "
+                "owner_host, nonce, lease_expires_at, reservation_state) "
+                "VALUES ('primary', ?, ?, ?, ?, ?, 'held')",
+                (owner.id, owner.pid, owner.host, nonce, expires_at),
+            )
+            self._insert_event(
+                app=APP,
+                subject_key=key,
+                event="task_claimed",
+                reason_code=None,
+                created_at=now,
+                payload=_event_payload("queued", "leased", nonce, None),
+            )
+        return Lease(app=APP, key=key, owner=owner, nonce=nonce, expires_at=expires_at)
+
+    @_store_operation("start_job")
+    def start_job(self, lease: Lease, now: str) -> Lease:
+        """提交职位任务 leased→running；复用同一设备租约与截止时间。"""
+        now_dt = self._prepare_now(now)
+        if not is_job_task_key(lease.key):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row, _ = self._match_lease(
+                lease, {"leased"}, now_dt, allow_expired=False
+            )
+            cursor = self._connection.execute(
+                "UPDATE jobs SET state = 'running', updated_at = ? "
+                "WHERE app = ? AND job_key = ? AND state = 'leased' AND nonce = ?",
+                (now, lease.app, lease.key, lease.nonce),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("stale_lease")
+            self._insert_event(
+                app=lease.app,
+                subject_key=lease.key,
+                event="task_started",
+                reason_code=None,
+                created_at=now,
+                payload=_event_payload(
+                    "leased", "running", str(row["nonce"]), None
+                ),
+            )
+        return lease
+
+    @_store_operation("renew_job")
+    def renew_job(self, lease: Lease, now: str) -> Lease:
+        """同时延长职位任务与设备截止时间，返回新的 Lease。"""
+        now_dt = self._prepare_now(now)
+        if not is_job_task_key(lease.key):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row, _ = self._match_lease(
+                lease, LEASED_TASK_STATES, now_dt, allow_expired=False
+            )
+            current = parse_utc(str(row["lease_expires_at"]))
+            expires_at = format_utc(
+                max(current, now_dt + timedelta(seconds=LEASE_SECONDS))
+            )
+            cursor = self._connection.execute(
+                "UPDATE jobs SET lease_expires_at = ?, updated_at = ? "
+                "WHERE app = ? AND job_key = ? AND nonce = ?",
+                (expires_at, now, lease.app, lease.key, lease.nonce),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("stale_lease")
+            cursor = self._connection.execute(
+                "UPDATE device_lease SET lease_expires_at = ? "
+                "WHERE device_key = 'primary' AND nonce = ? "
+                "AND reservation_state = 'held'",
+                (expires_at, lease.nonce),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("stale_lease")
+            self._insert_event(
+                app=lease.app,
+                subject_key=lease.key,
+                event="lease_renewed",
+                reason_code=None,
+                created_at=now,
+                payload=_event_payload(
+                    str(row["state"]), str(row["state"]), lease.nonce, None
+                ),
+            )
+        return Lease(
+            app=lease.app,
+            key=lease.key,
+            owner=lease.owner,
+            nonce=lease.nonce,
+            expires_at=expires_at,
+        )
+
+    @_store_operation("finish_job")
+    def finish_job(
+        self,
+        lease: Lease,
+        now: str,
+        state: str,
+        reason_code: str | None,
+    ) -> str:
+        """收敛 running 职位任务；blocked 保留设备隔离，其余删除设备行。"""
+        now_dt = self._prepare_now(now)
+        if not is_job_task_key(lease.key):
+            raise StoreError("invalid_input")
+        if state not in {"done", "not_sent", "failed", "blocked", "cancelled"}:
+            raise StoreError("invalid_input")
+        if (state == "done" and reason_code is not None) or (
+            state != "done" and not is_nonempty_text(reason_code)
+        ):
+            raise StoreError("invalid_input")
+        if reason_code is not None:
+            try:
+                validate_event_reason(reason_code)
+            except ValueError:
+                raise StoreError("invalid_input") from None
+        self._check_clock(now_dt)
+        with self._write():
+            task_row, _ = self._match_current_lease(
+                lease, {"running"}, now_dt, allow_expired=False
+            )
+            self._apply_task_terminal(
+                task_row,
+                lease,
+                now=now,
+                task_state=state,
+                reason_code=reason_code,
+                from_state="running",
+                lease_expires_at=str(task_row["lease_expires_at"]),
+                keep_device=(state == "blocked"),
+            )
+        return "updated"
+
+    @_store_operation("save_checkpoint")
+    def save_checkpoint(
+        self,
+        batch_id: str,
+        cursor: BatchCursor,
+        *,
+        now: str,
+    ) -> dict[str, object]:
+        """原子提交游标、预算与 checkpoint_committed；失败整体回滚。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("invalid_input")
+        if not isinstance(cursor, BatchCursor) or cursor.batch_id != batch_id:
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        checkpoint_id = str(uuid.uuid4())
+        with self._write():
+            row = self._connection.execute(
+                "SELECT profile_id FROM job_batches WHERE batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+            if row is None or str(row["profile_id"]) != self.profile_id:
+                raise StoreError("invalid_input")
+            cursor_json = json.dumps(cursor.to_json(), sort_keys=True)
+            self._connection.execute(
+                "UPDATE job_batches SET cursor_json = ?, state = 'active', "
+                "pause_reason = NULL, last_checkpoint_id = ?, updated_at = ? "
+                "WHERE batch_id = ?",
+                (cursor_json, checkpoint_id, now, batch_id),
+            )
+            self._run_fault_hook("checkpoint_before_event")
+            self._insert_scheduler_event(
+                batch_id=batch_id,
+                task_key=None,
+                event="checkpoint_committed",
+                reason_code=None,
+                created_at=now,
+                payload={
+                    "checkpoint_id": checkpoint_id,
+                    "preemptions_used": cursor.preemptions_used,
+                    "remaining_budget": cursor.budget.to_json(),
+                },
+            )
+        return {"checkpoint_id": checkpoint_id, "cursor": cursor, "updated_at": now}
+
+    @_store_operation("pause_batch")
+    def pause_batch(
+        self,
+        batch_id: str,
+        cursor: BatchCursor,
+        reason_code: str,
+        *,
+        now: str,
+    ) -> dict[str, object]:
+        """原子保存游标并暂停批次；原因只取固定词表。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("invalid_input")
+        if (
+            not isinstance(cursor, BatchCursor)
+            or cursor.batch_id != batch_id
+            or reason_code not in PAUSE_REASONS
+        ):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row = self._connection.execute(
+                "SELECT profile_id FROM job_batches WHERE batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+            if row is None or str(row["profile_id"]) != self.profile_id:
+                raise StoreError("invalid_input")
+            self._connection.execute(
+                "UPDATE job_batches SET cursor_json = ?, state = 'paused', "
+                "pause_reason = ?, updated_at = ? WHERE batch_id = ?",
+                (
+                    json.dumps(cursor.to_json(), sort_keys=True),
+                    reason_code,
+                    now,
+                    batch_id,
+                ),
+            )
+            self._insert_scheduler_event(
+                batch_id=batch_id,
+                task_key=None,
+                event="round_paused",
+                reason_code=reason_code,
+                created_at=now,
+                payload={
+                    "preemptions_used": cursor.preemptions_used,
+                    "remaining_budget": cursor.budget.to_json(),
+                },
+            )
+        return {"batch_id": batch_id, "state": "paused", "reason_code": reason_code}
+
+    @_store_operation("record_runtime_event")
+    def record_runtime_event(
+        self,
+        batch_id: str,
+        event: str,
+        *,
+        now: str,
+        task_key: str | None = None,
+        reason_code: str | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> None:
+        """追加白名单调度事件；payload 不含正文、坐标或原始键值。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None or not is_uuid(batch_id):
+            raise StoreError("invalid_input")
+        if task_key is not None and not (
+            is_job_task_key(task_key) or _is_discovery_task_key(task_key)
+        ):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row = self._connection.execute(
+                "SELECT profile_id FROM job_batches WHERE batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+            if row is None or str(row["profile_id"]) != self.profile_id:
+                raise StoreError("invalid_input")
+            self._insert_scheduler_event(
+                batch_id=batch_id,
+                task_key=task_key,
+                event=event,
+                reason_code=reason_code,
+                created_at=now,
+                payload=payload or {},
+            )
+
+    @_store_operation("last_action_state")
+    def last_action_state(self, task_key: str) -> str | None:
+        """只读返回任务最近动作状态，供安全点独立判定已提交。"""
+        if task_key:
+            row = self._connection.execute(
+                "SELECT state FROM action_records WHERE app = ? AND task_key = ? "
+                "ORDER BY created_at DESC, action_key DESC LIMIT 1",
+                (APP, task_key),
+            ).fetchone()
+        else:
+            row = self._connection.execute(
+                "SELECT state FROM action_records WHERE app = ? "
+                "ORDER BY created_at DESC, action_key DESC LIMIT 1",
+                (APP,),
+            ).fetchone()
+        return None if row is None else str(row["state"])
+
+    @_store_operation("queued_new_message_keys")
+    def queued_new_message_keys(self) -> tuple[str, ...]:
+        """只读返回同 profile 中仍 queued 的 M2 新消息会话键，按会话去重。"""
+        if self.profile_id is None:
+            return ()
+        rows = self._connection.execute(
+            "SELECT nm.conversation_key FROM hr_discoveries nm "
+            "WHERE nm.app = ? AND nm.kind = 'new_message' AND nm.state = 'queued' "
+            "AND nm.conversation_key IS NOT NULL "
+            "AND NOT EXISTS ("
+            "SELECT 1 FROM hr_discoveries u "
+            "WHERE u.app = nm.app AND u.conversation_key = nm.conversation_key "
+            "AND u.kind = 'unread' "
+            "AND u.state IN ('queued', 'leased', 'running', 'done') "
+            "AND u.updated_at >= nm.created_at"
+            ") "
+            "ORDER BY nm.created_at, nm.conversation_key",
+            (APP,),
+        ).fetchall()
+        keys: list[str] = []
+        for row in rows:
+            key = str(row["conversation_key"])
+            if is_conversation_key(APP, key) and key not in keys:
+                keys.append(key)
+        return tuple(keys)
+
+    @_store_operation("save_draft")
+    def save_draft(
+        self,
+        *,
+        draft_id: str,
+        task_kind: str,
+        task_key: str,
+        subject_key: str,
+        input_hash: str,
+        base_hash: str,
+        pack_hash: str,
+        model_id: str,
+        model_config_hash: str,
+        facts_hash: str,
+        intent: str,
+        sub_intents: tuple[str, ...],
+        policy_tier: str,
+        reply: str,
+        now: str,
+    ) -> dict[str, object]:
+        """保存本机草稿审阅件；不携带授权、租约或旧 nonce。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("invalid_input")
+        if not is_uuid(draft_id):
+            raise StoreError("invalid_input")
+        if task_kind not in {"discovery", "job"}:
+            raise StoreError("invalid_input")
+        if not is_nonempty_text(task_key) or not is_nonempty_text(subject_key):
+            raise StoreError("invalid_input")
+        for name, value in (
+            ("input_hash", input_hash),
+            ("base_hash", base_hash),
+            ("pack_hash", pack_hash),
+            ("model_config_hash", model_config_hash),
+            ("facts_hash", facts_hash),
+        ):
+            if not is_hash(value):
+                raise StoreError("invalid_input")
+        if not is_nonempty_text(model_id) or not is_nonempty_text(intent):
+            raise StoreError("invalid_input")
+        if not isinstance(sub_intents, tuple) or any(
+            not is_nonempty_text(item) for item in sub_intents
+        ):
+            raise StoreError("invalid_input")
+        if policy_tier not in {"A", "B", "C"} or not is_nonempty_text(reply):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            self._connection.execute(
+                "UPDATE drafts SET state = 'superseded', updated_at = ? "
+                "WHERE profile_id = ? AND task_key = ? AND state = 'pending_review'",
+                (now, self.profile_id, task_key),
+            )
+            self._connection.execute(
+                "INSERT INTO drafts (draft_id, profile_id, task_kind, task_key, "
+                "subject_key, input_hash, base_hash, pack_hash, model_id, "
+                "model_config_hash, facts_hash, intent, sub_intents_json, "
+                "policy_tier, reply, state, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                "'pending_review', ?, ?)",
+                (
+                    draft_id,
+                    self.profile_id,
+                    task_kind,
+                    task_key,
+                    subject_key,
+                    input_hash,
+                    base_hash,
+                    pack_hash,
+                    model_id,
+                    model_config_hash,
+                    facts_hash,
+                    intent,
+                    json.dumps(list(sub_intents), sort_keys=True),
+                    policy_tier,
+                    reply,
+                    now,
+                    now,
+                ),
+            )
+            self._insert_scheduler_event(
+                batch_id=None,
+                task_key=task_key,
+                event="draft_saved",
+                reason_code=None,
+                created_at=now,
+                payload={
+                    "draft_id": draft_id,
+                    "input_hash": input_hash,
+                    "base_hash": base_hash,
+                    "pack_hash": pack_hash,
+                },
+            )
+        return self.get_draft(draft_id) or {}
+
+    @_store_operation("get_draft")
+    def get_draft(self, draft_id: str) -> dict[str, object] | None:
+        """只读返回一条草稿；不存在返回 None，正文只在本机边界内。"""
+        if not is_uuid(draft_id):
+            raise StoreError("invalid_input")
+        row = self._connection.execute(
+            "SELECT * FROM drafts WHERE draft_id = ? AND profile_id = ?",
+            (draft_id, self.profile_id),
+        ).fetchone()
+        return None if row is None else _draft_payload(row)
+
+    @_store_operation("find_draft_by_identity")
+    def find_draft_by_identity(
+        self,
+        *,
+        task_key: str,
+        subject_key: str,
+        input_hash: str,
+        base_hash: str,
+        pack_hash: str,
+        model_id: str,
+        model_config_hash: str,
+        facts_hash: str,
+    ) -> dict[str, object] | None:
+        """按完整当前身份查找唯一 pending_review 草稿；不跨身份复用。"""
+        if self.profile_id is None:
+            raise StoreError("invalid_input")
+        for value in (
+            input_hash,
+            base_hash,
+            pack_hash,
+            model_config_hash,
+            facts_hash,
+        ):
+            if not is_hash(value):
+                raise StoreError("invalid_input")
+        row = self._connection.execute(
+            "SELECT * FROM drafts WHERE profile_id = ? AND task_key = ? "
+            "AND subject_key = ? AND input_hash = ? AND base_hash = ? "
+            "AND pack_hash = ? AND model_id = ? AND model_config_hash = ? "
+            "AND facts_hash = ? AND state = 'pending_review' "
+            "ORDER BY created_at DESC LIMIT 1",
+            (
+                self.profile_id,
+                task_key,
+                subject_key,
+                input_hash,
+                base_hash,
+                pack_hash,
+                model_id,
+                model_config_hash,
+                facts_hash,
+            ),
+        ).fetchone()
+        return None if row is None else _draft_payload(row)
+
+    @_store_operation("save_runtime_decision")
+    def save_runtime_decision(
+        self,
+        *,
+        subject_key: str,
+        task_kind: str,
+        input_hash: str,
+        base_hash: str,
+        pack_hash: str,
+        model_id: str,
+        model_config_hash: str,
+        facts_hash: str,
+        intent: str,
+        sub_intents: tuple[str, ...],
+        policy_tier: str,
+        now: str,
+    ) -> None:
+        """保存最小运行时决策记忆：仅摘要/枚举，不含正文、旧 nonce 或授权。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("invalid_input")
+        if task_kind not in {"discovery", "job"} or not is_nonempty_text(subject_key):
+            raise StoreError("invalid_input")
+        for name, value in (
+            ("input_hash", input_hash),
+            ("base_hash", base_hash),
+            ("pack_hash", pack_hash),
+            ("model_config_hash", model_config_hash),
+            ("facts_hash", facts_hash),
+        ):
+            if not is_hash(value):
+                raise StoreError("invalid_input")
+        if not is_nonempty_text(model_id) or not is_nonempty_text(intent):
+            raise StoreError("invalid_input")
+        if not isinstance(sub_intents, tuple) or any(
+            not is_nonempty_text(item) for item in sub_intents
+        ):
+            raise StoreError("invalid_input")
+        if policy_tier not in {"A", "B", "C"}:
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            self._connection.execute(
+                "INSERT INTO runtime_decisions (profile_id, subject_key, task_kind, "
+                "input_hash, base_hash, pack_hash, model_id, model_config_hash, "
+                "facts_hash, intent, sub_intents_json, policy_tier, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(profile_id, subject_key, input_hash, base_hash, "
+                "pack_hash, model_id, model_config_hash) DO UPDATE SET "
+                "facts_hash = excluded.facts_hash, intent = excluded.intent, "
+                "sub_intents_json = excluded.sub_intents_json, "
+                "policy_tier = excluded.policy_tier, created_at = excluded.created_at",
+                (
+                    self.profile_id,
+                    subject_key,
+                    task_kind,
+                    input_hash,
+                    base_hash,
+                    pack_hash,
+                    model_id,
+                    model_config_hash,
+                    facts_hash,
+                    intent,
+                    json.dumps(list(sub_intents), sort_keys=True),
+                    policy_tier,
+                    now,
+                ),
+            )
+
+    @_store_operation("find_runtime_decision")
+    def find_runtime_decision(
+        self,
+        *,
+        subject_key: str,
+        task_kind: str,
+        input_hash: str,
+        base_hash: str,
+        pack_hash: str,
+        model_id: str,
+        model_config_hash: str,
+        facts_hash: str,
+    ) -> dict[str, object] | None:
+        """只在全部当前身份（含事实摘要）一致时返回记忆，否则视为失效。"""
+        if self.profile_id is None:
+            raise StoreError("invalid_input")
+        if task_kind not in {"discovery", "job"} or not is_nonempty_text(subject_key):
+            raise StoreError("invalid_input")
+        for value in (
+            input_hash,
+            base_hash,
+            pack_hash,
+            model_config_hash,
+            facts_hash,
+        ):
+            if not is_hash(value):
+                raise StoreError("invalid_input")
+        row = self._connection.execute(
+            "SELECT * FROM runtime_decisions WHERE profile_id = ? AND "
+            "subject_key = ? AND task_kind = ? AND input_hash = ? AND "
+            "base_hash = ? AND pack_hash = ? AND model_id = ? AND "
+            "model_config_hash = ? AND facts_hash = ?",
+            (
+                self.profile_id,
+                subject_key,
+                task_kind,
+                input_hash,
+                base_hash,
+                pack_hash,
+                model_id,
+                model_config_hash,
+                facts_hash,
+            ),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "subject_key": str(row["subject_key"]),
+            "task_kind": str(row["task_kind"]),
+            "input_hash": str(row["input_hash"]),
+            "base_hash": str(row["base_hash"]),
+            "pack_hash": str(row["pack_hash"]),
+            "model_id": str(row["model_id"]),
+            "model_config_hash": str(row["model_config_hash"]),
+            "facts_hash": str(row["facts_hash"]),
+            "intent": str(row["intent"]),
+            "sub_intents": tuple(json.loads(str(row["sub_intents_json"]))),
+            "policy_tier": str(row["policy_tier"]),
+            "created_at": str(row["created_at"]),
+        }
+
+    def _insert_scheduler_event(
+        self,
+        *,
+        batch_id: str | None,
+        task_key: str | None,
+        event: str,
+        reason_code: str | None,
+        created_at: str,
+        payload: dict[str, object],
+    ) -> None:
+        """在同一事务追加调度事件；调用方已持有写事务。"""
+        if event not in {
+            "run_started",
+            "run_finished",
+            "checkpoint_committed",
+            "stage_preempted",
+            "round_paused",
+            "unread_verified",
+            "draft_saved",
+            "decision_reused",
+            "job_claimed",
+            "job_started",
+            "job_finished",
+            "batch_resumed",
+        }:
+            raise StoreError("invalid_input")
+        if reason_code is not None and reason_code not in PAUSE_REASONS:
+            raise StoreError("invalid_input")
+        if not isinstance(payload, dict):
+            raise StoreError("invalid_input")
+        self._connection.execute(
+            "INSERT INTO scheduler_events(batch_id, task_key, event, reason_code, "
+            "created_at, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                batch_id,
+                task_key,
+                event,
+                reason_code,
+                created_at,
+                json.dumps(payload, sort_keys=True),
+            ),
+        )
+
+    @_store_operation("finish_semantic_block")
+    def finish_semantic_block(
+        self, lease: Lease, now: str, reason_code: str
+    ) -> str:
+        """仅语义未决时阻塞任务并释放安全设备行；不做设备隔离。"""
+        now_dt = self._prepare_now(now)
+        if reason_code not in {"human_review_required", "invalid_decision", "unread_unverified", "identity_ambiguous", "incomplete_snapshot", "stale_snapshot", "stale_decision", "policy_changed", "input_too_large", "decision_timeout"}:
+            raise StoreError("invalid_input")
+        if not is_task_key(lease.key):
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row, _device = self._match_current_lease(
+                lease, {"running"}, now_dt, allow_expired=False
+            )
+            table = "jobs" if is_job_task_key(lease.key) else "hr_discoveries"
+            key_column = "job_key" if is_job_task_key(lease.key) else "\"key\""
+            cursor = self._connection.execute(
+                f"UPDATE {table} SET state = 'blocked', reason_code = ?, "
+                "lease_owner = NULL, owner_pid = NULL, owner_host = NULL, "
+                "nonce = NULL, lease_expires_at = NULL, updated_at = ? "
+                f"WHERE app = ? AND {key_column} = ? AND state = 'running' "
+                "AND lease_owner = ? AND owner_pid = ? AND owner_host = ? "
+                "AND nonce = ? AND lease_expires_at = ?",
+                (
+                    reason_code,
+                    now,
+                    APP,
+                    lease.key,
+                    lease.owner.id,
+                    lease.owner.pid,
+                    lease.owner.host,
+                    lease.nonce,
+                    str(row["lease_expires_at"]),
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("stale_lease")
+            cursor = self._connection.execute(
+                "DELETE FROM device_lease WHERE device_key = 'primary' "
+                "AND reservation_state = 'held' AND lease_owner = ? "
+                "AND owner_pid = ? AND owner_host = ? AND nonce = ? "
+                "AND lease_expires_at = ?",
+                (
+                    lease.owner.id,
+                    lease.owner.pid,
+                    lease.owner.host,
+                    lease.nonce,
+                    str(row["lease_expires_at"]),
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise StoreError("stale_lease")
+            self._insert_event(
+                app=APP,
+                subject_key=lease.key,
+                event="task_finished",
+                reason_code=reason_code,
+                created_at=now,
+                payload=_event_payload("running", "blocked", lease.nonce, None),
+            )
+        return "updated"
 
     @_store_operation("begin_action", stage="action")
     def begin_action(
@@ -792,20 +1759,32 @@ class SqliteStore:
         reply_cooldown_seconds: int,
         ime_original: str | None,
         now: str,
+        apply_allowance: int | None = None,
     ) -> dict[str, object]:
         """原子准入并写 pending 与唯一动作键锁；额度冷却不通过则不调用执行器。"""
         now_dt = self._prepare_now(now)
         if self.profile_id is None:
             raise StoreError("action_not_ready")
+        task_kind = "job" if is_job_task_key(lease.key) else "discovery"
         try:
             if action_kind not in ACTION_KIND_SET or not is_action_key(
                 action_kind, action_key
             ):
                 raise StoreError("invalid_action_key")
             validate_action_target(action_kind, action_key, target_key)
-            _validate_conversation_key(conversation_key)
-            if action_kind != "send_text" and target_key != conversation_key:
-                raise StoreError("invalid_action_key")
+            if action_kind == "apply_job":
+                if task_kind != "job" or target_key != lease.key:
+                    raise StoreError("invalid_action_key")
+                if type(apply_allowance) is not int or apply_allowance < 1:
+                    raise StoreError("quota_exceeded")
+            else:
+                if task_kind != "discovery":
+                    raise StoreError("invalid_action_key")
+                if apply_allowance is not None:
+                    raise StoreError("invalid_input")
+                _validate_conversation_key(conversation_key)
+                if action_kind != "send_text" and target_key != conversation_key:
+                    raise StoreError("invalid_action_key")
             if (
                 type(daily_sends) is not int
                 or daily_sends < 1
@@ -832,7 +1811,15 @@ class SqliteStore:
             row, _ = self._match_current_lease(
                 lease, {"running"}, now_dt, allow_expired=False
             )
-            if str(row["conversation_key"]) != conversation_key:
+            if action_kind == "apply_job":
+                expected_conversation = (
+                    row["conversation_key"]
+                    if row["conversation_key"] is not None
+                    else lease.key
+                )
+                if conversation_key != expected_conversation:
+                    raise StoreError("invalid_action_key")
+            elif str(row["conversation_key"]) != conversation_key:
                 raise StoreError("invalid_action_key")
             existing = self._connection.execute(
                 "SELECT state FROM action_records WHERE action_key = ?",
@@ -854,18 +1841,33 @@ class SqliteStore:
                     reply_cooldown_seconds=reply_cooldown_seconds,
                     conversation_key=conversation_key,
                 )
+            if action_kind == "apply_job":
+                used = int(
+                    self._connection.execute(
+                        "SELECT COUNT(*) FROM action_records WHERE app = ? "
+                        "AND task_key = ? AND action_kind = 'apply_job' "
+                        "AND outcome = 'performed'",
+                        (APP, lease.key),
+                    ).fetchone()[0]
+                )
+                if used >= int(apply_allowance):  # type: ignore[arg-type]
+                    raise StoreError("quota_exceeded")
             self._run_fault_hook("action_before_insert")
             self._connection.execute(
-                "INSERT INTO action_records (action_key, app, action_kind, task_key, "
-                "target_key, conversation_key, state, authorization_json, "
+                "INSERT INTO action_records (action_key, app, action_kind, task_kind, "
+                "task_key, discovery_task_key, job_task_key, target_key, "
+                "conversation_key, state, authorization_json, "
                 "lease_owner, owner_pid, owner_host, nonce, lease_expires_at, "
                 "created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     action_key,
                     APP,
                     action_kind,
+                    task_kind,
                     lease.key,
+                    lease.key if task_kind == "discovery" else None,
+                    lease.key if task_kind == "job" else None,
                     target_key,
                     conversation_key,
                     authorization_json,
@@ -1219,10 +2221,7 @@ class SqliteStore:
             if str(record["owner_host"]) != self._local_host:
                 raise StoreError("owner_not_stopped")
             action_kind = str(record["action_kind"])
-            task = self._connection.execute(
-                "SELECT * FROM hr_discoveries WHERE app = ? AND \"key\" = ?",
-                (APP, str(record["task_key"])),
-            ).fetchone()
+            task = self._select_task_row(str(record["task_key"]))
             if task is None:
                 raise StoreError("action_not_ready")
             allowed_task_states = {"blocked", "cancelled"} if from_state == "cancelled" else {
@@ -1575,11 +2574,17 @@ class SqliteStore:
         keep_device: bool,
     ) -> None:
         """在同一事务清任务租约并按 blocked/终态处理设备行与任务事件。"""
+        if is_job_task_key(lease.key):
+            table = "jobs"
+            key_column = "job_key"
+        else:
+            table = "hr_discoveries"
+            key_column = "\"key\""
         cursor = self._connection.execute(
-            "UPDATE hr_discoveries SET state = ?, reason_code = ?, "
+            f"UPDATE {table} SET state = ?, reason_code = ?, "
             "lease_owner = NULL, owner_pid = NULL, owner_host = NULL, "
             "nonce = NULL, lease_expires_at = NULL, updated_at = ? "
-            "WHERE app = ? AND \"key\" = ? AND state = ? "
+            f"WHERE app = ? AND {key_column} = ? AND state = ? "
             "AND lease_owner = ? AND owner_pid = ? AND owner_host = ? "
             "AND nonce = ? AND lease_expires_at = ?",
             (
@@ -1647,17 +2652,24 @@ class SqliteStore:
         keep_device: bool,
     ) -> None:
         """人工对账后清理旧任务租约；abandon 保留隔离设备行。"""
+        task_key = str(task["job_key"]) if "job_key" in task.keys() else str(task["key"])
+        if is_job_task_key(task_key):
+            table = "jobs"
+            key_column = "job_key"
+        else:
+            table = "hr_discoveries"
+            key_column = "\"key\""
         cursor = self._connection.execute(
-            "UPDATE hr_discoveries SET state = ?, reason_code = ?, "
+            f"UPDATE {table} SET state = ?, reason_code = ?, "
             "lease_owner = NULL, owner_pid = NULL, owner_host = NULL, "
             "nonce = NULL, lease_expires_at = NULL, updated_at = ? "
-            "WHERE app = ? AND \"key\" = ? AND state = ?",
+            f"WHERE app = ? AND {key_column} = ? AND state = ?",
             (
                 task_state,
                 reason_code,
                 now,
                 APP,
-                str(task["key"]),
+                task_key,
                 str(task["state"]),
             ),
         )
@@ -1674,7 +2686,7 @@ class SqliteStore:
             )
         self._insert_event(
             app=APP,
-            subject_key=str(task["key"]),
+            subject_key=task_key,
             event="task_finished",
             reason_code=reason_code,
             created_at=now,
@@ -1802,13 +2814,10 @@ class SqliteStore:
     ) -> tuple[sqlite3.Row, sqlite3.Row]:
         """按 app/key/owner/pid/host/nonce 匹配当前行，使用库中真实截止时间。"""
         try:
-            validate_lease(lease)
+            validate_task_lease(lease)
         except ValueError:
             raise StoreError("invalid_input") from None
-        row = self._connection.execute(
-            "SELECT * FROM hr_discoveries WHERE app = ? AND \"key\" = ?",
-            (lease.app, lease.key),
-        ).fetchone()
+        row = self._select_task_row(lease.key)
         device = self._select_device()
         if row is None or device is None:
             raise StoreError("stale_lease")
@@ -1864,6 +2873,17 @@ class SqliteStore:
             "SELECT * FROM hr_discoveries WHERE app = ? AND \"key\" = ?",
             (APP, key),
         ).fetchone()
+
+    def _select_task_row(self, key: str) -> sqlite3.Row | None:
+        """按任务键前缀读取发现行或职位行，避免跨类型误取。"""
+        if is_job_task_key(key):
+            if self.profile_id is None:
+                raise StoreError("invalid_input")
+            return self._connection.execute(
+                "SELECT * FROM jobs WHERE app = ? AND job_key = ?",
+                (APP, key),
+            ).fetchone()
+        return self._select_discovery(key)
 
     def _select_active_conversation(self, conversation_key: str) -> sqlite3.Row | None:
         """读取同一会话当前唯一的非终态发现。"""
@@ -2118,12 +3138,48 @@ def _validate_conversation_key(conversation_key: object) -> None:
 
 
 def _validate_target_key(action_kind: str, target_key: object) -> None:
-    """文本目标必须是稳定消息键，其它动作目标必须是规范会话键。"""
+    """文本目标必须是稳定消息键，申请目标是职位键，其它是规范会话键。"""
     if action_kind == "send_text":
         if not is_message_key(target_key):
             raise ValueError("target key is invalid")
         return
+    if action_kind == "apply_job":
+        if not is_job_key(target_key):
+            raise ValueError("target key is invalid")
+        return
     _validate_conversation_key(target_key)
+
+
+def _is_discovery_task_key(value: object) -> bool:
+    """判断是否为规范发现任务键（不依赖 reading 模块）。"""
+    if not isinstance(value, str):
+        return False
+    prefix = f"{APP}:discovery:"
+    return value.startswith(prefix) and is_hash(value[len(prefix) :])
+
+
+def _draft_payload(row: sqlite3.Row) -> dict[str, object]:
+    """把草稿行投影为固定对象；正文只在本机调用边界内返回。"""
+    return {
+        "draft_id": str(row["draft_id"]),
+        "profile_id": str(row["profile_id"]),
+        "task_kind": str(row["task_kind"]),
+        "task_key": str(row["task_key"]),
+        "subject_key": str(row["subject_key"]),
+        "input_hash": str(row["input_hash"]),
+        "base_hash": str(row["base_hash"]),
+        "pack_hash": str(row["pack_hash"]),
+        "model_id": str(row["model_id"]),
+        "model_config_hash": str(row["model_config_hash"]),
+        "facts_hash": str(row["facts_hash"]),
+        "intent": str(row["intent"]),
+        "sub_intents": tuple(json.loads(str(row["sub_intents_json"]))),
+        "policy_tier": str(row["policy_tier"]),
+        "reply": str(row["reply"]),
+        "state": str(row["state"]),
+        "created_at": str(row["created_at"]),
+        "updated_at": str(row["updated_at"]),
+    }
 
 
 def _action_row_payload(row: sqlite3.Row) -> dict[str, object]:
@@ -2132,6 +3188,9 @@ def _action_row_payload(row: sqlite3.Row) -> dict[str, object]:
         "action_key": str(row["action_key"]),
         "app": str(row["app"]),
         "action_kind": str(row["action_kind"]),
+        "task_kind": (
+            str(row["task_kind"]) if "task_kind" in row.keys() else "discovery"
+        ),
         "task_key": str(row["task_key"]),
         "target_key": str(row["target_key"]),
         "conversation_key": str(row["conversation_key"]),

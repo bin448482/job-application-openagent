@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -1034,5 +1036,179 @@ class _StoppedActivity:
         return "stopped"
 
 
+class PolicyPromoteWindowsRetryTests(unittest.TestCase):
+    """Windows 短暂删除共享冲突的有限重试；不把持久权限错误当成功。"""
+
+    @unittest.skipUnless(os.name == "nt", "Windows sharing semantics only")
+    def test_transient_directory_handle_is_retried_once_released(self) -> None:
+        """临时目录句柄释放后同路径真实发布成功。"""
+        tmp, root = temp_project()
+        try:
+            repository = FilePolicyRepository(root)
+            staging_rel = repository.make_staging_dir("prompts/local")
+            staging = root / staging_rel
+            repository.write_text_exact(f"{staging_rel}/pack.toml", "x")
+            handle = _hold_directory_without_delete(staging)
+            released = threading.Event()
+
+            def release() -> None:
+                time.sleep(0.02)
+                _close_handle(handle)
+                released.set()
+
+            thread = threading.Thread(target=release)
+            thread.start()
+            repository.promote(staging_rel, "prompts/local/published")
+            thread.join(timeout=2)
+            self.assertTrue(released.is_set())
+            self.assertTrue((root / "prompts/local/published/pack.toml").is_file())
+            self.assertFalse(staging.exists())
+        finally:
+            tmp.cleanup()
+
+    @unittest.skipUnless(os.name == "nt", "Windows sharing semantics only")
+    def test_persistent_handle_fails_closed_without_half_package(self) -> None:
+        """持续占用耗尽重试后受控失败，目标不存在且暂存保留。"""
+        tmp, root = temp_project()
+        try:
+            repository = FilePolicyRepository(root)
+            staging_rel = repository.make_staging_dir("prompts/local")
+            staging = root / staging_rel
+            repository.write_text_exact(f"{staging_rel}/pack.toml", "x")
+            handle = _hold_directory_without_delete(staging)
+            try:
+                with self.assertRaises(Exception) as caught:
+                    repository.promote(staging_rel, "prompts/local/published")
+                self.assertEqual(caught.exception.reason_code, "policy_io_error")
+            finally:
+                _close_handle(handle)
+            self.assertFalse((root / "prompts/local/published").exists())
+            self.assertTrue(staging.is_dir())
+            repository.promote(staging_rel, "prompts/local/published")
+            self.assertTrue((root / "prompts/local/published/pack.toml").is_file())
+        finally:
+            tmp.cleanup()
+
+
+    def test_non_target_error_is_not_retried(self) -> None:
+        """普通 OSError 只尝试一次，不进入 Windows 共享冲突重试。"""
+        tmp, root = temp_project()
+        try:
+            repository = FilePolicyRepository(root)
+            staging_rel = repository.make_staging_dir("prompts/local")
+            staging = root / staging_rel
+            with patch.object(Path, "rename", side_effect=OSError("synthetic")) as rename:
+                with self.assertRaises(Exception) as caught:
+                    repository.promote(staging_rel, "prompts/local/published")
+                self.assertEqual(caught.exception.reason_code, "policy_io_error")
+                self.assertEqual(rename.call_count, 1)
+        finally:
+            tmp.cleanup()
+
+
+    def test_cross_instance_staging_is_rejected(self) -> None:
+        """另一实例拥有的暂存路径不能发布。"""
+        tmp, root = temp_project()
+        try:
+            owner = FilePolicyRepository(root)
+            staging_rel = owner.make_staging_dir("prompts/local")
+            owner.write_text_exact(f"{staging_rel}/pack.toml", "x")
+            other = FilePolicyRepository(root)
+            with self.assertRaises(Exception) as caught:
+                other.promote(staging_rel, "prompts/local/published")
+            self.assertEqual(caught.exception.reason_code, "invalid_input")
+            self.assertFalse((root / "prompts/local/published").exists())
+        finally:
+            tmp.cleanup()
+
+    def test_replacement_between_retries_is_rejected(self) -> None:
+        """首次 WinError32 后同路径暂存被替换，重试不得发布替换内容。"""
+        tmp, root = temp_project()
+        try:
+            repository = FilePolicyRepository(root)
+            staging_rel = repository.make_staging_dir("prompts/local")
+            repository.write_text_exact(f"{staging_rel}/pack.toml", "original")
+            original_rename = Path.rename
+            state = {"first": True}
+
+            def rename(path_self, target):
+                if state["first"]:
+                    state["first"] = False
+                    saved = Path(str(path_self) + "-saved")
+                    original_rename(path_self, saved)
+                    path_self.mkdir()
+                    (path_self / "pack.toml").write_text("replacement", encoding="utf-8")
+                    raise PermissionError(13, "synthetic", None, 32)
+                return original_rename(path_self, target)
+
+            with patch.object(Path, "rename", rename):
+                with self.assertRaises(Exception) as caught:
+                    repository.promote(staging_rel, "prompts/local/published")
+            self.assertEqual(caught.exception.reason_code, "invalid_input")
+            self.assertFalse((root / "prompts/local/published").exists())
+        finally:
+            tmp.cleanup()
+
+    def test_nested_link_in_staging_is_rejected(self) -> None:
+        """暂存目录内出现链接时，内容身份复核拒绝发布。"""
+        from app.adapters.files import policy as policy_module
+
+        tmp, root = temp_project()
+        try:
+            repository = FilePolicyRepository(root)
+            staging_rel = repository.make_staging_dir("prompts/local")
+            repository.write_text_exact(f"{staging_rel}/pack.toml", "original")
+            original_link = policy_module._is_link_like
+
+            def link_like(path: Path) -> bool:
+                return path.name == "pack.toml" or original_link(path)
+
+            with patch.object(policy_module, "_is_link_like", link_like):
+                with self.assertRaises(Exception) as caught:
+                    repository.promote(staging_rel, "prompts/local/published")
+            self.assertEqual(caught.exception.reason_code, "invalid_input")
+            self.assertFalse((root / "prompts/local/published").exists())
+        finally:
+            tmp.cleanup()
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+def _hold_directory_without_delete(path: Path) -> int:
+    """用 Win32 CreateFileW 打开无 FILE_SHARE_DELETE 的目录句柄。"""
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateFileW.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    ]
+    kernel32.CreateFileW.restype = ctypes.c_void_p
+    handle = kernel32.CreateFileW(
+        str(path),
+        0x80000000,
+        0x1 | 0x2,
+        None,
+        3,
+        0x02000000,
+        None,
+    )
+    if handle in (None, ctypes.c_void_p(-1).value):
+        raise OSError(ctypes.get_last_error())
+    return int(handle)
+
+
+def _close_handle(handle: int) -> None:
+    """关闭 Win32 句柄。"""
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle(handle)

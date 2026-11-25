@@ -342,6 +342,117 @@ class MigrationTests(unittest.TestCase):
             connection.close()
 
 
+    def test_same_transaction_fk_failure_rolls_back_and_reopen(self) -> None:
+        """同一事务先成功写父行再 FK 失败，全部回滚；重新打开仍为空。"""
+        path = self.directory / "tx-rollback.sqlite3"
+        initialize_database(path)
+        connection = sqlite3.connect(str(path))
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "INSERT INTO hr_conversations(app, key, identity_hash) VALUES "
+                "('boss', 'boss:conv:' || ?, ?)",
+                ("a" * 64, "a" * 64),
+            )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "INSERT INTO hr_discoveries(app, key, conversation_key, kind, "
+                    "fingerprint, source_names_json, snapshot_id, state, created_at, updated_at) "
+                    "VALUES ('boss', 'boss:discovery:' || ?, 'boss:conv:' || ?, 'unread', "
+                    "'f', '[\"row_badge\"]', '00000000-0000-4000-8000-000000000001', "
+                    "'queued', 'now', 'now')",
+                    ("b" * 64, "c" * 64),
+                )
+            connection.rollback()
+        finally:
+            connection.close()
+        reopened = sqlite3.connect(str(path))
+        try:
+            self.assertEqual(
+                reopened.execute("SELECT COUNT(*) FROM hr_conversations").fetchone()[0], 0
+            )
+            self.assertEqual(
+                reopened.execute("SELECT COUNT(*) FROM hr_discoveries").fetchone()[0], 0
+            )
+        finally:
+            reopened.close()
+
+    def test_lease_state_foreign_key_rollback_and_active_unique(self) -> None:
+        """SQL CHECK/FK/RESTRICT/active 唯一索引的真实正负控与行保持。"""
+        path = self.directory / "constraints.sqlite3"
+        initialize_database(path)
+        connection = sqlite3.connect(str(path))
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            conv = "boss:conv:" + canonical_hash(["a", "b", "c"])
+            hash_value = conv.rsplit(":", 1)[-1]
+            connection.execute(
+                "INSERT INTO hr_conversations(app, key, identity_hash) VALUES ('boss', ?, ?)",
+                (conv, hash_value),
+            )
+            connection.execute(
+                "INSERT INTO hr_discoveries(app, key, conversation_key, kind, fingerprint, "
+                "source_names_json, snapshot_id, state, created_at, updated_at) "
+                "VALUES ('boss', 'boss:discovery:one', ?, 'unread', 'f', '[\"row_badge\"]', "
+                "'00000000-0000-4000-8000-000000000001', 'queued', 'now', 'now')",
+                (conv,),
+            )
+            connection.commit()
+            before = connection.execute("SELECT COUNT(*) FROM hr_discoveries").fetchone()[0]
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "INSERT INTO hr_discoveries(app, key, conversation_key, kind, fingerprint, "
+                    "source_names_json, snapshot_id, state, created_at, updated_at) "
+                    "VALUES ('boss', 'boss:discovery:two', ?, 'unread', 'f2', '[\"row_badge\"]', "
+                    "'00000000-0000-4000-8000-000000000002', 'queued', 'now2', 'now2')",
+                    (conv,),
+                )
+            connection.rollback()
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM hr_discoveries").fetchone()[0],
+                before,
+            )
+            # 非法 leased 缺租约字段由 CHECK 拒绝；合法完整租约接受。
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "INSERT INTO hr_discoveries(app, key, conversation_key, kind, fingerprint, "
+                    "source_names_json, snapshot_id, state, created_at, updated_at) "
+                    "VALUES ('boss', 'boss:discovery:bad', ?, 'unread', 'f3', '[\"row_badge\"]', "
+                    "'00000000-0000-4000-8000-000000000003', 'leased', 'now', 'now')",
+                    (conv,),
+                )
+            connection.rollback()
+            conv2 = "boss:conv:" + canonical_hash(["d", "e", "f"])
+            connection.execute(
+                "INSERT INTO hr_conversations(app, key, identity_hash) VALUES ('boss', ?, ?)",
+                (conv2, conv2.rsplit(":", 1)[-1]),
+            )
+            connection.execute(
+                "INSERT INTO hr_discoveries(app, key, conversation_key, kind, fingerprint, "
+                "source_names_json, snapshot_id, state, lease_owner, nonce, lease_expires_at, "
+                "owner_host, owner_pid, attempt, created_at, updated_at) "
+                "VALUES ('boss', 'boss:discovery:leased', ?, 'unread', 'f4', '[\"row_badge\"]', "
+                "'00000000-0000-4000-8000-000000000004', 'leased', "
+                "'11111111-1111-4111-8111-111111111111', "
+                "'22222222-2222-4222-8222-222222222222', 'later', "
+                "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 42, 1, 'now', 'now')",
+                (conv2,),
+            )
+            connection.commit()
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute("DELETE FROM hr_conversations WHERE key = ?", (conv,))
+            connection.rollback()
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM hr_conversations").fetchone()[0], 2
+            )
+            self.assertGreaterEqual(
+                connection.execute("SELECT COUNT(*) FROM hr_discoveries").fetchone()[0], 2
+            )
+        finally:
+            connection.close()
+
+
 class StoreCliTests(unittest.TestCase):
     """覆盖 store init 的固定 JSON、幂等、路径边界与安全错误出口。"""
 

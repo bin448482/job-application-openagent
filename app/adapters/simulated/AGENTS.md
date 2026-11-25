@@ -8,6 +8,8 @@
 
 - `__init__.py`：声明合成适配器包。
 - `actions.py`：`ScriptedActionExecutor`；固定 `current_ime`、`observation`、`raise` 三种脚本键，严格校验观察字段集合与类型，`raise` 只携带固定失败原因与 `clicked` 事实；返回 `ActionObservation`，由领域纯函数推导三态证据。
+- `runtime.py`：M6 `StimulusRuntimeScene` 回放 M3 manifest 引用、原始现场与合成 bridge 响应字段；`FixtureM3Read` 调用真实 M3 解析/门禁并累计实际 `read` 次数，`take_device_calls` 返回并清零供生产预算扣减；`SyntheticDecisionBridge` 只提供原始 transport 响应，由唯一 `decide` 校验；严格拒绝 `expected/oracle/verdict/answer`，不把 fixture 的 task outcome/read result/Decision 当权威。
+- `actions.py` 追加 `CommandLedgerActionExecutor`：用真实 `CommandIdentityStore` 包裹合成观察，实际记录 begin→PID→complete，供 apply_job 的 perform_action E2E 使用，不启动 ADB。
 
 ## 三、边界
 
@@ -17,7 +19,9 @@
 
 ## 四、测试
 
-`python -m unittest tests.test_action_executor tests.test_action_cli`
+`python -m unittest tests.test_action_executor tests.test_action_cli tests.test_runtime_execute`
+
+`tests.test_runtime_execute` 只使用临时项目/OS 根、合成场景与合成凭证，验证调度/安全点/预算/游标/双时钟/read_only/决策记忆；不连接设备或 provider。
 
 ## 五、维护要求
 

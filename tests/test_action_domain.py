@@ -90,6 +90,45 @@ class ActionKeyTests(unittest.TestCase):
 class EvidenceDerivationTests(unittest.TestCase):
     """performed 只能由动作特有前后差分证明。"""
 
+    def _apply(self, **overrides: object) -> ActionObservation:
+        """构造职位申请观察，允许覆盖 before/after 完成状态。"""
+        job_key = "boss:job:" + canonical_hash({"synthetic": "apply-domain"})
+        data = helpers.observation(
+            apply_available_before=True,
+            apply_completed_before=False,
+            apply_completed_after=True,
+        )
+        data.update(overrides)
+        return ActionObservation(
+            action_key=action_key_for("apply_job", app="boss", message_key=job_key),
+            action_kind="apply_job",
+            **data,
+        )
+
+    def test_apply_requires_fresh_before_to_after_completion(self) -> None:
+        """before 未完成 → after 完成才 performed/applied。"""
+        outcome = derive_action_outcome(self._apply())
+        self.assertEqual(outcome.evidence.outcome, "performed")
+        self.assertEqual(outcome.evidence.effect, "applied")
+
+    def test_preexisting_done_is_not_a_fresh_apply(self) -> None:
+        """before 已完成后即使 after 仍完成也不得 performed。"""
+        outcome = derive_action_outcome(
+            self._apply(apply_completed_before=True, clicked=False)
+        )
+        self.assertEqual(outcome.evidence.outcome, "not_performed")
+        self.assertEqual(outcome.evidence.effect, "none")
+        self.assertEqual(outcome.evidence.reason_code, "precondition_failed")
+
+    def test_preexisting_done_after_click_is_unknown(self) -> None:
+        """若已点击但 before 已完成，仍不得把既有 done 当本次成功。"""
+        outcome = derive_action_outcome(
+            self._apply(apply_completed_before=True, clicked=True)
+        )
+        self.assertEqual(outcome.evidence.outcome, "unknown")
+        self.assertEqual(outcome.evidence.reason_code, "result_unverified")
+
+
     def test_text_performed_requires_distinct_snapshots_and_new_echo(self) -> None:
         """同快照或没有新增回显时不得 performed。"""
         self.assertEqual(
