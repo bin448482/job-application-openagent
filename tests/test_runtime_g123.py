@@ -39,12 +39,16 @@ from app.domain.reading import (
     job_key_from_identity,
 )
 from app.domain.runtime import BatchCursor, BudgetLimits
-from app.ports.runtime import RawScene
+from app.ports.runtime import RawScene, RuntimeCommandControlError
 from app.ports.store import StoreError
 from app.process_log import ProcessLog
 from app.usecases import policy as policy_usecases
 from app.usecases.policy_eval import RepositorySnapshot
-from app.usecases.runtime import derive_safe_point, execute_run
+from app.usecases.runtime import (
+    _LeaseCommandContext,
+    derive_safe_point,
+    execute_run,
+)
 from tests import runtime_helpers as helpers
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -142,6 +146,44 @@ class _CountingRead(FixtureM3Read):
         return super().read(relative)
 
 
+class _SecondConversationRead(FixtureM3Read):
+    """第二次读取同一会话引用前改写真实原始 manifest/profile 的测试刺激。"""
+
+    def __init__(self, project_root: Path, target: str, mutate) -> None:
+        """保存真实解析根、目标会话引用与第二次读取前的原始输入改写。"""
+        super().__init__(project_root)
+        self._target = target
+        self._mutate = mutate
+        self._conversation_reads = 0
+
+    def read(self, relative: str):
+        """仅在 post-claim 会话重读前改写原始输入，仍走真实 M3 解析。"""
+        if relative == self._target:
+            self._conversation_reads += 1
+            if self._conversation_reads == 2:
+                self._mutate()
+        return super().read(relative)
+
+
+class _ReplayConversationRead(FixtureM3Read):
+    """第二次读取同一会话时回放第一次真实结果，模拟重放快照反例。"""
+
+    def __init__(self, project_root: Path, target: str) -> None:
+        """保存真实解析根与目标会话引用。"""
+        super().__init__(project_root)
+        self._target = target
+        self._cached = None
+
+    def read(self, relative: str):
+        """目标会话第二次读取直接回放第一次 ReadResult。"""
+        if relative == self._target:
+            if self._cached is not None:
+                return self._cached
+            self._cached = super().read(relative)
+            return self._cached
+        return super().read(relative)
+
+
 class _AdvancingBridge:
     """包裹真实合成 bridge，只在原始 transport 调用期间推进可信时钟。"""
 
@@ -218,6 +260,8 @@ class _RuntimeCase(unittest.TestCase):
         bridge_factory: object | None = None,
         store_hook: object | None = None,
         store_monotonic: object | None = None,
+        on_started: object | None = None,
+        gate: object | None = None,
     ) -> dict[str, object]:
         """经真实 M3 解析、唯一 decide、真实 profile/gate/仓储运行一次。"""
         active = clock or _Clock()
@@ -227,7 +271,7 @@ class _RuntimeCase(unittest.TestCase):
                 FilePolicyRepository(self.root), "prompts/local/demo"
             )
         )
-        gate = SharedDeviceGate(
+        gate = gate or SharedDeviceGate(
             profile_id="demo", profile_db_path=self.path, os_root=self.os_root
         )
         profile_store = SqliteProfileStore(
@@ -283,6 +327,7 @@ class _RuntimeCase(unittest.TestCase):
             clock=active.now,
             monotonic_ms=active.mono,
             on_boundary=on_boundary,
+            on_started=on_started,  # type: ignore[arg-type]
             process_log=process_log,
         )
         return result["run"]  # type: ignore[return-value]
@@ -322,14 +367,18 @@ class _RuntimeCase(unittest.TestCase):
             connection.close()
         return None if row is None else json.loads(row[0])
 
-    def _two_job_list(
-        self, name: str, label_a: str, label_b: str
-    ) -> tuple[str, str, str]:
-        """生成含两张真实职位卡的单页 job_list，返回 manifest 与两个职位键。"""
-        manifest_a, key_a = helpers.make_job_fixture(self.root, label_a)
-        manifest_b, key_b = helpers.make_job_fixture(self.root, label_b)
+    def _job_list(
+        self, name: str, labels: tuple[str, ...]
+    ) -> tuple[str, list[str]]:
+        """生成含多张真实职位卡的 job_list，返回 manifest 与各职位键。"""
+        manifests: list[str] = []
+        keys: list[str] = []
+        for label in labels:
+            manifest, key = helpers.make_job_fixture(self.root, label)
+            manifests.append(manifest)
+            keys.append(key)
         blocks: list[str] = []
-        for manifest in (manifest_a, manifest_b):
+        for manifest in manifests:
             xml = (self.root / manifest).parent.joinpath("job_list.xml").read_text(
                 encoding="utf-8"
             )
@@ -344,10 +393,17 @@ class _RuntimeCase(unittest.TestCase):
         for item in ("profile.json", "job_list.json"):
             shutil.copyfile(ROOT / "tests/fixtures/read" / item, target / item)
         (target / "job_list.xml").write_text(
-            header + blocks[0] + "\n" + blocks[1] + "\n" + footer,
+            header + "\n".join(blocks) + "\n" + footer,
             encoding="utf-8",
         )
-        return f"tests/fixtures/runtime/{name}/job_list.json", key_a, key_b
+        return f"tests/fixtures/runtime/{name}/job_list.json", keys
+
+    def _two_job_list(
+        self, name: str, label_a: str, label_b: str
+    ) -> tuple[str, str, str]:
+        """生成含两张真实职位卡的单页 job_list，返回 manifest 与两个职位键。"""
+        manifest, keys = self._job_list(name, (label_a, label_b))
+        return manifest, keys[0], keys[1]
 
     def _many_page_conversation(self, name: str, pages: int) -> str:
         """生成引用 pages 份真实会话页 XML 的 conversation manifest。"""
@@ -389,6 +445,15 @@ class _RuntimeCase(unittest.TestCase):
             json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
         )
         return f"tests/fixtures/runtime/{name}/conversation.json"
+
+    def _page_outputs(self, manifest_rel: str) -> list[object]:
+        """返回 conversation 每页的真实 XML 文本。"""
+        manifest = json.loads((self.root / manifest_rel).read_text(encoding="utf-8"))
+        base = (self.root / manifest_rel).parent
+        return [
+            (base / path).read_text(encoding="utf-8")
+            for path in manifest["hierarchy_paths"]
+        ]
 
     def _unread_pixel_manifest(self, name: str) -> tuple[str, bytes]:
         """生成带显式像素文件的未读 manifest，返回 manifest 与截图字节。"""
@@ -445,6 +510,31 @@ class _RuntimeCase(unittest.TestCase):
         finally:
             connection.close()
         return [str(row[0]) for row in rows]
+
+    def _discovery_state(self, key: str) -> str:
+        """只读返回会话发现的终态。"""
+        connection = sqlite3.connect(str(self.path))
+        try:
+            row = connection.execute(
+                "SELECT state FROM hr_discoveries WHERE conversation_key = ?",
+                (key,),
+            ).fetchone()
+        finally:
+            connection.close()
+        self.assertIsNotNone(row)
+        return str(row[0])
+
+    def _job_state(self, key: str) -> str:
+        """只读返回职位任务状态。"""
+        connection = sqlite3.connect(str(self.path))
+        try:
+            row = connection.execute(
+                "SELECT state FROM jobs WHERE job_key = ?", (key,)
+            ).fetchone()
+        finally:
+            connection.close()
+        self.assertIsNotNone(row)
+        return str(row[0])
 
     def _seed_discovery(self, label: str) -> tuple[str, str]:
         """通过真实 M3 取值与生产 upsert 写入同身份未读发现。"""
@@ -1220,17 +1310,8 @@ class S06CommandBudgetMatrixTests(_RuntimeCase):
             """记录清理。"""
             self.killed = True
 
-    def _page_outputs(self, manifest_rel: str) -> list[object]:
-        """返回 conversation 每页的真实 XML 文本。"""
-        manifest = json.loads((self.root / manifest_rel).read_text(encoding="utf-8"))
-        base = (self.root / manifest_rel).parent
-        return [
-            (base / path).read_text(encoding="utf-8")
-            for path in manifest["hierarchy_paths"]
-        ]
-
     def _run_case(self, total: int, pages: int, *, unread: bool) -> dict[str, object]:
-        """按 total 命令构造一次真实 execute_run。"""
+        """按 total 实际命令构造一次含 post-claim 重读的真实 execute_run。"""
         batch = f"00000000-0000-4000-8000-{total:012d}"
         conversation = self._many_page_conversation(f"s06-{total}", pages)
         conv_outputs = self._page_outputs(conversation)
@@ -1241,6 +1322,7 @@ class S06CommandBudgetMatrixTests(_RuntimeCase):
             step = self._step(
                 read_fixture=primary,
                 conversation_fixture=conversation,
+                decision=helpers.decision_stimulus(),
             )
             outputs: list[object] = ["dumped", (self.root / primary).parent.joinpath("unread.xml").read_text(encoding="utf-8"), raw]
         else:
@@ -1249,8 +1331,12 @@ class S06CommandBudgetMatrixTests(_RuntimeCase):
             step = self._step(
                 read_fixture=primary,
                 conversation_fixture=conversation,
+                decision=helpers.decision_stimulus(),
             )
             outputs = ["dumped", (ROOT / "tests/fixtures/read/page.xml").read_text(encoding="utf-8")]
+        for xml in conv_outputs:
+            outputs.extend(["dumped", xml])
+        # 决策前当前会话重读：同一 conversation fixture 经同一真实采集/解析再走一次。
         for xml in conv_outputs:
             outputs.extend(["dumped", xml])
         rel = self._scenario(f"s06-{total}", [step], batch_id=batch)
@@ -1271,10 +1357,11 @@ class S06CommandBudgetMatrixTests(_RuntimeCase):
             )
 
     def test_199_commands_allow_one_task(self) -> None:
-        """真实 199 次命令创建后仍可开始一条任务，预算余 1。"""
-        run = self._run_case(199, 98, unread=True)
+        """真实 199 次命令（含 post-claim 重读）后仍可开始一条任务，预算余 1。"""
+        run = self._run_case(199, 49, unread=True)
         self.assertEqual(run["processed"], 1)
         self.assertIsNone(run["pause_reason"])
+        self.assertEqual(len(run["drafts"]), 1)
         self.assertEqual(run["remaining_budget"]["device_calls"], 1)  # type: ignore[index]
 
     def test_200_201_250_commands_pause_and_preserve_budget(self) -> None:
@@ -1525,31 +1612,6 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
         self.assertEqual(run["processed"], 1)
         self.assertEqual(len(run["drafts"]), 1)
         self.assertEqual(self._discovery_state(key), "done")
-
-    def _job_state(self, key: str) -> str:
-        """只读返回职位任务状态。"""
-        connection = sqlite3.connect(str(self.path))
-        try:
-            row = connection.execute(
-                "SELECT state FROM jobs WHERE job_key = ?", (key,)
-            ).fetchone()
-        finally:
-            connection.close()
-        self.assertIsNotNone(row)
-        return str(row[0])
-
-    def _discovery_state(self, key: str) -> str:
-        """只读返回会话发现的终态。"""
-        connection = sqlite3.connect(str(self.path))
-        try:
-            row = connection.execute(
-                "SELECT state FROM hr_discoveries WHERE conversation_key = ?",
-                (key,),
-            ).fetchone()
-        finally:
-            connection.close()
-        self.assertIsNotNone(row)
-        return str(row[0])
 
     def test_nonce_change_between_start_and_next_command_blocks_read(self) -> None:
         """真实 start 后任务 nonce 被外部改变时，下一条详情采集命令零启动。"""
@@ -1884,6 +1946,921 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
         visible3 = read3.read("switch:unread")
         self.assertEqual(visible3.status, "ok")
         self.assertEqual(visible3.value.unread_state, "present")
+
+
+class _ToggleGate:
+    """包裹真实共享门禁，允许测试在真实 start 后切换为失败，仍保持真实占用。"""
+
+    def __init__(self, inner: object) -> None:
+        """保存真实门禁并初始化可用状态。"""
+        self._inner = inner
+        self.fail = False
+
+    def __getattr__(self, name: str):
+        """其余能力完全委托真实门禁。"""
+        return getattr(self._inner, name)
+
+    def verify(self, now: str | None = None):
+        """按开关拒绝命令前复核；否则委托真实门禁。"""
+        if self.fail:
+            raise RuntimeError("synthetic gate changed")
+        if now is None:
+            return self._inner.verify()  # type: ignore[attr-defined]
+        return self._inner.verify(now=now)  # type: ignore[attr-defined]
+
+
+class _FakeSpawn:
+    """最低外部进程替身：不启动真实进程，可独立推进可信时钟。"""
+
+    def __init__(self, output: object, clock=None, ms: int = 0) -> None:
+        """保存固定输出、可选时钟与单条命令耗时。"""
+        self.pid = 8000 + id(output) % 1000
+        self.returncode = 0
+        self._output = output
+        self._clock = clock
+        self._ms = ms
+        self.killed = False
+
+    def communicate(self, timeout=None):
+        """返回固定输出；仅在显式注入时钟时推进命令耗时。"""
+        del timeout
+        if self._clock is not None and self._ms:
+            self._clock.advance(self._ms)
+        empty = b"" if isinstance(self._output, bytes) else ""
+        return (self._output, empty)
+
+    def kill(self) -> None:
+        """记录清理。"""
+        self.killed = True
+
+
+class PostClaimConversationRejectionTests(_RuntimeCase):
+    """A：post-claim 重读只用当前新鲜会话证据，异常原始输入 zero bridge。"""
+
+    def _base_ms(self) -> int:
+        """返回固定合成基准墙钟的毫秒值。"""
+        return int(parse_utc(helpers.NOW).timestamp() * 1000)
+
+    def _mutate_manifest(self, rel: str, **fields: object) -> None:
+        """改写真实会话 manifest 的合成字段，保留其余原始输入。"""
+        path = self.root / rel
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest.update(fields)
+        path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+
+    def _mutate_profile(self, rel: str, profile_id: str) -> None:
+        """只改会话 fixture 的 selector profile_id，模拟采集上下文变化。"""
+        path = self.root / rel
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        profile_path = path.parent / str(manifest["profile_path"])
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        profile["profile_id"] = profile_id
+        profile_path.write_text(
+            json.dumps(profile, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def _mutate_identity(self, rel: str) -> None:
+        """把会话原始标题与上下文改成另一合成身份，形成错会话键刺激。"""
+        path = self.root / rel
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["conversation_context"]["contact"] = "合成联系人乙"
+        for page in manifest["hierarchy_paths"]:
+            page_path = path.parent / page
+            text = page_path.read_text(encoding="utf-8").replace(
+                "合成联系人甲", "合成联系人乙"
+            )
+            page_path.write_text(text, encoding="utf-8")
+        path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+
+    def _mutate_stable_identity(self, rel: str) -> None:
+        """关闭会话稳定消息身份验证，形成无稳定入站身份刺激。"""
+        path = self.root / rel
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        profile_path = path.parent / str(manifest["profile_path"])
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        profile["selectors"]["conversation_stable_id_verified"] = False
+        profile_path.write_text(
+            json.dumps(profile, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def _run_rejected(
+        self, name: str, mutate=None, *, replay: bool = False
+    ) -> None:
+        """第二次会话原始读取异常时必须安全阻塞且零模型桥。"""
+        manifest, key = self._seed_discovery(name)
+        conversation = f"tests/fixtures/runtime/read-{name}/conversation.json"
+        rel = self._scenario(
+            name,
+            [
+                self._step(
+                    read_fixture=manifest,
+                    conversation_fixture=conversation,
+                    decision=helpers.decision_stimulus(),
+                )
+            ],
+            batch_id=f"00000000-0000-4000-8000-{abs(hash(name)) % 10**12:012d}",
+        )
+        calls = {"bridge": 0}
+
+        def factory(stimulus: object) -> SyntheticDecisionBridge:
+            """记录任何被允许启动的合成桥调用。"""
+            calls["bridge"] += 1
+            return SyntheticDecisionBridge(
+                stimulus,  # type: ignore[arg-type]
+                provider_id=self.provider,
+                model_id=self.model_id,
+                model_config_hash=self.config_hash,
+            )
+
+        if replay:
+            read = _ReplayConversationRead(self.root, conversation)
+        else:
+            read = _SecondConversationRead(self.root, conversation, mutate)
+        run = self._execute(rel, read=read, bridge_factory=factory)
+        self.assertEqual(run["pause_reason"], "unread_unverified", run)
+        self.assertEqual(run["drafts"], [], run)
+        self.assertEqual(calls["bridge"], 0, run)
+        self.assertEqual(self._discovery_state(key), "blocked")
+
+    def test_stale_second_conversation_is_rejected_without_bridge(self) -> None:
+        """第二次会话 observed_at 落后 30 秒时必须保守阻塞且零桥。"""
+        self._run_rejected(
+            "stalereread",
+            lambda: self._mutate_manifest(
+                "tests/fixtures/runtime/read-stalereread/conversation.json",
+                observed_at=_format_ms(self._base_ms(), -30_000),
+            ),
+        )
+
+    def test_future_second_conversation_is_rejected_without_bridge(self) -> None:
+        """第二次会话 observed_at 超前 6 秒时不得当作当前证据或启动桥。"""
+        self._run_rejected(
+            "futureread",
+            lambda: self._mutate_manifest(
+                "tests/fixtures/runtime/read-futureread/conversation.json",
+                observed_at=_format_ms(self._base_ms(), 6_000),
+            ),
+        )
+
+    def test_changed_selector_profile_is_rejected_without_bridge(self) -> None:
+        """第二次会话 selector profile 与初次采集上下文不一致时零桥。"""
+        self._run_rejected(
+            "profileread",
+            lambda: self._mutate_profile(
+                "tests/fixtures/runtime/read-profileread/conversation.json",
+                "synthetic-boss-m3-alt",
+            ),
+        )
+
+    def test_wrong_conversation_key_is_rejected_without_bridge(self) -> None:
+        """第二次采集变成另一会话身份时不得用旧任务键启动桥。"""
+        self._run_rejected(
+            "keyread",
+            lambda: self._mutate_identity(
+                "tests/fixtures/runtime/read-keyread/conversation.json"
+            ),
+        )
+
+    def test_replayed_snapshot_is_rejected_without_bridge(self) -> None:
+        """第二次会话回放同一 ReadResult/snapshot 时不得当作新证据。"""
+        self._run_rejected("replayread", replay=True)
+
+    def test_incomplete_second_conversation_is_rejected_without_bridge(self) -> None:
+        """第二次会话缺少完整遍历证明时安全阻塞且零桥。"""
+        self._run_rejected(
+            "incompleteread",
+            lambda: self._mutate_manifest(
+                "tests/fixtures/runtime/read-incompleteread/conversation.json",
+                coverage_proof={
+                    "kind": "full_traversal",
+                    "top_proven": True,
+                    "bottom_proven": False,
+                },
+            ),
+        )
+
+    def test_missing_stable_inbound_identity_is_rejected_without_bridge(self) -> None:
+        """第二次会话没有稳定入站身份时不得构造可发送证据或启动桥。"""
+        self._run_rejected(
+            "stableread",
+            lambda: self._mutate_stable_identity(
+                "tests/fixtures/runtime/read-stableread/conversation.json"
+            ),
+        )
+
+
+class PostClaimLongReadTests(_RuntimeCase):
+    """S07：post-claim 多命令长读取按 20 秒续租并诚实处理新鲜度。"""
+
+    class _Gate:
+        """ScreenPort 门禁替身。"""
+
+        def require_available(self) -> None:
+            """始终可用。"""
+            return
+
+        def verify(self) -> None:
+            """命令前复核无副作用。"""
+            return
+
+        def release(self) -> None:
+            """无占用。"""
+            return
+
+    def _outputs(self, pages: int) -> list[object]:
+        """构造未读 3 条 + pre-claim 2N + post-claim 2N 条真实原始输出。"""
+        primary, raw = self._unread_pixel_manifest("甲")
+        key = helpers.m3_unread_key()
+        helpers.seed_discovery(self.root, key, unread_count=1)
+        conversation = self._many_page_conversation(f"longread{pages}", pages)
+        page_xml = self._page_outputs(conversation)
+        unread_xml = (self.root / primary).parent.joinpath("unread.xml").read_text(
+            encoding="utf-8"
+        )
+        outputs: list[object] = ["dumped", unread_xml, raw]
+        for xml in page_xml:
+            outputs.extend(["dumped", xml])
+        for xml in page_xml:
+            outputs.extend(["dumped", xml])
+        return outputs, key, conversation
+
+    def _run(
+        self, pages: int, ms: int, *, batch: str
+    ) -> tuple[dict[str, object], int, dict[str, object], _Clock]:
+        """经真实 execute_run→AdbRuntimeRead→AdbScreenReader→run_adb 运行。"""
+        outputs, key, conversation = self._outputs(pages)
+        rel = self._scenario(
+            f"long-{pages}-{ms}",
+            [
+                self._step(
+                    read_fixture=self._unread_pixel_manifest("甲")[0],
+                    conversation_fixture=conversation,
+                    decision=helpers.decision_stimulus(),
+                )
+            ],
+            batch_id=batch,
+        )
+        clock = _Clock()
+        made: list[_FakeSpawn] = []
+
+        def spawn(*args: object, **kwargs: object) -> _FakeSpawn:
+            """按实际创建顺序返回最低进程替身并记录启动数。"""
+            del args, kwargs
+            index = len(made)
+            if index >= len(outputs):
+                raise AssertionError(f"unexpected spawn {index}")
+            item = _FakeSpawn(outputs[index], clock, ms)
+            made.append(item)
+            return item
+
+        seen: dict[str, object] = {}
+
+        def started() -> None:
+            """真实 claim/start 成功后记录 pre-claim 实际启动数。"""
+            seen["after_start"] = len(made)
+
+        adapter = AdbRuntimeRead(
+            self.root,
+            AdbScreenReader(None, gate=self._Gate()),
+            "synthetic-serial",
+            clock=clock.now,
+        )
+        calls = {"bridge": 0}
+        finish: dict[str, object] = {}
+
+        def factory(stimulus: object) -> SyntheticDecisionBridge:
+            """记录任何桥调用；长读陈旧时必须为零。"""
+            calls["bridge"] += 1
+            return SyntheticDecisionBridge(
+                stimulus,  # type: ignore[arg-type]
+                provider_id=self.provider,
+                model_id=self.model_id,
+                model_config_hash=self.config_hash,
+            )
+
+        class RecordingStore:
+            """委托真实仓储，仅记录语义阻塞实际消费的 Lease 截止时间。"""
+
+            def __init__(self, inner: object) -> None:
+                """保存真实仓储。"""
+                self._inner = inner
+
+            def __getattr__(self, name: str):
+                """其余能力完全委托。"""
+                return getattr(self._inner, name)
+
+            def finish_semantic_block(self, lease: Lease, now: str, reason: str) -> str:
+                """记录 finish 消费的最新 Lease 截止时间后委托真实写入。"""
+                finish["expires_at"] = lease.expires_at
+                finish["now"] = now
+                return self._inner.finish_semantic_block(  # type: ignore[attr-defined]
+                    lease, now, reason
+                )
+
+        with patch("app.adapters.adb.command.subprocess.Popen", side_effect=spawn):
+            run = self._execute(
+                rel,
+                clock=clock,
+                read=adapter,
+                on_started=started,
+                bridge_factory=factory,
+                store_monotonic=lambda: clock.mono() / 1000.0,
+                store_hook=lambda inner: RecordingStore(inner),
+            )
+        run["_spawned"] = len(made)
+        run["_after_start"] = seen.get("after_start")
+        run["_bridge"] = calls["bridge"]
+        run["_finish"] = finish
+        return run, len(outputs), {"key": key}, clock
+
+    def test_43_command_long_read_renews_and_blocks_on_stale_freshness(self) -> None:
+        """10 页 pre+post 共 43 条命令、80 秒 post 读取在 20/40/60/80 秒续租后按新鲜度阻塞。"""
+        run, expected, meta, clock = self._run(
+            10,
+            4_000,
+            batch="00000000-0000-4000-8000-0000000000aa",
+        )
+        self.assertEqual(run["_spawned"], expected)
+        self.assertEqual(run["_spawned"], 43)
+        self.assertEqual(run["pause_reason"], "unread_unverified")
+        self.assertEqual(run["processed"], 1)
+        self.assertEqual(run["drafts"], [])
+        self.assertEqual(run["_bridge"], 0)
+        self.assertEqual(self._discovery_state(meta["key"]), "blocked")  # type: ignore[arg-type]
+        self.assertEqual(self._task_events().count("lease_renewed"), 4)
+        connection = sqlite3.connect(str(self.path))
+        try:
+            renewed = [
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT created_at FROM events WHERE event = 'lease_renewed' "
+                    "ORDER BY event_id"
+                ).fetchall()
+            ]
+        finally:
+            connection.close()
+        self.assertEqual(
+            renewed,
+            [clock.wall_at(ms) for ms in (112_000, 132_000, 152_000, 172_000)],
+        )
+        self.assertEqual(run["_finish"]["now"], clock.wall_at(172_000))
+        self.assertEqual(run["_finish"]["expires_at"], clock.wall_at(232_000))
+
+    def test_short_trusted_clock_read_builds_decision_from_new_snapshot(self) -> None:
+        """2 页、每条 500ms 的短读取仍使用新采集快照完成一次决策。"""
+        run, expected, meta, _clock = self._run(
+            2,
+            500,
+            batch="00000000-0000-4000-8000-0000000000ab",
+        )
+        self.assertEqual(run["_spawned"], expected)
+        self.assertEqual(run["_spawned"], 11)
+        self.assertEqual(run["pause_reason"], None, run)
+        self.assertEqual(run["processed"], 1, run)
+        self.assertEqual(len(run["drafts"]), 1)
+        self.assertEqual(run["_bridge"], 1)
+        self.assertEqual(self._discovery_state(meta["key"]), "done")  # type: ignore[arg-type]
+        # 短读没有逐命令 20 秒续租；仅决策前一次性 Lease 复核会记一次续租。
+        self.assertEqual(self._task_events().count("lease_renewed"), 1)
+
+
+class PostClaimLeaseFailureTests(_RuntimeCase):
+    """C：post-claim 逐命令门禁/Lease/nonce/时钟失败在后续 spawn 前停止。"""
+
+    class _Gate:
+        """ScreenPort 门禁替身，可被测试在真实 start 后切换为失败。"""
+
+        def __init__(self) -> None:
+            """初始化可用状态。"""
+            self.fail = False
+
+        def require_available(self) -> None:
+            """始终可用。"""
+            return
+
+        def verify(self) -> None:
+            """按测试开关拒绝命令前复核。"""
+            if self.fail:
+                raise RuntimeError("synthetic gate changed")
+
+        def release(self) -> None:
+            """无占用。"""
+            return
+
+    def _prepare(self, name: str) -> tuple[str, str, list[object], str]:
+        """生成未读 2 页会话与 pre+post 原始输出，返回场景与键。"""
+        primary, raw = self._unread_pixel_manifest("甲")
+        key = helpers.m3_unread_key()
+        helpers.seed_discovery(self.root, key, unread_count=1)
+        conversation = self._many_page_conversation(name, 2)
+        page_xml = self._page_outputs(conversation)
+        outputs: list[object] = [
+            "dumped",
+            (self.root / primary).parent.joinpath("unread.xml").read_text(
+                encoding="utf-8"
+            ),
+            raw,
+        ]
+        for xml in page_xml + page_xml:
+            outputs.extend(["dumped", xml])
+        rel = self._scenario(
+            name,
+            [
+                self._step(
+                    read_fixture=primary,
+                    conversation_fixture=conversation,
+                    decision=helpers.decision_stimulus(),
+                )
+            ],
+            batch_id=f"00000000-0000-4000-8000-{abs(hash(name)) % 10**12:012d}",
+        )
+        return rel, key, outputs, conversation
+
+    def _execute_with(
+        self, rel: str, outputs: list[object], *, gate=None, store_hook=None, on_started=None
+    ) -> tuple[dict[str, object], list[_FakeSpawn], dict[str, object]]:
+        """用最低进程替身运行一次并返回真实启动数与 start 边界计数。"""
+        made: list[_FakeSpawn] = []
+        clock = _Clock()
+        seen: dict[str, object] = {}
+
+        def spawn(*args: object, **kwargs: object) -> _FakeSpawn:
+            """按实际创建顺序计数；超出原始响应即失败。"""
+            del args, kwargs
+            index = len(made)
+            if index >= len(outputs):
+                raise AssertionError(f"unexpected spawn {index}")
+            item = _FakeSpawn(outputs[index], clock, 100)
+            made.append(item)
+            return item
+
+        def started() -> None:
+            """真实 start 后记录边界并可选切换外部状态。"""
+            seen["after_start"] = len(made)
+            if on_started is not None:
+                on_started()
+
+        adapter = AdbRuntimeRead(
+            self.root,
+            AdbScreenReader(None, gate=gate or self._Gate()),
+            "synthetic-serial",
+            clock=clock.now,
+        )
+        calls = {"bridge": 0}
+
+        def factory(stimulus: object) -> SyntheticDecisionBridge:
+            """记录桥调用。"""
+            calls["bridge"] += 1
+            return SyntheticDecisionBridge(
+                stimulus,  # type: ignore[arg-type]
+                provider_id=self.provider,
+                model_id=self.model_id,
+                model_config_hash=self.config_hash,
+            )
+
+        with patch("app.adapters.adb.command.subprocess.Popen", side_effect=spawn):
+            run = self._execute(
+                rel,
+                clock=clock,
+                read=adapter,
+                on_started=started,
+                bridge_factory=factory,
+                store_hook=store_hook,
+                store_monotonic=lambda: clock.mono() / 1000.0,
+                gate=gate,
+            )
+        run["_spawned"] = len(made)
+        run["_bridge"] = calls["bridge"]
+        return run, made, seen
+
+    def test_expired_lease_before_first_post_claim_command_starts_nothing(self) -> None:
+        """真实 start 后墙钟越过 60 秒 Lease 时，post-claim 零命令且零桥。"""
+        rel, key, outputs, _conversation = self._prepare("expiry")
+        clock = _Clock()
+
+        def advance() -> None:
+            """模拟 start 与首条重读命令之间的外部长时间停顿。"""
+            clock.advance(61_000)
+
+        gate = self._Gate()
+        made: list[_FakeSpawn] = []
+
+        def spawn(*args: object, **kwargs: object) -> _FakeSpawn:
+            """按序返回最低替身。"""
+            del args, kwargs
+            made.append(_FakeSpawn(outputs[len(made)], clock, 100))
+            return made[-1]
+
+        adapter = AdbRuntimeRead(
+            self.root,
+            AdbScreenReader(None, gate=gate),
+            "synthetic-serial",
+            clock=clock.now,
+        )
+        with patch("app.adapters.adb.command.subprocess.Popen", side_effect=spawn):
+            run = self._execute(
+                rel,
+                clock=clock,
+                read=adapter,
+                on_started=advance,
+                store_monotonic=lambda: clock.mono() / 1000.0,
+            )
+        self.assertEqual(run["pause_reason"], "precondition_failed")
+        self.assertEqual(run["processed"], 1)
+        self.assertEqual(run["drafts"], [])
+        self.assertEqual(len(made), 7)  # 3 条初读 + 2 页 pre，start 后过期零重读命令
+        self.assertEqual(self._discovery_state(key), "running")
+
+    def test_gate_change_after_start_blocks_first_post_claim_command(self) -> None:
+        """共享门禁在真实 start 后变化时首条重读命令不启动并零桥。"""
+        rel, key, outputs, _conversation = self._prepare("gatechange")
+        gate = _ToggleGate(
+            SharedDeviceGate(
+                profile_id="demo", profile_db_path=self.path, os_root=self.os_root
+            )
+        )
+
+        def fail() -> None:
+            """真实 start 后切换门禁为失败。"""
+            gate.fail = True
+
+        run, made, seen = self._execute_with(
+            rel, outputs, gate=gate, on_started=fail
+        )
+        self.assertEqual(run["pause_reason"], "precondition_failed")
+        self.assertEqual(run["_bridge"], 0)
+        self.assertEqual(len(made), seen["after_start"])
+        self.assertEqual(self._discovery_state(key), "running")
+
+    def test_nonce_change_between_post_claim_commands_stops_subsequent_spawn(self) -> None:
+        """首条 post-claim 命令后 nonce 改变时后续命令零启动并零桥。"""
+        rel, key, outputs, _conversation = self._prepare("midnonce")
+        state = {"calls": 0, "changed": False}
+
+        class NonceChangingStore:
+            """委托真实仓储，只在 post-claim 首条 require_running 后改 nonce。"""
+
+            def __init__(self, inner: object) -> None:
+                """保存真实仓储。"""
+                self._inner = inner
+
+            def __getattr__(self, name: str):
+                """其余能力完全委托。"""
+                return getattr(self._inner, name)
+
+            def require_running(self, lease: Lease, *, now: str) -> bool:
+                """返回真实结果后注入一次外部 nonce 变化。"""
+                result = self._inner.require_running(lease, now=now)  # type: ignore[attr-defined]
+                state["calls"] += 1
+                if result and state["calls"] == 1:
+                    connection = self._inner._connection  # type: ignore[attr-defined]
+                    connection.execute(
+                        "UPDATE hr_discoveries SET nonce = ? WHERE \"key\" = ?",
+                        (str(uuid.uuid4()), lease.key),
+                    )
+                    connection.commit()
+                    state["changed"] = True
+                return result
+
+        run, made, seen = self._execute_with(
+            rel, outputs, store_hook=lambda inner: NonceChangingStore(inner)
+        )
+        self.assertTrue(state["changed"])
+        self.assertEqual(run["pause_reason"], "precondition_failed")
+        self.assertEqual(run["_bridge"], 0)
+        self.assertEqual(len(made), seen["after_start"] + 1)
+        self.assertEqual(self._discovery_state(key), "running")
+
+    def test_context_rejects_expiry_gate_nonce_clock_and_renew_failure(self) -> None:
+        """真实仓储下逐命令上下文对过期/门禁/nonce/时钟/renew 失败均结构化拒绝。"""
+        key = helpers.m3_unread_key()
+        helpers.seed_discovery(self.root, key, unread_count=1)
+        batch = "00000000-0000-4000-8000-0000000000c1"
+        clock = _Clock()
+        store = SqliteStore(
+            self.path,
+            profile_id="demo",
+            local_host=self.owner.host,
+            monotonic=lambda: clock.mono() / 1000.0,
+            require_runtime=True,
+        )
+        try:
+            store.ensure_batch(batch, BudgetLimits(), helpers.NOW)
+            lease = store.claim(APP, "unread", self.owner, helpers.NOW, conversation_key=key)
+            self.assertIsNotNone(lease)
+            lease = store.start(lease, helpers.NOW)  # type: ignore[arg-type]
+
+            class Gate:
+                """可控门禁。"""
+
+                def __init__(self) -> None:
+                    """初始化可用。"""
+                    self.fail = False
+
+                def verify(self, now: str) -> None:
+                    """按开关拒绝。"""
+                    del now
+                    if self.fail:
+                        raise RuntimeError("gate changed")
+
+            gate = Gate()
+            context = _LeaseCommandContext(
+                store=store,
+                gate=gate,  # type: ignore[arg-type]
+                clock=clock.now,
+                monotonic_ms=clock.mono,
+                lease=lease,  # type: ignore[arg-type]
+            )
+            context.before()
+
+            gate.fail = True
+            with self.assertRaises(RuntimeCommandControlError) as raised:
+                context.before()
+            self.assertEqual(raised.exception.reason_code, "device_gate_mismatch")
+            gate.fail = False
+
+            connection = store._connection  # type: ignore[attr-defined]
+            old_nonce = lease.nonce
+            connection.execute(
+                "UPDATE hr_discoveries SET nonce = ? WHERE \"key\" = ?",
+                (str(uuid.uuid4()), lease.key),
+            )
+            connection.commit()
+            with self.assertRaises(RuntimeCommandControlError) as raised:
+                context.before()
+            self.assertEqual(raised.exception.reason_code, "stale_lease")
+            connection.execute(
+                "UPDATE hr_discoveries SET nonce = ? WHERE \"key\" = ?",
+                (old_nonce, lease.key),
+            )
+            connection.commit()
+
+            old_lease = context.lease
+            clock.advance(20_000)
+            context.after(failed=False)
+            self.assertGreater(
+                parse_utc(context.lease.expires_at),
+                parse_utc(old_lease.expires_at),
+            )
+
+            clock.advance(80_000)
+            with self.assertRaises(StoreError) as stale:
+                store.finish_semantic_block(
+                    context.lease, clock.now(), "unread_unverified"
+                )
+            self.assertEqual(stale.exception.reason_code, "stale_lease")
+        finally:
+            store.close()
+
+    def test_clock_change_on_renew_reports_clock_changed(self) -> None:
+        """续租时墙钟领先内部单调钟超过容差必须结构化报 clock_changed。"""
+        key = helpers.m3_unread_key()
+        helpers.seed_discovery(self.root, key, unread_count=1)
+        batch = "00000000-0000-4000-8000-0000000000c2"
+        store = SqliteStore(
+            self.path,
+            profile_id="demo",
+            local_host=self.owner.host,
+            monotonic=lambda: 0.0,
+            require_runtime=True,
+        )
+        try:
+            store.ensure_batch(batch, BudgetLimits(), helpers.NOW)
+            lease = store.claim(APP, "unread", self.owner, helpers.NOW, conversation_key=key)
+            lease = store.start(lease, helpers.NOW)  # type: ignore[arg-type]
+            clock = _Clock()
+
+            class Gate:
+                """始终可用。"""
+
+                def verify(self, now: str) -> None:
+                    """无副作用。"""
+                    del now
+
+            context = _LeaseCommandContext(
+                store=store,
+                gate=Gate(),  # type: ignore[arg-type]
+                clock=clock.now,
+                monotonic_ms=clock.mono,
+                lease=lease,  # type: ignore[arg-type]
+            )
+            clock.advance(30_000)
+            with self.assertRaises(RuntimeCommandControlError) as raised:
+                context.after(failed=False)
+            self.assertEqual(raised.exception.reason_code, "clock_changed")
+        finally:
+            store.close()
+
+    def test_before_rejection_prevents_any_adapter_spawn(self) -> None:
+        """绑定上下文在命令前拒绝时适配器零 Popen，不存在后续采集。"""
+        manifest = "tests/fixtures/read/page.json"
+
+        class RejectingContext:
+            """首条命令前固定拒绝。"""
+
+            lease = object()
+
+            def before(self) -> None:
+                """拒绝命令前复核。"""
+                raise RuntimeCommandControlError("stale_lease")
+
+            def after(self, *, failed: bool) -> None:
+                """不应被调用。"""
+                del failed
+
+        adapter = AdbRuntimeRead(
+            self.root,
+            AdbScreenReader(None, gate=self._Gate()),
+            "synthetic-serial",
+        )
+        adapter.bind_command_context(RejectingContext())
+        made: list[object] = []
+
+        def spawn(*args: object, **kwargs: object) -> object:
+            """任何真实创建都记录为回归。"""
+            del args, kwargs
+            made.append(object())
+            raise AssertionError("must not spawn")
+
+        with patch("app.adapters.adb.command.subprocess.Popen", side_effect=spawn):
+            with self.assertRaises(RuntimeCommandControlError):
+                adapter.read(manifest)
+        self.assertEqual(made, [])
+
+    def test_renew_failure_stops_after_first_spawn(self) -> None:
+        """命令后严格续租失败时传播固定原因且不再启动下一条命令。"""
+        conversation = self._many_page_conversation("renewfail", 2)
+
+        class FailingAfter:
+            """首条命令后严格续租失败。"""
+
+            lease = object()
+
+            def before(self) -> None:
+                """命令前放行。"""
+                return
+
+            def after(self, *, failed: bool) -> None:
+                """命令后固定失败。"""
+                del failed
+                raise RuntimeCommandControlError("store_busy")
+
+        adapter = AdbRuntimeRead(
+            self.root,
+            AdbScreenReader(None, gate=self._Gate()),
+            "synthetic-serial",
+        )
+        adapter.bind_command_context(FailingAfter())
+        made: list[_FakeSpawn] = []
+
+        def spawn(*args: object, **kwargs: object) -> _FakeSpawn:
+            """第一条命令真实创建后即应停止。"""
+            del args, kwargs
+            item = _FakeSpawn("dumped")
+            made.append(item)
+            return item
+
+        with patch("app.adapters.adb.command.subprocess.Popen", side_effect=spawn):
+            with self.assertRaises(RuntimeCommandControlError) as raised:
+                adapter.read(conversation)
+        self.assertEqual(raised.exception.reason_code, "store_busy")
+        self.assertEqual(len(made), 1)
+
+
+class S05ReopenControlTests(_RuntimeCase):
+    """S05：真实 paused→关闭→新进程重开后的预算/游标/列表控制。"""
+
+    def _prime(
+        self, batch: str, key_a: str, *, pending: tuple[str, ...] = ()
+    ) -> None:
+        """父进程真实处理首卡并持久化暂停游标/四维预算，可选保留待办卡。"""
+        store = self._store()
+        try:
+            store.ensure_batch(batch, BudgetLimits(), helpers.NOW)
+            store.enqueue_jobs(batch, (key_a,) + pending, helpers.NOW)
+            lease = store.claim_job(batch, self.owner, helpers.NOW, key_a)
+            self.assertIsNotNone(lease)
+            lease = store.start_job(lease, helpers.NOW)  # type: ignore[arg-type]
+            store.finish_job(lease, helpers.NOW, "done", None)  # type: ignore[arg-type]
+            batch_row = store.load_batch(batch)
+            self.assertIsNotNone(batch_row)
+            cursor = batch_row["cursor"]  # type: ignore[index]
+            cursor = cursor.visit_job(key_a)  # type: ignore[union-attr]
+            cursor = replace(
+                cursor,
+                budget=replace(
+                    cursor.budget,
+                    remaining_seconds=800,
+                    remaining_device_calls=150,
+                    remaining_candidates=10,
+                    remaining_preemptions=3,
+                ),
+            )
+            store.pause_batch(batch, cursor, "budget_exhausted", now=helpers.NOW)
+        finally:
+            store.close()
+
+    def _child(
+        self, name: str, batch: str, steps: list[dict[str, object]]
+    ) -> dict[str, object]:
+        """在独立 CLI 进程中重开同一 profile/batch 并返回 run 结果。"""
+        rel = self._scenario(name, steps, batch_id=batch)
+        code, payload, stderr = helpers.execute(
+            self.root,
+            self.os_root,
+            rel,
+            mode="draft_only",
+            credential_rel=self.credential,
+            provider=self.provider,
+            model_id=self.model_id,
+            model_config_hash=self.config_hash,
+        )
+        self.assertEqual(code, 0, (payload, stderr))
+        self.assertEqual(stderr, "")
+        self.assertEqual(payload["status"], "ok")  # type: ignore[index]
+        return payload["result"]["run"]  # type: ignore[index]
+
+    def test_reopen_preserves_budget_and_skips_visited_first_card(self) -> None:
+        """列表不变时新进程保留预算、跳过首卡 visited 并处理下一卡。"""
+        batch = "00000000-0000-4000-8000-0000000000d1"
+        manifest, keys = self._job_list("s05-same", ("s05a", "s05b"))
+        self._prime(batch, keys[0])
+        detail_b = helpers.make_job_fixture(self.root, "s05b")[0]
+        run = self._child(
+            "s05-same-child",
+            batch,
+            [self._step(read_fixture=manifest, job_fixture=detail_b)],
+        )
+        self.assertEqual(run["processed"], 1)
+        self.assertIsNone(run["pause_reason"])
+        self.assertEqual(run["remaining_budget"]["seconds"], 800)  # type: ignore[index]
+        self.assertEqual(run["remaining_budget"]["device_calls"], 148)  # type: ignore[index]
+        self.assertEqual(run["remaining_budget"]["candidates"], 9)  # type: ignore[index]
+        self.assertEqual(run["remaining_budget"]["preemptions"], 3)  # type: ignore[index]
+        self.assertEqual(self._job_state(keys[0]), "done")
+        self.assertEqual(self._job_state(keys[1]), "done")
+
+    def test_reopen_handles_reordered_list_by_identity(self) -> None:
+        """重排后仍按真实 visited 身份选下一卡，不按旧下标重复。"""
+        batch = "00000000-0000-4000-8000-0000000000d2"
+        _ab, keys = self._job_list("s05-ab", ("s05c", "s05d"))
+        reordered, _other = self._job_list("s05-ba", ("s05d", "s05c"))
+        self._prime(batch, keys[0])
+        run = self._child(
+            "s05-ba-child",
+            batch,
+            [
+                self._step(
+                    read_fixture=reordered,
+                    job_fixture=helpers.make_job_fixture(self.root, "s05d")[0],
+                )
+            ],
+        )
+        self.assertEqual(run["processed"], 1)
+        self.assertEqual(self._job_state(keys[0]), "done")
+        self.assertEqual(self._job_state(keys[1]), "done")
+
+    def test_reopen_handles_inserted_card_without_replaying_visited(self) -> None:
+        """插入新卡后按身份继续其后的未访问卡，不重放已 visited 首卡。"""
+        batch = "00000000-0000-4000-8000-0000000000d3"
+        _ab, keys = self._job_list("s05-ab2", ("s05e", "s05f"))
+        inserted, _keys3 = self._job_list(
+            "s05-insert", ("s05g", "s05e", "s05f")
+        )
+        self._prime(batch, keys[0])
+        run = self._child(
+            "s05-insert-child",
+            batch,
+            [
+                self._step(
+                    read_fixture=inserted,
+                    job_fixture=helpers.make_job_fixture(self.root, "s05f")[0],
+                ),
+                self._step(
+                    read_fixture=inserted,
+                    job_fixture=helpers.make_job_fixture(self.root, "s05g")[0],
+                ),
+            ],
+        )
+        self.assertEqual(run["processed"], 2)
+        self.assertEqual(self._job_state(keys[0]), "done")
+        self.assertEqual(self._job_state(keys[1]), "done")
+        inserted_key = helpers.make_job_fixture(self.root, "s05g")[1]
+        self.assertEqual(self._job_state(inserted_key), "done")
+
+    def test_reopen_missing_unvisited_card_is_not_claimed(self) -> None:
+        """原先未访问的卡在新进程中消失时不得凭旧列表/下标领取。"""
+        batch = "00000000-0000-4000-8000-0000000000d4"
+        _ab, keys = self._job_list("s05-ab3", ("s05h", "s05i"))
+        only_a, _only = self._job_list("s05-only", ("s05h",))
+        self._prime(batch, keys[0], pending=(keys[1],))
+        run = self._child(
+            "s05-only-child",
+            batch,
+            [self._step(read_fixture=only_a)],
+        )
+        self.assertEqual(run["processed"], 0)
+        self.assertEqual(self._job_state(keys[1]), "queued")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from typing import Callable
 
 from app.adapters.boss.read import (
     load_read_fixture,
@@ -27,11 +28,14 @@ class AdbRuntimeRead:
         project_root: Path,
         screen: ScreenPort,
         serial: str,
+        *,
+        clock: Callable[[], str] | None = None,
     ) -> None:
-        """保存项目根、真实采集端口与内存 serial；构造不启动命令。"""
+        """保存项目根、真实采集端口、内存 serial 与可选可信墙钟。"""
         self._root = Path(project_root).resolve()
         self._screen = screen
         self._serial = serial
+        self._clock = clock
         self._calls = 0
         self._context: RuntimeCommandContext | None = None
 
@@ -86,32 +90,43 @@ class AdbRuntimeRead:
         )
         return capture.xml_text
 
+    def _observed_at(self, fallback: str) -> str:
+        """在真实采集完成边界取可信时间；无注入时钟时保留 fixture 合成时间。"""
+        if self._clock is None:
+            return fallback
+        return self._clock()
+
     def read(self, relative: str) -> ReadResult:
         """实际采集原始 XML/截图并调用现有 M3 解析器。"""
         path = self._resolve(relative)
         fixture = load_read_fixture(path)
         snapshot_id = str(uuid.uuid4())
-        observed_at = fixture.observed_at
         if fixture.kind == "conversation":
-            pages = [
-                parse_conversation_page(
-                    self._capture_xml(),
-                    fixture.profile,
-                    fixture.conversation_context,
-                    observed_at,
-                    snapshot_id,
-                    app_version=fixture.app_version,
+            # 同一次遍历必须共享同一观察时间（M3 合并契约）；取采集开始边界，
+            # 由合并时真实完成时钟判定整次采集是否仍在 5 秒新鲜度内。
+            observed_at = self._observed_at(fixture.observed_at)
+            pages = []
+            for _ in fixture.xml_texts:
+                xml_text = self._capture_xml()
+                pages.append(
+                    parse_conversation_page(
+                        xml_text,
+                        fixture.profile,
+                        fixture.conversation_context,
+                        observed_at,
+                        snapshot_id,
+                        app_version=fixture.app_version,
+                    )
                 )
-                for _ in fixture.xml_texts
-            ]
             return merge_conversations(
                 pages,
                 fixture.profile,
                 fixture.coverage_proof,
-                observed_at,
+                self._observed_at(fixture.observed_at),
                 app_version=fixture.app_version,
             )
         xml_text = self._capture_xml()
+        observed_at = self._observed_at(fixture.observed_at)
         if fixture.kind == "page":
             return parse_page(
                 xml_text,
@@ -143,6 +158,7 @@ class AdbRuntimeRead:
             on_done=self._on_done,
             strict_callbacks=True,
         )
+        observed_at = self._observed_at(fixture.observed_at)
         return parse_unread(
             xml_text,
             fixture.profile,

@@ -1130,12 +1130,14 @@ def execute_run(
     clock: Callable[[], str] | None = None,
     monotonic_ms: Callable[[], int] | None = None,
     on_boundary: Callable[[str], None] | None = None,
+    on_started: Callable[[], None] | None = None,
 ) -> dict[str, object]:
     """执行一次有界 run：先占共享门禁，再打开 profile 与仓储。
 
     `on_boundary` 只在固定生产边界被调用（after_checkpoint/after_refresh/
     before_safe_point/before_claim），返回值被忽略；它只能改变外界原始刺激、
     推进注入的可信时钟或记录轨迹，不能返回任务、安全点、决策或终态答案。
+    `on_started` 在真实 claim/start 成功后调用一次，只作原始观察/外部刺激钩子。
     """
     from app.domain.policy import utc_now as clock_impl
 
@@ -1594,6 +1596,8 @@ def execute_run(
                 """在真实 claim/start 成功后立即取样，避免使用完成后的旧时刻。"""
                 observed_start["at"] = active_clock()
                 observed_start["mono"] = active_mono()
+                if on_started is not None:
+                    on_started()
 
             conversation_result = (
                 next(
