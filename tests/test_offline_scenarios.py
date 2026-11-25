@@ -1203,8 +1203,8 @@ class M6SevenVariantTests(unittest.TestCase):
         """加载 oracle 供 comparator 复用。"""
         cls.assets = load_assets()
 
-    def _run_case(self, name: str, stimuli_rel: str):
-        """在临时合成项目根运行真实 M6 探针案例并返回输出。"""
+    def _run_case(self, name: str, stimuli_rel: str, mutate=None):
+        """在唯一临时根准备路径运行真实 M6 探针；正负控共用同一 helper。"""
         import action_helpers
 
         tmp, root = action_helpers.temp_project()
@@ -1218,6 +1218,8 @@ class M6SevenVariantTests(unittest.TestCase):
                 root / "tests" / "scenarios" / "fixtures" / "m3",
             )
             stimuli = json.loads((SCENARIO_ROOT / stimuli_rel).read_text(encoding="utf-8"))
+            if mutate is not None:
+                mutate(stimuli)
             old_root = m6_probe.ROOT
             try:
                 m6_probe.ROOT = root
@@ -1276,28 +1278,14 @@ class M6SevenVariantTests(unittest.TestCase):
         )
         oracle = self.assets.oracles["variants"]["SC-S01/safe_point_preempts"]["acceptance"]
         self.assertEqual(compare_step(payload, oracle["steps"][0]), [])
-        stimuli = json.loads(
-            (SCENARIO_ROOT / "fixtures/m6/events/s01-preemption.stimuli.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        mutant = copy.deepcopy(stimuli)
-        mutant["detect_after_ms"] = 300
-        original_root = m6_probe.ROOT
-        import action_helpers
+        def delay(stimuli):
+            stimuli["detect_after_ms"] = 300
 
-        tmp, root = action_helpers.temp_project()
-        try:
-            shutil.copytree(
-                TESTS_DIR.parent / "tests" / "fixtures" / "read",
-                root / "tests" / "fixtures" / "read",
-            )
-            m6_probe.ROOT = root
-            ctx = m6_probe._Context()
-            changed = m6_probe._run_s01(ctx, mutant)
-        finally:
-            m6_probe.ROOT = original_root
-            tmp.cleanup()
+        changed = self._run_case(
+            "safe_point_preempts",
+            "fixtures/m6/events/s01-preemption.stimuli.json",
+            delay,
+        )
         self.assertEqual(changed["handling_started_ms"], 20320)
         self.assertEqual(changed["waited_ms"], 10320)
         self.assertEqual(changed["detection_ms"], 300)
@@ -1307,20 +1295,15 @@ class M6SevenVariantTests(unittest.TestCase):
             "safe_point_preempts",
             ("handling_started_ms", "waited_ms", "detection_ms", "clock_trace"),
         )
-        arrival_only = copy.deepcopy(stimuli)
-        arrival_only["events"][1]["arrival_at"] = 7000
-        tmp, root = action_helpers.temp_project()
-        try:
-            shutil.copytree(
-                TESTS_DIR.parent / "tests" / "fixtures" / "read",
-                root / "tests" / "fixtures" / "read",
-            )
-            m6_probe.ROOT = root
-            ctx = m6_probe._Context()
-            arrival_payload = m6_probe._run_s01(ctx, arrival_only)
-        finally:
-            m6_probe.ROOT = original_root
-            tmp.cleanup()
+
+        def arrival_only(stimuli):
+            stimuli["events"][1]["arrival_at"] = 7000
+
+        arrival_payload = self._run_case(
+            "safe_point_preempts",
+            "fixtures/m6/events/s01-preemption.stimuli.json",
+            arrival_only,
+        )
         self.assertEqual(arrival_payload["first_observed_ms"], 10000)
         self.assertEqual(arrival_payload["handling_started_ms"], 20200)
         self.assertEqual(arrival_payload["clock_trace"][1], 7000)
@@ -1340,28 +1323,14 @@ class M6SevenVariantTests(unittest.TestCase):
         self.assertTrue(payload["checkpoint_before_stage"])
         oracle = self.assets.oracles["variants"]["SC-S01/arrival_after_commit"]["acceptance"]
         self.assertEqual(compare_step(payload, oracle["steps"][0]), [])
-        stimuli = json.loads(
-            (SCENARIO_ROOT / "fixtures/m6/events/s01-arrival-after-commit.stimuli.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        mutant = copy.deepcopy(stimuli)
-        mutant["events"][2]["virtual_ms"] = 1200
-        import action_helpers
+        def snapshot_late(stimuli):
+            stimuli["events"][2]["virtual_ms"] = 1200
 
-        tmp, root = action_helpers.temp_project()
-        original_root = m6_probe.ROOT
-        try:
-            shutil.copytree(
-                TESTS_DIR.parent / "tests" / "fixtures" / "read",
-                root / "tests" / "fixtures" / "read",
-            )
-            m6_probe.ROOT = root
-            ctx = m6_probe._Context()
-            changed = m6_probe._run_s01_arrival(ctx, mutant)
-        finally:
-            m6_probe.ROOT = original_root
-            tmp.cleanup()
+        changed = self._run_case(
+            "arrival_after_commit",
+            "fixtures/m6/events/s01-arrival-after-commit.stimuli.json",
+            snapshot_late,
+        )
         self.assertEqual(changed["first_observed_ms"], 1200)
         self._assert_business_reject(
             changed,
@@ -1412,50 +1381,24 @@ class M6SevenVariantTests(unittest.TestCase):
         self.assertTrue(payload["visible_at_refresh_preempts"])
         oracle = self.assets.oracles["variants"]["SC-S08/three_hooks"]["acceptance"]
         self.assertEqual(compare_step(payload, oracle["steps"][0]), [])
-        stimuli = json.loads(
-            (SCENARIO_ROOT / "fixtures/m6/events/s08-observation-boundaries.stimuli.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        refresh_mutant = copy.deepcopy(stimuli)
-        refresh_mutant["events"][1]["virtual_ms"] = 1100
-        arrival_mutant = copy.deepcopy(stimuli)
-        arrival_mutant["events"][1]["arrival_at"] = 800
-        visible_mutant = copy.deepcopy(stimuli)
-        visible_mutant["third_refresh_visible"] = True
-        missing_mutant = copy.deepcopy(stimuli)
-        missing_mutant["third_arrival"] = False
-        missing_mutant["third_refresh_visible"] = True
-        import action_helpers
+        def refresh_mutant(stimuli):
+            stimuli["events"][1]["virtual_ms"] = 1100
 
-        original_root = m6_probe.ROOT
-        changed_refresh = changed_arrival = visible = missing = None
-        for label, value in (
-            ("refresh", refresh_mutant),
-            ("arrival", arrival_mutant),
-            ("visible", visible_mutant),
-            ("missing", missing_mutant),
-        ):
-            tmp, root = action_helpers.temp_project()
-            try:
-                shutil.copytree(
-                    TESTS_DIR.parent / "tests" / "fixtures" / "read",
-                    root / "tests" / "fixtures" / "read",
-                )
-                m6_probe.ROOT = root
-                ctx = m6_probe._Context()
-                result = m6_probe._run_s08(ctx, value)
-            finally:
-                m6_probe.ROOT = original_root
-                tmp.cleanup()
-            if label == "refresh":
-                changed_refresh = result
-            elif label == "arrival":
-                changed_arrival = result
-            elif label == "visible":
-                visible = result
-            else:
-                missing = result
+        def arrival_mutant(stimuli):
+            stimuli["events"][1]["arrival_at"] = 800
+
+        def visible_mutant(stimuli):
+            stimuli["third_refresh_visible"] = True
+
+        def missing_mutant(stimuli):
+            stimuli["third_arrival"] = False
+            stimuli["third_refresh_visible"] = True
+
+        base_rel = "fixtures/m6/events/s08-observation-boundaries.stimuli.json"
+        changed_refresh = self._run_case("three_hooks", base_rel, refresh_mutant)
+        changed_arrival = self._run_case("three_hooks", base_rel, arrival_mutant)
+        visible = self._run_case("three_hooks", base_rel, visible_mutant)
+        missing = self._run_case("three_hooks", base_rel, missing_mutant)
         self.assertEqual(changed_refresh["second_hook_first_observed_at"], 1100)
         self._assert_business_reject(
             changed_refresh,
@@ -1624,36 +1567,22 @@ class M6SevenVariantTests(unittest.TestCase):
         self.assertIn(
             "targeted_verification_outcome", payload["source_audit"]["missing_call"]
         )
-        stimuli = json.loads(
-            (SCENARIO_ROOT / "fixtures/m6/events/s04-verification-gap.stimuli.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        cleared = copy.deepcopy(stimuli)
-        cleared["verification"] = "cleared"
-        import action_helpers
+        def cleared_stimulus(stimuli):
+            stimuli["verification"] = "cleared"
 
-        tmp, root = action_helpers.temp_project()
-        original_root = m6_probe.ROOT
-        try:
-            shutil.copytree(
-                TESTS_DIR.parent / "tests" / "fixtures" / "read",
-                root / "tests" / "fixtures" / "read",
-            )
-            m6_probe.ROOT = root
-            ctx = m6_probe._Context()
-            accepted = m6_probe._run_s04_gap(ctx, cleared)
-        finally:
-            m6_probe.ROOT = original_root
-            tmp.cleanup()
+        accepted = self._run_case(
+            "unread_verification_gap",
+            "fixtures/m6/events/s04-verification-gap.stimuli.json",
+            cleared_stimulus,
+        )
         self.assertEqual(accepted["read_calls"], 1)
         self.assertEqual(accepted["unread_verified_events"], 1)
         self.assertEqual(accepted["verification_payload"], "cleared")
         self.assertEqual(accepted["processed"], 0)
         self.assertTrue(accepted["scene_declaration_only"])
 
-    def test_observations_ref_binding_and_negative_control(self) -> None:
-        """新增观测引用必须绑定到正确文件/variant/stimulus；错绑被拒绝。"""
+    def test_observations_ref_binding_contract_check(self) -> None:
+        """test-local 契约检查：只验证引用谓词，不宣称资产/生产校验器拒绝。"""
         ref = "SC-S01/arrival_after_commit"
         assets = self.assets
         variant = next(
@@ -1741,6 +1670,44 @@ class M6SevenVariantTests(unittest.TestCase):
         }
         for source, target in mapping.items():
             self.assertEqual(paths[target], observation[source], source)
+
+
+class M6UnconvergedIsolationTests(unittest.TestCase):
+    """真实未决门禁 release(converged=False) 的 quarantine 与后续拒绝。"""
+
+    def test_release_false_quarantines_and_rejects_reads_and_actions(self) -> None:
+        """未决 pending 保留占用并 quarantine；场景读取与动作入口均被拒绝。"""
+        import action_helpers
+
+        temp, root = action_helpers.temp_project()
+        old_root = m6_probe.ROOT
+        try:
+            shutil.copytree(
+                TESTS_DIR.parent / "tests" / "fixtures" / "read",
+                root / "tests" / "fixtures" / "read",
+            )
+            m6_probe.ROOT = root
+            ctx = m6_probe._Context()
+            payload = m6_probe._run_s02_unconverged(
+                ctx,
+                {
+                    "script_id": "SC-S02/unconverged-release",
+                    "role": "driver_stimuli_only",
+                    "note": "真实 pending 后 release(converged=False)",
+                },
+            )
+        finally:
+            m6_probe.ROOT = old_root
+            temp.cleanup()
+        self.assertEqual(payload["gate_state"], "quarantined")
+        self.assertTrue(payload["occupancy_retained"])
+        self.assertEqual(payload["occupancy_state"], "quarantined")
+        self.assertEqual(payload["action_rejection"], "device_not_held")
+        self.assertEqual(payload["action_state_after"], "pending")
+        self.assertEqual(payload["run_rejection"], "device_quarantined")
+        self.assertEqual(payload["run_scene_reads"], 0)
+        self.assertEqual(payload["run_model_calls"], 0)
+        self.assertEqual(payload["run_actions_performed"], 0)
 
 
 class M1DriverBoundaryTests(unittest.TestCase):

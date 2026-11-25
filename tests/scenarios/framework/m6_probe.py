@@ -2105,6 +2105,59 @@ def _run_s02_converged(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, A
     }
 
 
+def _run_s02_unconverged(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
+    """真实未决 pending 下 release(converged=False)，验证 quarantine 与后续拒绝。"""
+    if not isinstance(stimuli, dict) or stimuli.get("role") != "driver_stimuli_only":
+        raise ProbeError("S02 未收敛刺激非法")
+    if set(stimuli) - {"script_id", "role", "note"}:
+        raise ProbeError("S02 未收敛刺激形状非法")
+    gate = _acquire_probe_gate(ctx)
+    store = _open_action_store(ctx)
+    scene_reads: list[str] = []
+    try:
+        key = _make_unread("s02-unconverged")[2]
+        _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, key)
+        _lease, action_key = _begin_pending_text_action(store, ctx, key)
+        gate.release(now=NOW, converged=False)
+        occupancy = gate.inspect()
+        try:
+            _reconcile_not_performed(store, gate, ctx, action_key)
+            action_rejection = "accepted"
+        except Exception as error:  # noqa: BLE001 - 固定原因码出口
+            action_rejection = str(getattr(error, "reason_code", type(error).__name__))
+        action_state = str(store.get_action(action_key)["state"])
+        import app.adapters.simulated.runtime as simulated
+
+        original_read = simulated.FixtureM3Read.read
+
+        def counting(self, relative: str):
+            """记录 quarantine 后是否在场景读取前停止。"""
+            scene_reads.append(relative)
+            return original_read(self, relative)
+
+        simulated.FixtureM3Read.read = counting  # type: ignore[assignment]
+        try:
+            ctx.execute([_step()], clock=EnvironmentClock(), times=[0])
+            run_rejection = "accepted"
+        except Exception as error:  # noqa: BLE001 - 固定原因码出口
+            run_rejection = str(getattr(error, "reason_code", type(error).__name__))
+        finally:
+            simulated.FixtureM3Read.read = original_read  # type: ignore[assignment]
+    finally:
+        store.close()
+    return {
+        "gate_state": None if occupancy is None else occupancy.get("state"),
+        "occupancy_retained": occupancy is not None,
+        "occupancy_state": None if occupancy is None else occupancy.get("state"),
+        "action_rejection": action_rejection,
+        "action_state_after": action_state,
+        "run_rejection": run_rejection,
+        "run_scene_reads": len(scene_reads),
+        "run_model_calls": 0,
+        "run_actions_performed": 0,
+    }
+
+
 def _run_s02_list_semantics(
     ctx: _Context, stimuli: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -2457,6 +2510,7 @@ CASES = {
     "arrival_after_commit": _run_s01_arrival,
     "three_hooks": _run_s08,
     "safe_point_converged": _run_s02_converged,
+    "safe_point_unconverged": _run_s02_unconverged,
     "safe_point_list_semantics": _run_s02_list_semantics,
     "unread_verification_gap": _run_s04_gap,
     "five_then_pause": _run_s03,

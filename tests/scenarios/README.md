@@ -40,7 +40,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --only SC-R --targe
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-D --target .
 ```
 
-- unittest：161 项，验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant，以及 M4c 探针正常执行/越界拒绝/junction 拒绝/生产字段变异被 oracle 拒绝、D06 forget 残留、并发 winner 关联、隔离 LF 规范化边界（自动与显式 LF 均保持 BOM/NUL）、单文件夹具根内绝对/上跳/Windows 语义/答案名拒绝、资产校验复用同一路径规则、合成无上传合同正例与缺合同零桥调用反例、受控异常安全 JSON，以及 M5 原始 JSONL/生产格式账本变异到原 A01_FE 判据、逐命令实例 finish 闭合（缺/重/乱序/跨命令/同 label 实例）、合成 Popen 计数正增量/异常/零调用、实际 `_gate_race` 输出到原 D09 关系，以及 M6 S01/S02/S08 真实探针正例、引用绑定错绑负控与原始刺激变异负控（`M6SevenVariantTests` 8 项）。
+- unittest：162 项，验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant，以及 M4c 探针正常执行/越界拒绝/junction 拒绝/生产字段变异被 oracle 拒绝、D06 forget 残留、并发 winner 关联、隔离 LF 规范化边界（自动与显式 LF 均保持 BOM/NUL）、单文件夹具根内绝对/上跳/Windows 语义/答案名拒绝、资产校验复用同一路径规则、合成无上传合同正例与缺合同零桥调用反例、受控异常安全 JSON，以及 M5 原始 JSONL/生产格式账本变异到原 A01_FE 判据、逐命令实例 finish 闭合（缺/重/乱序/跨命令/同 label 实例）、合成 Popen 计数正增量/异常/零调用、实际 `_gate_race` 输出到原 D09 关系，以及 M6 S01/S02/S08 真实探针正例、test-local 引用契约检查、原始刺激变异负控（`M6SevenVariantTests` 8 项）与未决 quarantine 拒绝（`M6UnconvergedIsolationTests` 1 项）。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；
