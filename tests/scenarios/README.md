@@ -16,7 +16,7 @@
 ## 2. 当前事实
 
 - 场景 73、变体 364：F 342、T 9、O 12、W 1；M4 103（66 原 + 37 子证据）。
-- READY_FOR_APP 256、ASSET_ONLY 46、DEFERRED 35、MODULE_EVIDENCE 5、DEVICE_GATE 22。
+- READY_FOR_APP 267、ASSET_ONLY 35、DEFERRED 35、MODULE_EVIDENCE 5、DEVICE_GATE 22。
 - M0 `51333d8`、M1 `a600d0a`、M2 `cc103f8`、M3 `584b814`（merge `92a0b68`）、M4a/b `140c182`（merge `ec66db4`）、M4c `5cb6817`（普通 merge `248483e`）已接入。
   - M0 实际执行：C01 9 PASS + 1 T 门槛、C02 12 PASS、C03 8 PASS，共 29 PASS、0 FAIL。
   - M1 实际执行：38 PASS、0 FAIL；DEFERRED 2（abandon→M5、leased_no_start→M6）、MODULE_EVIDENCE 3（纯约束用例，不重做模块单测）。M1 子集总体 BLOCKED、退出 3，不冒充完整 M1 通过。
@@ -40,7 +40,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --only SC-R --targe
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-D --target .
 ```
 
-- unittest：145 项（139 资产/判据 + 6 个真实 facts CLI 持久案例），验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant，以及 M4c 探针正常执行/越界拒绝/junction 拒绝/生产字段变异被 oracle 拒绝、D06 forget 残留、并发 winner 关联、隔离 LF 规范化边界（自动与显式 LF 均保持 BOM/NUL）、单文件夹具根内绝对/上跳/Windows 语义/答案名拒绝、资产校验复用同一路径规则、合成无上传合同正例与缺合同零桥调用反例、受控异常安全 JSON，以及 M5 原始 JSONL/生产格式账本变异到原 A01_FE 判据、逐命令实例 finish 闭合（缺/重/乱序/跨命令/同 label 实例）、合成 Popen 计数正增量/异常/零调用、实际 `_gate_race` 输出到原 D09 关系。
+- unittest：160 项，验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant，以及 M4c 探针正常执行/越界拒绝/junction 拒绝/生产字段变异被 oracle 拒绝、D06 forget 残留、并发 winner 关联、隔离 LF 规范化边界（自动与显式 LF 均保持 BOM/NUL）、单文件夹具根内绝对/上跳/Windows 语义/答案名拒绝、资产校验复用同一路径规则、合成无上传合同正例与缺合同零桥调用反例、受控异常安全 JSON，以及 M5 原始 JSONL/生产格式账本变异到原 A01_FE 判据、逐命令实例 finish 闭合（缺/重/乱序/跨命令/同 label 实例）、合成 Popen 计数正增量/异常/零调用、实际 `_gate_race` 输出到原 D09 关系，以及 M6 S01/S02/S08 真实探针正例与原始刺激变异负控。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；
@@ -77,13 +77,13 @@ acceptance 对每个可执行变体：
 - M3 页面/职位/未读/会话完整路径、字段阶梯/像素/上下文冲突、稳定消息身份/跨屏重叠/new_message_keys、定向核对 API 与边界、版本漂移、读侧不关闭发现；rows/cards/messages/field_evidence 的每个元素校验固定键、必要类型与非首项身份/摘要/证据；真实日志按单次调用与 correlation 校验有序事件、成对次数和敏感字段；真实进入/返回/到达时序仍依赖 M4–M6 或设备；
 - M4a/b/c 旧 24 映射、Decision 校验、提交前重试/提交后超时/2048 限额、事实/注入/档位纯契约、策略包 45 键与真实链接拒绝、init/validate/preview、摘要/渲染/篡改、显式 restore activity 子证据、公开/eval 留出首次与重复访问/整批退役/真实 regression 准入；M4c 真实事实过期/冲突/白名单/跨 profile、共享门禁两进程与失败隔离、真实租约与桥前后拒绝、活动 stopped/active/unknown、真实 restore 与旧凭证失效已接稳定接口；完整 M5 待办/授权与整轮 run 仍 DEFERRED；
 - M5 已接真实 `perform_action`/`AdbActionExecutor`/`reconcile_action`/`complete_action`/领域证据校验：A01 文本 6 PASS + 2 BLOCKED、A02 8 PASS、A03 7 PASS + 1 BLOCKED、A04 7 PASS + 1 BLOCKED、A05 6 PASS、A07 3 PASS + 1 BLOCKED、A08 6 PASS；A06 六个保留 ASSET_ONLY/BLOCKED_ENTRY_UNFROZEN（依赖 M6 apply_job）。A01 输入法/发送控件候选缺 M5 控件发现；A03/A04 direct_send 被生产执行器前置拒绝（非文本需先有可逆槽位点击）；A07 reconnect 缺 M5 键屏/会话身份入口，均保持 BLOCKED，未伪造 PASS。确认框场景只证明调用方 tap_points 合同下的 dialog 状态，不证明坐标命中控件；base 重放的 precondition_failed 属于任务已完成，不是 pending 动作键 action_conflict。
-- M6 安全点、第 6 次抢占、预算边界、双钟/续租、三个观察钩子；
+- M6 安全点、第 6 次抢占、预算边界、双钟/续租、三个观察钩子；S01 两变体、S02/all_true、S03 与 S08 已由真实 `execute_run`/仓储/门禁定向执行，S02/single_false_blocks 与 S04 两变体仍 BLOCKED；
 - M7 清理保护、身份核验、台账与删除后核验；
 - M8 分桶/零分母、固定 C、降级回滚。
 
 ## 7. 未完成与下一步
 
 - P2 已接入 M0/M1/M2/M3/M4a/M4b/M4c/M5 动作与事实入口；M6+ 需等业务方稳定提交后，逐一绑定调度/清理/灰度接口；不得合并未验收业务分支。
-- 46 个 M5+ ASSET_ONLY 变体仍缺接口（含 A06 六个与 M6–M8）；35 个 DEFERRED 与 5 个 MODULE_EVIDENCE 保持未计 PASS。原 R03/R04/R06/R07 完整变体仍分别依赖 M6 调度/M5–M6 进入与事件时序；M4 D02/D03 完整调度重跑与超限待办、D04 ask_user/blocked 授权、D06 完整十步、D09 read_only 整轮持有、D10 额度/旧授权/在途、D11 真实 provider/私有留出仍未验收。
+- 35 个 M5+ ASSET_ONLY 变体仍缺接口（含 S02/single_false_blocks、S04 两变体与 M7–M8）；35 个 DEFERRED 与 5 个 MODULE_EVIDENCE 保持未计 PASS。原 R03/R04/R06/R07 完整变体仍分别依赖 M6 调度/M5–M6 进入与事件时序；M4 D02/D03 完整调度重跑与超限待办、D04 ask_user/blocked 授权、D06 完整十步、D09 read_only 整轮持有、D10 额度/旧授权/在途、D11 真实 provider/私有留出仍未验收。
 - 纯实机门槛、真实模型/provider、真实写入与设备证据全部未执行。
 - 根 `tests/AGENTS.md`、根 `AGENTS.md` 索引与 README 由业务方串行更新；本目录只提供待同步条目。

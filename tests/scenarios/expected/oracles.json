@@ -25736,7 +25736,71 @@
       "variant_id": "participant_event"
     },
     "SC-S01/arrival_after_commit": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "arrival_after_commit",
+                "path": "case"
+              },
+              {
+                "equals": 2,
+                "path": "processed"
+              },
+              {
+                "equals": null,
+                "path": "pause_reason"
+              },
+              {
+                "equals": 500,
+                "path": "arrival_at"
+              },
+              {
+                "equals": 1,
+                "path": "stage_preempted_count"
+              },
+              {
+                "equals": 1000,
+                "path": "first_observed_ms"
+              },
+              {
+                "equals": 1000,
+                "path": "handling_started_ms"
+              },
+              {
+                "equals": 0,
+                "path": "waited_ms"
+              },
+              {
+                "equals": true,
+                "path": "arrival_not_first_observed"
+              },
+              {
+                "equals": true,
+                "path": "first_observed_at_normal_check"
+              },
+              {
+                "equals": true,
+                "path": "preempted_at_normal_check"
+              },
+              {
+                "equals": 1000,
+                "path": "first_observation_call_ms"
+              },
+              {
+                "equals": true,
+                "path": "checkpoint_before_stage"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "下次正常检查观察后优先",
         "不伪造 first_observed"
@@ -25750,7 +25814,7 @@
       ],
       "layer": "F",
       "module_evidence": null,
-      "observations_ref": null,
+      "observations_ref": "expected/m6-observations.json",
       "preconditions": [
         "M1/M2/M5 离线门槛",
         "固定事件脚本与单调时钟"
@@ -25764,7 +25828,101 @@
       "variant_id": "arrival_after_commit"
     },
     "SC-S01/safe_point_preempts": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "safe_point_preempts",
+                "path": "case"
+              },
+              {
+                "equals": 2,
+                "path": "processed"
+              },
+              {
+                "equals": null,
+                "path": "pause_reason"
+              },
+              {
+                "equals": 8000,
+                "path": "arrival_at"
+              },
+              {
+                "equals": 10000,
+                "path": "snapshot_at"
+              },
+              {
+                "equals": 20020,
+                "path": "safe_point_at"
+              },
+              {
+                "equals": 20200,
+                "path": "detect_at"
+              },
+              {
+                "equals": 1,
+                "path": "stage_preempted_count"
+              },
+              {
+                "equals": 10000,
+                "path": "first_observed_ms"
+              },
+              {
+                "equals": 20200,
+                "path": "handling_started_ms"
+              },
+              {
+                "equals": 10200,
+                "path": "waited_ms"
+              },
+              {
+                "equals": 180,
+                "path": "detection_ms"
+              },
+              {
+                "equals": true,
+                "path": "stage_preempted_after_safe_point"
+              },
+              {
+                "equals": false,
+                "path": "preempted_before_safe_point"
+              },
+              {
+                "equals": true,
+                "path": "arrival_not_first_observed"
+              },
+              {
+                "equals": 10000,
+                "path": "first_observation_call_ms"
+              },
+              {
+                "equals": 2,
+                "path": "observe_call_count"
+              },
+              {
+                "equals": true,
+                "path": "checkpoint_before_stage"
+              },
+              {
+                "equals": [
+                  0,
+                  8000,
+                  10000,
+                  20020,
+                  20200
+                ],
+                "path": "clock_trace"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "刺激不含 first_observed/handling/pause 等产品结果",
         "安全点前不切换",
@@ -25795,7 +25953,183 @@
       "variant_id": "safe_point_preempts"
     },
     "SC-S02/all_true": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "safe_point_converged",
+                "path": "case"
+              },
+              {
+                "equals": 1,
+                "path": "pending_before_actions"
+              },
+              {
+                "equals": 1,
+                "path": "pending_before_pending"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_last_state"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_action_state"
+              },
+              {
+                "equals": "not_performed",
+                "path": "pending_reconciled_state"
+              },
+              {
+                "equals": "not_sent",
+                "path": "pending_reconciled_task_state"
+              },
+              {
+                "equals": 0,
+                "path": "pending_after_actions"
+              },
+              {
+                "equals": 0,
+                "path": "pending_after_pending"
+              },
+              {
+                "equals": 1,
+                "path": "unknown_before_actions"
+              },
+              {
+                "equals": 1,
+                "path": "unknown_before_pending"
+              },
+              {
+                "equals": "unknown",
+                "path": "unknown_action_state"
+              },
+              {
+                "equals": "not_performed",
+                "path": "unknown_reconciled_state"
+              },
+              {
+                "equals": "not_sent",
+                "path": "unknown_reconciled_task_state"
+              },
+              {
+                "equals": 0,
+                "path": "unknown_after_actions"
+              },
+              {
+                "equals": 0,
+                "path": "unknown_after_pending"
+              },
+              {
+                "equals": 2,
+                "path": "all_true_processed"
+              },
+              {
+                "equals": 0,
+                "path": "all_true_pre_pending_actions"
+              },
+              {
+                "equals": 0,
+                "path": "all_true_pre_pending_running"
+              },
+              {
+                "equals": "not_performed",
+                "path": "all_true_pre_last_state"
+              },
+              {
+                "equals": "ok",
+                "path": "all_true_read_status"
+              },
+              {
+                "equals": true,
+                "path": "all_true_read_actionable"
+              },
+              {
+                "equals": true,
+                "path": "all_true_input_empty"
+              },
+              {
+                "equals": true,
+                "path": "all_true_confirmation_closed"
+              },
+              {
+                "equals": true,
+                "path": "all_true_no_inflight"
+              },
+              {
+                "equals": null,
+                "path": "all_true_pause_reason"
+              },
+              {
+                "equals": 1,
+                "path": "all_true_stage_preempted_count"
+              },
+              {
+                "equals": 1000,
+                "path": "all_true_first_observed_ms"
+              },
+              {
+                "equals": 1000,
+                "path": "all_true_handling_started_ms"
+              },
+              {
+                "equals": 0,
+                "path": "all_true_waited_ms"
+              },
+              {
+                "path": "all_true_checkpoint_event_id",
+                "type": "integer"
+              },
+              {
+                "path": "all_true_stage_event_id",
+                "type": "integer"
+              },
+              {
+                "equals": 3,
+                "path": "all_true_checkpoint_stage_delta"
+              },
+              {
+                "equals": true,
+                "path": "all_true_checkpoint_before_stage"
+              },
+              {
+                "equals": 1,
+                "path": "refusal_pending_actions"
+              },
+              {
+                "equals": "pending",
+                "path": "refusal_action_state"
+              },
+              {
+                "equals": "held",
+                "path": "refusal_gate_state"
+              },
+              {
+                "equals": true,
+                "path": "refusal_lock_retained"
+              },
+              {
+                "equals": "device_busy",
+                "path": "refusal_reason"
+              },
+              {
+                "equals": 0,
+                "path": "refusal_processed"
+              },
+              {
+                "equals": 0,
+                "path": "refusal_scene_reads"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "只有全真才切换",
         "状态证据收敛后重跑"
@@ -26283,7 +26617,184 @@
       "variant_id": "renew_before_finish"
     },
     "SC-S08/three_hooks": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "three_hooks",
+                "path": "case"
+              },
+              {
+                "equals": 5,
+                "path": "processed"
+              },
+              {
+                "equals": null,
+                "path": "pause_reason"
+              },
+              {
+                "equals": 2,
+                "path": "stage_preempted_count"
+              },
+              {
+                "equals": 0,
+                "path": "first_hook_first_observed_at"
+              },
+              {
+                "equals": 1000,
+                "path": "second_hook_first_observed_at"
+              },
+              {
+                "equals": null,
+                "path": "third_hook_first_observed_at"
+              },
+              {
+                "equals": [
+                  0,
+                  1000,
+                  null
+                ],
+                "path": "hook_first_observed"
+              },
+              {
+                "equals": true,
+                "path": "observed_before_safe_point_preempts"
+              },
+              {
+                "equals": true,
+                "path": "visible_at_refresh_preempts"
+              },
+              {
+                "equals": true,
+                "path": "unobserved_not_fabricated"
+              },
+              {
+                "equals": true,
+                "path": "no_arrival_latency_claim"
+              },
+              {
+                "equals": 900,
+                "path": "second_arrival_at"
+              },
+              {
+                "equals": 1000,
+                "path": "second_refresh_at"
+              },
+              {
+                "equals": 1900,
+                "path": "third_arrival_at"
+              },
+              {
+                "equals": 2000,
+                "path": "third_refresh_at"
+              },
+              {
+                "equals": 0,
+                "path": "third_window_observe_calls"
+              },
+              {
+                "equals": true,
+                "path": "third_window_consumed"
+              },
+              {
+                "equals": false,
+                "path": "third_refresh_visible"
+              },
+              {
+                "equals": true,
+                "path": "third_arrival_event_consumed"
+              },
+              {
+                "equals": 1900,
+                "path": "third_arrival_event_consumed_at_ms"
+              },
+              {
+                "equals": true,
+                "path": "third_arrival_payload_present"
+              },
+              {
+                "path": "third_arrival_payload_sha256",
+                "type": "string"
+              },
+              {
+                "equals": "driver_inbox_at_arrival_ms_refresh_selects_source",
+                "path": "third_arrival_injection_boundary"
+              },
+              {
+                "equals": "absent",
+                "path": "third_arrival_product_state"
+              },
+              {
+                "equals": false,
+                "path": "third_arrival_claimed"
+              },
+              {
+                "equals": false,
+                "path": "third_arrival_observed"
+              },
+              {
+                "equals": true,
+                "path": "third_refresh_inbox_present"
+              },
+              {
+                "equals": false,
+                "path": "third_refresh_source_visible"
+              },
+              {
+                "equals": false,
+                "path": "third_refresh_consumed_payload"
+              },
+              {
+                "equals": "tests/fixtures/read/page.json",
+                "path": "third_refresh_selected_fixture"
+              },
+              {
+                "equals": null,
+                "path": "third_window_first_observed_ms"
+              },
+              {
+                "equals": 11,
+                "path": "consumed_step_count"
+              },
+              {
+                "equals": [
+                  0,
+                  100,
+                  1000,
+                  1100
+                ],
+                "path": "observe_call_ms"
+              },
+              {
+                "equals": [
+                  0,
+                  0,
+                  0,
+                  100,
+                  500,
+                  900,
+                  1000,
+                  1100,
+                  1500,
+                  1900,
+                  2000
+                ],
+                "path": "clock_trace"
+              },
+              {
+                "equals": 11,
+                "path": "step_count"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "刺激不含 first_observed",
         "前两者优先处理",
