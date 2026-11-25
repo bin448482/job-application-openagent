@@ -1214,6 +1214,8 @@ def execute_run(
                 monotonic_now_ms=current_mono,
             ):
                 pause_reason = "clock_changed"
+                _account(current_mono - last_boundary)
+                last_boundary = current_mono
                 store.safety_stop_after_clock_change(
                     batch_id, cursor, pause_reason, now=now_value
                 )
@@ -1304,6 +1306,8 @@ def execute_run(
                     monotonic_now_ms=targeted_before,
                 ):
                     pause_reason = "clock_changed"
+                    _account(targeted_before - last_boundary)
+                    last_boundary = targeted_before
                     store.safety_stop_after_clock_change(
                         batch_id, cursor, pause_reason, now=now_value
                     )
@@ -1490,6 +1494,8 @@ def execute_run(
                 monotonic_now_ms=claim_mono,
             ):
                 pause_reason = "clock_changed"
+                _account(claim_mono - last_boundary)
+                last_boundary = claim_mono
                 store.safety_stop_after_clock_change(
                     batch_id, cursor, pause_reason, now=now_value
                 )

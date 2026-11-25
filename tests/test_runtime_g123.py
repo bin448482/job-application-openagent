@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import shutil
 import sqlite3
+import struct
 import unittest
 import uuid
 from dataclasses import replace
@@ -37,7 +38,7 @@ from app.domain.reading import (
     job_identity_hash_for,
     job_key_from_identity,
 )
-from app.domain.runtime import BudgetLimits
+from app.domain.runtime import BatchCursor, BudgetLimits
 from app.ports.runtime import RawScene
 from app.ports.store import StoreError
 from app.process_log import ProcessLog
@@ -347,6 +348,85 @@ class _RuntimeCase(unittest.TestCase):
             encoding="utf-8",
         )
         return f"tests/fixtures/runtime/{name}/job_list.json", key_a, key_b
+
+    def _many_page_conversation(self, name: str, pages: int) -> str:
+        """生成引用 pages 份真实会话页 XML 的 conversation manifest。"""
+        target = self.root / "tests/fixtures/runtime" / name
+        target.mkdir(parents=True, exist_ok=True)
+        for item in ("profile.json", "conversation.json"):
+            shutil.copyfile(ROOT / "tests/fixtures/read" / item, target / item)
+        template = (ROOT / "tests/fixtures/read/conversation-0.xml").read_text(
+            encoding="utf-8"
+        )
+        first = template.index(
+            '      <node resource-id="com.hpbr.bosszhipin:id/chat_message_row"'
+        )
+        second = template.index(
+            '      <node resource-id="com.hpbr.bosszhipin:id/chat_message_row"',
+            first + 1,
+        )
+        suffix = template[template.index("    </node>\n  </node>\n</hierarchy>"):]
+        prefix = template[:second]
+        paths: list[str] = []
+        for index in range(pages):
+            page = (
+                prefix.replace("合成消息甲", f"合成消息{index}")
+                .replace("10:00", f"10:{index % 60:02d}")
+                .replace("msg-1", f"msg-page-{index}")
+                + suffix
+            )
+            file_name = f"conversation_{index:03d}.xml"
+            (target / file_name).write_text(page, encoding="utf-8")
+            paths.append(file_name)
+        manifest = json.loads((target / "conversation.json").read_text(encoding="utf-8"))
+        manifest["hierarchy_paths"] = paths
+        manifest["coverage_proof"] = {
+            "kind": "full_traversal",
+            "top_proven": True,
+            "bottom_proven": True,
+        }
+        (target / "conversation.json").write_text(
+            json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+        )
+        return f"tests/fixtures/runtime/{name}/conversation.json"
+
+    def _unread_pixel_manifest(self, name: str) -> tuple[str, bytes]:
+        """生成带显式像素文件的未读 manifest，返回 manifest 与截图字节。"""
+        rel = self._write_unread_variant(name, observed_at=helpers.NOW)
+        target = (self.root / rel).parent
+        profile = json.loads((target / "profile.json").read_text(encoding="utf-8"))
+        calibration = {
+            "calibration_id": "synthetic-calibration",
+            "app": "boss",
+            "profile_id": str(profile["profile_id"]),
+            "version": str(profile["version"]),
+            "calibrated": True,
+            "absent_state_verified": True,
+            "resolution": [100, 100],
+            "badge_region": [0.0, 0.0, 0.2, 1.0],
+            "target_color": [255, 0, 0],
+            "tolerance": 0,
+            "threshold_pixels": 1,
+            "source": "synthetic",
+            "calibrated_on": "2026-11-24",
+        }
+        (target / "calibration.json").write_text(
+            json.dumps(calibration, ensure_ascii=False), encoding="utf-8"
+        )
+        pixels = bytearray(100 * 100 * 4)
+        pixels[(5 * 100 + 5) * 4] = 255
+        pixels[(5 * 100 + 5) * 4 + 3] = 255
+        raw = struct.pack("<IIII", 100, 100, 1, 0) + bytes(pixels)
+        (target / "screen.rgba").write_bytes(raw)
+        manifest = json.loads((target / "unread.json").read_text(encoding="utf-8"))
+        manifest["pixel"] = {
+            "calibration_path": "calibration.json",
+            "raw_path": "screen.rgba",
+        }
+        (target / "unread.json").write_text(
+            json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+        )
+        return rel, raw
 
     def _slow_copy(self, manifest_rel: str, name: str) -> str:
         """复制同一合成职位 manifest 到独立路径，供只在该次读取推进时钟。"""
@@ -1102,6 +1182,175 @@ class AdbRuntimeReadCommandTests(_RuntimeCase):
         self.assertEqual(gate.verifies, 2)
 
 
+class S06CommandBudgetMatrixTests(_RuntimeCase):
+    """S06：真实 execute_run→AdbRuntimeRead→run_adb.on_spawn 的 199/200/201/250。"""
+
+    class _Gate:
+        """ScreenPort 共享门禁替身。"""
+
+        def require_available(self) -> None:
+            """始终可用。"""
+            return
+
+        def verify(self) -> None:
+            """命令前复核无副作用。"""
+            return
+
+        def release(self) -> None:
+            """无占用。"""
+            return
+
+    class _FakePopen:
+        """模拟一次真实创建命令，不启动外部进程。"""
+
+        def __init__(self, output: object) -> None:
+            """保存固定输出。"""
+            self.pid = 6000 + id(output) % 1000
+            self.returncode = 0
+            self._output = output
+            self.killed = False
+
+        def communicate(self, timeout=None):
+            """返回固定输出。"""
+            del timeout
+            empty = b"" if isinstance(self._output, bytes) else ""
+            return (self._output, empty)
+
+        def kill(self) -> None:
+            """记录清理。"""
+            self.killed = True
+
+    def _page_outputs(self, manifest_rel: str) -> list[object]:
+        """返回 conversation 每页的真实 XML 文本。"""
+        manifest = json.loads((self.root / manifest_rel).read_text(encoding="utf-8"))
+        base = (self.root / manifest_rel).parent
+        return [
+            (base / path).read_text(encoding="utf-8")
+            for path in manifest["hierarchy_paths"]
+        ]
+
+    def _run_case(self, total: int, pages: int, *, unread: bool) -> dict[str, object]:
+        """按 total 命令构造一次真实 execute_run。"""
+        batch = f"00000000-0000-4000-8000-{total:012d}"
+        conversation = self._many_page_conversation(f"s06-{total}", pages)
+        conv_outputs = self._page_outputs(conversation)
+        if unread:
+            primary, raw = self._unread_pixel_manifest("甲")
+            key = helpers.m3_unread_key()
+            helpers.seed_discovery(self.root, key, unread_count=1)
+            step = self._step(
+                read_fixture=primary,
+                conversation_fixture=conversation,
+                decision=helpers.decision_stimulus(),
+            )
+            outputs: list[object] = ["dumped", (self.root / primary).parent.joinpath("unread.xml").read_text(encoding="utf-8"), raw]
+        else:
+            helpers.seed_new_message(self.root, f"s06-{total}")
+            primary = "tests/fixtures/read/page.json"
+            step = self._step(
+                read_fixture=primary,
+                conversation_fixture=conversation,
+                decision=helpers.decision_stimulus(),
+            )
+            outputs = ["dumped", (ROOT / "tests/fixtures/read/page.xml").read_text(encoding="utf-8")]
+        for xml in conv_outputs:
+            outputs.extend(["dumped", xml])
+        rel = self._scenario(f"s06-{total}", [step], batch_id=batch)
+        adapter = AdbRuntimeRead(
+            self.root,
+            AdbScreenReader(None, gate=self._Gate()),
+            "synthetic-serial",
+        )
+        fake = [self._FakePopen(item) for item in outputs]
+        with patch(
+            "app.adapters.adb.command.subprocess.Popen", side_effect=fake
+        ):
+            return self._execute(
+                rel,
+                clock=_Clock(),
+                read=adapter,
+                store_monotonic=lambda: 0.0,
+            )
+
+    def test_199_commands_allow_one_task(self) -> None:
+        """真实 199 次命令创建后仍可开始一条任务，预算余 1。"""
+        run = self._run_case(199, 98, unread=True)
+        self.assertEqual(run["processed"], 1)
+        self.assertIsNone(run["pause_reason"])
+        self.assertEqual(run["remaining_budget"]["device_calls"], 1)  # type: ignore[index]
+
+    def test_200_201_250_commands_pause_and_preserve_budget(self) -> None:
+        """200 等号、201 与 250 在途超支均暂停且保留真实剩余/负值。"""
+        cases = ((200, 99, False, 0), (201, 99, True, -1), (250, 124, False, -50))
+        for total, pages, unread, remaining in cases:
+            run = self._run_case(total, pages, unread=unread)
+            self.assertEqual(run["processed"], 0, total)
+            self.assertEqual(run["pause_reason"], "budget_exhausted", total)
+            self.assertEqual(
+                run["remaining_budget"]["device_calls"], remaining, total  # type: ignore[index]
+            )
+
+class SafetyStopTests(_RuntimeCase):
+    """双钟安全停止：真实 profile/batch 校验、预算保存与故障回滚。"""
+
+    def test_safety_stop_validates_batch_cursor_and_reason(self) -> None:
+        """错误 batch/cursor/原因拒绝，合法调用保存暂停与四维预算。"""
+        store = self._store()
+        try:
+            store.ensure_batch(BATCH, BudgetLimits(), helpers.NOW)
+            cursor = store.load_batch(BATCH)["cursor"]
+            self.assertIsInstance(cursor, BatchCursor)
+            cursor = replace(cursor, budget=replace(cursor.budget, remaining_seconds=875))
+            with self.assertRaises(StoreError):
+                store.safety_stop_after_clock_change(
+                    "00000000-0000-4000-8000-000000000099",
+                    cursor,
+                    "clock_changed",
+                    now=helpers.NOW,
+                )
+            with self.assertRaises(StoreError):
+                store.safety_stop_after_clock_change(
+                    BATCH, cursor, "budget_exhausted", now=helpers.NOW
+                )
+            store.safety_stop_after_clock_change(
+                BATCH, cursor, "clock_changed", now=helpers.NOW
+            )
+            batch = store.load_batch(BATCH)
+            self.assertEqual(batch["state"], "paused")
+            self.assertEqual(batch["pause_reason"], "clock_changed")
+            self.assertEqual(batch["cursor"].budget.remaining_seconds, 875)
+        finally:
+            store.close()
+
+    def test_safety_stop_event_failure_rolls_back(self) -> None:
+        """事件写入故障回滚暂停状态，不伪造已保存。"""
+        def boom(name: str, connection: object) -> None:
+            """只在安全停止事件边界注入故障。"""
+            del connection
+            if name == "safety_stop_before_event":
+                raise RuntimeError("synthetic safety stop fault")
+
+        store = SqliteStore(
+            self.path,
+            profile_id="demo",
+            local_host=self.owner.host,
+            fault_hook=boom,
+            require_runtime=True,
+        )
+        try:
+            store.ensure_batch(BATCH, BudgetLimits(), helpers.NOW)
+            cursor = store.load_batch(BATCH)["cursor"]
+            with self.assertRaises(StoreError):
+                store.safety_stop_after_clock_change(
+                    BATCH, cursor, "clock_changed", now=helpers.NOW
+                )
+            batch = store.load_batch(BATCH)
+            self.assertEqual(batch["state"], "active")
+            self.assertIsNone(batch["pause_reason"])
+        finally:
+            store.close()
+
+
 class ArrivalAndStartBoundaryTests(_RuntimeCase):
     """G3：checkpoint→refresh→安全点→真实开始边界与 arrival/first_observed 分离。"""
 
@@ -1482,6 +1731,7 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
             [item for item in self._events() if item[0] == "stage_preempted"]
         )
         self.assertEqual(run["processed"], 1)
+        self.assertEqual(run["remaining_budget"]["seconds"], 875)  # type: ignore[index]
         connection = sqlite3.connect(str(self.path))
         try:
             state, reason, cursor_json = connection.execute(

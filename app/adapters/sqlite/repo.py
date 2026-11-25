@@ -1315,6 +1315,7 @@ class SqliteStore:
                     batch_id,
                 ),
             )
+            self._run_fault_hook("safety_stop_before_event")
             self._insert_scheduler_event(
                 batch_id=batch_id,
                 task_key=None,
