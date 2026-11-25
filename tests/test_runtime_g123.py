@@ -101,6 +101,24 @@ class _AdvancingRead(FixtureM3Read):
         return super().read(relative)
 
 
+class _SwitchRead(FixtureM3Read):
+    """按外部可见性标志切换真实原始 manifest，仍走真实 M3 解析。"""
+
+    def __init__(self, project_root: Path, hidden: str, visible: str) -> None:
+        """保存隐藏/可见原始引用与初始不可见状态。"""
+        super().__init__(project_root)
+        self._hidden = hidden
+        self._visible = visible
+        self.state = {"visible": False}
+
+    def read(self, relative: str):
+        """选择当前真实外部可见的原始输入；不返回业务答案。"""
+        if relative == "switch:unread":
+            relative = self._visible if self.state["visible"] else self._hidden
+        return super().read(relative)
+
+
+
 class _RuntimeCase(unittest.TestCase):
     """提供临时 profile/门禁/真实仓储与 execute_run 组合根。"""
 
@@ -480,13 +498,13 @@ class SafePointSourceTests(_RuntimeCase):
             )
             self.assertTrue(safe_a.action_state_committed)
             self.assertFalse(safe_a.no_pending_action)
-            # 错/不匹配/空身份保守：合法但不在现场、非法键与应有任务缺失身份都为假。
-            mismatched = "boss:job:" + canonical_hash({"job": "not-in-scene"})
-            self.assertFalse(
+            # 错/空身份与错误任务：不回退全局最近动作；None 仅表示本轮尚未 start。
+            other_job = "boss:job:" + canonical_hash({"job": "not-started-this-round"})
+            self.assertTrue(
                 derive_safe_point(
                     store=store,
                     batch_id=BATCH,
-                    task_key=mismatched,
+                    task_key=other_job,
                     read_results=(read_a,),
                     raw=RawScene("", None, 0),
                 ).action_state_committed
@@ -500,15 +518,15 @@ class SafePointSourceTests(_RuntimeCase):
                     raw=RawScene("", None, 0),
                 ).action_state_committed
             )
-            self.assertFalse(
-                derive_safe_point(
-                    store=store,
-                    batch_id=BATCH,
-                    task_key=None,
-                    read_results=(read_a,),
-                    raw=RawScene("", None, 0),
-                ).action_state_committed
+            no_prior = derive_safe_point(
+                store=store,
+                batch_id=BATCH,
+                task_key=None,
+                read_results=(read_a,),
+                raw=RawScene("", None, 0),
             )
+            self.assertTrue(no_prior.action_state_committed)
+            self.assertFalse(no_prior.no_pending_action)
             page = load_and_read_fixture(
                 ROOT / "tests/fixtures/read/page.json",
                 "00000000-0000-4000-8000-0000000000ab",
@@ -804,6 +822,40 @@ class TargetedReadTests(_RuntimeCase):
             event = [item for item in self._events() if item[0] == "unread_verified"][-1]
             self.assertEqual(event[1]["outcome"], "unread_unverified", label)
 
+    def test_ordinary_read_budget_is_settled_before_targeted_read(self) -> None:
+        """普通读取耗时先结算；耗尽预算时不得继续定向读取或开始业务任务。"""
+        _unused, _key = helpers.make_unread_fixture(self.root, "g2pre")
+        unknown, _ = helpers.make_unknown_unread_fixture(self.root, "g2pre")
+        targeted = self._write_unread_variant("g2pre", observed_at=helpers.NOW)
+        rel, _key = self._ok_scenario("g2pre", targeted=targeted)
+        clock = _Clock()
+        read = _AdvancingRead(self.root, clock, unknown, 1_500)
+        run = self._execute(
+            rel,
+            clock=clock,
+            read=read,
+            limits=BudgetLimits(round_seconds=1),
+        )
+        self.assertEqual(run["pause_reason"], "budget_exhausted")
+        self.assertEqual(run["processed"], 0)
+        self.assertEqual(run["remaining_budget"]["seconds"], 0)  # type: ignore[index]
+        self.assertFalse(
+            [item for item in self._events() if item[0] == "unread_verified"]
+        )
+
+    def test_ordinary_read_seconds_are_not_lost_with_default_budget(self) -> None:
+        """默认预算下普通读取的整秒也真实扣除，不因进入定向分支丢失。"""
+        _unused, _key = helpers.make_unread_fixture(self.root, "g2pre2")
+        unknown, _ = helpers.make_unknown_unread_fixture(self.root, "g2pre2")
+        targeted = self._write_unread_variant("g2pre2", observed_at=helpers.NOW)
+        rel, _key = self._ok_scenario("g2pre2", targeted=targeted)
+        clock = _Clock()
+        read = _AdvancingRead(self.root, clock, unknown, 1_500)
+        run = self._execute(rel, clock=clock, read=read)
+        self.assertEqual(run["pause_reason"], None)
+        self.assertEqual(run["processed"], 1)
+        self.assertEqual(run["remaining_budget"]["seconds"], 899)  # type: ignore[index]
+
     def test_targeted_read_duration_is_counted_from_trusted_monotonic(self) -> None:
         """定向采集真实耗时按可信单调钟计入同轮预算，不丢亚秒余量。"""
         _unused, _key = helpers.make_unread_fixture(self.root, "g2time")
@@ -876,6 +928,49 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
             ),
         ]
         return self._scenario(name, steps, batch_id=batch_id), key
+
+    def test_first_observed_uses_real_read_completion_time(self) -> None:
+        """首次观察取真实采集完成时刻；每次未读采集 250ms 时等待只从 10250 起算。"""
+        job_manifest, _job = helpers.make_job_fixture(self.root, "obs-job")
+        unread_manifest, _key = self._seed_discovery("obs-unread")
+        conversation = "tests/fixtures/runtime/read-obs-unread/conversation.json"
+        rel = self._scenario(
+            "obs-timing",
+            [
+                self._step(read_fixture=job_manifest, job_fixture=job_manifest),
+                self._step(
+                    read_fixture=unread_manifest,
+                    conversation_fixture=conversation,
+                    in_progress=True,
+                ),
+                self._step(
+                    read_fixture=unread_manifest,
+                    conversation_fixture=conversation,
+                    decision=helpers.decision_stimulus(),
+                ),
+            ],
+        )
+        clock = _Clock()
+        read = _AdvancingRead(self.root, clock, unread_manifest, 250)
+        seen = {"checkpoint": 0}
+
+        def boundary(name: str) -> None:
+            """job checkpoint 后推进到 10000；采集耗时由读取端口真实推进。"""
+            if name == "after_checkpoint" and seen["checkpoint"] == 0:
+                seen["checkpoint"] = 1
+                clock.advance(10_000)
+
+        run = self._execute(rel, clock=clock, read=read, on_boundary=boundary)
+        self.assertEqual(len(run["preemptions"]), 1)
+        event = run["preemptions"][0]
+        self.assertEqual(event["first_observed_at"], clock.wall_at(10_250))
+        self.assertEqual(event["handling_started_at"], clock.wall_at(10_500))
+        self.assertEqual(event["waited_ms"], 250)
+        self.assertEqual(event["detection_ms"], 250)
+        self.assertEqual(
+            self._cursor()["first_observed_at"],  # type: ignore[index]
+            clock.wall_at(10_250),
+        )
 
     def test_s01_actual_start_samples_after_detection_gap(self) -> None:
         """安全点 20020、真实开始 20200，wait 10200；安全点前零切换。"""
@@ -1021,20 +1116,41 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
 
         # 窗口 2：checkpoint 后 arrival=900，下一次真实 refresh=1000 才观察。
         batch2 = "00000000-0000-4000-8000-0000000000b2"
-        rel2, _ = self._job_then_unread("s08b", batch_id=batch2)
+        unread2, _key2 = self._seed_discovery("s08b-unread")
+        conversation2 = "tests/fixtures/runtime/read-s08b-unread/conversation.json"
+        job2, _ = helpers.make_job_fixture(self.root, "s08b-job")
+        rel2 = self._scenario(
+            "s08b",
+            [
+                self._step(read_fixture=job2, job_fixture=job2),
+                self._step(read_fixture="switch:unread", in_progress=True),
+                self._step(
+                    read_fixture="switch:unread",
+                    conversation_fixture=conversation2,
+                    decision=helpers.decision_stimulus(),
+                ),
+            ],
+            batch_id=batch2,
+        )
+        read2 = _SwitchRead(self.root, "tests/fixtures/read/page.json", unread2)
         clock2 = _Clock()
-        trace2: dict[str, int] = {"arrival": 900, "seen": 0}
+        trace2 = {"arrival": 900, "seen": 0}
 
         def boundary2(name: str) -> None:
-            """在 checkpoint 后记录到达 900 并把可信时钟推进到 1000。"""
+            """checkpoint 后推进到 900；refresh 后到达才让原始未读可见并推进到 1000。"""
             if name == "after_checkpoint" and trace2["seen"] == 0:
                 trace2["seen"] = 1
                 self.assertLess(trace2["arrival"], 1_000)
-                clock2.advance(1_000)
+                clock2.advance(900)
+            elif name == "after_refresh" and clock2.mono() == 900:
+                read2.state["visible"] = True
+                clock2.advance(100)
             elif name == "before_claim" and clock2.mono() == 1_000:
                 clock2.advance(200)
 
-        run2 = self._execute(rel2, clock=clock2, on_boundary=boundary2)
+        run2 = self._execute(
+            rel2, clock=clock2, read=read2, on_boundary=boundary2
+        )
         self.assertEqual(len(run2["preemptions"]), 1)
         event2 = run2["preemptions"][0]
         self.assertEqual(event2["first_observed_at"], clock2.wall_at(1_000))
@@ -1045,13 +1161,14 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
 
         # 窗口 3：refresh 后 arrival=1900，本次 2000 读取未再观察，保持 null。
         batch3 = "00000000-0000-4000-8000-0000000000b3"
-        job_manifest, _ = helpers.make_job_fixture(self.root, "s08c-job")
-        page = "tests/fixtures/read/page.json"
+        unread3, _key3 = self._seed_discovery("s08c-unread")
+        job3, _ = helpers.make_job_fixture(self.root, "s08c-job")
+        read3 = _SwitchRead(self.root, "tests/fixtures/read/page.json", unread3)
         rel3 = self._scenario(
             "s08c",
             [
-                self._step(read_fixture=job_manifest, job_fixture=job_manifest),
-                self._step(read_fixture=page),
+                self._step(read_fixture=job3, job_fixture=job3),
+                self._step(read_fixture="switch:unread"),
             ],
             batch_id=batch3,
         )
@@ -1059,20 +1176,28 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
         trace3: dict[str, int] = {"arrival": 0, "seen": 0}
 
         def boundary3(name: str) -> None:
-            """checkpoint 后推进到 2000；refresh 后记录 1900 到达但不改读取。"""
+            """checkpoint 后推进到 2000；refresh 结束后才让原始未读可见。"""
             if name == "after_checkpoint" and trace3["seen"] == 0:
                 trace3["seen"] = 1
                 clock3.advance(2_000)
             elif name == "after_refresh" and clock3.mono() == 2_000:
+                read3.state["visible"] = True
                 trace3["arrival"] = 1_900
 
-        run3 = self._execute(rel3, clock=clock3, on_boundary=boundary3)
+        run3 = self._execute(
+            rel3, clock=clock3, read=read3, on_boundary=boundary3
+        )
         self.assertEqual(run3["preemptions"], [])
         self.assertFalse(
             [item for item in self._events(batch3) if item[0] == "stage_preempted"]
         )
         self.assertEqual(trace3["arrival"], 1_900)
         self.assertIsNone(self._cursor(batch3)["first_observed_at"])  # type: ignore[index]
+        # 到达后原始外界确实已切换为可见未读；只是本次结束后没有再读取。
+        self.assertTrue(read3.state["visible"])
+        visible3 = read3.read("switch:unread")
+        self.assertEqual(visible3.status, "ok")
+        self.assertEqual(visible3.value.unread_state, "present")
 
 
 if __name__ == "__main__":

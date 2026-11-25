@@ -11,7 +11,6 @@ from typing import Callable
 
 from app.adapters.sqlite.session import ProfileSessionLease
 from app.domain.models import (
-    APP,
     Lease,
     Owner,
     ReadResult,
@@ -37,7 +36,6 @@ from app.domain.reading import (
     JobList,
     PageSnapshot,
     UnreadRead,
-    is_job_key,
 )
 from app.domain.runtime import (
     BatchCursor,
@@ -198,57 +196,19 @@ def _list_returned(read_results: tuple[object, ...]) -> bool:
     return False
 
 
-def _locatable_identities(read_results: tuple[object, ...]) -> set[str]:
-    """从当前真实读取值收集可定位任务身份，用于校验待取任务是否匹配现场。"""
-    keys: set[str] = set()
-    for value in _iter_read_values(read_results):
-        if isinstance(value, JobList):
-            keys.update(card.job_key for card in value.cards if card.job_key is not None)
-        elif isinstance(value, JobDetail) and value.complete:
-            keys.add(value.job_key)
-        elif isinstance(value, UnreadRead):
-            keys.update(
-                row.conversation_key
-                for row in value.rows
-                if row.state == "present" and row.conversation_key is not None
-            )
-    return keys
-
-
-def _identity_supported(
-    task_key: str,
-    read_results: tuple[object, ...],
-    store: RuntimeStorePort,
-) -> bool:
-    """核对任务身份确实来自当前读取或已持久化 M2 queued 新消息，不靠全局最近动作。"""
-    if not is_runtime_key(task_key):
-        return False
-    if task_key in _locatable_identities(read_results):
-        return True
-    if is_conversation_key(APP, task_key):
-        probe = getattr(store, "queued_new_message_keys", None)
-        if callable(probe):
-            try:
-                return task_key in probe()
-            except Exception:
-                return False
-    return False
-
-
 def _action_state_committed(
     store: RuntimeStorePort,
     task_key: str | None,
-    read_results: tuple[object, ...],
 ) -> bool:
-    """用真实任务身份读取最近动作状态；缺失/不匹配身份保守为假。
+    """用本轮最近一次真实成功 start 的任务身份读取最近动作状态。
 
-    `None` 表示本轮还没有前序任务身份：只有当前读取也没有任何可定位任务时
-    才视为“无动作可归属”。任何历史已收敛动作不会因此阻断新一轮；真正应有
-    任务但身份缺失、非法或与现场不匹配时保持保守，不回退全局最近动作。
+    `None` 只表示本轮尚未成功 start 任何任务：没有可归属动作，真正的未决
+    动作仍由全局 `no_pending_action` 拦截；历史已收敛动作不会阻断新轮。
+    非法身份保守为假，不回退全局最近动作，也不要求任务仍在当前读取现场。
     """
     if task_key is None:
-        return not _locatable_identities(read_results)
-    if not _identity_supported(task_key, read_results, store):
+        return True
+    if not is_runtime_key(task_key):
         return False
     state = store.last_action_state(task_key)
     return state in {None, "performed", "not_performed"}
@@ -266,6 +226,8 @@ def derive_safe_point(
 
     该入口同时服务生产 `execute_run` 与独立模块探针；不接受调用方直接
     传入 safe/committed 布尔答案，也不把 fixture hint 当作安全点证据。
+    `task_key` 必须是本轮最近一次真实 claim/start 成功的任务身份；`None`
+    仅用于尚未 start 任何任务或只读观察。
     """
     pending = store.pending_actions("boss")
     checkpoint = store.checkpoint_status(batch_id)
@@ -275,9 +237,7 @@ def derive_safe_point(
         confirmation_closed=raw.confirmation_title is None,
         no_inflight_command=raw.inflight_commands == 0,
         no_pending_action=not pending,
-        action_state_committed=_action_state_committed(
-            store, task_key, read_results
-        ),
+        action_state_committed=_action_state_committed(store, task_key),
         checkpoint_committed=checkpoint["last_checkpoint_id"] is not None
         and int(checkpoint["checkpoint_events"]) > 0,
     )
@@ -1141,6 +1101,7 @@ def execute_run(
         wall_start_ms = _wall_ms(active_clock())
         mono_start = active_mono()
         last_kind: str | None = None
+        last_task_key: str | None = None
         first_observed: PreemptionObservation | None = None
         previous_check_mono: int | None = None
         drafts: list[dict[str, object]] = []
@@ -1186,6 +1147,14 @@ def execute_run(
                 store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
                 break
             results, primary, conversation, raw_results = _read_target(read, step)
+            read_mono = active_mono()
+            _account(read_mono - last_boundary)
+            last_boundary = read_mono
+            now_value = active_clock()
+            current_mono = read_mono
+            # 真实观察发生在本次原始采集/解析完成之后；after_refresh 注入不得倒灌。
+            observed_at = now_value
+            observed_mono = read_mono
             calls = (
                 read.take_device_calls()
                 if hasattr(read, "take_device_calls")
@@ -1219,11 +1188,11 @@ def execute_run(
                 if candidates.unread and last_kind == "job":
                     first_observed = observe_unread(
                         first_observed,
-                        wall_now=now_value,
-                        monotonic_ms=current_mono,
+                        wall_now=observed_at,
+                        monotonic_ms=observed_mono,
                     )
-                    cursor = cursor.with_first_observed(now_value)
-                previous_check_mono = current_mono
+                    cursor = cursor.with_first_observed(observed_at)
+                previous_check_mono = observed_mono
                 continue
             selection = select_task(
                 candidates,
@@ -1248,11 +1217,29 @@ def execute_run(
                     None,
                 )
                 target_fixture = step.targeted_read_fixture
-                gate.verify(now=active_clock())
+                targeted_before = active_mono()
+                now_value = active_clock()
+                if clock_drift_exceeded(
+                    wall_start_ms=wall_start_ms,
+                    wall_now_ms=_wall_ms(now_value),
+                    monotonic_start_ms=mono_start,
+                    monotonic_now_ms=targeted_before,
+                ):
+                    pause_reason = "clock_changed"
+                    store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                    break
+                gate.verify(now=now_value)
+                _account(targeted_before - last_boundary)
+                last_boundary = targeted_before
+                current_mono = targeted_before
+                if not cursor.budget.can_start_work():
+                    pause_reason = "budget_exhausted"
+                    store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                    break
                 if process_log is not None:
                     process_log.record(stage="run", operation="unread", result="started")
                 if target_fixture is not None and initial_unread is not None:
-                    mono_before = active_mono()
+                    mono_before = targeted_before
                     try:
                         target_result = read.read(target_fixture)
                     except Exception:
@@ -1267,7 +1254,7 @@ def execute_run(
                     _account(elapsed_ms)
                     last_boundary = mono_after
                     now_value = active_clock()
-                    current_mono = active_mono()
+                    current_mono = mono_after
                     cursor = _spend(
                         cursor,
                         device_calls=calls,
@@ -1367,7 +1354,7 @@ def execute_run(
             safe = derive_safe_point(
                 store=store,
                 batch_id=batch_id,
-                task_key=task.key,
+                task_key=last_task_key,
                 read_results=raw_results,
                 raw=step.raw_scene,
             )
@@ -1383,10 +1370,10 @@ def execute_run(
             if task.kind == "unread" and last_kind == "job":
                 first_observed = observe_unread(
                     first_observed,
-                    wall_now=now_value,
-                    monotonic_ms=current_mono,
+                    wall_now=observed_at,
+                    monotonic_ms=observed_mono,
                 )
-                cursor = cursor.with_first_observed(now_value)
+                cursor = cursor.with_first_observed(observed_at)
             store.enqueue_jobs(
                 batch_id,
                 tuple(candidate.key for candidate in candidates.jobs),
@@ -1487,6 +1474,7 @@ def execute_run(
                 last_boundary = started_mono
             if started:
                 processed += 1
+                last_task_key = task.key
                 if task.kind == "unread" and last_kind == "job":
                     assert first_observed is not None
                     start_at = observed_start.get("at")
@@ -1518,6 +1506,9 @@ def execute_run(
                     first_observed = None
                 store.save_checkpoint(batch_id, cursor, now=active_clock())
                 _notify("after_checkpoint")
+            end_mono = active_mono()
+            _account(end_mono - last_boundary)
+            last_boundary = end_mono
             previous_check_mono = current_mono
             last_kind = task.kind
             if task_pause is not None:
