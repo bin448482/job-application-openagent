@@ -3391,83 +3391,226 @@ class M5LogAndLedgerOracleTests(unittest.TestCase):
 
     @staticmethod
     def _a01_fe_rows() -> list[dict]:
-        """构造与 A01_FE 同形状的原始 JSONL 行，不读取产品运行输出。"""
+        """构造与固定 A01_FE 原始 action 序列同形的新合成 JSONL 行。
+
+        序列来自固定 92ec 的合成 A01_FE 日志：13 个带标签 perform 实例、6 组
+        共享采集无标签 finish、动作/仓储生命周期失败。这里只重建原始字段，
+        不读取 expected，也不从产品结论反推输入。
+        """
         correlation = "00000000-0000-4000-8000-0000000000fe"
-        labels = [
-            "adb_action_ime_get",
-            "adb_action_tap",
-            "adb_action_input",
-            "adb_action_tap",
-            "adb_action_tap",
-            "adb_action_ime_set",
-            "adb_action_ime_set",
-            "adb_hierarchy_dump",
-            "adb_hierarchy_cat",
-            "adb_action_tap",
-            "adb_action_ime_set",
-            "adb_action_ime_get",
-            "adb_action_ime_set",
+        sequence = [
+            ("action", "action_validate", "started", None, None, None),
+            ("action", "action_validate", "ok", None, None, None),
+            ("action", "action_admit", "started", None, None, None),
+            ("action", "begin_action", "started", None, None, None),
+            ("action", "begin_action", "ok", None, None, None),
+            ("action", "action_admit", "ok", None, None, None),
+            ("action", "action_execute", "started", None, None, None),
+            ("action", "perform", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_get", None, None),
+            ("action", "perform", "ok", "adb_action_ime_get", None, None),
+            ("action", "save_ime", "started", None, None, None),
+            ("action", "save_ime", "ok", None, None, None),
+            ("action", "get_action", "started", None, None, None),
+            ("action", "get_action", "ok", None, None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "perform", "started", "adb_action_ime_set", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_set", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_set", None, None),
+            ("action", "perform", "ok", "adb_action_ime_set", None, None),
+            ("action", "perform", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_get", None, None),
+            ("action", "perform", "ok", "adb_action_ime_get", None, None),
+            ("action", "perform", "started", "adb_action_input", None, None),
+            ("action", "action_finish_command", "started", "adb_action_input", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_input", None, None),
+            ("action", "perform", "ok", "adb_action_input", None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "perform", "started", "adb_action_tap", None, None),
+            ("action", "action_finish_command", "started", "adb_action_tap", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_tap", None, None),
+            ("action", "perform", "ok", "adb_action_tap", None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "perform", "started", "adb_action_ime_set", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_set", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_set", None, None),
+            ("action", "perform", "ok", "adb_action_ime_set", None, None),
+            ("action", "perform", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_get", None, None),
+            ("action", "perform", "ok", "adb_action_ime_get", None, None),
+            ("action", "action_execute", "ok", None, None, None),
+            ("action", "action_derive", "started", None, None, None),
+            ("action", "action_derive", "ok", None, None, None),
+            ("action", "action_commit", "started", None, None, None),
+            ("action", "complete_action", "started", None, None, None),
+            ("action", "complete_action", "failed", None, "store_io_error", "store"),
+            ("action", "action_commit", "failed", None, "store_io_error", "action"),
+            ("action", "action_validate", "started", None, None, None),
+            ("action", "action_validate", "ok", None, None, None),
+            ("action", "action_admit", "started", None, None, None),
+            ("action", "begin_action", "started", None, None, None),
+            ("action", "begin_action", "failed", None, "action_conflict", "store"),
+            ("action", "action_admit", "failed", None, "action_conflict", "action"),
         ]
-
-        def row(stage: str, operation: str, result: str, **extra) -> dict:
-            """按白名单字段写一行；command 只在真实需要时出现。"""
-            return {
-                "schema_version": 1,
-                "ts": "2026-11-25T00:00:00+00:00",
-                "correlation_id": correlation,
-                "stage": stage,
-                "operation": operation,
-                "result": result,
-                "duration_ms": 0,
-                **extra,
-            }
-
-        rows = [
-            row("action", "action_validate", "started"),
-            row("action", "action_validate", "ok"),
-            row("action", "action_admit", "started"),
-            row("action", "action_admit", "ok"),
-            row("action", "action_execute", "started"),
-        ]
-        for label in labels:
-            rows.extend(
-                [
-                    row("action", "perform", "started", command=label),
-                    row("action", "action_finish_command", "started", command=label),
-                    row("action", "action_finish_command", "ok", command=label),
-                    row("action", "perform", "ok", command=label),
-                ]
+        rows = []
+        for index, (stage, operation, result, command, reason, error) in enumerate(
+            sequence
+        ):
+            rows.append(
+                {
+                    "schema_version": 1,
+                    "ts": "2026-11-25T00:00:00+00:00",
+                    "correlation_id": correlation,
+                    "stage": stage,
+                    "operation": operation,
+                    "result": result,
+                    "reason_code": reason,
+                    "error_category": error,
+                    "duration_ms": 0,
+                    "command": command,
+                    "case_index": index,
+                }
             )
-        rows.extend(
-            [
-                row("action", "action_execute", "ok"),
-                row("action", "action_derive", "started"),
-                row("action", "action_derive", "ok"),
-                row("action", "action_commit", "started"),
-                row(
-                    "store",
-                    "complete_action",
-                    "failed",
-                    reason_code="store_io_error",
-                    error_category="store",
-                ),
-                row(
-                    "store",
-                    "begin_action",
-                    "failed",
-                    reason_code="action_conflict",
-                    error_category="store",
-                ),
-                row(
-                    "action",
-                    "action_commit",
-                    "failed",
-                    reason_code="store_io_error",
-                    error_category="action",
-                ),
-            ]
-        )
         return rows
+
+    @staticmethod
+    def _finish_indices(rows: list[dict], command: str) -> list[int]:
+        """返回指定命令的 finish started/终态原始行下标。"""
+        return [
+            index
+            for index, item in enumerate(rows)
+            if item.get("operation") == "action_finish_command"
+            and item.get("command") == command
+        ]
+
+    @staticmethod
+    def _remove_group(rows: list[dict], command: str, *, instance: int = 0) -> list[dict]:
+        """删除指定命令第 N 个实例的 finish 组，保留其余行原样。"""
+        indices = M5LogAndLedgerOracleTests._finish_indices(rows, command)
+        if len(indices) < 2 * (instance + 1):
+            raise AssertionError("finish group missing")
+        removed = set(indices[2 * instance : 2 * instance + 2])
+        return [copy.deepcopy(item) for index, item in enumerate(rows) if index not in removed]
+
+    @staticmethod
+    def _duplicate_group(rows: list[dict], command: str, *, instance: int = 0) -> list[dict]:
+        """把指定命令第 N 个实例的 finish 组复制到该组终态之后。"""
+        indices = M5LogAndLedgerOracleTests._finish_indices(rows, command)
+        terminal = indices[2 * instance + 1]
+        group = [copy.deepcopy(rows[indices[2 * instance]]), copy.deepcopy(rows[terminal])]
+        mutated: list[dict] = []
+        for index, item in enumerate(rows):
+            mutated.append(copy.deepcopy(item))
+            if index == terminal:
+                mutated.extend(copy.deepcopy(value) for value in group)
+        return mutated
+
+    @staticmethod
+    def _move_group(
+        rows: list[dict], source: str, target: str, *, target_instance: int = 0
+    ) -> list[dict]:
+        """把 source 的 finish 组移动到 target 已有 perform 窗口内。"""
+        source_indices = M5LogAndLedgerOracleTests._finish_indices(rows, source)
+        group = [copy.deepcopy(rows[source_indices[0]]), copy.deepcopy(rows[source_indices[1]])]
+        target_indices = M5LogAndLedgerOracleTests._finish_indices(rows, target)
+        anchor = target_indices[2 * target_instance + 1]
+        mutated: list[dict] = []
+        for index, item in enumerate(rows):
+            if index in {source_indices[0], source_indices[1]}:
+                continue
+            mutated.append(copy.deepcopy(item))
+            if index == anchor:
+                mutated.extend(copy.deepcopy(value) for value in group)
+        return mutated
+
+    def test_input_finish_replaced_by_second_tap_finish_is_rejected(self) -> None:
+        """固定 92 实际 FE 变异：删 input finish、重复 tap finish 必须被拒绝。"""
+        rows = self._a01_fe_rows()
+        input_indices = self._finish_indices(rows, "adb_action_input")
+        tap_indices = self._finish_indices(rows, "adb_action_tap")
+        self.assertEqual(len(input_indices), 2)
+        self.assertEqual([rows[i]["result"] for i in tap_indices], ["started", "ok"])
+        tap_group = [copy.deepcopy(rows[i]) for i in tap_indices]
+        mutated: list[dict] = []
+        for index, item in enumerate(rows):
+            if index in set(input_indices):
+                continue
+            mutated.append(copy.deepcopy(item))
+            if index == tap_indices[1]:
+                mutated.extend(copy.deepcopy(value) for value in tap_group)
+        result = self._project(mutated)
+        self.assertEqual(result["log_finish"]["started"], 13)
+        self.assertEqual(result["log_finish"]["ok"], 13)
+        self.assertGreater(result["log_association_errors"], 0)
+        self.assertGreater(result["log_finish"]["unpaired"], 0)
+        self.assertNotIn("adb_action_input", result["log_finish_by_command"])
+        self.assertEqual(result["log_finish_by_command"]["adb_action_tap"]["started"], 2)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_finish_moved_to_other_existing_command_is_rejected(self) -> None:
+        """把 finish 移到另一条已有 started 的合法命令必须被拒绝。"""
+        rows = self._move_group(
+            self._a01_fe_rows(), "adb_action_input", "adb_action_ime_set"
+        )
+        result = self._project(rows)
+        self.assertGreater(result["log_association_errors"], 0)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_duplicate_finish_group_is_rejected(self) -> None:
+        """同一 perform 内重复一组 finish 必须被拒绝。"""
+        rows = self._duplicate_group(self._a01_fe_rows(), "adb_action_input")
+        result = self._project(rows)
+        self.assertGreater(result["log_association_errors"], 0)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_misordered_finish_group_is_rejected(self) -> None:
+        """finish 终态先于 started 的乱序必须被拒绝。"""
+        rows = self._a01_fe_rows()
+        indices = self._finish_indices(rows, "adb_action_input")
+        swapped = [copy.deepcopy(item) for item in rows]
+        swapped[indices[0]], swapped[indices[1]] = swapped[indices[1]], swapped[indices[0]]
+        result = self._project(swapped)
+        self.assertGreater(result["log_association_errors"], 0)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_same_label_instance_boundaries_are_enforced(self) -> None:
+        """相同 label 的两个实例必须各自恰一组 finish，不能互相顶替。"""
+        rows = self._a01_fe_rows()
+        missing = self._remove_group(rows, "adb_action_ime_get", instance=0)
+        missing_result = self._project(missing)
+        self.assertGreater(missing_result["log_association_errors"], 0)
+        self.assertTrue(
+            compare_step(missing_result, {"stdout_paths": self.log_paths})
+        )
+        duplicated = self._duplicate_group(rows, "adb_action_ime_get", instance=1)
+        duplicate_result = self._project(duplicated)
+        self.assertGreater(duplicate_result["log_association_errors"], 0)
+        self.assertTrue(
+            compare_step(duplicate_result, {"stdout_paths": self.log_paths})
+        )
+
+    def test_unlabeled_shared_finishes_remain_independent(self) -> None:
+        """共享采集无标签 finish 保持独立聚合，不伪造命令归属或 unpaired。"""
+        result = self._project(self._a01_fe_rows())
+        self.assertEqual(result["log_finish"]["unpaired"], 0)
+        self.assertEqual(result["log_association_errors"], 0)
+        self.assertEqual(
+            result["log_finish_by_command"][""],
+            {"started": 6, "ok": 6, "failed": 0},
+        )
+        self.assertEqual(result["log_reasons_by_command"], {})
 
     def _project(
         self, rows: list[dict], *, forbidden: tuple[str, ...] = (), root: Path | None = None
@@ -3487,6 +3630,7 @@ class M5LogAndLedgerOracleTests(unittest.TestCase):
                 "log_finish_by_command": projection["finish_by_command"],
                 "log_reasons": projection["reasons"],
                 "log_reasons_by_command": projection["reasons_by_command"],
+                "log_association_errors": projection["association_errors"],
                 "log_pairs": m5_probe._log_pairs(log),
                 "log_correlations": m5_probe._log_correlations(log),
             }
@@ -3607,8 +3751,13 @@ class M5LogAndLedgerOracleTests(unittest.TestCase):
                     )
 
     def test_out_of_order_ledger_is_rejected(self) -> None:
-        """complete 先于 begin 的错序账本不得闭合。"""
-        directory, _key, _store = self._production_ledger()
+        """complete 先于 begin 时场景严格证据完整性拒绝，生产计数/停止检查接受。
+
+        `_ledger_summary.closed` 是场景层严格证据完整性，不是生产
+        `CommandIdentityStore.check` 的返回值；两者语义差异如实保留，不据此
+        复用私有 `_load` 或扩大生产语义。
+        """
+        directory, key, store = self._production_ledger()
         path, entries = self._ledger_entries(directory)
         index = next(i for i, item in enumerate(entries) if item.get("complete"))
         entries.insert(0, entries.pop(index))
@@ -3616,6 +3765,7 @@ class M5LogAndLedgerOracleTests(unittest.TestCase):
         summary = m5_probe._ledger_summary(directory)
         self.assertGreater(summary["order_errors"], 0)
         self.assertFalse(summary["closed"])
+        self.assertEqual(store.check(key, 1, lambda _pid: "stopped"), "stopped")
         mutated = self._project(self._a01_fe_rows())
         mutated["ledger"] = summary
         self.assertTrue(compare_step(mutated, {"stdout_paths": self.ledger_paths}))
@@ -3685,21 +3835,6 @@ class M5LogAndLedgerOracleTests(unittest.TestCase):
         self.assertEqual(result["log_sensitive_hits"], 1)
         self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
 
-    def test_finish_on_wrong_command_is_rejected(self) -> None:
-        """finish 挂到错误 command 时按命令关联计为 unpaired 并被拒绝。"""
-        rows = copy.deepcopy(self._a01_fe_rows())
-        for item in rows:
-            if (
-                item.get("operation") == "action_finish_command"
-                and item.get("result") == "started"
-            ):
-                item["command"] = "adb_action_wrong"
-                break
-        result = self._project(rows)
-        self.assertGreater(result["log_finish"]["unpaired"], 0)
-        self.assertIn("adb_action_wrong", result["log_finish_by_command"])
-        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
-
     def test_unpaired_finish_terminal_is_rejected(self) -> None:
         """只留 finish 终态而删除 started 时原闭合判据必须失败。"""
         rows = copy.deepcopy(self._a01_fe_rows())
@@ -3707,6 +3842,7 @@ class M5LogAndLedgerOracleTests(unittest.TestCase):
             i
             for i, item in enumerate(rows)
             if item.get("operation") == "action_finish_command"
+            and item.get("command") is not None
             and item.get("result") == "started"
         )
         rows.pop(index)
@@ -3714,28 +3850,84 @@ class M5LogAndLedgerOracleTests(unittest.TestCase):
         self.assertGreater(result["log_finish"]["unpaired"], 0)
         self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
 
-    def test_failure_category_on_wrong_command_is_rejected(self) -> None:
-        """把失败分类挂到没有 started 的命令时按关联错误拒绝。"""
-        rows = copy.deepcopy(self._a01_fe_rows())
-        rows.append(
-            {
-                "schema_version": 1,
-                "correlation_id": "00000000-0000-4000-8000-0000000000fe",
-                "stage": "action",
-                "operation": "perform",
-                "result": "failed",
-                "reason_code": "device_disconnected",
-                "error_category": "adb_timeout",
-                "command": "adb_action_unpaired",
-            }
-        )
-        result = self._project(rows)
+    def test_lifecycle_failures_are_not_given_adb_command_attribution(self) -> None:
+        """action_commit/complete_action/begin_action 失败保留 operation 责任，不伪造 ADB 归属。"""
+        result = self._project(self._a01_fe_rows())
+        self.assertEqual(result["log_reasons_by_command"], {})
         self.assertEqual(
-            result["log_reasons_by_command"]["adb_action_unpaired"],
-            ["device_disconnected:adb_timeout"],
+            result["log_reasons"]["action_commit"], ["store_io_error:action"]
         )
-        self.assertGreater(result["log_finish"]["unpaired"], 0)
-        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+        self.assertEqual(
+            result["log_reasons"]["complete_action"], ["store_io_error:store"]
+        )
+        self.assertEqual(
+            result["log_reasons"]["begin_action"], ["action_conflict:store"]
+        )
+        self.assertEqual(
+            compare_step(result, {"stdout_paths": self.log_paths}), []
+        )
+
+
+class PopenCounterBoundaryTests(unittest.TestCase):
+    """纯合成 FakePopen 验证边界窗口实测计数与恢复，不启动真实进程。"""
+
+    class _FakeDevice:
+        """只提供 _synthetic_device 需要的 popen 与计数器。"""
+
+        def __init__(self) -> None:
+            """初始化实测计数。"""
+            self.real_popen_attempts = 0
+
+        def popen(self, *_args, **_kwargs):
+            """生产边界不应回落到合成 popen。"""
+            raise AssertionError("synthetic popen must not be called")
+
+    def _window(self, body, *, explode: bool = False):
+        """在 FakePopen 类上进入 _synthetic_device，返回设备、调用计数与原 init。"""
+        device = self._FakeDevice()
+        calls: list[tuple] = []
+
+        class FakePopen:
+            """纯合成 Popen 类，只记录构造调用。"""
+
+            def __init__(self, *args, **kwargs):
+                """记录一次构造；explode 时模拟异常路径。"""
+                calls.append(args)
+                if explode:
+                    raise RuntimeError("synthetic popen failure")
+
+        original_init = FakePopen.__init__
+        with mock.patch.object(subprocess, "Popen", FakePopen):
+            try:
+                with m5_probe._synthetic_device(device):
+                    body(FakePopen)
+            except RuntimeError:
+                pass
+            self.assertIs(subprocess.Popen, FakePopen)
+            self.assertIs(FakePopen.__init__, original_init)
+        return device, calls, original_init
+
+    def test_one_real_popen_constructor_is_counted(self) -> None:
+        """窗口内经保存的原始类构造一次真实 Popen 时实测计数为 1。"""
+        device, calls, _original = self._window(
+            lambda fake: fake(["synthetic"], shell=False)
+        )
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(device.real_popen_attempts, 1)
+
+    def test_exception_path_is_counted_and_restored(self) -> None:
+        """构造抛异常仍计数 1，退出后 Popen 与 __init__ 均恢复。"""
+        device, calls, _original = self._window(
+            lambda fake: fake(["synthetic"], shell=False), explode=True
+        )
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(device.real_popen_attempts, 1)
+
+    def test_no_call_counts_zero(self) -> None:
+        """窗口内未调用原始构造时实测计数为 0。"""
+        device, calls, _original = self._window(lambda _fake: None)
+        self.assertEqual(calls, [])
+        self.assertEqual(device.real_popen_attempts, 0)
 
 
 class GateObservationBoundaryTests(unittest.TestCase):

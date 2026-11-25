@@ -340,7 +340,10 @@ def _log_projection(
             "sensitive_hits": 0,
             "correlations": 0,
             "finish": {"started": 0, "ok": 0, "failed": 0, "unpaired": 0},
+            "finish_by_command": {},
             "reasons": {},
+            "reasons_by_command": {},
+            "association_errors": 0,
         }
     forbidden = (*forbidden_values, BODY, "合成附件简历.pdf", "10,20", "30,40")
     sensitive_hits = sum(1 for item in forbidden if item and item in raw)
@@ -349,8 +352,7 @@ def _log_projection(
     reasons: dict[str, list[str]] = {}
     reasons_by_command: dict[str, list[str]] = {}
     association_errors = 0
-    open_commands: list[str] = []
-    finishing: str | None = None
+    perform: dict[str, Any] | None = None
     for line in raw.splitlines():
         if not line.strip():
             continue
@@ -382,29 +384,55 @@ def _log_projection(
             reasons.setdefault(str(operation), []).append(reason)
             if command is not None:
                 reasons_by_command.setdefault(str(command), []).append(reason)
-        # 逐命令顺序：perform started 开一条命令，有 command 标签的 finish started/
-        # 终态必须对应当前命令，perform 终态按同一标签闭合；共享采集等没有标签的
-        # finish 只计入聚合，不伪造命令关联。错命令/配错 finish 计入 unpaired。
+        # 逐命令实例闭合：每个带 command 的 perform started 开启一个实例；有标签
+        # finish 必须在该实例内 started→终态恰一组；perform ok 必须有且仅有一组，
+        # perform failed/undetermined 允许 0 或 1 组。缺组、重复、乱序、跨实例错
+        # 标签都计入 unpaired；无标签共享采集 finish 只保留独立聚合，不伪造归属。
         label = None if command is None else str(command)
         if operation == "perform" and label is not None:
             if result == "started":
-                open_commands.append(label)
+                if perform is not None:
+                    association_errors += 1
+                perform = {
+                    "command": label,
+                    "groups": 0,
+                    "finish_open": False,
+                    "terminals": 0,
+                }
             elif result in {"ok", "failed", "undetermined"}:
-                if not open_commands or open_commands[-1] != label:
+                if perform is None or perform["command"] != label:
                     association_errors += 1
                 else:
-                    open_commands.pop()
+                    perform["terminals"] += 1
+                    if perform["finish_open"]:
+                        association_errors += 1
+                    if result == "ok" and perform["groups"] != 1:
+                        association_errors += 1
+                    if perform["groups"] > 1:
+                        association_errors += 1
+                    if perform["terminals"] != 1:
+                        association_errors += 1
+                    perform = None
         elif operation == "action_finish_command" and label is not None:
             if result == "started":
-                if not open_commands or open_commands[-1] != label:
+                if perform is None or perform["command"] != label:
                     association_errors += 1
-                    finishing = None
                 else:
-                    finishing = label
+                    if perform["finish_open"]:
+                        association_errors += 1
+                    perform["finish_open"] = True
+                    perform["groups"] += 1
             elif result in {"ok", "failed", "undetermined"}:
-                if finishing != label:
+                if (
+                    perform is None
+                    or perform["command"] != label
+                    or not perform["finish_open"]
+                ):
                     association_errors += 1
-                finishing = None
+                else:
+                    perform["finish_open"] = False
+    if perform is not None:
+        association_errors += 1
     finish_events = [
         item for item in events if item["operation"] == "action_finish_command"
     ]
@@ -436,6 +464,7 @@ def _log_projection(
         "finish_by_command": finish_by_command,
         "reasons": reasons,
         "reasons_by_command": reasons_by_command,
+        "association_errors": association_errors,
     }
 
 
@@ -486,6 +515,7 @@ def _attach_log(result: dict[str, Any], log: ProcessLog) -> None:
     result["log_finish_by_command"] = summary["finish_by_command"]
     result["log_reasons"] = summary["reasons"]
     result["log_reasons_by_command"] = summary["reasons_by_command"]
+    result["log_association_errors"] = summary["association_errors"]
 
 
 def _gate_view(gate: SharedDeviceGate) -> dict[str, Any] | None:
@@ -527,6 +557,9 @@ def _ledger_summary(directory: Path) -> dict[str, Any]:
     真实 begin 只认固定 `{"begin":true}` 标记；PID 行不代替 begin。闭合要求
     单文件、has begin、真实 begin==complete、无 unresolved、每条 complete 都
     有先前 begin，且 pid 只出现在已开始的命令内。坏行/错序保持未闭合。
+    这里的 `closed` 是本场景的严格证据完整性判断，不是生产
+    `CommandIdentityStore.check` 的返回值；`check` 只做记录计数与进程停止证明，
+    两者在 complete-before-begin 等边界上可以不同，不互相冒充。
     """
     files = sorted(directory.glob("*.jsonl")) if directory.is_dir() else []
     begin = 0
