@@ -1329,6 +1329,17 @@ def execute_run(
                     unread_unknown=False,
                     unread_signal_without_target=False,
                 )
+                # 定向采集首次带来可见未读时，首次观察取本次采集完成边界；
+                # 既有真实正观察由 observe_unread 保留，不被无条件覆盖。
+                if candidates.unread and last_kind == "job":
+                    first_observed = observe_unread(
+                        first_observed,
+                        wall_now=now_value,
+                        monotonic_ms=current_mono,
+                    )
+                    cursor = cursor.with_first_observed(now_value)
+                observed_at = now_value
+                observed_mono = current_mono
                 # 安全点与后续处理只消费刚发生的真实定向采集，不用被替换前的旧读取。
                 raw_results = tuple(
                     target_result if item is initial_unread else item

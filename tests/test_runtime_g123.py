@@ -856,6 +856,50 @@ class TargetedReadTests(_RuntimeCase):
         self.assertEqual(run["processed"], 1)
         self.assertEqual(run["remaining_budget"]["seconds"], 899)  # type: ignore[index]
 
+    def test_first_observed_uses_targeted_completion_when_it_first_reveals_unread(self) -> None:
+        """定向采集首次带来 present 未读时，首次观察取该次采集完成边界，而非旧 unknown tick。"""
+        label = "g2first"
+        _unread, key = helpers.make_unread_fixture(self.root, label)
+        unknown, _ = helpers.make_unknown_unread_fixture(self.root, label)
+        helpers.seed_discovery(self.root, key)
+        conversation = f"tests/fixtures/runtime/read-{label}/conversation.json"
+        clock = _Clock()
+        targeted = self._write_unread_variant(
+            label, observed_at=clock.wall_at(10_250)
+        )
+        job_manifest, _job = helpers.make_job_fixture(self.root, "g2first-job")
+        rel = self._scenario(
+            "targeted-first-observation",
+            [
+                self._step(read_fixture=job_manifest, job_fixture=job_manifest),
+                self._step(
+                    read_fixture=unknown,
+                    conversation_fixture=conversation,
+                    decision=helpers.decision_stimulus(),
+                    targeted=targeted,
+                ),
+            ],
+        )
+        read = _AdvancingRead(self.root, clock, targeted, 250)
+        seen = {"checkpoint": 0}
+
+        def boundary(name: str) -> None:
+            """job checkpoint 后推进到 10000；定向采集自身耗时 250ms。"""
+            if name == "after_checkpoint" and seen["checkpoint"] == 0:
+                seen["checkpoint"] = 1
+                clock.advance(10_000)
+
+        run = self._execute(rel, clock=clock, read=read, on_boundary=boundary)
+        self.assertEqual(len(run["preemptions"]), 1)
+        event = run["preemptions"][0]
+        self.assertEqual(event["first_observed_at"], clock.wall_at(10_250))
+        self.assertEqual(event["handling_started_at"], clock.wall_at(10_250))
+        self.assertEqual(event["waited_ms"], 0)
+        self.assertEqual(
+            self._cursor()["first_observed_at"],  # type: ignore[index]
+            clock.wall_at(10_250),
+        )
+
     def test_targeted_read_duration_is_counted_from_trusted_monotonic(self) -> None:
         """定向采集真实耗时按可信单调钟计入同轮预算，不丢亚秒余量。"""
         _unused, _key = helpers.make_unread_fixture(self.root, "g2time")
