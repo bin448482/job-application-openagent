@@ -1706,9 +1706,21 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
     def test_s01_actual_start_samples_after_detection_gap(self) -> None:
         """安全点 20020、真实开始 20200，wait 10200；安全点前零切换。"""
         rel, _key = self._job_then_unread("s01")
+        conversation = "tests/fixtures/runtime/read-s01-unread/conversation.json"
         clock = _Clock()
         trace: list[tuple[str, int]] = []
         seen = {"job_checkpoint": 0, "preempt_safe": 0, "advanced": False}
+
+        def refresh_observation() -> None:
+            """第二次真实解析前把会话原始 observed_at 更新为当前可信墙钟。"""
+            path = self.root / conversation
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest["observed_at"] = clock.now()
+            path.write_text(
+                json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+            )
+
+        read = _SecondConversationRead(self.root, conversation, refresh_observation)
 
         def boundary(name: str) -> None:
             """只在固定生产边界推进可信时钟并记录原始轨迹。"""
@@ -1732,7 +1744,7 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
                 clock.advance(180)
                 trace.append((name, clock.mono()))
 
-        run = self._execute(rel, clock=clock, on_boundary=boundary)
+        run = self._execute(rel, clock=clock, read=read, on_boundary=boundary)
         self.assertEqual(run["pause_reason"], None)
         self.assertEqual(run["processed"], 2)
         self.assertEqual(len(run["preemptions"]), 1)
