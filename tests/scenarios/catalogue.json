@@ -32157,6 +32157,162 @@
                   {
                     "path": "controls.unrelated_change.real_popen_attempts",
                     "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done.env.project_root",
+                    "equals": "controls/preexisting"
+                  },
+                  {
+                    "path": "controls.preexisting_done.env.os_root",
+                    "equals": "controls/preexisting/os"
+                  },
+                  {
+                    "path": "controls.preexisting_done.env.db_path_token",
+                    "pattern": "controls/preexisting/data/runtime/profiles/m6-apply-preexisting/runtime\\.sqlite3"
+                  },
+                  {
+                    "path": "controls.preexisting_done.env.profile_meta.profile_id",
+                    "equals": "m6-apply-preexisting"
+                  },
+                  {
+                    "path": "controls.preexisting_done.env.gate.profile_id",
+                    "equals": "m6-apply-preexisting"
+                  },
+                  {
+                    "path": "controls.preexisting_done.env.gate.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "controls.preexisting_done.env.binding_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.preexisting_done.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done.log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.preexisting_done.log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done.log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done.log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done.log_has_body",
+                    "equals": false
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.env.project_root",
+                    "equals": "controls/preexisting_unrelated"
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.env.os_root",
+                    "equals": "controls/preexisting_unrelated/os"
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.env.db_path_token",
+                    "pattern": "controls/preexisting_unrelated/data/runtime/profiles/m6-apply-preexisting_unrelated/runtime\\.sqlite3"
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.env.profile_meta.profile_id",
+                    "equals": "m6-apply-preexisting_unrelated"
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.env.gate.profile_id",
+                    "equals": "m6-apply-preexisting_unrelated"
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.env.gate.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.env.binding_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.log_has_body",
+                    "equals": false
+                  },
+                  {
+                    "path": "controls.unrelated_change.env.project_root",
+                    "equals": "controls/unrelated"
+                  },
+                  {
+                    "path": "controls.unrelated_change.env.os_root",
+                    "equals": "controls/unrelated/os"
+                  },
+                  {
+                    "path": "controls.unrelated_change.env.db_path_token",
+                    "pattern": "controls/unrelated/data/runtime/profiles/m6-apply-unrelated/runtime\\.sqlite3"
+                  },
+                  {
+                    "path": "controls.unrelated_change.env.profile_meta.profile_id",
+                    "equals": "m6-apply-unrelated"
+                  },
+                  {
+                    "path": "controls.unrelated_change.env.gate.profile_id",
+                    "equals": "m6-apply-unrelated"
+                  },
+                  {
+                    "path": "controls.unrelated_change.env.gate.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "controls.unrelated_change.env.binding_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.unrelated_change.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.unrelated_change.log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.unrelated_change.log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.unrelated_change.log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.unrelated_change.log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.unrelated_change.log_has_body",
+                    "equals": false
                   }
                 ]
               }
@@ -32673,6 +32829,162 @@
                   {
                     "path": "controls.empty.real_popen_attempts",
                     "equals": 0
+                  },
+                  {
+                    "path": "controls.toast.env.project_root",
+                    "equals": "controls/toast"
+                  },
+                  {
+                    "path": "controls.toast.env.os_root",
+                    "equals": "controls/toast/os"
+                  },
+                  {
+                    "path": "controls.toast.env.db_path_token",
+                    "pattern": "controls/toast/data/runtime/profiles/m6-apply-toast/runtime\\.sqlite3"
+                  },
+                  {
+                    "path": "controls.toast.env.profile_meta.profile_id",
+                    "equals": "m6-apply-toast"
+                  },
+                  {
+                    "path": "controls.toast.env.gate.profile_id",
+                    "equals": "m6-apply-toast"
+                  },
+                  {
+                    "path": "controls.toast.env.gate.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "controls.toast.env.binding_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.toast.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.toast.log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.toast.log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.toast.log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.toast.log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.toast.log_has_body",
+                    "equals": false
+                  },
+                  {
+                    "path": "controls.dialog.env.project_root",
+                    "equals": "controls/dialog"
+                  },
+                  {
+                    "path": "controls.dialog.env.os_root",
+                    "equals": "controls/dialog/os"
+                  },
+                  {
+                    "path": "controls.dialog.env.db_path_token",
+                    "pattern": "controls/dialog/data/runtime/profiles/m6-apply-dialog/runtime\\.sqlite3"
+                  },
+                  {
+                    "path": "controls.dialog.env.profile_meta.profile_id",
+                    "equals": "m6-apply-dialog"
+                  },
+                  {
+                    "path": "controls.dialog.env.gate.profile_id",
+                    "equals": "m6-apply-dialog"
+                  },
+                  {
+                    "path": "controls.dialog.env.gate.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "controls.dialog.env.binding_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.dialog.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.dialog.log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.dialog.log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.dialog.log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.dialog.log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.dialog.log_has_body",
+                    "equals": false
+                  },
+                  {
+                    "path": "controls.empty.env.project_root",
+                    "equals": "controls/empty"
+                  },
+                  {
+                    "path": "controls.empty.env.os_root",
+                    "equals": "controls/empty/os"
+                  },
+                  {
+                    "path": "controls.empty.env.db_path_token",
+                    "pattern": "controls/empty/data/runtime/profiles/m6-apply-empty/runtime\\.sqlite3"
+                  },
+                  {
+                    "path": "controls.empty.env.profile_meta.profile_id",
+                    "equals": "m6-apply-empty"
+                  },
+                  {
+                    "path": "controls.empty.env.gate.profile_id",
+                    "equals": "m6-apply-empty"
+                  },
+                  {
+                    "path": "controls.empty.env.gate.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "controls.empty.env.binding_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.empty.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.empty.log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.empty.log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.empty.log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.empty.log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.empty.log_has_body",
+                    "equals": false
                   }
                 ]
               }
@@ -34273,6 +34585,86 @@
                   {
                     "path": "cursor_preserved",
                     "equals": true
+                  },
+                  {
+                    "path": "unsafe_claim_count",
+                    "equals": 0
+                  },
+                  {
+                    "path": "unsafe_observations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "unsafe_stage_before",
+                    "equals": 0
+                  },
+                  {
+                    "path": "unsafe_stage_after",
+                    "equals": 0
+                  },
+                  {
+                    "path": "unsafe_stage_delta",
+                    "equals": 0
+                  },
+                  {
+                    "path": "timeline_length",
+                    "equals": 25
+                  },
+                  {
+                    "path": "step_count",
+                    "equals": 19
+                  },
+                  {
+                    "path": "timeline.0.virtual_ms",
+                    "equals": 0
+                  },
+                  {
+                    "path": "timeline.1.virtual_ms",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "timeline.2.event",
+                    "equals": "snapshot_available"
+                  },
+                  {
+                    "path": "timeline.2.virtual_ms",
+                    "equals": 1500
+                  },
+                  {
+                    "path": "timeline.3.event",
+                    "equals": "safe_point_not_reached"
+                  },
+                  {
+                    "path": "timeline.3.virtual_ms",
+                    "equals": 1800
+                  },
+                  {
+                    "path": "timeline.4.event",
+                    "equals": "safe_point_reached"
+                  },
+                  {
+                    "path": "timeline.4.virtual_ms",
+                    "equals": 2000
+                  },
+                  {
+                    "path": "timeline.5.virtual_ms",
+                    "equals": 2000
+                  },
+                  {
+                    "path": "timeline.6.virtual_ms",
+                    "equals": 2200
+                  },
+                  {
+                    "path": "timeline.7.virtual_ms",
+                    "equals": 2400
+                  },
+                  {
+                    "path": "arrival_trace.1",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "arrival_trace.6",
+                    "equals": 2200
                   }
                 ]
               }

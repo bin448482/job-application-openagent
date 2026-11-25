@@ -1450,6 +1450,61 @@ def _relative_token(path: Path, root: Path) -> str:
         return path.name
 
 
+def _rel_or_none(path: Path, base: Path) -> str | None:
+    """返回相对 token；不在 base 内返回 None。"""
+    try:
+        return path.resolve().relative_to(base.resolve()).as_posix()
+    except ValueError:
+        return None
+
+
+def _binding_facts(
+    root: Path,
+    control_root: Path,
+    control_os: Path,
+    label: str,
+    profile_id: str,
+    db_path: Path,
+    profile_meta: dict[str, Any] | None,
+    gate_view: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """由真实路径/DB 行/门禁行独立计算控制环境绑定一致性。"""
+    project_ok = _rel_or_none(control_root, root) == f"controls/{label}"
+    os_ok = _rel_or_none(control_os, root) == f"controls/{label}/os"
+    db_ok = (
+        _rel_or_none(db_path, control_root)
+        == f"data/runtime/profiles/{profile_id}/runtime.sqlite3"
+    )
+    profile_ok = bool(profile_meta and profile_meta.get("profile_id") == profile_id)
+    gate_profile_ok = bool(gate_view and gate_view.get("profile_id") == profile_id)
+    gate_path_ok = bool(
+        gate_view
+        and gate_view.get("path_token") == canonical_hash(str(db_path.resolve()))
+    )
+    gate_state_ok = bool(gate_view and gate_view.get("state") == "held")
+    ok = all(
+        [
+            project_ok,
+            os_ok,
+            db_ok,
+            profile_ok,
+            gate_profile_ok,
+            gate_path_ok,
+            gate_state_ok,
+        ]
+    )
+    return {
+        "project_root_ok": project_ok,
+        "os_root_ok": os_ok,
+        "db_path_ok": db_ok,
+        "profile_meta_ok": profile_ok,
+        "gate_profile_ok": gate_profile_ok,
+        "gate_path_ok": gate_path_ok,
+        "gate_state_ok": gate_state_ok,
+        "ok": ok,
+    }
+
+
 def _apply_once(
     root: Path,
     label: str,
@@ -1551,6 +1606,26 @@ def _apply_once(
                 "db_path_token": _relative_token(db_path, root),
                 "profile_meta": _profile_meta(db_path),
                 "gate": _gate_view(gate),
+                "binding": _binding_facts(
+                    root,
+                    control_root,
+                    control_os,
+                    label,
+                    profile_id,
+                    db_path,
+                    _profile_meta(db_path),
+                    _gate_view(gate),
+                ),
+                "binding_ok": _binding_facts(
+                    root,
+                    control_root,
+                    control_os,
+                    label,
+                    profile_id,
+                    db_path,
+                    _profile_meta(db_path),
+                    _gate_view(gate),
+                )["ok"],
             },
             "facts": facts,
             "after_consumed": len(device.served_xml) > 1,

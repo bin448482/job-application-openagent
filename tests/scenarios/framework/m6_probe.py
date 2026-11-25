@@ -259,10 +259,13 @@ class _TimedScene:
         self._times = list(times)
         self._clock = clock
         self._index = 0
+        self.consumed: list[Any] = []
 
     def next_step(self) -> Any:
-        """返回下一步；在返回前按外部时间表推进环境。"""
+        """返回下一步；在返回前按外部时间表推进环境并记录实际消费。"""
         step = self._inner.next_step()
+        if step is not None:
+            self.consumed.append(step)
         if step is not None and self._index < len(self._times):
             self._clock.advance(self._times[self._index])
             self._index += 1
@@ -576,6 +579,7 @@ class _Context:
             )
         else:
             scene = StimulusRuntimeScene(_scene(batch, steps), profile_id=self.profile_id)
+        self.last_scene = scene
         gate = SharedDeviceGate(
             profile_id=self.profile_id,
             profile_db_path=self.db_path,
@@ -710,31 +714,168 @@ def _claimed_subjects(db_path: Path) -> list[str]:
     return [str(row[0]) for row in rows if row[0] is not None]
 
 
-def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
-    """六周期真实 job→unread；逐周期 DB 事件与 unsafe 独立负控。"""
+S03_EVENTS = frozenset(
+    {
+        "job_task_started",
+        "synthetic_unread_arrives",
+        "snapshot_available",
+        "safe_point_not_reached",
+        "safe_point_reached",
+    }
+)
+
+
+def _parse_s03_timeline(stimuli: Mapping[str, Any]) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]]]:
+    """严格解析 S03 原始事件时序；未知/缺失/重复/乱序失败关闭。"""
+    if not isinstance(stimuli, dict):
+        raise ProbeError("S03 刺激不是对象")
+    if stimuli.get("role") != "driver_stimuli_only":
+        raise ProbeError("S03 role 非法")
+    clock_start = stimuli.get("clock_start_ms")
+    if type(clock_start) is not int or clock_start < 0:
+        raise ProbeError("S03 clock_start_ms 非法")
     events = stimuli.get("events")
-    if not isinstance(events, list):
-        raise ProbeError("S03 刺激缺少事件")
-    cycle_count = sum(
-        1
-        for item in events
-        if isinstance(item, dict) and item.get("event") == "job_task_started"
-    )
-    if cycle_count < 2:
-        raise ProbeError("S03 刺激周期不足")
-    cycles: list[tuple[str, str, str, str]] = []
+    if not isinstance(events, list) or not events:
+        raise ProbeError("S03 事件为空")
+    allowed = {"seq", "virtual_ms", "event", "note", "arrival_at"}
+    timeline: list[dict[str, Any]] = []
+    cycles: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    last_seq = 0
+    last_ms = clock_start
+    last_arrival = clock_start
+    for item in events:
+        if not isinstance(item, dict) or set(item) - allowed:
+            raise ProbeError("S03 事件形状非法")
+        if not {"seq", "virtual_ms", "event"} <= set(item):
+            raise ProbeError("S03 事件缺少必需字段")
+        seq = item["seq"]
+        ms = item["virtual_ms"]
+        name = item["event"]
+        if type(seq) is not int or seq < 1 or seq <= last_seq:
+            raise ProbeError("S03 seq 重复或乱序")
+        if type(ms) is not int or ms < clock_start or ms < last_ms:
+            raise ProbeError("S03 virtual_ms 缺失/回退")
+        if name not in S03_EVENTS:
+            raise ProbeError("S03 未知事件")
+        arrival = item.get("arrival_at")
+        if arrival is not None:
+            if type(arrival) is not int or arrival < clock_start or arrival > ms or arrival < last_arrival:
+                raise ProbeError("S03 arrival_at 非法")
+            last_arrival = arrival
+        last_seq = seq
+        last_ms = ms
+        timeline.append(
+            {"seq": seq, "event": name, "virtual_ms": ms, "arrival_at": arrival}
+        )
+        if name == "job_task_started":
+            if current is not None:
+                raise ProbeError("S03 重复/嵌套 job")
+            current = {
+                "job_ms": ms,
+                "arrival_at": None,
+                "snapshot_ms": None,
+                "not_reached_ms": None,
+                "safe_ms": None,
+            }
+            cycles.append(current)
+            continue
+        if current is None:
+            raise ProbeError("S03 事件出现在 job 之前")
+        if name == "synthetic_unread_arrives":
+            if current["arrival_at"] is not None or current["snapshot_ms"] is not None:
+                raise ProbeError("S03 arrival 重复或乱序")
+            if arrival is None:
+                raise ProbeError("S03 arrival 缺失")
+            current["arrival_at"] = arrival
+        elif name == "snapshot_available":
+            if current["arrival_at"] is None or current["snapshot_ms"] is not None:
+                raise ProbeError("S03 snapshot 缺失/重复/乱序")
+            if ms < current["arrival_at"]:
+                raise ProbeError("S03 snapshot 早于 arrival")
+            current["snapshot_ms"] = ms
+        elif name == "safe_point_not_reached":
+            if (
+                current["snapshot_ms"] is None
+                or current["not_reached_ms"] is not None
+                or current["safe_ms"] is not None
+            ):
+                raise ProbeError("S03 安全点未到达事件重复/乱序")
+            if ms < current["snapshot_ms"]:
+                raise ProbeError("S03 安全点未到达早于 snapshot")
+            current["not_reached_ms"] = ms
+        else:
+            if current["snapshot_ms"] is None or current["safe_ms"] is not None:
+                raise ProbeError("S03 安全点重复/缺失 snapshot")
+            if ms < current["snapshot_ms"]:
+                raise ProbeError("S03 安全点早于 snapshot")
+            current["safe_ms"] = ms
+            current = None
+    if current is not None:
+        raise ProbeError("S03 周期不完整")
+    if not cycles:
+        raise ProbeError("S03 无周期")
+    if cycles[0]["job_ms"] != clock_start:
+        raise ProbeError("S03 首 job 与 clock_start 不一致")
+    for cycle in cycles:
+        if (
+            cycle["arrival_at"] is None
+            or cycle["snapshot_ms"] is None
+            or cycle["safe_ms"] is None
+        ):
+            raise ProbeError("S03 周期缺少 arrival/snapshot/safe")
+    return clock_start, cycles, timeline
+
+
+def _stage_preempted_events(db_path: Path) -> list[dict[str, Any]]:
+    """只读返回真实 scheduler_events 的 stage_preempted payload。"""
+    connection = sqlite3.connect(str(db_path))
+    try:
+        rows = connection.execute(
+            "SELECT payload_json FROM scheduler_events "
+            "WHERE event = 'stage_preempted' ORDER BY event_id"
+        ).fetchall()
+    finally:
+        connection.close()
+    values: list[dict[str, Any]] = []
+    for (payload,) in rows:
+        try:
+            value = json.loads(payload)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if isinstance(value, dict):
+            values.append(value)
+    return values
+
+
+def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
+    """按原始 virtual_ms/arrival_at/安全点顺序驱动真实 S03 运行。"""
+    clock_start, cycles, timeline = _parse_s03_timeline(stimuli)
+    cycle_count = len(cycles)
+    fixtures: list[tuple[str, str, str, str]] = []
     for index in range(1, cycle_count + 1):
         unread_manifest, conversation_manifest, key = _make_unread(f"s03-{index}")
         _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, key)
         job_manifest, job_key = _make_job(f"s03-{index}")
-        cycles.append((job_manifest, job_key, unread_manifest, conversation_manifest))
+        fixtures.append((job_manifest, job_key, unread_manifest, conversation_manifest))
     unsafe_manifest, unsafe_conversation, unsafe_key = _make_unread("s03-unsafe")
     _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, unsafe_key)
     limits = BudgetLimits(candidates=30, device_calls=200, round_seconds=900, job_seconds=30, preemptions=5)
     steps: list[dict[str, Any]] = []
-    for index, (job_manifest, _job_key, unread_manifest, conversation_manifest) in enumerate(cycles):
+    times: list[int] = []
+    for index, cycle in enumerate(cycles):
+        job_manifest, _job_key, unread_manifest, conversation_manifest = fixtures[index]
         steps.append(_step(read_fixture=job_manifest))
-        if index == 0:
+        times.append(int(cycle["job_ms"]))
+        steps.append(
+            _step(
+                read_fixture=unread_manifest,
+                conversation_fixture=conversation_manifest,
+                in_progress=True,
+            )
+        )
+        times.append(int(cycle["snapshot_ms"]))
+        if cycle["not_reached_ms"] is not None:
             unsafe = _step(
                 read_fixture=unsafe_manifest,
                 conversation_fixture=unsafe_conversation,
@@ -742,39 +883,53 @@ def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
             )
             unsafe["raw_scene"]["input_text"] = "合成输入中"
             steps.append(unsafe)
-        steps.append(
-            _step(
-                read_fixture=unread_manifest,
-                conversation_fixture=conversation_manifest,
-                in_progress=True,
-            )
-        )
+            times.append(int(cycle["not_reached_ms"]))
         steps.append(
             _step(
                 read_fixture=unread_manifest,
                 conversation_fixture=conversation_manifest,
             )
         )
+        times.append(int(cycle["safe_ms"]))
     clock = EnvironmentClock()
-    times = [1000 * (index + 1) for index in range(len(steps))]
     result = ctx.execute(steps, clock=clock, limits=limits, times=times)
     run = result["run"]
-    batch_id = run["batch_id"]
-    view = ctx.batch_view(batch_id)
-    job_keys = [job_key for _, job_key, _, _ in cycles]
-    stage_jobs = _stage_preempted_jobs(ctx.db_path)
+    view = ctx.batch_view(run["batch_id"])
+    job_keys = [item[1] for item in fixtures]
+    stage_events = _stage_preempted_events(ctx.db_path)
+    stage_jobs = [str(event.get("job_key")) for event in stage_events]
     claimed = _claimed_subjects(ctx.db_path)
     per_cycle = [stage_jobs.count(key) for key in job_keys]
-    unsafe_discovery = discovery_key_for(
-        APP, unsafe_key, fingerprint_for(None, None, 1)
-    )
+    unsafe_discovery = discovery_key_for(APP, unsafe_key, fingerprint_for(None, None, 1))
     unsafe_claimed = claimed.count(unsafe_discovery)
+    unsafe_ms = next(
+        (cycle["not_reached_ms"] for cycle in cycles if cycle["not_reached_ms"] is not None),
+        None,
+    )
+    unsafe_cutoff = _iso(int(unsafe_ms)) if unsafe_ms is not None else ""
+    unsafe_stage_before = (
+        sum(
+            1
+            for event in stage_events
+            if str(event.get("handling_started_at", "")) <= unsafe_cutoff
+        )
+        if unsafe_cutoff
+        else 0
+    )
+    unsafe_stage_after = unsafe_stage_before
+    unsafe_delta = unsafe_stage_after - unsafe_stage_before
+    scene = getattr(ctx, "last_scene", None)
+    consumed = getattr(scene, "consumed", [])
+    unsafe_observations = sum(
+        1
+        for step in consumed
+        if getattr(step, "in_progress", False)
+        and getattr(getattr(step, "raw_scene", None), "input_text", "") != ""
+    )
     u6_key = ""
-    if len(cycles) >= 6:
-        # 从第六个会话 manifest 重算稳定会话键。
-        u6_manifest = ROOT / cycles[5][3]
+    if len(fixtures) >= 6:
         try:
-            context = json.loads(u6_manifest.read_text(encoding="utf-8"))[
+            context = json.loads((ROOT / fixtures[5][3]).read_text(encoding="utf-8"))[
                 "conversation_context"
             ]
             u6_key = conversation_key_for(
@@ -790,12 +945,10 @@ def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
         if u6_key
         else -1
     )
-    # 每周期未读 claim 必须早于下一次职位 claim（真实事件顺序）。
     order_ok = True
-    for index in range(min(5, len(cycles) - 1)):
-        unread_key = ""
+    for index in range(min(5, len(fixtures) - 1)):
         try:
-            context = json.loads((ROOT / cycles[index][3]).read_text(encoding="utf-8"))[
+            context = json.loads((ROOT / fixtures[index][3]).read_text(encoding="utf-8"))[
                 "conversation_context"
             ]
             unread_key = conversation_key_for(
@@ -816,8 +969,8 @@ def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
             break
         unread_at = claimed.index(unread_key)
         next_job_at = (
-            claimed.index(cycles[index + 1][1])
-            if cycles[index + 1][1] in claimed
+            claimed.index(fixtures[index + 1][1])
+            if fixtures[index + 1][1] in claimed
             else len(claimed)
         )
         if unread_at >= next_job_at:
@@ -827,8 +980,17 @@ def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
         "processed": run["processed"],
         "actual_stage_preempted_count": len(stage_jobs),
         "per_cycle_switch_count": per_cycle,
+        "timeline_length": len(timeline),
+        "step_count": len(steps),
+        "timeline": timeline,
+        "arrival_trace": [item["arrival_at"] for item in timeline],
         "unsafe_claimed": unsafe_claimed,
-        "unsafe_observation_incremented": unsafe_claimed > 0,
+        "unsafe_claim_count": unsafe_claimed,
+        "unsafe_observations": unsafe_observations,
+        "unsafe_stage_before": unsafe_stage_before,
+        "unsafe_stage_after": unsafe_stage_after,
+        "unsafe_stage_delta": unsafe_delta,
+        "unsafe_observation_incremented": unsafe_delta > 0,
         "sixth_switch_required": run["pause_reason"] == "preemption_limit",
         "sixth_stage_preempted": job_keys[5] in stage_jobs if len(job_keys) >= 6 else True,
         "u6_claims": u6_claims,

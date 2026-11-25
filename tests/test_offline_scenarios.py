@@ -987,6 +987,102 @@ class P2M0BindingTests(unittest.TestCase):
             self.assertEqual(payload["status"], "probe_error")
             self.assertEqual(payload["reason"], "刺激路径非法" if ".." in value or value.startswith("C:") else "刺激文件不可读")
 
+    def test_s03_timeline_consumes_original_events(self) -> None:
+        """S03 原始 virtual_ms/arrival_at/安全点顺序必须实际进入解析轨迹。"""
+        stimuli = json.loads(
+            (SCENARIO_ROOT / "fixtures/m6/events/s03-preemption-limit.stimuli.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        start, cycles, timeline = m6_probe._parse_s03_timeline(stimuli)
+        self.assertEqual(start, 0)
+        self.assertEqual(len(cycles), 6)
+        self.assertEqual(len(timeline), 25)
+        self.assertEqual(
+            (cycles[0]["job_ms"], cycles[0]["arrival_at"], cycles[0]["snapshot_ms"],
+             cycles[0]["not_reached_ms"], cycles[0]["safe_ms"]),
+            (0, 1000, 1500, 1800, 2000),
+        )
+        self.assertEqual(
+            (cycles[1]["job_ms"], cycles[1]["arrival_at"], cycles[1]["snapshot_ms"],
+             cycles[1]["not_reached_ms"], cycles[1]["safe_ms"]),
+            (2000, 2200, 2400, None, 2600),
+        )
+        changed = copy.deepcopy(stimuli)
+        changed["events"][2]["virtual_ms"] = 1600
+        _start, _cycles, changed_timeline = m6_probe._parse_s03_timeline(changed)
+        self.assertNotEqual(changed_timeline[2]["virtual_ms"], 1500)
+
+    def test_s03_timeline_rejects_unknown_missing_duplicate_out_of_order(self) -> None:
+        """S03 未知/缺失/重复/乱序/clock_start 不符必须拒绝。"""
+        base = json.loads(
+            (SCENARIO_ROOT / "fixtures/m6/events/s03-preemption-limit.stimuli.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        def unknown(value):
+            value["events"][2]["event"] = "ignored_marker"
+
+        def missing_snapshot(value):
+            value["events"].pop(2)
+
+        def duplicate_seq(value):
+            value["events"][1]["seq"] = value["events"][0]["seq"]
+
+        def out_of_order(value):
+            value["events"][3]["virtual_ms"] = 1400
+
+        def clock_mismatch(value):
+            value["clock_start_ms"] = 999999
+
+        def missing_arrival(value):
+            value["events"][1].pop("arrival_at")
+
+        for mutate in (
+            unknown,
+            missing_snapshot,
+            duplicate_seq,
+            out_of_order,
+            clock_mismatch,
+            missing_arrival,
+        ):
+            value = copy.deepcopy(base)
+            mutate(value)
+            with self.assertRaises(m6_probe.ProbeError):
+                m6_probe._parse_s03_timeline(value)
+
+    def test_a06_control_binding_fact_is_consumed(self) -> None:
+        """比较器必须消费逐控制真实绑定事实；错绑定被拒绝。"""
+        step = {
+            "stdout_paths": [
+                {"path": "env.binding_ok", "equals": True},
+                {"path": "env.profile_meta.profile_id", "equals": "m6-apply-preexisting"},
+            ]
+        }
+        payload = {
+            "env": {
+                "binding_ok": True,
+                "profile_meta": {"profile_id": "m6-apply-preexisting"},
+            }
+        }
+        self.assertEqual(compare_step(payload, step), [])
+        bad = copy.deepcopy(payload)
+        bad["env"]["binding_ok"] = False
+        self.assertNotEqual(compare_step(bad, step), [])
+
+    def test_a06_control_log_fact_missing_is_rejected(self) -> None:
+        """删除未断言的日志事实后比较器必须报缺失。"""
+        step = {"stdout_paths": [{"path": "log_finish.unpaired", "equals": 0}]}
+        self.assertEqual(compare_step({"log_finish": {"unpaired": 0}}, step), [])
+        self.assertNotEqual(compare_step({}, step), [])
+
+    def test_a06_control_nonzero_popen_is_rejected(self) -> None:
+        """非零真实 Popen 尝试必须被比较器拒绝。"""
+        step = {"stdout_paths": [{"path": "real_popen_attempts", "equals": 0}]}
+        self.assertEqual(compare_step({"real_popen_attempts": 0}, step), [])
+        self.assertNotEqual(compare_step({"real_popen_attempts": 1}, step), [])
+
     def test_deferred_and_module_evidence_are_not_pass(self) -> None:
         """DEFERRED 与 MODULE_EVIDENCE 不能被当 PASS 或普通入口阻塞。"""
         assets = load_assets()

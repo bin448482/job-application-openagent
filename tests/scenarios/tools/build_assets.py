@@ -8034,6 +8034,38 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
             {"path": "log_finish.unpaired", "equals": 0},
         ],
     }
+
+    def _control_paths(key: str, label: str, profile_id: str) -> list[dict[str, Any]]:
+        """逐控制真实根/profile/gate/日志/Popen 的独立 acceptance 路径。"""
+        return [
+            {"path": f"controls.{key}.env.project_root", "equals": f"controls/{label}"},
+            {"path": f"controls.{key}.env.os_root", "equals": f"controls/{label}/os"},
+            {
+                "path": f"controls.{key}.env.db_path_token",
+                "pattern": rf"controls/{label}/data/runtime/profiles/{profile_id}/runtime\.sqlite3",
+            },
+            {"path": f"controls.{key}.env.profile_meta.profile_id", "equals": profile_id},
+            {"path": f"controls.{key}.env.gate.profile_id", "equals": profile_id},
+            {"path": f"controls.{key}.env.gate.state", "equals": "held"},
+            {"path": f"controls.{key}.env.binding_ok", "equals": True},
+            {"path": f"controls.{key}.real_popen_attempts", "equals": 0},
+            {"path": f"controls.{key}.log_correlations", "equals": 1},
+            {"path": f"controls.{key}.log_schema_violations", "equals": 0},
+            {"path": f"controls.{key}.log_sensitive_hits", "equals": 0},
+            {"path": f"controls.{key}.log_finish.unpaired", "equals": 0},
+            {"path": f"controls.{key}.log_has_body", "equals": False},
+        ]
+
+    apply_paths["A06_base"].extend(
+        _control_paths("preexisting_done", "preexisting", "m6-apply-preexisting")
+        + _control_paths("preexisting_done_unrelated_change", "preexisting_unrelated", "m6-apply-preexisting_unrelated")
+        + _control_paths("unrelated_change", "unrelated", "m6-apply-unrelated")
+    )
+    apply_paths["A06_FD"].extend(
+        _control_paths("toast", "toast", "m6-apply-toast")
+        + _control_paths("dialog", "dialog", "m6-apply-dialog")
+        + _control_paths("empty", "empty", "m6-apply-empty")
+    )
     add(
         "SC-A06",
         "M5",
@@ -8395,6 +8427,26 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     {"path": "pause_reason", "equals": "preemption_limit"},
                     {"path": "preemptions_used", "equals": 5},
                     {"path": "cursor_preserved", "equals": True},
+                    {"path": "unsafe_claim_count", "equals": 0},
+                    {"path": "unsafe_observations", "equals": 1},
+                    {"path": "unsafe_stage_before", "equals": 0},
+                    {"path": "unsafe_stage_after", "equals": 0},
+                    {"path": "unsafe_stage_delta", "equals": 0},
+                    {"path": "timeline_length", "equals": 25},
+                    {"path": "step_count", "equals": 19},
+                    {"path": "timeline.0.virtual_ms", "equals": 0},
+                    {"path": "timeline.1.virtual_ms", "equals": 1000},
+                    {"path": "timeline.2.event", "equals": "snapshot_available"},
+                    {"path": "timeline.2.virtual_ms", "equals": 1500},
+                    {"path": "timeline.3.event", "equals": "safe_point_not_reached"},
+                    {"path": "timeline.3.virtual_ms", "equals": 1800},
+                    {"path": "timeline.4.event", "equals": "safe_point_reached"},
+                    {"path": "timeline.4.virtual_ms", "equals": 2000},
+                    {"path": "timeline.5.virtual_ms", "equals": 2000},
+                    {"path": "timeline.6.virtual_ms", "equals": 2200},
+                    {"path": "timeline.7.virtual_ms", "equals": 2400},
+                    {"path": "arrival_trace.1", "equals": 1000},
+                    {"path": "arrival_trace.6", "equals": 2200},
                 ),
             ),
         ],
