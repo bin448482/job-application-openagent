@@ -25814,7 +25814,7 @@
       ],
       "layer": "F",
       "module_evidence": null,
-      "observations_ref": "expected/m6-observations.json",
+      "observations_ref": "expected/m6-supplemental-observations.json",
       "preconditions": [
         "M1/M2/M5 离线门槛",
         "固定事件脚本与单调时钟"

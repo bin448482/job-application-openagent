@@ -2406,6 +2406,7 @@ def build_support_fixtures() -> None:
             "note": "原 m6-observations.json 保持 raw 字节不变；本文件只补充新增变体的独立观测。",
             "cases": {
                 "SC-S01/arrival_after_commit": {
+                    "variant_ref": "SC-S01/arrival_after_commit",
                     "stimulus_ref": "fixtures/m6/events/s01-arrival-after-commit.stimuli.json",
                     "observation": {
                         "arrival_at": 500,
@@ -8472,7 +8473,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 steps=[m6_cmd("arrival_after_commit", "fixtures/m6/events/s01-arrival-after-commit.stimuli.json")],
                 fixture="fixtures/m6/events/s01-arrival-after-commit.stimuli.json",
                 shared_inputs=m6_shared,
-                observations_ref="expected/m6-observations.json",
+                observations_ref="expected/m6-supplemental-observations.json",
                 setup="在 checkpoint 后、下次取任务前注入到达",
                 required_api="M6 调度",
                 assertions=[
@@ -8516,8 +8517,8 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 "all_true",
                 label="全部条件真",
                 steps=[m6_cmd("safe_point_converged", "fixtures/m6/safe-point/converged-retry.stimuli.json")],
-                fixture="fixtures/m6/safe-point/converged-retry.stimuli.json",
-                shared_inputs=m6_shared,
+                fixture="fixtures/m6/safe-point/vector.json",
+                shared_inputs=[*m6_shared, "tests/scenarios/fixtures/m6/safe-point"],
                 setup="全部条件真且有可领取正目标",
                 required_api="M6 调度",
                 assertions=["只有全真才切换", "状态证据收敛后重跑"],

@@ -1570,6 +1570,72 @@ class M6SevenVariantTests(unittest.TestCase):
         self.assertEqual(accepted["processed"], 0)
         self.assertTrue(accepted["scene_declaration_only"])
 
+    def test_observations_ref_binding_and_negative_control(self) -> None:
+        """新增观测引用必须绑定到正确文件/variant/stimulus；错绑被拒绝。"""
+        ref = "SC-S01/arrival_after_commit"
+        assets = self.assets
+        variant = next(
+            entry
+            for scenario, entry in model.iter_variants(assets.catalogue)
+            if f"{scenario['id']}/{entry['id']}" == ref
+        )
+        supplemental = json.loads(
+            (SCENARIO_ROOT / "expected/m6-supplemental-observations.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        original = json.loads(
+            (SCENARIO_ROOT / "expected/m6-observations.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        case = supplemental["cases"].get(ref)
+
+        def errors(observations_ref, case_value, variant_value, old_value):
+            """按接线合同返回引用错误列表；只比较元数据，不执行产品。"""
+            found = []
+            if observations_ref != "expected/m6-supplemental-observations.json":
+                found.append("observations_ref")
+            if not isinstance(case_value, dict):
+                found.append("missing_case")
+            else:
+                if case_value.get("variant_ref") != ref:
+                    found.append("variant_ref")
+                if case_value.get("stimulus_ref") != variant_value["fixture"]:
+                    found.append("stimulus_ref")
+            if ref in old_value.get("cases", {}):
+                found.append("old_file_contains_case")
+            return found
+
+        self.assertEqual(
+            errors(variant["observations_ref"], case, variant, original), []
+        )
+        self.assertEqual(
+            assets.oracles["variants"][ref]["observations_ref"],
+            "expected/m6-supplemental-observations.json",
+        )
+        self.assertNotEqual(
+            errors("expected/m6-observations.json", case, variant, original), []
+        )
+        self.assertNotEqual(
+            errors(
+                variant["observations_ref"],
+                {**case, "stimulus_ref": "fixtures/m6/events/other.json"},
+                variant,
+                original,
+            ),
+            [],
+        )
+        self.assertNotEqual(
+            errors(
+                variant["observations_ref"],
+                case,
+                variant,
+                {"cases": {ref: case}},
+            ),
+            [],
+        )
+
     def test_supplemental_observation_is_wired_to_oracle(self) -> None:
         """新增变体 expected 独立于原观察文件，并与 oracle 比较值一致。"""
         supplemental = json.loads(

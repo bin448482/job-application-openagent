@@ -34549,7 +34549,7 @@
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": "expected/m6-observations.json",
+          "observations_ref": "expected/m6-supplemental-observations.json",
           "deferred_to": null,
           "module_evidence": null,
           "shared_inputs": [
@@ -34623,7 +34623,7 @@
           "steps": [
             "python tests/scenarios/framework/m6_probe.py --case safe_point_converged --stimuli tests/scenarios/fixtures/m6/safe-point/converged-retry.stimuli.json"
           ],
-          "fixture": "fixtures/m6/safe-point/converged-retry.stimuli.json",
+          "fixture": "fixtures/m6/safe-point/vector.json",
           "setup": "全部条件真且有可领取正目标",
           "required_api": "M6 调度",
           "expected_ref": "SC-S02/all_true",
@@ -34821,7 +34821,8 @@
             "tests/fixtures/read",
             "prompts/base",
             "prompts/examples",
-            "evals/policy-suite"
+            "evals/policy-suite",
+            "tests/scenarios/fixtures/m6/safe-point"
           ],
           "local_packs": {},
           "fixture_copies": {},
