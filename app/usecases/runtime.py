@@ -1010,17 +1010,12 @@ def _handle_discovery(
             try:
                 now_dt = parse_utc(clock())
                 observed_dt = parse_utc(reread.observed_at)
-                if previous_observed is not None:
+                delta = (now_dt - observed_dt).total_seconds()
+                if delta < 0 or delta > 5:
+                    valid = False
+                elif previous_observed is not None:
                     previous_dt = parse_utc(previous_observed)
-                    if observed_dt < previous_dt or observed_dt > now_dt:
-                        valid = False
-                    elif observed_dt > previous_dt:
-                        delta = (now_dt - observed_dt).total_seconds()
-                        if delta > 5:
-                            valid = False
-                else:
-                    delta = (now_dt - observed_dt).total_seconds()
-                    if delta < 0 or delta > 5:
+                    if observed_dt < previous_dt:
                         valid = False
             except ValueError:
                 valid = False

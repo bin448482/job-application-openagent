@@ -212,6 +212,7 @@ class _RuntimeCase(unittest.TestCase):
     """提供临时 profile/门禁/真实仓储与 execute_run 组合根。"""
 
     def setUp(self) -> None:
+        """为每个用例创建独立临时项目根并准备真实 profile/门禁/验收。"""
         self.temp, self.root = helpers.runtime_project()
         self.os_root = self.root / "os-root"
         code, payload, stderr = helpers.prepare(self.root, self.os_root)
@@ -223,6 +224,7 @@ class _RuntimeCase(unittest.TestCase):
         self.path = profile_runtime_path(self.root, "demo")
 
     def tearDown(self) -> None:
+        """清理本用例独占的临时项目根，不触碰其它运行产物。"""
         self.temp.cleanup()
 
     # ---- 真实 SQLite / 场景辅助 ----
@@ -2084,6 +2086,142 @@ class PostClaimConversationRejectionTests(_RuntimeCase):
         self.assertEqual(run["drafts"], [], run)
         self.assertEqual(calls["bridge"], 0, run)
         self.assertEqual(self._discovery_state(key), "blocked")
+
+    def _post_close_state(
+        self, key: str, batch_id: str
+    ) -> dict[str, object]:
+        """运行关闭后以新只读连接核对草稿/决策记忆/发现/预算持久结果。"""
+        uri = self.path.as_uri() + "?mode=ro"
+        connection = sqlite3.connect(uri, uri=True)
+        try:
+            drafts = connection.execute(
+                "SELECT COUNT(*) FROM drafts WHERE profile_id = ?", ("demo",)
+            ).fetchone()[0]
+            decisions = connection.execute(
+                "SELECT COUNT(*) FROM runtime_decisions WHERE profile_id = ?",
+                ("demo",),
+            ).fetchone()[0]
+            row = connection.execute(
+                "SELECT state FROM hr_discoveries WHERE conversation_key = ?",
+                (key,),
+            ).fetchone()
+            cursor_row = connection.execute(
+                "SELECT cursor_json FROM job_batches WHERE batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+        finally:
+            connection.close()
+        return {
+            "drafts": int(drafts),
+            "runtime_decisions": int(decisions),
+            "discovery_state": None if row is None else str(row[0]),
+            "budget": None
+            if cursor_row is None
+            else json.loads(cursor_row[0])["remaining_budget"],
+        }
+
+    def _run_same_observed(
+        self, name: str, advance_ms: int, *, batch_id: str
+    ) -> tuple[dict[str, object], str, int]:
+        """第二次真实解析同 observed_at 的新快照，仅推进可信双时钟后运行。"""
+        manifest, key = self._seed_discovery(name)
+        conversation = f"tests/fixtures/runtime/read-{name}/conversation.json"
+        rel = self._scenario(
+            name,
+            [
+                self._step(
+                    read_fixture=manifest,
+                    conversation_fixture=conversation,
+                    decision=helpers.decision_stimulus(),
+                )
+            ],
+            batch_id=batch_id,
+        )
+        clock = _Clock()
+        calls = {"bridge": 0}
+
+        def factory(stimulus: object) -> SyntheticDecisionBridge:
+            """记录任何被允许启动的合成桥调用。"""
+            calls["bridge"] += 1
+            return SyntheticDecisionBridge(
+                stimulus,  # type: ignore[arg-type]
+                provider_id=self.provider,
+                model_id=self.model_id,
+                model_config_hash=self.config_hash,
+            )
+
+        read = _SecondConversationRead(
+            self.root, conversation, lambda: clock.advance(advance_ms)
+        )
+        run = self._execute(rel, clock=clock, read=read, bridge_factory=factory)
+        return run, key, calls["bridge"]
+
+    def test_same_observed_after_six_seconds_is_rejected_without_bridge(self) -> None:
+        """同一 observed_at 的新快照在外部推进 6 秒后仍须按年龄阻塞且零桥。"""
+        batch = "00000000-0000-4000-8000-0000000000c1"
+        run, key, bridge = self._run_same_observed(
+            "same6000", 6_000, batch_id=batch
+        )
+        self.assertEqual(run["pause_reason"], "unread_unverified", run)
+        self.assertEqual(run["drafts"], [], run)
+        self.assertEqual(run["model_calls"], 0, run)
+        self.assertEqual(bridge, 0, run)
+        state = self._post_close_state(key, batch)
+        self.assertEqual(state["drafts"], 0, state)
+        self.assertEqual(state["runtime_decisions"], 0, state)
+        self.assertEqual(state["discovery_state"], "blocked", state)
+        self.assertEqual(state["budget"]["seconds"], 894, state)  # type: ignore[index]
+        self.assertEqual(
+            run["remaining_budget"]["seconds"], 894, run  # type: ignore[index]
+        )
+
+    def test_same_observed_at_zero_offset_still_decides_once(self) -> None:
+        """同 observed_at 的新快照在 0ms 偏移下仍满足年龄约束并完成一次决策。"""
+        batch = "00000000-0000-4000-8000-0000000000c2"
+        run, key, bridge = self._run_same_observed(
+            "same0", 0, batch_id=batch
+        )
+        self.assertEqual(run["pause_reason"], None, run)
+        self.assertEqual(len(run["drafts"]), 1, run)
+        self.assertEqual(run["model_calls"], 1, run)
+        self.assertEqual(bridge, 1, run)
+        state = self._post_close_state(key, batch)
+        self.assertEqual(state["drafts"], 1, state)
+        self.assertEqual(state["runtime_decisions"], 1, state)
+        self.assertEqual(state["discovery_state"], "done", state)
+        self.assertEqual(state["budget"]["seconds"], 900, state)  # type: ignore[index]
+
+    def test_same_observed_at_five_seconds_still_decides_once(self) -> None:
+        """同 observed_at 的新快照在 5000ms 边界内仍允许决策，不扩大到 5001ms。"""
+        batch = "00000000-0000-4000-8000-0000000000c3"
+        run, key, bridge = self._run_same_observed(
+            "same5000", 5_000, batch_id=batch
+        )
+        self.assertEqual(run["pause_reason"], None, run)
+        self.assertEqual(len(run["drafts"]), 1, run)
+        self.assertEqual(run["model_calls"], 1, run)
+        self.assertEqual(bridge, 1, run)
+        state = self._post_close_state(key, batch)
+        self.assertEqual(state["drafts"], 1, state)
+        self.assertEqual(state["runtime_decisions"], 1, state)
+        self.assertEqual(state["discovery_state"], "done", state)
+        self.assertEqual(state["budget"]["seconds"], 895, state)  # type: ignore[index]
+
+    def test_same_observed_at_5001ms_is_rejected_without_bridge(self) -> None:
+        """同 observed_at 超过 5 秒的 5001ms 偏移必须阻塞且零桥。"""
+        batch = "00000000-0000-4000-8000-0000000000c4"
+        run, key, bridge = self._run_same_observed(
+            "same5001", 5_001, batch_id=batch
+        )
+        self.assertEqual(run["pause_reason"], "unread_unverified", run)
+        self.assertEqual(run["drafts"], [], run)
+        self.assertEqual(run["model_calls"], 0, run)
+        self.assertEqual(bridge, 0, run)
+        state = self._post_close_state(key, batch)
+        self.assertEqual(state["drafts"], 0, state)
+        self.assertEqual(state["runtime_decisions"], 0, state)
+        self.assertEqual(state["discovery_state"], "blocked", state)
+        self.assertEqual(state["budget"]["seconds"], 895, state)  # type: ignore[index]
 
     def test_stale_second_conversation_is_rejected_without_bridge(self) -> None:
         """第二次会话 observed_at 落后 30 秒时必须保守阻塞且零桥。"""
