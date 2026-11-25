@@ -246,6 +246,38 @@ def write_scenario(
     return rel
 
 
+def _refresh_conversation_observations(root: Path, fixture_rel: str) -> None:
+    """在 CLI 合成运行前把场景引用的会话 manifest 采样时间更新为当前墙钟。"""
+    from datetime import datetime, timezone
+
+    from app.domain.models import format_utc
+
+    path = (root / fixture_rel).resolve()
+    if root.resolve() not in path.parents or not path.is_file():
+        return
+    spec = json.loads(path.read_text(encoding="utf-8"))
+    steps = spec.get("steps") if isinstance(spec, dict) else None
+    if not isinstance(steps, list):
+        return
+    observed_at = format_utc(datetime.now(timezone.utc))
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        rel = step.get("conversation_fixture")
+        if not isinstance(rel, str):
+            continue
+        candidate = (root / rel).resolve()
+        if root.resolve() not in candidate.parents or not candidate.is_file():
+            continue
+        manifest = json.loads(candidate.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict) or "observed_at" not in manifest:
+            continue
+        manifest["observed_at"] = observed_at
+        candidate.write_text(
+            json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+        )
+
+
 def execute(
     root: Path,
     os_root: Path,
@@ -259,6 +291,7 @@ def execute(
     confirm_device: bool = True,
 ) -> tuple[int, dict[str, object] | None, str]:
     """运行 run execute CLI，返回退出码、JSON 与 stderr。"""
+    _refresh_conversation_observations(root, fixture_rel)
     argv = [
         "run",
         "execute",
