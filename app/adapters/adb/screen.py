@@ -131,7 +131,12 @@ class AdbScreenReader:
 
     def _run_bytes(self, args: list[str], *, stage: str, command: str) -> bytes:
         """执行一条不重试的二进制 ADB 命令，失败统一为断连。"""
-        completed = self._run(args, stage=stage, command=command, binary=True)
+        completed = self._run(
+            args,
+            stage=stage,
+            command=command,
+            binary=True,
+        )
         return completed.stdout
 
     def _run(

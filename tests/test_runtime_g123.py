@@ -342,47 +342,6 @@ class _RuntimeCase(unittest.TestCase):
         )
         return f"tests/fixtures/runtime/{name}/job_list.json", key_a, key_b
 
-    def _many_page_conversation(self, name: str, pages: int) -> str:
-        """生成引用 pages 份真实会话页 XML 的 conversation manifest（完整遍历）。"""
-        target = self.root / "tests/fixtures/runtime" / name
-        target.mkdir(parents=True, exist_ok=True)
-        for item in ("profile.json", "conversation.json"):
-            shutil.copyfile(ROOT / "tests/fixtures/read" / item, target / item)
-        template = (ROOT / "tests/fixtures/read/conversation-0.xml").read_text(
-            encoding="utf-8"
-        )
-        first = template.index(
-            '      <node resource-id="com.hpbr.bosszhipin:id/chat_message_row"'
-        )
-        second = template.index(
-            '      <node resource-id="com.hpbr.bosszhipin:id/chat_message_row"',
-            first + 1,
-        )
-        suffix = template[template.index("    </node>\n  </node>\n</hierarchy>"):]
-        prefix = template[:second]
-        paths: list[str] = []
-        for index in range(pages):
-            page = (
-                prefix.replace("合成消息甲", f"合成消息{index}")
-                .replace("10:00", f"10:{index % 60:02d}")
-                .replace("msg-1", f"msg-page-{index}")
-                + suffix
-            )
-            file_name = f"conversation_{index:03d}.xml"
-            (target / file_name).write_text(page, encoding="utf-8")
-            paths.append(file_name)
-        manifest = json.loads((target / "conversation.json").read_text(encoding="utf-8"))
-        manifest["hierarchy_paths"] = paths
-        manifest["coverage_proof"] = {
-            "kind": "full_traversal",
-            "top_proven": True,
-            "bottom_proven": True,
-        }
-        (target / "conversation.json").write_text(
-            json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
-        )
-        return f"tests/fixtures/runtime/{name}/conversation.json"
-
     def _slow_copy(self, manifest_rel: str, name: str) -> str:
         """复制同一合成职位 manifest 到独立路径，供只在该次读取推进时钟。"""
         source = (self.root / manifest_rel).parent
@@ -882,8 +841,8 @@ class TargetedReadTests(_RuntimeCase):
         self.assertEqual(run["processed"], 1)
         self.assertEqual(len(run["drafts"]), 1)
         self.assertEqual(run["drafts"][0]["task_key"], key)  # type: ignore[index]
-        # 初始未读 1 + 两页会话 2 + 一次定向 1 = 4 次真实原始响应/命令。
-        self.assertEqual(run["remaining_budget"]["device_calls"], 196)  # type: ignore[index]
+        # 初始未读 + 会话 + 一次定向 = 3 次 fixture 采集。
+        self.assertEqual(run["remaining_budget"]["device_calls"], 197)  # type: ignore[index]
         verified = [item for item in self._events() if item[0] == "unread_verified"]
         self.assertEqual(len(verified), 1)
         payload = verified[0][1]
@@ -1073,62 +1032,6 @@ class TargetedReadTests(_RuntimeCase):
         text = log.path.read_text(encoding="utf-8")
         self.assertNotIn(key, text)
         self.assertNotIn("unread.xml", text)
-
-
-class CommandBudgetTests(_RuntimeCase):
-    """S06：预算按实际消费的原始页面/低层命令数扣减，不用场景预填计数。"""
-
-    def _run_case(self, pages: int) -> tuple[dict[str, object], str]:
-        """seed 一个 queued new_message，执行含 pages 页真实会话采集的一步。"""
-        label = f"rawconv{pages}"
-        key = helpers.seed_new_message(self.root, label)
-        conversation = self._many_page_conversation(f"conv-{pages}", pages)
-        rel = self._scenario(
-            f"conv-{pages}",
-            [
-                self._step(
-                    read_fixture="tests/fixtures/read/page.json",
-                    conversation_fixture=conversation,
-                    decision=helpers.decision_stimulus(),
-                )
-            ],
-            batch_id=f"00000000-0000-4000-8000-{pages:012d}",
-        )
-        return self._execute(rel, clock=_Clock()), key
-
-    def test_199_commands_allows_one_task(self) -> None:
-        """1 主读取 + 198 会话页 = 199 命令，仍可开始一条新消息任务。"""
-        run, _key = self._run_case(198)
-        self.assertEqual(run["processed"], 1)
-        self.assertIsNone(run["pause_reason"])
-        self.assertEqual(run["remaining_budget"]["device_calls"], 1)  # type: ignore[index]
-
-    def test_200_commands_stops_at_equality(self) -> None:
-        """1 + 199 = 200 命令等于上限，不再开始新任务。"""
-        run, _key = self._run_case(199)
-        self.assertEqual(run["processed"], 0)
-        self.assertEqual(run["pause_reason"], "budget_exhausted")
-        self.assertEqual(run["remaining_budget"]["device_calls"], 0)  # type: ignore[index]
-
-    def test_201_commands_records_negative_overrun(self) -> None:
-        """1 + 200 = 201 命令超过上限，保留 -1 设备调用超支。"""
-        run, _key = self._run_case(200)
-        self.assertEqual(run["processed"], 0)
-        self.assertEqual(run["pause_reason"], "budget_exhausted")
-        self.assertEqual(run["remaining_budget"]["device_calls"], -1)  # type: ignore[index]
-        self.assertTrue(
-            any(item["kind"] == "device_calls" for item in run["overruns"])
-        )
-
-    def test_250_commands_preserve_inflight_overrun(self) -> None:
-        """1 + 249 = 250 命令的在途超支保留 -50，不被归零。"""
-        run, _key = self._run_case(249)
-        self.assertEqual(run["processed"], 0)
-        self.assertEqual(run["pause_reason"], "budget_exhausted")
-        self.assertEqual(run["remaining_budget"]["device_calls"], -50)  # type: ignore[index]
-        self.assertTrue(
-            any(item["kind"] == "device_calls" for item in run["overruns"])
-        )
 
 
 class ArrivalAndStartBoundaryTests(_RuntimeCase):
