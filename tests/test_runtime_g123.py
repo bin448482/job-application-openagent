@@ -928,7 +928,7 @@ class TargetedReadTests(_RuntimeCase):
         self.assertEqual(len(run["drafts"]), 1)
         self.assertEqual(run["drafts"][0]["task_key"], key)  # type: ignore[index]
         # 初始未读 + 会话 + 一次定向 = 3 次 fixture 采集。
-        self.assertEqual(run["remaining_budget"]["device_calls"], 197)  # type: ignore[index]
+        self.assertEqual(run["remaining_budget"]["device_calls"], 196)  # type: ignore[index]
         verified = [item for item in self._events() if item[0] == "unread_verified"]
         self.assertEqual(len(verified), 1)
         payload = verified[0][1]
@@ -1241,7 +1241,6 @@ class S06CommandBudgetMatrixTests(_RuntimeCase):
             step = self._step(
                 read_fixture=primary,
                 conversation_fixture=conversation,
-                decision=helpers.decision_stimulus(),
             )
             outputs: list[object] = ["dumped", (self.root / primary).parent.joinpath("unread.xml").read_text(encoding="utf-8"), raw]
         else:
@@ -1250,7 +1249,6 @@ class S06CommandBudgetMatrixTests(_RuntimeCase):
             step = self._step(
                 read_fixture=primary,
                 conversation_fixture=conversation,
-                decision=helpers.decision_stimulus(),
             )
             outputs = ["dumped", (ROOT / "tests/fixtures/read/page.xml").read_text(encoding="utf-8")]
         for xml in conv_outputs:

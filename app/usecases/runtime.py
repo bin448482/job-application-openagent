@@ -16,6 +16,7 @@ from app.domain.models import (
     ReadResult,
     canonical_hash,
     is_conversation_key,
+    is_job_task_key,
     parse_utc,
     validate_read_result,
 )
@@ -775,7 +776,10 @@ class _LeaseCommandContext:
         if current - self._last_renew_mono < 20_000:
             return
         try:
-            self.lease = self._store.renew_job(self.lease, self._clock())
+            if is_job_task_key(self.lease.key):
+                self.lease = self._store.renew_job(self.lease, self._clock())
+            else:
+                self.lease = self._store.renew(self.lease, self._clock())
         except StoreError as error:
             raise RuntimeCommandControlError(error.reason_code) from None
         self._last_renew_mono = current
@@ -904,6 +908,7 @@ def _handle_discovery(
     model_id: str,
     model_config_hash: str,
     clock: Callable[[], str],
+    monotonic_ms: Callable[[], int],
     process_log: ProcessLog | None,
     acceptance: dict[str, object] | None = None,
     acceptance_recheck: Callable[[], dict[str, object] | None] | None = None,
@@ -948,6 +953,43 @@ def _handle_discovery(
             return cursor, "precondition_failed", True, None
         store.finish_semantic_block(lease, clock(), "unread_unverified")
         return cursor, "unread_unverified", True, None
+    previous_snapshot = getattr(conversation_result, "snapshot_id", None)
+    if step.decision is not None and step.conversation_fixture is not None:
+        bind = getattr(read, "bind_command_context", None)
+        context: _LeaseCommandContext | None = None
+        if callable(bind):
+            context = _LeaseCommandContext(
+                store=store,
+                gate=gate,
+                clock=clock,
+                monotonic_ms=monotonic_ms,                lease=lease,
+            )
+            bind(context)
+        try:
+            reread = read.read(step.conversation_fixture)
+        except RuntimeCommandControlError as error:
+            reason = error.reason_code
+            if reason not in PAUSE_REASONS:
+                reason = "precondition_failed"
+            return cursor, reason, True, None
+        finally:
+            if callable(bind):
+                bind(None)
+        if context is not None:
+            lease = context.lease
+        if (
+            reread.status != "ok"
+            or not isinstance(reread.value, Conversation)
+            or reread.value.conversation_key != task.key
+            or (
+                previous_snapshot is not None
+                and reread.snapshot_id == previous_snapshot
+            )
+        ):
+            store.finish_semantic_block(lease, clock(), "unread_unverified")
+            return cursor, "unread_unverified", True, None
+        conversation = reread.value
+        conversation_result = reread
     if not isinstance(conversation, Conversation) or (
         conversation.conversation_key != task.key
     ):
@@ -1565,6 +1607,7 @@ def execute_run(
                     model_id=model_id or "",
                     model_config_hash=model_config_hash or "",
                     clock=active_clock,
+                    monotonic_ms=active_mono,
                     process_log=process_log,
                     acceptance=acceptance,
                     acceptance_recheck=_recheck_acceptance,
