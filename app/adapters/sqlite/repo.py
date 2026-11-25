@@ -1278,6 +1278,58 @@ class SqliteStore:
             )
         return {"batch_id": batch_id, "state": "paused", "reason_code": reason_code}
 
+    @_store_operation("pause_batch")
+    def safety_stop_after_clock_change(
+        self,
+        batch_id: str,
+        cursor: BatchCursor,
+        reason_code: str,
+        *,
+        now: str,
+    ) -> dict[str, object]:
+        """时钟异常后的专用安全停止：保存最后可靠游标/预算，不续租/不改时钟锚点。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("invalid_input")
+        if (
+            not isinstance(cursor, BatchCursor)
+            or cursor.batch_id != batch_id
+            or reason_code != "clock_changed"
+        ):
+            raise StoreError("invalid_input")
+        del now_dt
+        with self._write():
+            row = self._connection.execute(
+                "SELECT profile_id FROM job_batches WHERE batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+            if row is None or str(row["profile_id"]) != self.profile_id:
+                raise StoreError("invalid_input")
+            self._connection.execute(
+                "UPDATE job_batches SET cursor_json = ?, state = 'paused', "
+                "pause_reason = ?, updated_at = ? WHERE batch_id = ?",
+                (
+                    json.dumps(cursor.to_json(), sort_keys=True),
+                    reason_code,
+                    now,
+                    batch_id,
+                ),
+            )
+            self._run_fault_hook("safety_stop_before_event")
+            self._insert_scheduler_event(
+                batch_id=batch_id,
+                task_key=None,
+                event="round_paused",
+                reason_code=reason_code,
+                created_at=now,
+                payload={
+                    "preemptions_used": cursor.preemptions_used,
+                    "remaining_budget": cursor.budget.to_json(),
+                    "safety_stop": True,
+                },
+            )
+        return {"batch_id": batch_id, "state": "paused", "reason_code": reason_code}
+
     @_store_operation("record_runtime_event")
     def record_runtime_event(
         self,
@@ -1316,13 +1368,30 @@ class SqliteStore:
 
     @_store_operation("last_action_state")
     def last_action_state(self, task_key: str) -> str | None:
-        """只读返回任务最近动作状态，供安全点独立判定已提交。"""
+        """只读返回任务最近动作状态；会话键按真实发现关联，不用全局最近动作。
+
+        职位键直接匹配持久 `task_key`；会话键经由 `hr_discoveries` 的
+        `conversation_key` 关联到实际发现任务键，避免把另一任务的最近动作
+        当作本任务证据。空键仅保留“是否存在任何动作”的保守探测。
+        """
         if task_key:
-            row = self._connection.execute(
-                "SELECT state FROM action_records WHERE app = ? AND task_key = ? "
-                "ORDER BY created_at DESC, action_key DESC LIMIT 1",
-                (APP, task_key),
-            ).fetchone()
+            if is_job_task_key(task_key):
+                row = self._connection.execute(
+                    "SELECT state FROM action_records WHERE app = ? AND task_key = ? "
+                    "ORDER BY created_at DESC, action_key DESC LIMIT 1",
+                    (APP, task_key),
+                ).fetchone()
+            elif is_conversation_key(APP, task_key):
+                row = self._connection.execute(
+                    "SELECT ar.state FROM action_records ar "
+                    "JOIN hr_discoveries d ON d.app = ar.app "
+                    "AND d.\"key\" = ar.discovery_task_key "
+                    "WHERE ar.app = ? AND d.conversation_key = ? "
+                    "ORDER BY ar.created_at DESC, ar.action_key DESC LIMIT 1",
+                    (APP, task_key),
+                ).fetchone()
+            else:
+                return None
         else:
             row = self._connection.execute(
                 "SELECT state FROM action_records WHERE app = ? "

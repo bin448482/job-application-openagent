@@ -25,7 +25,7 @@ from app.domain.models import (
 from tests import action_helpers, policy_helpers
 
 ROOT = Path(__file__).resolve().parents[1]
-NOW = "2026-11-25T10:00:00.000Z"
+NOW = "2026-11-24T00:00:00.000Z"
 BATCH = "00000000-0000-4000-8000-0000000000aa"
 
 
@@ -246,6 +246,50 @@ def write_scenario(
     return rel
 
 
+def _refresh_conversation_observations(root: Path, fixture_rel: str) -> None:
+    """在 CLI 合成运行前把场景引用的会话 manifest 采样时间更新为当前墙钟。
+
+    坏 JSON/不可读路径不在这里报错，原样留给 CLI 夹具校验拒绝。
+    """
+    from datetime import datetime, timezone
+
+    from app.domain.models import format_utc
+
+    path = (root / fixture_rel).resolve()
+    if root.resolve() not in path.parents or not path.is_file():
+        return
+    try:
+        spec = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    steps = spec.get("steps") if isinstance(spec, dict) else None
+    if not isinstance(steps, list):
+        return
+    observed_at = format_utc(datetime.now(timezone.utc))
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        rel = step.get("conversation_fixture")
+        if not isinstance(rel, str):
+            continue
+        candidate = (root / rel).resolve()
+        if root.resolve() not in candidate.parents or not candidate.is_file():
+            continue
+        try:
+            manifest = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(manifest, dict) or "observed_at" not in manifest:
+            continue
+        manifest["observed_at"] = observed_at
+        try:
+            candidate.write_text(
+                json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+            )
+        except OSError:
+            continue
+
+
 def execute(
     root: Path,
     os_root: Path,
@@ -257,8 +301,15 @@ def execute(
     model_id: str | None = None,
     model_config_hash: str | None = None,
     confirm_device: bool = True,
+    refresh_conversations: bool = False,
 ) -> tuple[int, dict[str, object] | None, str]:
-    """运行 run execute CLI，返回退出码、JSON 与 stderr。"""
+    """运行 run execute CLI，返回退出码、JSON 与 stderr。
+
+    默认不改任何原始时间输入；只有显式 `refresh_conversations=True` 的阳性
+    采集用例才在运行前把会话采样时间更新为当前墙钟。
+    """
+    if refresh_conversations:
+        _refresh_conversation_observations(root, fixture_rel)
     argv = [
         "run",
         "execute",
@@ -486,7 +537,11 @@ def seed_new_message(
 
 
 def make_job_fixture(root: Path, label: str) -> tuple[str, str]:
-    """复制 job_detail fixture 并替换标题/公司/薪资，返回 manifest 与职位键。"""
+    """复制 job_list fixture 并替换标题/公司/薪资，返回单卡列表 manifest 与职位键。
+
+    安全点要求真实回到列表，因此职位场景的主读取使用列表页；同一 manifest
+    也可作为 `job_fixture` 复核目标身份，不再用完整职位详情冒充列表。
+    """
     import shutil
     from app.domain.models import canonical_hash
     from app.domain.reading import job_identity_hash_for, job_key_from_identity
@@ -496,10 +551,24 @@ def make_job_fixture(root: Path, label: str) -> tuple[str, str]:
     salary = "20-30K"
     target = root / "tests" / "fixtures" / "runtime" / f"job-{label}"
     target.mkdir(parents=True, exist_ok=True)
-    for name in ("profile.json", "job_detail.xml", "job_detail.json"):
+    for name in ("profile.json", "job_list.xml", "job_list.json"):
         shutil.copyfile(ROOT / "tests/fixtures/read" / name, target / name)
-    path = target / "job_detail.xml"
+    path = target / "job_list.xml"
     text = path.read_text(encoding="utf-8")
+    second = (
+        '      <node clickable="true" class="android.widget.LinearLayout" '
+        'bounds="[0,500][1080,800]">\n'
+        '        <node text="合成岗位乙" resource-id="com.hpbr.bosszhipin:id/tv_position_name" '
+        'class="android.widget.TextView" bounds="[40,520][600,580]" />\n'
+        '        <node text="15-20K" resource-id="com.hpbr.bosszhipin:id/tv_salary_statue" '
+        'class="android.widget.TextView" bounds="[620,520][900,580]" />\n'
+        '        <node text="合成公司乙" resource-id="com.hpbr.bosszhipin:id/tv_company_name" '
+        'class="android.widget.TextView" bounds="[40,590][600,640]" />\n'
+        "      </node>\n"
+    )
+    if second not in text:
+        raise AssertionError("job list fixture shape changed")
+    text = text.replace(second, "")
     text = (
         text.replace("合成岗位甲", title)
         .replace("合成公司甲", company)
@@ -507,4 +576,4 @@ def make_job_fixture(root: Path, label: str) -> tuple[str, str]:
     )
     path.write_text(text, encoding="utf-8")
     key = job_key_from_identity(job_identity_hash_for(title, company, salary))
-    return f"tests/fixtures/runtime/job-{label}/job_detail.json", key
+    return f"tests/fixtures/runtime/job-{label}/job_list.json", key

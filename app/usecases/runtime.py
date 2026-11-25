@@ -4,17 +4,22 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable
 
 from app.adapters.sqlite.session import ProfileSessionLease
 from app.domain.models import (
+    APP,
     Lease,
     Owner,
+    ReadResult,
     canonical_hash,
     is_conversation_key,
+    is_job_task_key,
     parse_utc,
+    validate_read_result,
 )
 from app.domain.policy import (
     PolicyPack,
@@ -27,18 +32,27 @@ from app.domain.policy import (
     v1_policy_tier,
 )
 from app.domain.profile import select_profile_facts
-from app.domain.reading import Conversation, JobDetail, JobList, PageSnapshot, UnreadRead
+from app.domain.reading import (
+    Conversation,
+    JobDetail,
+    JobList,
+    PageSnapshot,
+    UnreadRead,
+)
 from app.domain.runtime import (
     BatchCursor,
     BudgetLimits,
     PreemptionObservation,
+    PAUSE_REASONS,
     SafePoint,
+    SAFE_POINT_FIELDS,
     SceneCandidates,
     Selection,
     TaskCandidate,
     build_stage_preempted,
     clock_drift_exceeded,
     detection_interval_ms,
+    is_runtime_key,
     observe_unread,
     select_task,
 )
@@ -49,16 +63,19 @@ from app.ports.policy import PolicyError, PolicyIssue
 from app.ports.profile import ProfileStorePort
 from app.ports.runtime import (
     RawScene,
+    RuntimeCommandContext,
+    RuntimeCommandControlError,
     RuntimeReadPort,
     RuntimeScenePort,
     RuntimeStorePort,
     SceneStep,
 )
+from app.ports.store import StoreError
 from app.process_log import ProcessLog
 from app.profile_open import open_profile_store
 from app.usecases.acceptance import check_acceptance
 from app.usecases.decision import DecisionRunError, decide
-from app.usecases.read import is_actionable
+from app.usecases.read import is_actionable, targeted_verification_outcome
 
 RUN_MODES = ("read_only", "draft_only", "auto_send_tier_a")
 
@@ -158,42 +175,78 @@ def _facts_hash(selected: dict[str, object]) -> str:
     return canonical_hash(selected)
 
 
-def _safe_scene(
+def _iter_read_values(read_results: tuple[object, ...]) -> Iterator[object]:
+    """只迭代严格有效且 status=ok 的真实读取值，坏结果不冒充现场。"""
+    for result in read_results:
+        if not isinstance(result, ReadResult):
+            continue
+        try:
+            validate_read_result(result)
+        except ValueError:
+            continue
+        if result.status == "ok" and result.value is not None:
+            yield result.value
+
+
+def _list_returned(read_results: tuple[object, ...]) -> bool:
+    """只把真实列表页/列表值视为已回到列表；详情、会话与 unknown 页面不算。
+
+    这里判断的是页面/导航事实，不要求当前列表已经存在可处理目标：合法
+    全覆盖 absent 的 `UnreadRead` 仍是回到列表，只是没有任务可做。
+    """
+    for value in _iter_read_values(read_results):
+        if isinstance(value, (JobList, UnreadRead)):
+            return True
+        if isinstance(value, PageSnapshot) and value.page == "chat_list":
+            return True
+    return False
+
+
+def _action_state_committed(
+    store: RuntimeStorePort,
+    task_key: str | None,
+) -> bool:
+    """用本轮最近一次真实成功 start 的任务身份读取最近动作状态。
+
+    `None` 只表示本轮尚未成功 start 任何任务：没有可归属动作，真正的未决
+    动作仍由全局 `no_pending_action` 拦截；历史已收敛动作不会阻断新轮。
+    非法身份保守为假，不回退全局最近动作，也不要求任务仍在当前读取现场。
+    """
+    if task_key is None:
+        return True
+    if not is_runtime_key(task_key):
+        return False
+    state = store.last_action_state(task_key)
+    return state in {None, "performed", "not_performed"}
+
+
+def derive_safe_point(
     *,
     store: RuntimeStorePort,
     batch_id: str,
-    task_key: str,
+    task_key: str | None,
     read_results: tuple[object, ...],
     raw: RawScene,
-) -> tuple[object, ...]:
-    """从真实读取类型、仓储检查点/pending 与原始现场派生七条件。"""
-    page_ok = False
-    for result in read_results:
-        actionable, _reason = (
-            is_actionable(result) if hasattr(result, "status") else (False, None)
-        )
-        if not actionable:
-            continue
-        value = result.value if getattr(result, "status", None) == "ok" else None
-        if isinstance(value, (UnreadRead, JobList, JobDetail, PageSnapshot)):
-            if getattr(value, "coverage", "viewport") in {"viewport", "all"}:
-                page_ok = True
-                break
+) -> SafePoint:
+    """从真实读取类型、持久 pending/动作/检查点与原始现场派生七条件。
+
+    该入口同时服务生产 `execute_run` 与独立模块探针；不接受调用方直接
+    传入 safe/committed 布尔答案，也不把 fixture hint 当作安全点证据。
+    `task_key` 必须是本轮最近一次真实 claim/start 成功的任务身份；`None`
+    仅用于尚未 start 任何任务或只读观察。
+    """
     pending = store.pending_actions("boss")
-    state_probe = getattr(store, "last_action_state", None)
-    last_state = state_probe(task_key) if callable(state_probe) else "unknown"
     checkpoint = store.checkpoint_status(batch_id)
-    safe = (
-        page_ok,
-        raw.input_text == "",
-        raw.confirmation_title is None,
-        raw.inflight_commands == 0,
-        not pending,
-        last_state in {None, "performed", "not_performed"},
-        checkpoint["last_checkpoint_id"] is not None
+    return SafePoint(
+        list_returned=_list_returned(read_results),
+        input_empty=raw.input_text == "",
+        confirmation_closed=raw.confirmation_title is None,
+        no_inflight_command=raw.inflight_commands == 0,
+        no_pending_action=not pending,
+        action_state_committed=_action_state_committed(store, task_key),
+        checkpoint_committed=checkpoint["last_checkpoint_id"] is not None
         and int(checkpoint["checkpoint_events"]) > 0,
     )
-    return safe
 
 
 def _candidates(
@@ -259,6 +312,35 @@ def _candidates(
         unread_unknown=unread_unknown or unknown_state,
         unread_signal_without_target=signal_without_target,
     )
+
+
+def _targeted_unread_candidates(value: UnreadRead) -> tuple[TaskCandidate, ...]:
+    """只把定向采集里真实 present 且可定位的行投影为未读候选。"""
+    seen: set[str] = set()
+    items: list[TaskCandidate] = []
+    for row in value.rows:
+        key = row.conversation_key
+        if row.state != "present" or key is None or key in seen:
+            continue
+        seen.add(key)
+        items.append(TaskCandidate("unread", key))
+    return tuple(items)
+
+
+_TARGETED_LOG_REASONS = frozenset(
+    {
+        "unread_unverified",
+        "stale_snapshot",
+        "identity_ambiguous",
+        "not_ok",
+        "wrong_page",
+        "invalid_xml",
+        "invalid_fixture",
+        "device_disconnected",
+        "device_offline",
+        "device_unauthorized",
+    }
+)
 
 
 def _read_target(
@@ -431,7 +513,7 @@ def _decision_for(
         store.record_runtime_event(
             batch_id,
             "decision_reused",
-            now=now,
+            now=clock(),
             task_key=lease.key if lease.key.startswith("boss:job:") else None,
             payload={"draft_id": draft["draft_id"]},
         )
@@ -490,7 +572,7 @@ def _decision_for(
         sub_intents=sub_intents,
         policy_tier=tier,
         reply=reply,
-        now=now,
+        now=clock(),
     )
     store.save_runtime_decision(
         subject_key=task.key,
@@ -504,7 +586,7 @@ def _decision_for(
         intent=intent,
         sub_intents=sub_intents,
         policy_tier=tier,
-        now=now,
+        now=clock(),
     )
     return {
         "draft": saved,
@@ -655,6 +737,55 @@ def _spend(
     return updated
 
 
+class _LeaseCommandContext:
+    """在每条真实命令前后复核 Lease 并按 20 秒保存最新续租结果。"""
+
+    def __init__(
+        self,
+        *,
+        store: RuntimeStorePort,
+        gate: SharedDeviceGatePort,
+        clock: Callable[[], str],
+        monotonic_ms: Callable[[], int],
+        lease: Lease,
+    ) -> None:
+        """保存当前 Lease 与可信时钟。"""
+        self._store = store
+        self._gate = gate
+        self._clock = clock
+        self._monotonic = monotonic_ms
+        self.lease = lease
+        self._last_renew_mono = monotonic_ms()
+
+    def before(self) -> None:
+        """命令启动前复核共享门禁与当前任务完整 Lease/nonce。"""
+        try:
+            self._gate.verify(now=self._clock())
+            running = self._store.require_running(self.lease, now=self._clock())
+        except StoreError as error:
+            raise RuntimeCommandControlError(error.reason_code) from None
+        except Exception:
+            raise RuntimeCommandControlError("device_gate_mismatch") from None
+        if not running:
+            raise RuntimeCommandControlError("stale_lease")
+
+    def after(self, *, failed: bool) -> None:
+        """命令结束后按独立可信时钟检查 20 秒并保存最新 Lease。"""
+        if failed:
+            return
+        current = self._monotonic()
+        if current - self._last_renew_mono < 20_000:
+            return
+        try:
+            if is_job_task_key(self.lease.key):
+                self.lease = self._store.renew_job(self.lease, self._clock())
+            else:
+                self.lease = self._store.renew(self.lease, self._clock())
+        except StoreError as error:
+            raise RuntimeCommandControlError(error.reason_code) from None
+        self._last_renew_mono = current
+
+
 def _handle_job(
     *,
     store: RuntimeStorePort,
@@ -665,16 +796,20 @@ def _handle_job(
     task: TaskCandidate,
     primary: object,
     owner: Owner,
-    now_value: str,
     monotonic_ms: Callable[[], int],
+    clock: Callable[[], str],
+    gate: SharedDeviceGatePort,
     limits: BudgetLimits,
     overruns: list[dict[str, object]],
+    on_started: Callable[[], None] | None = None,
 ) -> tuple[BatchCursor, str | None, bool]:
     """认领/开始/收敛职位；必须由实际 M3 页面包含该 task.key。"""
-    lease = store.claim_job(batch_id, owner, now_value, task.key)
+    lease = store.claim_job(batch_id, owner, clock(), task.key)
     if lease is None:
         return cursor, None, False
-    lease = store.start_job(lease, now_value)
+    lease = store.start_job(lease, clock())
+    if on_started is not None:
+        on_started()
     started_mono = monotonic_ms()
     actionable, reason = (
         is_actionable(primary) if hasattr(primary, "status") else (False, "not_ok")
@@ -691,10 +826,36 @@ def _handle_job(
         and value.complete
     )
     if not actionable or not target_present:
-        store.finish_semantic_block(lease, now_value, "identity_ambiguous")
+        store.finish_semantic_block(lease, clock(), "identity_ambiguous")
         return cursor.visit_job(task.key), "semantic_block", True
     if step.job_fixture is not None:
-        detail = read.read(step.job_fixture)
+        # 每条后续采集命令前复核共享门禁与当前完整任务/Lease 身份；nonce 变化即零启动。
+        gate.verify(now=clock())
+        if not store.require_running(lease, now=clock()):
+            return cursor, "precondition_failed", True
+        bind = getattr(read, "bind_command_context", None)
+        context: _LeaseCommandContext | None = None
+        if callable(bind):
+            context = _LeaseCommandContext(
+                store=store,
+                gate=gate,
+                clock=clock,
+                monotonic_ms=monotonic_ms,
+                lease=lease,
+            )
+            bind(context)
+        try:
+            detail = read.read(step.job_fixture)
+        except RuntimeCommandControlError as error:
+            reason = error.reason_code
+            if reason not in PAUSE_REASONS:
+                reason = "precondition_failed"
+            return cursor, reason, True
+        finally:
+            if callable(bind):
+                bind(None)
+        if context is not None:
+            lease = context.lease
         detail_ok, detail_reason = is_actionable(detail)
         detail_value = detail.value if getattr(detail, "status", None) == "ok" else None
         if isinstance(detail_value, JobList):
@@ -707,13 +868,13 @@ def _handle_job(
             detail_present = False
         if not detail_ok or not detail_present:
             store.finish_semantic_block(
-                lease, now_value, detail_reason or "incomplete_snapshot"
+                lease, clock(), detail_reason or "incomplete_snapshot"
             )
             return cursor.visit_job(task.key), "semantic_block", True
     elapsed = max(0, monotonic_ms() - started_mono)
     if elapsed >= 20_000:
-        lease = store.renew_job(lease, now_value)
-    store.finish_job(lease, now_value, "done", None)
+        lease = store.renew_job(lease, clock())
+    store.finish_job(lease, clock(), "done", None)
     if elapsed >= limits.job_seconds * 1000:
         overruns.append(
             {
@@ -747,20 +908,23 @@ def _handle_discovery(
     provider_id: str,
     model_id: str,
     model_config_hash: str,
-    now_value: str,
     clock: Callable[[], str],
+    monotonic_ms: Callable[[], int],
     process_log: ProcessLog | None,
     acceptance: dict[str, object] | None = None,
     acceptance_recheck: Callable[[], dict[str, object] | None] | None = None,
     conversation_result: object | None = None,
+    on_started: Callable[[], None] | None = None,
 ) -> tuple[BatchCursor, str | None, bool, dict[str, object] | None]:
     """认领发现，经 M3 门禁与唯一 decide 后收敛；未决不标 done。"""
     lease = store.claim(
-        "boss", task.kind, owner, now_value, conversation_key=task.key
+        "boss", task.kind, owner, clock(), conversation_key=task.key
     )
     if lease is None:
         return cursor, None, False, None
-    lease = store.start(lease, now_value)
+    lease = store.start(lease, clock())
+    if on_started is not None:
+        on_started()
     cursor = replace(cursor, budget=cursor.budget.spend_candidate())
     actionable, reason = (
         is_actionable(primary)
@@ -781,19 +945,89 @@ def _handle_discovery(
         )
     if not actionable or not target_present:
         if task.kind == "new_message":
-            store.finish_semantic_block(lease, now_value, "identity_ambiguous")
+            store.finish_semantic_block(lease, clock(), "identity_ambiguous")
             return cursor, "semantic_block", True, None
         code = "unread_unverified"
         if getattr(primary, "status", None) == "failed":
             code = str(getattr(primary, "reason_code", "wrong_page"))
-            store.finish(lease, now_value, "failed", code, primary)  # type: ignore[arg-type]
+            store.finish(lease, clock(), "failed", code, primary)  # type: ignore[arg-type]
             return cursor, "precondition_failed", True, None
-        store.finish_semantic_block(lease, now_value, "unread_unverified")
+        store.finish_semantic_block(lease, clock(), "unread_unverified")
         return cursor, "unread_unverified", True, None
+    previous_snapshot = getattr(conversation_result, "snapshot_id", None)
+    previous_profile = (
+        conversation.profile_id if isinstance(conversation, Conversation) else None
+    )
+    previous_observed = (
+        conversation_result.observed_at
+        if conversation_result is not None
+        and hasattr(conversation_result, "observed_at")
+        else None
+    )
+    if step.decision is not None and step.conversation_fixture is not None:
+        bind = getattr(read, "bind_command_context", None)
+        context: _LeaseCommandContext | None = None
+        if callable(bind):
+            context = _LeaseCommandContext(
+                store=store,
+                gate=gate,
+                clock=clock,
+                monotonic_ms=monotonic_ms,
+                lease=lease,
+            )
+            bind(context)
+        try:
+            reread = read.read(step.conversation_fixture)
+        except RuntimeCommandControlError as error:
+            reason = error.reason_code
+            if reason not in PAUSE_REASONS:
+                reason = "precondition_failed"
+            return cursor, reason, True, None
+        finally:
+            if callable(bind):
+                bind(None)
+        if context is not None:
+            lease = context.lease
+        valid = (
+            reread.status == "ok"
+            and isinstance(reread.value, Conversation)
+            and reread.value.app == APP
+            and reread.value.conversation_key == task.key
+            and reread.snapshot_id is not None
+            and (
+                previous_snapshot is None
+                or reread.snapshot_id != previous_snapshot
+            )
+            and (
+                previous_profile is None
+                or reread.value.profile_id == previous_profile
+            )
+            and reread.value.read_complete
+            and reread.value.inbound_state == "known"
+            and reread.value.latest_inbound_key is not None
+        )
+        if valid:
+            try:
+                now_dt = parse_utc(clock())
+                observed_dt = parse_utc(reread.observed_at)
+                delta = (now_dt - observed_dt).total_seconds()
+                if delta < 0 or delta > 5:
+                    valid = False
+                elif previous_observed is not None:
+                    previous_dt = parse_utc(previous_observed)
+                    if observed_dt < previous_dt:
+                        valid = False
+            except ValueError:
+                valid = False
+        if not valid:
+            store.finish_semantic_block(lease, clock(), "unread_unverified")
+            return cursor, "unread_unverified", True, None
+        conversation = reread.value
+        conversation_result = reread
     if not isinstance(conversation, Conversation) or (
         conversation.conversation_key != task.key
     ):
-        store.finish_semantic_block(lease, now_value, "unread_unverified")
+        store.finish_semantic_block(lease, clock(), "unread_unverified")
         return cursor, "unread_unverified", True, None
     conv_ok = (
         conversation.read_complete
@@ -801,13 +1035,13 @@ def _handle_discovery(
         and conversation.latest_inbound_key is not None
     )
     if not conv_ok:
-        store.finish_semantic_block(lease, now_value, "unread_unverified")
+        store.finish_semantic_block(lease, clock(), "unread_unverified")
         return cursor, "unread_unverified", True, None
     ledger: dict[str, object] | None = None
     needs_human = False
     if step.decision is not None:
-        gate.verify(now=now_value)
-        lease = store.renew(lease, now_value)
+        gate.verify(now=clock())
+        lease = store.renew(lease, clock())
         try:
             outcome = _decision_for(
                 store=store,
@@ -827,7 +1061,7 @@ def _handle_discovery(
                 provider_id=provider_id,
                 model_id=model_id,
                 model_config_hash=model_config_hash,
-                now=now_value,
+                now=clock(),
                 clock=clock,
                 process_log=process_log,
                 acceptance=acceptance,
@@ -837,7 +1071,7 @@ def _handle_discovery(
             needs_human = bool(outcome.get("needs_human"))
             if needs_human:
                 store.finish_semantic_block(
-                    lease, now_value, "human_review_required"
+                    lease, clock(), "human_review_required"
                 )
                 return cursor, "semantic_block", True, ledger
         except DecisionRunError as error:
@@ -850,7 +1084,7 @@ def _handle_discovery(
                 "decision_timeout",
             }:
                 reason = "invalid_decision"
-            store.finish_semantic_block(lease, now_value, reason)
+            store.finish_semantic_block(lease, clock(), reason)
             return cursor, "semantic_block", True, {
                 "draft": None,
                 "reused": False,
@@ -861,7 +1095,7 @@ def _handle_discovery(
         if task.kind == "new_message" and conversation_result is not None
         else primary
     )
-    store.finish(lease, now_value, "done", None, proof)  # type: ignore[arg-type]
+    store.finish(lease, clock(), "done", None, proof)  # type: ignore[arg-type]
     return cursor, None, True, ledger
 
 
@@ -890,8 +1124,16 @@ def execute_run(
     process_log: ProcessLog | None = None,
     clock: Callable[[], str] | None = None,
     monotonic_ms: Callable[[], int] | None = None,
+    on_boundary: Callable[[str], None] | None = None,
+    on_started: Callable[[], None] | None = None,
 ) -> dict[str, object]:
-    """执行一次有界 run：先占共享门禁，再打开 profile 与仓储。"""
+    """执行一次有界 run：先占共享门禁，再打开 profile 与仓储。
+
+    `on_boundary` 只在固定生产边界被调用（after_checkpoint/after_refresh/
+    before_safe_point/before_claim），返回值被忽略；它只能改变外界原始刺激、
+    推进注入的可信时钟或记录轨迹，不能返回任务、安全点、决策或终态答案。
+    `on_started` 在真实 claim/start 成功后调用一次，只作原始观察/外部刺激钩子。
+    """
     from app.domain.policy import utc_now as clock_impl
 
     if mode not in RUN_MODES:
@@ -913,6 +1155,11 @@ def execute_run(
     limits = limits or BudgetLimits()
     active_clock = clock if clock is not None else clock_impl
     active_mono = monotonic_ms if monotonic_ms is not None else _monotonic_default
+
+    def _notify(name: str) -> None:
+        """调用固定边界观察者；忽略返回值，避免测试缝变成业务答案入口。"""
+        if on_boundary is not None:
+            on_boundary(name)
 
     def _recheck_acceptance() -> dict[str, object] | None:
         """缓存命中时重新读取当前验收，不沿用本轮起始快照。"""
@@ -956,10 +1203,10 @@ def execute_run(
             if step is not None:
                 results, _primary, _conv, raw_results = _read_target(read, step)
                 candidates = _candidates(results, hints=step.candidates if step else None, unread_unknown=False)
-                safe = _safe_scene(
+                safe = derive_safe_point(
                     store=_ReadOnlyStore(),
                     batch_id="00000000-0000-4000-8000-000000000000",
-                    task_key="",
+                    task_key=None,
                     read_results=raw_results,
                     raw=step.raw_scene,
                 )
@@ -967,7 +1214,9 @@ def execute_run(
                     "unread": len(candidates.unread),
                     "new_messages": len(candidates.new_messages),
                     "jobs": len(candidates.jobs),
-                    "safe_point": all(safe[1:]),
+                    "safe_point": all(
+                        getattr(safe, name) for name in SAFE_POINT_FIELDS[1:]
+                    ),
                 }
             converged = True
             return {
@@ -1006,6 +1255,7 @@ def execute_run(
         wall_start_ms = _wall_ms(active_clock())
         mono_start = active_mono()
         last_kind: str | None = None
+        last_task_key: str | None = None
         first_observed: PreemptionObservation | None = None
         previous_check_mono: int | None = None
         drafts: list[dict[str, object]] = []
@@ -1015,6 +1265,19 @@ def execute_run(
         reused = 0
         pause_reason: str | None = None
         last_boundary = active_mono()
+        pending_ms = 0
+
+        def _account(elapsed_mono: int) -> None:
+            """按累计毫秒扣整秒预算，保留亚秒余量，避免多次短耗时永久不计费。"""
+            nonlocal cursor, pending_ms
+            pending_ms += max(0, elapsed_mono)
+            seconds = pending_ms // 1000
+            if seconds:
+                pending_ms -= seconds * 1000
+                cursor = _spend(
+                    cursor, seconds=seconds, limits=limits, overruns=overruns
+                )
+
         while True:
             step = scene.next_step()
             if step is None:
@@ -1029,21 +1292,27 @@ def execute_run(
                 monotonic_now_ms=current_mono,
             ):
                 pause_reason = "clock_changed"
-                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                _account(current_mono - last_boundary)
+                last_boundary = current_mono
+                store.safety_stop_after_clock_change(
+                    batch_id, cursor, pause_reason, now=now_value
+                )
                 break
-            elapsed_seconds = max(0, (current_mono - last_boundary) // 1000)
-            cursor = _spend(
-                cursor,
-                seconds=elapsed_seconds,
-                limits=limits,
-                overruns=overruns,
-            )
+            _account(current_mono - last_boundary)
             last_boundary = current_mono
             if not cursor.budget.can_start_work():
                 pause_reason = "budget_exhausted"
                 store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
                 break
             results, primary, conversation, raw_results = _read_target(read, step)
+            read_mono = active_mono()
+            _account(read_mono - last_boundary)
+            last_boundary = read_mono
+            now_value = active_clock()
+            current_mono = read_mono
+            # 真实观察发生在本次原始采集/解析完成之后；after_refresh 注入不得倒灌。
+            observed_at = now_value
+            observed_mono = read_mono
             calls = (
                 read.take_device_calls()
                 if hasattr(read, "take_device_calls")
@@ -1072,15 +1341,16 @@ def execute_run(
                     else ()
                 ),
             )
+            _notify("after_refresh")
             if step.in_progress:
                 if candidates.unread and last_kind == "job":
                     first_observed = observe_unread(
                         first_observed,
-                        wall_now=now_value,
-                        monotonic_ms=current_mono,
+                        wall_now=observed_at,
+                        monotonic_ms=observed_mono,
                     )
-                    cursor = cursor.with_first_observed(now_value)
-                previous_check_mono = current_mono
+                    cursor = cursor.with_first_observed(observed_at)
+                previous_check_mono = observed_mono
                 continue
             selection = select_task(
                 candidates,
@@ -1091,21 +1361,153 @@ def execute_run(
                 unread_verified_unknown=False,
             )
             if selection.verify_unread:
+                outcome = "missing_capability"
+                calls = 0
+                elapsed_ms = 0
+                target_result = None
+                initial_unread = next(
+                    (
+                        item
+                        for item in raw_results
+                        if isinstance(item, ReadResult)
+                        and isinstance(item.value, UnreadRead)
+                    ),
+                    None,
+                )
+                target_fixture = step.targeted_read_fixture
+                targeted_before = active_mono()
+                now_value = active_clock()
+                if clock_drift_exceeded(
+                    wall_start_ms=wall_start_ms,
+                    wall_now_ms=_wall_ms(now_value),
+                    monotonic_start_ms=mono_start,
+                    monotonic_now_ms=targeted_before,
+                ):
+                    pause_reason = "clock_changed"
+                    _account(targeted_before - last_boundary)
+                    last_boundary = targeted_before
+                    store.safety_stop_after_clock_change(
+                        batch_id, cursor, pause_reason, now=now_value
+                    )
+                    break
+                gate.verify(now=active_clock())
+                _account(targeted_before - last_boundary)
+                last_boundary = targeted_before
+                current_mono = targeted_before
+                if not cursor.budget.can_start_work():
+                    pause_reason = "budget_exhausted"
+                    store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                    break
+                if process_log is not None:
+                    process_log.record(stage="run", operation="unread", result="started")
+                if target_fixture is not None and initial_unread is not None:
+                    mono_before = targeted_before
+                    try:
+                        target_result = read.read(target_fixture)
+                    except Exception:
+                        target_result = None
+                    mono_after = active_mono()
+                    elapsed_ms = max(0, mono_after - mono_before)
+                    calls = (
+                        read.take_device_calls()
+                        if hasattr(read, "take_device_calls")
+                        else 0
+                    )
+                    _account(elapsed_ms)
+                    last_boundary = mono_after
+                    now_value = active_clock()
+                    current_mono = mono_after
+                    cursor = _spend(
+                        cursor,
+                        device_calls=calls,
+                        limits=limits,
+                        overruns=overruns,
+                    )
+                    if target_result is None or target_result.status != "ok":
+                        outcome = (
+                            target_result.reason_code
+                            if target_result is not None
+                            and target_result.reason_code is not None
+                            else "read_failed"
+                        )
+                    else:
+                        try:
+                            outcome = (
+                                targeted_verification_outcome(
+                                    initial_unread,
+                                    target_result,
+                                    [],
+                                    now=active_clock(),
+                                )
+                                or "cleared"
+                            )
+                        except ValueError:
+                            outcome = "invalid_read"
+                terminal = "ok" if outcome == "cleared" else "undetermined"
+                if target_result is not None and target_result.status == "failed":
+                    terminal = "failed"
+                if process_log is not None:
+                    process_log.record(
+                        stage="run",
+                        operation="unread",
+                        result=terminal,
+                        reason_code=(
+                            outcome if outcome in _TARGETED_LOG_REASONS else None
+                        ),
+                        error_category=None if terminal == "ok" else "read",
+                        duration_ms=elapsed_ms,
+                        device_count=calls,
+                    )
                 store.record_runtime_event(
                     batch_id,
                     "unread_verified",
-                    now=now_value,
-                    payload={"result": step.unread_verification},
+                    now=active_clock(),
+                    payload={
+                        "outcome": outcome,
+                        "device_calls": calls,
+                        "elapsed_ms": elapsed_ms,
+                    },
                 )
-                if step.unread_verification != "cleared":
+                if not cursor.budget.can_start_work():
+                    pause_reason = "budget_exhausted"
+                    store.pause_batch(batch_id, cursor, pause_reason, now=active_clock())
+                    break
+                if outcome != "cleared":
                     pause_reason = "unread_unverified"
-                    store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                    store.pause_batch(batch_id, cursor, pause_reason, now=active_clock())
+                    break
+                target_value = (
+                    target_result.value
+                    if target_result is not None and target_result.status == "ok"
+                    else None
+                )
+                if not isinstance(target_value, UnreadRead):
+                    pause_reason = "unread_unverified"
+                    store.pause_batch(batch_id, cursor, pause_reason, now=active_clock())
                     break
                 candidates = replace(
                     candidates,
+                    unread=_targeted_unread_candidates(target_value),
                     unread_unknown=False,
                     unread_signal_without_target=False,
                 )
+                # 定向采集首次带来可见未读时，首次观察取本次采集完成边界；
+                # 既有真实正观察由 observe_unread 保留，不被无条件覆盖。
+                if candidates.unread and last_kind == "job":
+                    first_observed = observe_unread(
+                        first_observed,
+                        wall_now=now_value,
+                        monotonic_ms=current_mono,
+                    )
+                    cursor = cursor.with_first_observed(now_value)
+                observed_at = now_value
+                observed_mono = current_mono
+                # 安全点与后续处理只消费刚发生的真实定向采集，不用被替换前的旧读取。
+                raw_results = tuple(
+                    target_result if item is initial_unread else item
+                    for item in raw_results
+                )
+                primary = target_result
                 selection = select_task(
                     candidates,
                     switching_from_job=last_kind == "job",
@@ -1118,14 +1520,26 @@ def execute_run(
                 pause_reason = selection.pause_reason
                 store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
                 break
-            safe_tuple = _safe_scene(
+            task = selection.task
+            if task is None:
+                break
+            if task.kind == "job":
+                ordered = tuple(candidate.key for candidate in candidates.jobs)
+                chosen = cursor.next_job(ordered)
+                if chosen is None:
+                    # 当前可见职位都已在真实游标中访问过；等待下一次刷新或结束。
+                    previous_check_mono = observed_mono
+                    continue
+                if chosen != task.key:
+                    task = TaskCandidate("job", chosen)
+            _notify("before_safe_point")
+            safe = derive_safe_point(
                 store=store,
                 batch_id=batch_id,
-                task_key="",
+                task_key=last_task_key,
                 read_results=raw_results,
                 raw=step.raw_scene,
             )
-            safe = SafePoint(*safe_tuple)  # type: ignore[arg-type]
             if not safe.is_safe():
                 pause_reason = "precondition_failed"
                 store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
@@ -1135,23 +1549,51 @@ def execute_run(
                 pause_reason = "preemption_limit"
                 store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
                 break
-            task = selection.task
-            if task is None:
-                break
             if task.kind == "unread" and last_kind == "job":
                 first_observed = observe_unread(
                     first_observed,
-                    wall_now=now_value,
-                    monotonic_ms=current_mono,
+                    wall_now=observed_at,
+                    monotonic_ms=observed_mono,
                 )
-                cursor = cursor.with_first_observed(now_value)
+                cursor = cursor.with_first_observed(observed_at)
             store.enqueue_jobs(
                 batch_id,
                 tuple(candidate.key for candidate in candidates.jobs),
-                now_value,
+                active_clock(),
             )
+            _notify("before_claim")
             gate.verify(now=active_clock())
+            now_value = active_clock()
+            claim_mono = active_mono()
+            if clock_drift_exceeded(
+                wall_start_ms=wall_start_ms,
+                wall_now_ms=_wall_ms(now_value),
+                monotonic_start_ms=mono_start,
+                monotonic_now_ms=claim_mono,
+            ):
+                pause_reason = "clock_changed"
+                _account(claim_mono - last_boundary)
+                last_boundary = claim_mono
+                store.safety_stop_after_clock_change(
+                    batch_id, cursor, pause_reason, now=now_value
+                )
+                break
+            _account(claim_mono - last_boundary)
+            last_boundary = claim_mono
+            if not cursor.budget.can_start_work():
+                pause_reason = "budget_exhausted"
+                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                break
             task_ledger: dict[str, object] | None = None
+            observed_start: dict[str, object] = {}
+
+            def _capture_start() -> None:
+                """在真实 claim/start 成功后立即取样，避免使用完成后的旧时刻。"""
+                observed_start["at"] = active_clock()
+                observed_start["mono"] = active_mono()
+                if on_started is not None:
+                    on_started()
+
             conversation_result = (
                 next(
                     (
@@ -1174,10 +1616,12 @@ def execute_run(
                     task=task,
                     primary=primary,
                     owner=owner,
-                    now_value=now_value,
                     monotonic_ms=active_mono,
+                    clock=active_clock,
+                    gate=gate,
                     limits=limits,
                     overruns=overruns,
+                    on_started=_capture_start,
                 )
             else:
                 cursor, task_pause, started, task_ledger = _handle_discovery(
@@ -1200,31 +1644,55 @@ def execute_run(
                     provider_id=provider_id or "",
                     model_id=model_id or "",
                     model_config_hash=model_config_hash or "",
-                    now_value=now_value,
                     clock=active_clock,
+                    monotonic_ms=active_mono,
                     process_log=process_log,
                     acceptance=acceptance,
                     acceptance_recheck=_recheck_acceptance,
                     conversation_result=conversation_result,
+                    on_started=_capture_start,
                 )
                 if task_ledger is not None:
                     if task_ledger.get("reused"):
                         reused += 1
                     elif task_ledger.get("draft") is not None:
                         drafts.append(task_ledger["draft"])
+            started_mono = observed_start.get("mono")
+            if started and type(started_mono) is int:
+                _account(started_mono - last_boundary)
+                last_boundary = started_mono
+            post_calls = (
+                read.take_device_calls()
+                if hasattr(read, "take_device_calls")
+                else 0
+            )
+            cursor = _spend(
+                cursor,
+                device_calls=post_calls,
+                limits=limits,
+                overruns=overruns,
+            )
+            end_mono = active_mono()
+            _account(end_mono - last_boundary)
+            last_boundary = end_mono
             if started:
                 processed += 1
-                if (
-                    task.kind == "unread"
-                    and last_kind == "job"
-                ):
+                last_task_key = task.key
+                if task.kind == "unread" and last_kind == "job":
                     assert first_observed is not None
+                    start_at = observed_start.get("at")
+                    if not isinstance(start_at, str) or type(started_mono) is not int:
+                        pause_reason = "precondition_failed"
+                        store.pause_batch(
+                            batch_id, cursor, pause_reason, now=active_clock()
+                        )
+                        break
                     event = build_stage_preempted(
                         job_key=_last_job_key(cursor),
                         trigger="unread_count>0",
                         first=first_observed,
-                        handling_started_at=now_value,
-                        handling_started_monotonic_ms=current_mono,
+                        handling_started_at=start_at,
+                        handling_started_monotonic_ms=started_mono,
                     )
                     if previous_check_mono is not None:
                         event["detection_ms"] = detection_interval_ms(
@@ -1233,28 +1701,30 @@ def execute_run(
                     store.record_runtime_event(
                         batch_id,
                         "stage_preempted",
-                        now=now_value,
+                        now=active_clock(),
                         payload=event,
                     )
                     cursor = cursor.record_preemption()
                     preemptions.append(event)
                     first_observed = None
                 store.save_checkpoint(batch_id, cursor, now=active_clock())
+                _notify("after_checkpoint")
             previous_check_mono = current_mono
             last_kind = task.kind
             if task_pause is not None:
                 pause_reason = task_pause
-                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                store.pause_batch(batch_id, cursor, pause_reason, now=active_clock())
                 break
-        store.record_runtime_event(
-            batch_id,
-            "run_finished",
-            now=active_clock(),
-            reason_code=pause_reason,
-            payload={"processed": processed, "preemptions": len(preemptions)},
-        )
-        if pause_reason is None:
-            store.complete_batch(batch_id, cursor, active_clock())
+        if pause_reason != "clock_changed":
+            store.record_runtime_event(
+                batch_id,
+                "run_finished",
+                now=active_clock(),
+                reason_code=pause_reason,
+                payload={"processed": processed, "preemptions": len(preemptions)},
+            )
+            if pause_reason is None:
+                store.complete_batch(batch_id, cursor, active_clock())
         converged = pause_reason in {
             None,
             "budget_exhausted",

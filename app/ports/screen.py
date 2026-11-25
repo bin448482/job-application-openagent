@@ -49,12 +49,12 @@ class DeviceGateUnavailable(Exception):
 class ScreenPort(Protocol):
     """抽象一次显式层级与截图采集；实现不得把 serial 或原文交给输出层。"""
 
-    def dump_hierarchy(self, serial: str) -> HierarchyCapture:
-        """执行一次层级 dump/cat 并保存本机证据。"""
+    def dump_hierarchy(self, serial: str, **callbacks: object) -> HierarchyCapture:
+        """执行一次层级 dump/cat 并保存本机证据；可传命令生命周期回调。"""
         ...
 
-    def capture_screen(self, serial: str) -> ScreenCapture:
-        """执行一次原始截图并保存本机证据。"""
+    def capture_screen(self, serial: str, **callbacks: object) -> ScreenCapture:
+        """执行一次原始截图并保存本机证据；可传命令生命周期回调。"""
         ...
 
 

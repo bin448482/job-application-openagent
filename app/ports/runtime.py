@@ -70,6 +70,8 @@ class SceneStep:
     device_calls: int = 0
     conversation_fixture: str | None = None
     job_fixture: str | None = None
+    # 定向核对使用的独立 M3 原始输入引用；缺省表示当前场景没有采集能力。
+    targeted_read_fixture: str | None = None
     decision: DecisionStimulus | None = None
     # 兼容旧调用方的刺激字段；生产用例不把这些当作最终判决。
     wall_now: str = "1970-01-01T00:00:00.000Z"
@@ -107,6 +109,35 @@ class RuntimeScenePort(Protocol):
         ...
 
 
+class RuntimeCommandControlError(Exception):
+    """逐命令控制/续租失败的固定安全原因，供 execute_run 结构化停止。"""
+
+    def __init__(
+        self,
+        reason_code: str = "precondition_failed",
+        *,
+        command_category: str | None = None,
+    ) -> None:
+        """保存固定原因码与可选命令失败类别，不携带设备、路径或异常原文。"""
+        if not isinstance(reason_code, str) or not reason_code:
+            raise ValueError("command control reason is invalid")
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+        self.command_category = command_category
+
+
+class RuntimeCommandContext(Protocol):
+    """逐命令复核/续租上下文；由 execute_run 绑定，适配器只回调。"""
+
+    def before(self) -> None:
+        """命令启动前复核共享门禁、当前任务、完整 Lease 与 nonce。"""
+        ...
+
+    def after(self, *, failed: bool) -> None:
+        """命令结束后取独立可信时钟，按需续租并保存最新 Lease。"""
+        ...
+
+
 class RuntimeReadPort(Protocol):
     """按项目内 M3 manifest 调用真实解析/门禁，返回三态 ReadResult。"""
 
@@ -116,6 +147,10 @@ class RuntimeReadPort(Protocol):
 
     def take_device_calls(self) -> int:
         """返回自上次调用以来实际发生的设备读取/命令数。"""
+        ...
+
+    def bind_command_context(self, context: object | None) -> None:
+        """绑定/解绑逐命令复核与续租上下文；fixture 实现可省略。"""
         ...
 
 
@@ -182,6 +217,12 @@ class RuntimeStorePort(Protocol):
         """原子保存游标并暂停。"""
         ...
 
+    def safety_stop_after_clock_change(
+        self, batch_id: str, cursor: BatchCursor, reason_code: str, *, now: str
+    ) -> dict[str, object]:
+        """时钟异常后的专用安全停止：保存最后可靠游标/预算，不续租或放宽租约。"""
+        ...
+
     def record_runtime_event(
         self,
         batch_id: str,
@@ -206,7 +247,7 @@ class RuntimeStorePort(Protocol):
         ...
 
     def last_action_state(self, task_key: str) -> str | None:
-        """只读返回该任务最近一条动作状态；无动作返回 None。"""
+        """只读返回该任务最近动作状态；会话键按真实发现关联，无动作返回 None。"""
         ...
 
     def queued_new_message_keys(self) -> tuple[str, ...]:

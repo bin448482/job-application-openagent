@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from app.ports.runtime import RuntimeCommandControlError
+
 ADB_TIMEOUT_SECONDS = 5
 _REAL_POPEN = subprocess.Popen
 
@@ -472,9 +474,11 @@ def run_adb(
     before: Callable[[], None] | None = None,
     binary: bool = False,
     on_start: Callable[[], None] | None = None,
+    on_spawn: Callable[[int], None] | None = None,
     on_pid: Callable[[int], None] | None = None,
     on_done: Callable[[int, bool, bool], None] | None = None,
     on_fail: Callable[[], None] | None = None,
+    strict_callbacks: bool = False,
     bound_factory: Callable[[], ProcessFamilyBound | None] | None = None,
     real_process_check: Callable[[object], bool] | None = None,
 ) -> subprocess.CompletedProcess:
@@ -482,7 +486,7 @@ def run_adb(
     if before is not None:
         before()
     gate.verify()  # type: ignore[attr-defined]
-    if on_pid is None:
+    if on_pid is None and on_spawn is None:
         try:
             completed = subprocess.run(
                 args,
@@ -526,13 +530,22 @@ def run_adb(
     except FileNotFoundError:
         if bound is not None:
             bound.close()
-        _notify(on_fail)
+        _notify(on_fail, strict_callbacks)
         raise AdbCommandFailure("adb_missing") from None
     except OSError:
         if bound is not None:
             bound.close()
-        _notify(on_fail)
+        _notify(on_fail, strict_callbacks)
         raise AdbCommandFailure("adb_oserror") from None
+    if on_spawn is not None:
+        try:
+            on_spawn(process.pid)
+        except BaseException:
+            _kill_reap(process)
+            if bound is not None:
+                bound.terminate()
+                bound.close()
+            raise
     real_process = (real_process_check or _is_real_process)(process)
     if bound is not None:
         if not real_process:
@@ -541,27 +554,29 @@ def run_adb(
         elif not bound.assign(process.pid):
             _kill_reap(process)
             bound.close()
-            _notify(on_fail)
+            _notify(on_fail, strict_callbacks)
             raise AdbCommandFailure("adb_oserror") from None
-    try:
-        on_pid(process.pid)
-    except BaseException:
-        _kill_reap(process)
-        if bound is not None:
-            bound.terminate()
-            bound.close()
-        _notify(on_fail)
-        raise AdbCommandFailure("adb_oserror") from None
+    if on_pid is not None:
+        try:
+            on_pid(process.pid)
+        except BaseException:
+            _kill_reap(process)
+            if bound is not None:
+                bound.terminate()
+                bound.close()
+            _notify(on_fail, strict_callbacks)
+            raise AdbCommandFailure("adb_oserror") from None
     if bound is not None and not bound.resume(process.pid):
         _kill_reap(process)
         bound.terminate()
         bound.close()
-        _notify(on_fail)
+        _notify(on_fail, strict_callbacks)
         raise AdbCommandFailure("adb_oserror") from None
     timed_out = False
     failed = False
     stdout: str | bytes = ""
     stderr: str | bytes = ""
+    callback_error: BaseException | None = None
     try:
         stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -571,7 +586,23 @@ def run_adb(
         failed = True
         _kill_reap(process)
     finally:
-        _finalize(on_done, process.pid, bound)
+        callback_error = _finalize(
+            on_done, process.pid, bound, strict_callbacks
+        )
+    if callback_error is not None and strict_callbacks:
+        category = None
+        if timed_out:
+            category = "adb_timeout"
+        elif failed:
+            category = "adb_oserror"
+        elif process.returncode != 0:
+            category = "adb_nonzero"
+        reason = getattr(callback_error, "reason_code", "precondition_failed")
+        if not isinstance(reason, str) or not reason:
+            reason = "precondition_failed"
+        raise RuntimeCommandControlError(
+            reason, command_category=category
+        ) from None
     if timed_out:
         raise AdbCommandFailure("adb_timeout") from None
     if failed:
@@ -618,13 +649,15 @@ def _kill_reap(process: object) -> None:
         pass
 
 
-def _notify(on_fail: Callable[[], None] | None) -> None:
-    """把未闭合/失败事实写给账本；写失败仍由已存在的 begin 保持 unknown。"""
+def _notify(on_fail: Callable[[], None] | None, strict: bool = False) -> None:
+    """把未闭合/失败事实写给账本；严格消费者错误在清理后向上抛出。"""
     if on_fail is None:
         return
     try:
         on_fail()
     except Exception:
+        if strict:
+            raise
         return
 
 
@@ -632,8 +665,9 @@ def _finalize(
     on_done: Callable[[int, bool, bool], None] | None,
     pid: int,
     bound: ProcessFamilyBound | None,
-) -> None:
-    """命令结束后先约束/核验命令族，再闭合账本；失败只让账本保持 unknown。"""
+    strict: bool = False,
+) -> BaseException | None:
+    """命令结束后先约束/核验命令族，再闭合账本；严格模式返回回调错误。"""
     bounded = bound is not None
     proven = False
     if bound is not None:
@@ -653,11 +687,12 @@ def _finalize(
         finally:
             bound.close()
     if on_done is None:
-        return
+        return None
     try:
         on_done(pid, bounded, proven)
-    except Exception:
-        return
+    except Exception as error:
+        return error if strict else None
+    return None
 
 
 def save_evidence(directory: Path | None, name: str, payload: bytes) -> None:

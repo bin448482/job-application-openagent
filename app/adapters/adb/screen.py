@@ -49,33 +49,33 @@ class AdbScreenReader:
         before_command: object | None = None,
         prefix: str = "hierarchy",
         on_start: Callable[[], None] | None = None,
+        on_spawn: Callable[[int], None] | None = None,
         on_pid: Callable[[int], None] | None = None,
         on_done: Callable[[int, bool, bool], None] | None = None,
         on_fail: Callable[[], None] | None = None,
+        strict_callbacks: bool = False,
     ) -> HierarchyCapture:
         """依次执行 dump 与 cat，保存 XML 证据并返回内存文本。"""
         self._require_gate()
         _require_serial(serial)
-        self._run_text(
-            [self._adb, "-s", serial, "shell", "uiautomator", "dump", DEVICE_TMP_XML],
-            stage="adb_hierarchy",
-            command="adb_hierarchy_dump",
-            before_command=before_command,
-            on_start=on_start,
-            on_pid=on_pid,
-            on_done=on_done,
-            on_fail=on_fail,
-        )
-        xml_text = self._run_text(
-            [self._adb, "-s", serial, "shell", "cat", DEVICE_TMP_XML],
-            stage="adb_hierarchy",
-            command="adb_hierarchy_cat",
-            before_command=before_command,
-            on_start=on_start,
-            on_pid=on_pid,
-            on_done=on_done,
-            on_fail=on_fail,
-        )
+        for command in ("dump", "cat"):
+            args = (
+                [self._adb, "-s", serial, "shell", "uiautomator", "dump", DEVICE_TMP_XML]
+                if command == "dump"
+                else [self._adb, "-s", serial, "shell", "cat", DEVICE_TMP_XML]
+            )
+            xml_text = self._run_text(
+                args,
+                stage="adb_hierarchy",
+                command=f"adb_hierarchy_{command}",
+                before_command=before_command,
+                on_start=on_start,
+                on_spawn=on_spawn,
+                on_pid=on_pid,
+                on_done=on_done,
+                on_fail=on_fail,
+                strict_callbacks=strict_callbacks,
+            )
         name = f"{prefix}-{uuid.uuid4()}.xml"
         payload = xml_text.encode("utf-8")
         self._save(name, payload)
@@ -85,7 +85,18 @@ class AdbScreenReader:
             byte_size=len(payload),
         )
 
-    def capture_screen(self, serial: str) -> ScreenCapture:
+    def capture_screen(
+        self,
+        serial: str,
+        *,
+        before_command: object | None = None,
+        on_start: Callable[[], None] | None = None,
+        on_spawn: Callable[[int], None] | None = None,
+        on_pid: Callable[[int], None] | None = None,
+        on_done: Callable[[int, bool, bool], None] | None = None,
+        on_fail: Callable[[], None] | None = None,
+        strict_callbacks: bool = False,
+    ) -> ScreenCapture:
         """执行一次 exec-out screencap，保存原始字节并返回内存截图。"""
         self._require_gate()
         _require_serial(serial)
@@ -93,6 +104,13 @@ class AdbScreenReader:
             [self._adb, "-s", serial, "exec-out", "screencap"],
             stage="adb_screen",
             command="adb_screencap",
+            before_command=before_command,
+            on_start=on_start,
+            on_spawn=on_spawn,
+            on_pid=on_pid,
+            on_done=on_done,
+            on_fail=on_fail,
+            strict_callbacks=strict_callbacks,
         )
         name = f"screen-{uuid.uuid4()}.rgba"
         self._save(name, raw)
@@ -111,9 +129,11 @@ class AdbScreenReader:
         command: str,
         before_command: object | None = None,
         on_start: Callable[[], None] | None = None,
+        on_spawn: Callable[[int], None] | None = None,
         on_pid: Callable[[int], None] | None = None,
         on_done: Callable[[int, bool, bool], None] | None = None,
         on_fail: Callable[[], None] | None = None,
+        strict_callbacks: bool = False,
     ) -> str:
         """执行一条不重试的文本 ADB 命令，失败统一为断连。"""
         completed = self._run(
@@ -123,15 +143,42 @@ class AdbScreenReader:
             binary=False,
             before_command=before_command,
             on_start=on_start,
+            on_spawn=on_spawn,
             on_pid=on_pid,
             on_done=on_done,
             on_fail=on_fail,
+            strict_callbacks=strict_callbacks,
         )
         return completed.stdout
 
-    def _run_bytes(self, args: list[str], *, stage: str, command: str) -> bytes:
+    def _run_bytes(
+        self,
+        args: list[str],
+        *,
+        stage: str,
+        command: str,
+        before_command: object | None = None,
+        on_start: Callable[[], None] | None = None,
+        on_spawn: Callable[[int], None] | None = None,
+        on_pid: Callable[[int], None] | None = None,
+        on_done: Callable[[int, bool, bool], None] | None = None,
+        on_fail: Callable[[], None] | None = None,
+        strict_callbacks: bool = False,
+    ) -> bytes:
         """执行一条不重试的二进制 ADB 命令，失败统一为断连。"""
-        completed = self._run(args, stage=stage, command=command, binary=True)
+        completed = self._run(
+            args,
+            stage=stage,
+            command=command,
+            binary=True,
+            before_command=before_command,
+            on_start=on_start,
+            on_spawn=on_spawn,
+            on_pid=on_pid,
+            on_done=on_done,
+            on_fail=on_fail,
+            strict_callbacks=strict_callbacks,
+        )
         return completed.stdout
 
     def _run(
@@ -143,9 +190,11 @@ class AdbScreenReader:
         binary: bool,
         before_command: object | None = None,
         on_start: Callable[[], None] | None = None,
+        on_spawn: Callable[[int], None] | None = None,
         on_pid: Callable[[int], None] | None = None,
         on_done: Callable[[int, bool, bool], None] | None = None,
         on_fail: Callable[[], None] | None = None,
+        strict_callbacks: bool = False,
     ) -> subprocess.CompletedProcess:
         """复用共享 ADB 边界；每条命令前复核门禁，单次 attempt 不重试。"""
         self._require_gate()
@@ -160,9 +209,11 @@ class AdbScreenReader:
                 binary=binary,
                 before=before_command,  # type: ignore[arg-type]
                 on_start=on_start,
+                on_spawn=on_spawn,
                 on_pid=on_pid,
                 on_done=on_done,
                 on_fail=on_fail,
+                strict_callbacks=strict_callbacks,
             )
         except AdbCommandFailure as error:
             self._record_failure(stage, command, started, error.category)

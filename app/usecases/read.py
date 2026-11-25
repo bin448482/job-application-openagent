@@ -108,17 +108,24 @@ def targeted_verification_outcome(
     *,
     now: str,
 ) -> str | None:
-    """核对一次真正新鲜、同 app/profile 的定向采集，再计算停止原因。"""
+    """核对一次真正新鲜、同 app/profile 的定向采集，再按值类型计算是否解除未知。
+
+    M2 `UnreadSnapshot` 继续使用既有 `stop_reason_for` 语义；M3 `UnreadRead`
+    只把明确可定位的正在未读行，或覆盖完整的全部 absent，视为已核实，其余
+    一律保守返回 `unread_unverified`。两种值类型共享同一新鲜度与身份约束。
+    """
     validate_read_result(initial)
     validate_read_result(targeted)
     if initial.status != "ok" or initial.value is None:
         return initial.reason_code
-    if not isinstance(initial.value, UnreadSnapshot):
-        raise ValueError("targeted verification requires unread snapshots")
+    if not isinstance(initial.value, (UnreadSnapshot, UnreadRead)):
+        raise ValueError("targeted verification requires unread reads")
     if targeted.status != "ok" or targeted.value is None:
         return targeted.reason_code
-    if not isinstance(targeted.value, UnreadSnapshot):
-        raise ValueError("targeted verification requires unread snapshots")
+    if type(targeted.value) is not type(initial.value):
+        raise ValueError("targeted verification value type is mismatched")
+    if not isinstance(targeted.value, (UnreadSnapshot, UnreadRead)):
+        raise ValueError("targeted verification requires unread reads")
     try:
         now_dt = parse_utc(now)
         observed_dt = parse_utc(targeted.observed_at)
@@ -137,10 +144,21 @@ def targeted_verification_outcome(
         or targeted.value.profile_id != initial.value.profile_id
     ):
         return "identity_ambiguous"
-    reason = stop_reason_for(targeted.value, queued_keys)
-    if reason == "needs_targeted_verification":
-        return "unread_unverified"
-    return reason
+    if isinstance(targeted.value, UnreadSnapshot):
+        reason = stop_reason_for(targeted.value, queued_keys)
+        if reason == "needs_targeted_verification":
+            return "unread_unverified"
+        return reason
+    # M3：全覆盖 absent 是合法的“当前无未读”，不生成候选也不算未知；
+    # 只有真实可定位的 present 行才解除未知，count/viewport 缺失仍待核对。
+    if targeted.value.coverage == "all" and targeted.value.unread_state == "absent":
+        return None
+    if any(
+        row.state == "present" and row.conversation_key is not None
+        for row in targeted.value.rows
+    ):
+        return None
+    return "unread_unverified"
 
 
 def read_from_device(

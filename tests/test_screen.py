@@ -8,9 +8,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from app.adapters.adb.command import run_adb
 from app.adapters.adb.screen import ADB_TIMEOUT_SECONDS, AdbScreenReader
 from app.adapters.boss.read import parse_page
 from app.ports.device_gate import DeviceGateError
+from app.ports.runtime import RuntimeCommandControlError
 from app.ports.screen import (
     DeviceGate,
     DeviceGateUnavailable,
@@ -390,6 +392,143 @@ def _profile() -> dict:
 
     path = Path(__file__).resolve().parent / "fixtures" / "read" / "profile.json"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+class RunAdbSpawnCallbackTests(unittest.TestCase):
+    """验证唯一 run_adb 的实际创建事件、严格回调传播与有界清理。"""
+
+    class _FakePopen:
+        """只模拟 Popen 生命周期，不创建真实进程。"""
+
+        next_pid = 4242
+
+        def __init__(self, *, returncode: int = 0, timeout: bool = False) -> None:
+            """分配模拟 PID、返回码与超时行为。"""
+            self.pid = RunAdbSpawnCallbackTests._FakePopen.next_pid
+            RunAdbSpawnCallbackTests._FakePopen.next_pid += 1
+            self.returncode = returncode
+            self.killed = False
+            self._timeout = timeout
+
+        def communicate(self, timeout=None):
+            """返回固定输出；首次按配置模拟超时。"""
+            del timeout
+            if self._timeout:
+                self._timeout = False
+                raise subprocess.TimeoutExpired(["adb"], 5)
+            return ("ok", "")
+
+        def kill(self) -> None:
+            """记录有界清理调用。"""
+            self.killed = True
+
+    def test_spawn_pid_done_fire_once_on_created_process(self) -> None:
+        """Popen 成功后 on_spawn/on_pid/on_done 各一次。"""
+        fake = self._FakePopen()
+        events: list[tuple[str, int | None]] = []
+        with patch(
+            "app.adapters.adb.command.subprocess.Popen", return_value=fake
+        ):
+            completed = run_adb(
+                ["adb", "version"],
+                gate=_Gate(False),
+                on_spawn=lambda pid: events.append(("spawn", pid)),
+                on_pid=lambda pid: events.append(("pid", pid)),
+                on_done=lambda pid, bounded, proven: events.append(("done", pid)),
+                bound_factory=lambda: None,
+            )
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(
+            events,
+            [("spawn", fake.pid), ("pid", fake.pid), ("done", fake.pid)],
+        )
+
+    def test_popen_missing_does_not_fire_spawn(self) -> None:
+        """Popen 未创建时 on_spawn 为 0，仍保留固定 adb_missing。"""
+        events: list[int] = []
+        with patch(
+            "app.adapters.adb.command.subprocess.Popen",
+            side_effect=FileNotFoundError,
+        ):
+            with self.assertRaises(Exception) as caught:
+                run_adb(
+                    ["adb", "version"],
+                    gate=_Gate(False),
+                    on_spawn=events.append,
+                    bound_factory=lambda: None,
+                )
+        self.assertEqual(events, [])
+        self.assertEqual(caught.exception.category, "adb_missing")
+
+    def test_strict_on_done_error_propagates_after_command(self) -> None:
+        """严格 on_done 错误在命令结束后向上传播，不被静默吞掉。"""
+        fake = self._FakePopen()
+
+        def boom(pid: int, bounded: bool, proven: bool) -> None:
+            """模拟续租控制失败。"""
+            del pid, bounded, proven
+            raise RuntimeError("strict callback")
+
+        with patch(
+            "app.adapters.adb.command.subprocess.Popen", return_value=fake
+        ):
+            with self.assertRaises(RuntimeCommandControlError) as caught:
+                run_adb(
+                    ["adb", "version"],
+                    gate=_Gate(False),
+                    on_spawn=lambda pid: None,
+                    on_done=boom,
+                    strict_callbacks=True,
+                    bound_factory=lambda: None,
+                )
+        self.assertIsNone(caught.exception.command_category)
+
+    def test_strict_callback_keeps_nonzero_and_timeout_category(self) -> None:
+        """命令非零/超时与严格回调同时失败时，异常仍携带原命令固定类别。"""
+        for category, fake in (
+            ("adb_nonzero", self._FakePopen(returncode=1)),
+            ("adb_timeout", self._FakePopen(timeout=True)),
+        ):
+            with self.subTest(category=category):
+                def boom(pid: int, bounded: bool, proven: bool) -> None:
+                    """模拟续租控制失败。"""
+                    del pid, bounded, proven
+                    raise RuntimeError("strict callback")
+
+                with patch(
+                    "app.adapters.adb.command.subprocess.Popen", return_value=fake
+                ):
+                    with self.assertRaises(RuntimeCommandControlError) as caught:
+                        run_adb(
+                            ["adb", "version"],
+                            gate=_Gate(False),
+                            on_spawn=lambda pid: None,
+                            on_done=boom,
+                            strict_callbacks=True,
+                            bound_factory=lambda: None,
+                        )
+                self.assertEqual(caught.exception.command_category, category)
+
+    def test_on_spawn_error_kills_created_process_and_propagates(self) -> None:
+        """on_spawn 自身失败时先有界回收已创建进程再向上抛出。"""
+        fake = self._FakePopen()
+
+        def boom(pid: int) -> None:
+            """模拟首次创建观测失败。"""
+            del pid
+            raise RuntimeError("spawn observer failed")
+
+        with patch(
+            "app.adapters.adb.command.subprocess.Popen", return_value=fake
+        ):
+            with self.assertRaises(RuntimeError):
+                run_adb(
+                    ["adb", "version"],
+                    gate=_Gate(False),
+                    on_spawn=boom,
+                    bound_factory=lambda: None,
+                )
+        self.assertTrue(fake.killed)
 
 
 if __name__ == "__main__":

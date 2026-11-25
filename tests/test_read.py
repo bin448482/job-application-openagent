@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import io
 import json
+import re
 import struct
 import tempfile
 import unittest
@@ -1915,6 +1916,163 @@ class PixelHeaderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_calibration(bad_source)
         self.assertEqual(validate_calibration(calibration())["source"], "synthetic")
+
+
+class TargetedVerificationTypeDispatchTests(unittest.TestCase):
+    """M2/M3 共用一次定向核对入口，但分别按值类型判断是否解除未知。"""
+
+    def _fixture(
+        self,
+        root: Path,
+        name: str,
+        xml: str,
+        proof: dict,
+        *,
+        observed_at: str = BASE_TIME,
+    ) -> Path:
+        """写入单页未读合成 manifest 并返回绝对路径。"""
+        rel = make_read_fixture(
+            root,
+            name,
+            "unread",
+            [xml],
+            proof=proof,
+            observed_at=observed_at,
+        )
+        return root / rel
+
+    def _load(self, path: Path, snapshot_id: str) -> ReadResult:
+        """经真实解析器读取合成 manifest。"""
+        result = load_and_read_fixture(path, snapshot_id)
+        self.assertEqual(result.status, "ok", result.reason_code)
+        self.assertIsInstance(result.value, UnreadRead)
+        return result
+
+    def test_m3_present_target_and_full_absent_both_clear(self) -> None:
+        """真实可定位 present 行与全覆盖 absent 都算已核实；后者不生成候选。"""
+        viewport = {"kind": "viewport", "top_proven": False, "bottom_proven": False}
+        full = {"kind": "full_traversal", "top_proven": True, "bottom_proven": True}
+        zero_xml = fixture_text("unread.xml").replace(
+            'text="1" class="android.widget.TextView" bounds="[20,220][80,280]"',
+            'text="0" class="android.widget.TextView" bounds="[20,220][80,280]"',
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            initial = self._load(
+                self._fixture(root, "initial", fixture_text("unread.xml"), viewport),
+                SNAPSHOT_ID,
+            )
+            present = self._load(
+                self._fixture(root, "present", fixture_text("unread.xml"), viewport),
+                TARGETED_SNAPSHOT_ID,
+            )
+            self.assertIsNone(
+                targeted_verification_outcome(initial, present, [], now=BASE_TIME)
+            )
+            absent = self._load(
+                self._fixture(root, "absent", zero_xml, full),
+                "00000000-0000-4000-8000-000000000303",
+            )
+            self.assertEqual(absent.value.unread_state, "absent")
+            self.assertIsNone(
+                targeted_verification_outcome(initial, absent, [], now=BASE_TIME)
+            )
+
+    def test_m3_viewport_absent_and_count_without_target_stay_unknown(self) -> None:
+        """viewport 角标消失与“有计数无定位”都不能解除未知。"""
+        viewport = {"kind": "viewport", "top_proven": False, "bottom_proven": False}
+        zero_xml = fixture_text("unread.xml").replace(
+            'text="1" class="android.widget.TextView" bounds="[20,220][80,280]"',
+            'text="0" class="android.widget.TextView" bounds="[20,220][80,280]"',
+        )
+        no_identity = fixture_text("unread.xml")
+        for name in ("tv_name", "tv_company", "tv_position"):
+            pattern = (
+                r'<node text="[^"]*" resource-id="com\.hpbr\.bosszhipin:id/'
+                + name
+                + r'"[^/]*/>'
+            )
+            no_identity = re.sub(pattern, "", no_identity)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            initial = self._load(
+                self._fixture(root, "initial", fixture_text("unread.xml"), viewport),
+                SNAPSHOT_ID,
+            )
+            viewport_absent = self._load(
+                self._fixture(root, "viewport-absent", zero_xml, viewport),
+                "00000000-0000-4000-8000-000000000304",
+            )
+            self.assertEqual(viewport_absent.value.unread_state, "unknown")
+            self.assertEqual(
+                targeted_verification_outcome(
+                    initial, viewport_absent, [], now=BASE_TIME
+                ),
+                "unread_unverified",
+            )
+            count_only = self._load(
+                self._fixture(root, "count-only", no_identity, viewport),
+                "00000000-0000-4000-8000-000000000305",
+            )
+            self.assertEqual(count_only.value.unread_state, "present")
+            self.assertIsNone(count_only.value.rows[0].conversation_key)
+            self.assertEqual(
+                targeted_verification_outcome(initial, count_only, [], now=BASE_TIME),
+                "unread_unverified",
+            )
+
+    def test_m3_replay_stale_future_and_wrong_identity_are_rejected(self) -> None:
+        """新采集共享同一新鲜度/身份约束，重放/陈旧/未来/错 profile 都不清除。"""
+        viewport = {"kind": "viewport", "top_proven": False, "bottom_proven": False}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            initial = self._load(
+                self._fixture(root, "initial", fixture_text("unread.xml"), viewport),
+                SNAPSHOT_ID,
+            )
+            targeted = self._load(
+                self._fixture(root, "targeted", fixture_text("unread.xml"), viewport),
+                TARGETED_SNAPSHOT_ID,
+            )
+            self.assertEqual(
+                targeted_verification_outcome(initial, initial, [], now=BASE_TIME),
+                "unread_unverified",
+            )
+            older = replace(targeted, observed_at="2026-11-23T23:59:59.000Z")
+            self.assertEqual(
+                targeted_verification_outcome(initial, older, [], now=BASE_TIME),
+                "stale_snapshot",
+            )
+            future = replace(targeted, observed_at="2026-11-24T00:00:01.000Z")
+            self.assertEqual(
+                targeted_verification_outcome(initial, future, [], now=BASE_TIME),
+                "stale_snapshot",
+            )
+            wrong_profile = replace(
+                targeted, value=replace(targeted.value, profile_id="other-synthetic")
+            )
+            self.assertEqual(
+                targeted_verification_outcome(
+                    initial, wrong_profile, [], now=BASE_TIME
+                ),
+                "identity_ambiguous",
+            )
+
+    def test_m3_and_m2_value_types_cannot_be_mixed(self) -> None:
+        """M3 初始值不能被 M2 快照机械冒充为定向核对结果。"""
+        profile = json.loads((SENSOR_DIR / "profile.json").read_text(encoding="utf-8"))
+        xml = (SENSOR_DIR / "positive.xml").read_text(encoding="utf-8")
+        m2_target = parse_snapshot(xml, profile, [], BASE_TIME, TARGETED_SNAPSHOT_ID)
+        self.assertEqual(m2_target.status, "ok")
+        viewport = {"kind": "viewport", "top_proven": False, "bottom_proven": False}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            initial = self._load(
+                self._fixture(root, "mix", fixture_text("unread.xml"), viewport),
+                SNAPSHOT_ID,
+            )
+        with self.assertRaises(ValueError):
+            targeted_verification_outcome(initial, m2_target, [], now=BASE_TIME)
 
 
 if __name__ == "__main__":
