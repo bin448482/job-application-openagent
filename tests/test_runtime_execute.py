@@ -442,6 +442,18 @@ class RuntimeExecuteTests(unittest.TestCase):
         run = payload["result"]["run"]  # type: ignore[index]
         self.assertEqual(run["processed"], 0)
         self.assertEqual(run["pause_reason"], "unread_unverified")
+        connection = sqlite3.connect(str(profile_runtime_path(self.root, "demo")))
+        try:
+            row = connection.execute(
+                "SELECT payload_json FROM scheduler_events "
+                "WHERE event = 'unread_verified'"
+            ).fetchone()
+        finally:
+            connection.close()
+        self.assertIsNotNone(row)
+        event = json.loads(row[0])
+        self.assertEqual(event.get("result"), "still_unknown")
+        self.assertIn("outcome", event)
 
     def test_non_actionable_read_does_not_finish_discovery(self) -> None:
         """页面读取不可作为未读目标时不得认领或把发现标 done。"""

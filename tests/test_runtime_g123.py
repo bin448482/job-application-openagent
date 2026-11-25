@@ -49,6 +49,7 @@ from app.usecases import policy as policy_usecases
 from app.usecases.policy_eval import RepositorySnapshot
 from app.usecases.runtime import (
     _LeaseCommandContext,
+    _safe_scene,
     derive_safe_point,
     execute_run,
 )
@@ -885,14 +886,14 @@ class SafePointSourceTests(_RuntimeCase):
         self.assertEqual(run["processed"], 0)
         self.assertEqual(run["pause_reason"], "precondition_failed")
 
-    def test_complete_job_detail_is_not_returned_to_list(self) -> None:
-        """完整职位详情即使 actionable 也不能冒充回列表安全点。"""
+    def test_complete_job_detail_counts_as_compatible_list(self) -> None:
+        """冻结公开 M6 合同下，完整可行动职位详情按旧语义计入 list_returned。"""
         detail = "tests/fixtures/read/job_detail.json"
         step = self._step(read_fixture=detail, job_fixture=detail)
         rel = self._scenario("g1-detail", [step])
         run = self._execute(rel)
-        self.assertEqual(run["processed"], 0)
-        self.assertEqual(run["pause_reason"], "precondition_failed")
+        self.assertEqual(run["processed"], 1)
+        self.assertEqual(run["pause_reason"], None)
 
     def test_unknown_page_is_not_returned_to_list(self) -> None:
         """unknown 页面即使 status=ok 也不是回列表证据。"""
@@ -926,6 +927,57 @@ class SafePointSourceTests(_RuntimeCase):
                 raw=RawScene("", None, 0),
             )
             self.assertFalse(safe.list_returned)
+        finally:
+            store.close()
+
+    def test_legacy_safe_scene_projects_detail_and_unknown_pages(self) -> None:
+        """兼容七布尔入口：可行动 JobDetail 算 list，unknown 页面不算。"""
+        store = self._store()
+        try:
+            batch = store.ensure_batch(BATCH, BudgetLimits(), helpers.NOW)
+            store.save_checkpoint(BATCH, batch["cursor"], now=helpers.NOW)
+            detail = load_and_read_fixture(
+                ROOT / "tests/fixtures/read/job_detail.json",
+                "00000000-0000-4000-8000-0000000000ad",
+            )
+            safe_detail = _safe_scene(
+                store=store,
+                batch_id=BATCH,
+                task_key="",
+                read_results=(detail,),
+                raw=RawScene("", None, 0),
+            )
+            self.assertEqual(len(safe_detail), 7)
+            self.assertTrue(safe_detail[0])
+            self.assertTrue(all(safe_detail[1:]))
+            unknown = ReadResult(
+                status="ok",
+                value=PageSnapshot(
+                    app=APP,
+                    profile_id="synthetic-boss-m3",
+                    page="unknown",
+                    signals=(),
+                    field_evidence=(
+                        FieldEvidence(
+                            "page", "hierarchy", "low", "unknown", "missing_signal"
+                        ),
+                    ),
+                ),
+                reason_code=None,
+                snapshot_id="00000000-0000-4000-8000-0000000000ae",
+                observed_at=helpers.NOW,
+                source="fixture",
+                confidence="low",
+            )
+            safe_unknown = _safe_scene(
+                store=store,
+                batch_id=BATCH,
+                task_key="",
+                read_results=(unknown,),
+                raw=RawScene("", None, 0),
+            )
+            self.assertFalse(safe_unknown[0])
+            self.assertTrue(all(safe_unknown[1:]))
         finally:
             store.close()
 
