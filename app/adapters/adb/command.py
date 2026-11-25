@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from app.ports.runtime import RuntimeCommandControlError
+
 ADB_TIMEOUT_SECONDS = 5
 _REAL_POPEN = subprocess.Popen
 
@@ -588,7 +590,19 @@ def run_adb(
             on_done, process.pid, bound, strict_callbacks
         )
     if callback_error is not None and strict_callbacks:
-        raise callback_error
+        category = None
+        if timed_out:
+            category = "adb_timeout"
+        elif failed:
+            category = "adb_oserror"
+        elif process.returncode != 0:
+            category = "adb_nonzero"
+        reason = getattr(callback_error, "reason_code", "precondition_failed")
+        if not isinstance(reason, str) or not reason:
+            reason = "precondition_failed"
+        raise RuntimeCommandControlError(
+            reason, command_category=category
+        ) from None
     if timed_out:
         raise AdbCommandFailure("adb_timeout") from None
     if failed:

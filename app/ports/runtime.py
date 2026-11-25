@@ -112,12 +112,18 @@ class RuntimeScenePort(Protocol):
 class RuntimeCommandControlError(Exception):
     """逐命令控制/续租失败的固定安全原因，供 execute_run 结构化停止。"""
 
-    def __init__(self, reason_code: str = "precondition_failed") -> None:
-        """保存固定原因码，不携带设备、路径或异常原文。"""
+    def __init__(
+        self,
+        reason_code: str = "precondition_failed",
+        *,
+        command_category: str | None = None,
+    ) -> None:
+        """保存固定原因码与可选命令失败类别，不携带设备、路径或异常原文。"""
         if not isinstance(reason_code, str) or not reason_code:
             raise ValueError("command control reason is invalid")
         super().__init__(reason_code)
         self.reason_code = reason_code
+        self.command_category = command_category
 
 
 class RuntimeCommandContext(Protocol):

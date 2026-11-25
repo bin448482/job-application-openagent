@@ -12,6 +12,7 @@ from app.adapters.adb.command import run_adb
 from app.adapters.adb.screen import ADB_TIMEOUT_SECONDS, AdbScreenReader
 from app.adapters.boss.read import parse_page
 from app.ports.device_gate import DeviceGateError
+from app.ports.runtime import RuntimeCommandControlError
 from app.ports.screen import (
     DeviceGate,
     DeviceGateUnavailable,
@@ -401,16 +402,20 @@ class RunAdbSpawnCallbackTests(unittest.TestCase):
 
         next_pid = 4242
 
-        def __init__(self) -> None:
-            """分配模拟 PID 与回收标记。"""
+        def __init__(self, *, returncode: int = 0, timeout: bool = False) -> None:
+            """分配模拟 PID、返回码与超时行为。"""
             self.pid = RunAdbSpawnCallbackTests._FakePopen.next_pid
             RunAdbSpawnCallbackTests._FakePopen.next_pid += 1
-            self.returncode = 0
+            self.returncode = returncode
             self.killed = False
+            self._timeout = timeout
 
         def communicate(self, timeout=None):
-            """返回固定输出并模拟正常结束。"""
+            """返回固定输出；首次按配置模拟超时。"""
             del timeout
+            if self._timeout:
+                self._timeout = False
+                raise subprocess.TimeoutExpired(["adb"], 5)
             return ("ok", "")
 
         def kill(self) -> None:
@@ -467,7 +472,7 @@ class RunAdbSpawnCallbackTests(unittest.TestCase):
         with patch(
             "app.adapters.adb.command.subprocess.Popen", return_value=fake
         ):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(RuntimeCommandControlError) as caught:
                 run_adb(
                     ["adb", "version"],
                     gate=_Gate(False),
@@ -476,6 +481,33 @@ class RunAdbSpawnCallbackTests(unittest.TestCase):
                     strict_callbacks=True,
                     bound_factory=lambda: None,
                 )
+        self.assertIsNone(caught.exception.command_category)
+
+    def test_strict_callback_keeps_nonzero_and_timeout_category(self) -> None:
+        """命令非零/超时与严格回调同时失败时，异常仍携带原命令固定类别。"""
+        for category, fake in (
+            ("adb_nonzero", self._FakePopen(returncode=1)),
+            ("adb_timeout", self._FakePopen(timeout=True)),
+        ):
+            with self.subTest(category=category):
+                def boom(pid: int, bounded: bool, proven: bool) -> None:
+                    """模拟续租控制失败。"""
+                    del pid, bounded, proven
+                    raise RuntimeError("strict callback")
+
+                with patch(
+                    "app.adapters.adb.command.subprocess.Popen", return_value=fake
+                ):
+                    with self.assertRaises(RuntimeCommandControlError) as caught:
+                        run_adb(
+                            ["adb", "version"],
+                            gate=_Gate(False),
+                            on_spawn=lambda pid: None,
+                            on_done=boom,
+                            strict_callbacks=True,
+                            bound_factory=lambda: None,
+                        )
+                self.assertEqual(caught.exception.command_category, category)
 
     def test_on_spawn_error_kills_created_process_and_propagates(self) -> None:
         """on_spawn 自身失败时先有界回收已创建进程再向上抛出。"""
