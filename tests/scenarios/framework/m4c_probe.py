@@ -560,6 +560,54 @@ def _raw_active_count(path: Path, key: str) -> int:
         connection.close()
 
 
+GATE_INSPECT_ATTEMPTS = 80
+GATE_INSPECT_INTERVAL = 0.025
+
+
+def observe_gate_after_busy(
+    gate: object,
+    *,
+    attempts: int = GATE_INSPECT_ATTEMPTS,
+    interval: float = GATE_INSPECT_INTERVAL,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """有界只读观察胜者提交；记录固定类别轨迹，不读取/输出敏感原值。"""
+    trace: list[str] = []
+    shared = None
+    last_error = None
+    saw_none = False
+    saw_io_error = False
+    for index in range(attempts):
+        try:
+            value = gate.inspect()  # type: ignore[attr-defined]
+        except DeviceGateError as error:
+            if error.reason_code != "device_gate_io_error":
+                raise
+            saw_io_error = True
+            last_error = "device_gate_io_error"
+            trace.append("io_error")
+        else:
+            if value is None:
+                saw_none = True
+                trace.append("none")
+            else:
+                trace.append("row")
+                shared = value
+                break
+        if index < attempts - 1:
+            sleep(interval)
+    return {
+        "shared": shared,
+        "trace": trace,
+        "attempts": len(trace),
+        "saw_none": saw_none,
+        "saw_io_error": saw_io_error,
+        "exhausted": shared is None,
+        "last_error": last_error,
+        "shared_found": shared is not None,
+    }
+
+
 def _gate_race(request: Mapping[str, Any]) -> dict[str, Any]:
     """两个受控进程同时竞争同一隔离 os_root 的唯一 primary。"""
     profile_id = str(request.get("profile_id", "synthetic-profile"))
@@ -581,7 +629,8 @@ def _gate_race(request: Mapping[str, Any]) -> dict[str, Any]:
             now=NOW,
         )
     except DeviceGateError as error:
-        shared = gate.inspect()
+        observed = observe_gate_after_busy(gate)
+        shared = observed["shared"]
         return {
             "status": "ok",
             "outcome": "busy" if error.reason_code == "device_busy" else error.reason_code,
@@ -606,6 +655,13 @@ def _gate_race(request: Mapping[str, Any]) -> dict[str, Any]:
             "shared_nonce_matches_session": False,
             "shared_profile_matches_self": bool(shared)
             and _path_token(shared) == path_token,
+            "inspect_trace": observed["trace"],
+            "inspect_attempts": observed["attempts"],
+            "inspect_exhausted": observed["exhausted"],
+            "inspect_last_error": observed["last_error"],
+            "inspect_saw_none": observed["saw_none"],
+            "inspect_saw_io_error": observed["saw_io_error"],
+            "inspect_shared_found": observed["shared_found"],
         }
     identity = gate.session_identity()
     shared = gate.inspect()

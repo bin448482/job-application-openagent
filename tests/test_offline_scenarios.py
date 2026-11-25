@@ -12,6 +12,7 @@ import io
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -25,7 +26,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, m4_probe, m4c_probe, model, replay, runner  # noqa: E402
+from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, m4_probe, m4c_probe, m5_probe, model, replay, runner  # noqa: E402
 from scenarios.framework.compare import compare_invocation, compare_step, strict_equal  # noqa: E402
 
 SCENARIO_ROOT = TESTS_DIR / "scenarios"
@@ -931,11 +932,13 @@ class IsolationTripwireTests(unittest.TestCase):
 class P2M0BindingTests(unittest.TestCase):
     """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
 
-    def test_milestone_gate_blocks_unimplemented_m5(self) -> None:
-        """M5 未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
+    def test_milestone_gate_blocks_unimplemented_m6(self) -> None:
+        """M6 未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
         load_assets()
-        self.assertEqual(runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4"})
-        scenario = {"id": "SC-R99", "milestone": "M5"}
+        self.assertEqual(
+            runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4", "M5"}
+        )
+        scenario = {"id": "SC-R99", "milestone": "M6"}
         variant = {
             "id": "synthetic",
             "layer": "F",
@@ -3104,6 +3107,1087 @@ class BuilderProvenanceTests(unittest.TestCase):
         self.assertTrue((SCENARIO_ROOT / relative).is_file())
         spec = importlib.util.spec_from_file_location("build_assets", SCENARIO_ROOT / relative)
         self.assertIsNotNone(spec)
+
+
+class FactsCliPersistenceTests(unittest.TestCase):
+    """用真实 `python -m app facts` 与合成 LOCALAPPDATA 验证持久写入/拒写。"""
+
+    def setUp(self) -> None:
+        """建立独立临时项目根与合成 OS 根，不读真实配置或门禁。"""
+        self.temporary = tempfile.TemporaryDirectory(
+            dir=TESTS_DIR.parent, prefix=".m5-facts-"
+        )
+        self.root = Path(self.temporary.name)
+        (self.root / "localappdata").mkdir()
+        shutil.copytree(TESTS_DIR.parent / "app", self.root / "app")
+
+    def tearDown(self) -> None:
+        """只清理本测试自建临时根。"""
+        self.temporary.cleanup()
+
+    def _env(self) -> dict[str, str]:
+        """构造最小环境：仅合成 LOCALAPPDATA/HOME 与项目 PYTHONPATH。"""
+        env = {
+            key: os.environ[key]
+            for key in ("SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT")
+            if key in os.environ
+        }
+        env.update(
+            {
+                "PYTHONPATH": str(self.root),
+                "PYTHONNOUSERSITE": "1",
+                "LOCALAPPDATA": str(self.root / "localappdata"),
+                "APPDATA": str(self.root / "appdata"),
+                "HOME": str(self.root / "home"),
+                "USERPROFILE": str(self.root / "home"),
+                "TEMP": str(self.root / "tmp"),
+                "TMP": str(self.root / "tmp"),
+                "PATH": "",
+                "PYTHONIOENCODING": "utf-8",
+            }
+        )
+        for name in ("appdata", "home", "tmp"):
+            (self.root / name).mkdir(exist_ok=True)
+        return env
+
+    def _cli(self, *args: str) -> subprocess.CompletedProcess:
+        """运行真实 facts CLI，返回 stdout JSON 与退出码。"""
+        return subprocess.run(
+            [sys.executable, "-m", "app", "facts", *args],
+            cwd=self.root,
+            env=self._env(),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            shell=False,
+            check=False,
+        )
+
+    def _profile_db(self, profile_id: str = "demo") -> Path:
+        """返回隔离根内真实 profile 库路径。"""
+        return (
+            self.root
+            / "data"
+            / "runtime"
+            / "profiles"
+            / profile_id
+            / "runtime.sqlite3"
+        )
+
+    def _fact_rows(self, profile_id: str = "demo") -> list[tuple]:
+        """只读返回含合成值的事实与无值事件投影，用于前后比较。"""
+        connection = sqlite3.connect(str(self._profile_db(profile_id)))
+        try:
+            facts = connection.execute(
+                "SELECT fact_key, state, value, source_id, updated_at "
+                "FROM profile_facts ORDER BY fact_key, source_id"
+            ).fetchall()
+            events = connection.execute(
+                "SELECT fact_key, action, source_id, created_at "
+                "FROM profile_fact_events ORDER BY fact_key, action, source_id"
+            ).fetchall()
+        finally:
+            connection.close()
+        return [tuple(row) for row in facts] + [tuple(row) for row in events]
+
+    def _gate(self, profile_id: str):
+        """建立指向隔离 OS 根的真实共享门禁对象。"""
+        from app.adapters.sqlite.device_gate import SharedDeviceGate
+
+        return SharedDeviceGate(
+            profile_id=profile_id,
+            profile_db_path=self._profile_db(profile_id),
+            os_root=self.root / "localappdata",
+        )
+
+    def _acquire(self, profile_id: str):
+        """以本进程合成 owner 真实取得唯一 primary 占用并保留持有对象。"""
+        from app.domain.models import Owner
+
+        gate = self._gate(profile_id)
+        gate.acquire(
+            profile_id=profile_id,
+            profile_db_path=str(self._profile_db(profile_id)),
+            owner=Owner("00000000-0000-4000-8000-0000000000b1", 5150, "d" * 64),
+            now="2026-11-24T00:00:00.000Z",
+        )
+        return gate
+
+    def test_idle_set_revoke_forget_persists_without_values_in_audit(self) -> None:
+        """空闲合法正例：真实 set/revoke/forget 持久化且遗忘不保留值。"""
+        set_result = self._cli(
+            "set", "--profile", "demo", "--key", "work_location",
+            "--value", "合成地点甲", "--confirm",
+        )
+        self.assertEqual(set_result.returncode, 0, set_result.stdout)
+        payload = json.loads(set_result.stdout)
+        self.assertEqual(payload["status"], "ok")
+        self.assertEqual(payload["result"]["display_value"], "合成地点甲")
+        self.assertTrue(self._profile_db().is_file())
+        rows = self._fact_rows()
+        self.assertTrue(any(row[1] == "active" for row in rows if row[0] == "work_location"))
+        revoke = self._cli(
+            "revoke", "--profile", "demo", "--key", "work_location", "--confirm"
+        )
+        self.assertEqual(revoke.returncode, 0, revoke.stdout)
+        self.assertFalse(
+            any(row[1] == "active" for row in self._fact_rows() if row[0] == "work_location")
+        )
+        forget = self._cli(
+            "forget", "--profile", "demo", "--key", "work_location", "--confirm"
+        )
+        self.assertEqual(forget.returncode, 0, forget.stdout)
+        connection = sqlite3.connect(str(self._profile_db()))
+        try:
+            remaining = connection.execute(
+                "SELECT COUNT(*) FROM profile_facts WHERE value = ?",
+                ("合成地点甲",),
+            ).fetchone()[0]
+            audit_columns = connection.execute(
+                "SELECT COUNT(*) FROM profile_fact_events "
+                "WHERE previous_source_ids_json LIKE ?",
+                ("%合成地点甲%",),
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        # 产品只承诺删除事实行与无值审计，不宣称擦除 WAL/空闲页；这里只核对表内值。
+        self.assertEqual(remaining, 0)
+        self.assertEqual(audit_columns, 0)
+
+    def test_held_same_profile_refuses_all_writes_and_keeps_rows(self) -> None:
+        """同 profile held 时 set/revoke/forget 均拒写，事实/事件/门禁行不变。"""
+        self.assertEqual(
+            self._cli(
+                "set", "--profile", "demo", "--key", "work_location",
+                "--value", "合成地点甲", "--confirm",
+            ).returncode,
+            0,
+        )
+        before_rows = self._fact_rows()
+        self._acquire("demo")
+        gate = self._gate("demo")
+        before_gate = gate.inspect()
+        attempts = (
+            ("set", "--profile", "demo", "--key", "work_location",
+             "--value", "合成地点乙", "--confirm"),
+            ("revoke", "--profile", "demo", "--key", "work_location", "--confirm"),
+            ("forget", "--profile", "demo", "--key", "work_location", "--confirm"),
+        )
+        for args in attempts:
+            completed = self._cli(*args)
+            self.assertNotEqual(completed.returncode, 0, args)
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["status"], "failed", args)
+            self.assertEqual(payload["reason_code"], "device_busy", args)
+        self.assertEqual(self._fact_rows(), before_rows)
+        self.assertEqual(gate.inspect(), before_gate)
+
+    def test_quarantined_same_profile_refuses_without_creating_profile(self) -> None:
+        """同 profile quarantined 时拒写且不创建目标 profile 库。"""
+        gate = self._acquire("fresh")
+        gate.release(now="2026-11-24T00:00:00.000Z", converged=False)
+        before_gate = gate.inspect()
+        completed = self._cli(
+            "set", "--profile", "fresh", "--key", "work_location",
+            "--value", "合成地点甲", "--confirm",
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["reason_code"], "device_quarantined")
+        self.assertFalse(self._profile_db("fresh").exists())
+        self.assertEqual(gate.inspect(), before_gate)
+
+    def test_unknown_gate_path_refuses_before_any_profile_write(self) -> None:
+        """门禁路径不可判定时失败关闭，不建立新 profile。"""
+        from app.adapters.sqlite.device_gate import guard_database_path
+
+        database = guard_database_path(self.root / "localappdata")
+        database.parent.mkdir(parents=True, exist_ok=True)
+        database.mkdir()
+        completed = self._cli(
+            "set", "--profile", "fresh", "--key", "work_location",
+            "--value", "合成地点甲", "--confirm",
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["status"], "failed")
+        self.assertIn(
+            payload["reason_code"], {"device_gate_io_error", "device_busy"}
+        )
+        self.assertFalse(self._profile_db("fresh").exists())
+
+    def test_gate_exclusive_lock_refuses_without_partial_writes(self) -> None:
+        """真实 SQLite 排他锁下 CLI 拒写且已有事实/门禁行不变。"""
+        self.assertEqual(
+            self._cli(
+                "set", "--profile", "demo", "--key", "work_location",
+                "--value", "合成地点甲", "--confirm",
+            ).returncode,
+            0,
+        )
+        self._acquire("other-gate")
+        before_rows = self._fact_rows()
+        gate = self._gate("other-gate")
+        before_gate = gate.inspect()
+        from app.adapters.sqlite.device_gate import guard_database_path
+
+        lock = sqlite3.connect(str(guard_database_path(self.root / "localappdata")))
+        try:
+            lock.execute("BEGIN EXCLUSIVE")
+            completed = self._cli(
+                "set", "--profile", "demo", "--key", "salary_expectation",
+                "--value", "合成薪资甲", "--confirm",
+            )
+        finally:
+            lock.rollback()
+            lock.close()
+        self.assertNotEqual(completed.returncode, 0)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["reason_code"], "device_busy")
+        self.assertEqual(self._fact_rows(), before_rows)
+        self.assertEqual(gate.inspect(), before_gate)
+
+    def test_synthetic_localappdata_is_not_real_os_root(self) -> None:
+        """全部路径都在临时根内，未触碰真实 LOCALAPPDATA。"""
+        completed = self._cli(
+            "set", "--profile", "demo", "--key", "work_location",
+            "--value", "合成地点甲", "--confirm",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stdout)
+        from app.adapters.sqlite.device_gate import guard_database_path
+
+        database = guard_database_path(self.root / "localappdata")
+        self.assertTrue(str(database).startswith(str(self.root)))
+        self.assertTrue(self._profile_db().is_file())
+
+
+class M5LogAndLedgerOracleTests(unittest.TestCase):
+    """用原 A01_FE 判据证明原始 JSONL/账本变异会被拒绝，不引入宽松比较器。
+
+    基线不是预计算字典：每个用例把合成但真实格式的原始行写入临时目录，再调用
+    现有 `_log_projection`/`_ledger_summary` 重新投影，最后送同一原判据。
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """加载一次原独立预期，只取日志与账本路径。"""
+        cls.assets = load_assets()
+        acceptance = cls.assets.oracles["variants"]["SC-A01/A01_FE"]["acceptance"]
+        cls.paths = acceptance["steps"][0]["stdout_paths"]
+        cls.log_paths = [
+            item for item in cls.paths if str(item["path"]).startswith("log_")
+        ]
+        cls.ledger_paths = [
+            item for item in cls.paths if str(item["path"]).startswith("ledger.")
+        ]
+
+    def setUp(self) -> None:
+        """为每个用例建立独立临时原始数据目录。"""
+        self._temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temporary.cleanup)
+        self.root = Path(self._temporary.name)
+
+    @staticmethod
+    def _a01_fe_rows() -> list[dict]:
+        """构造与固定 A01_FE 原始 action 序列同形的新合成 JSONL 行。
+
+        序列来自固定 92ec 的合成 A01_FE 日志：7 个带标签 perform 实例 + 6 组
+        共享采集无标签 finish = 13 个 finish 组，另有动作/仓储生命周期失败。
+        这里只重建原始字段，不读取 expected，也不从产品结论反推输入。
+        """
+        correlation = "00000000-0000-4000-8000-0000000000fe"
+        sequence = [
+            ("action", "action_validate", "started", None, None, None),
+            ("action", "action_validate", "ok", None, None, None),
+            ("action", "action_admit", "started", None, None, None),
+            ("action", "begin_action", "started", None, None, None),
+            ("action", "begin_action", "ok", None, None, None),
+            ("action", "action_admit", "ok", None, None, None),
+            ("action", "action_execute", "started", None, None, None),
+            ("action", "perform", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_get", None, None),
+            ("action", "perform", "ok", "adb_action_ime_get", None, None),
+            ("action", "save_ime", "started", None, None, None),
+            ("action", "save_ime", "ok", None, None, None),
+            ("action", "get_action", "started", None, None, None),
+            ("action", "get_action", "ok", None, None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "perform", "started", "adb_action_ime_set", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_set", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_set", None, None),
+            ("action", "perform", "ok", "adb_action_ime_set", None, None),
+            ("action", "perform", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_get", None, None),
+            ("action", "perform", "ok", "adb_action_ime_get", None, None),
+            ("action", "perform", "started", "adb_action_input", None, None),
+            ("action", "action_finish_command", "started", "adb_action_input", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_input", None, None),
+            ("action", "perform", "ok", "adb_action_input", None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "perform", "started", "adb_action_tap", None, None),
+            ("action", "action_finish_command", "started", "adb_action_tap", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_tap", None, None),
+            ("action", "perform", "ok", "adb_action_tap", None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "action_finish_command", "started", None, None, None),
+            ("action", "action_finish_command", "ok", None, None, None),
+            ("action", "perform", "started", "adb_action_ime_set", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_set", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_set", None, None),
+            ("action", "perform", "ok", "adb_action_ime_set", None, None),
+            ("action", "perform", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "started", "adb_action_ime_get", None, None),
+            ("action", "action_finish_command", "ok", "adb_action_ime_get", None, None),
+            ("action", "perform", "ok", "adb_action_ime_get", None, None),
+            ("action", "action_execute", "ok", None, None, None),
+            ("action", "action_derive", "started", None, None, None),
+            ("action", "action_derive", "ok", None, None, None),
+            ("action", "action_commit", "started", None, None, None),
+            ("action", "complete_action", "started", None, None, None),
+            ("action", "complete_action", "failed", None, "store_io_error", "store"),
+            ("action", "action_commit", "failed", None, "store_io_error", "action"),
+            ("action", "action_validate", "started", None, None, None),
+            ("action", "action_validate", "ok", None, None, None),
+            ("action", "action_admit", "started", None, None, None),
+            ("action", "begin_action", "started", None, None, None),
+            ("action", "begin_action", "failed", None, "action_conflict", "store"),
+            ("action", "action_admit", "failed", None, "action_conflict", "action"),
+        ]
+        rows = []
+        for index, (stage, operation, result, command, reason, error) in enumerate(
+            sequence
+        ):
+            rows.append(
+                {
+                    "schema_version": 1,
+                    "ts": "2026-11-25T00:00:00+00:00",
+                    "correlation_id": correlation,
+                    "stage": stage,
+                    "operation": operation,
+                    "result": result,
+                    "reason_code": reason,
+                    "error_category": error,
+                    "duration_ms": 0,
+                    "command": command,
+                    "case_index": index,
+                }
+            )
+        return rows
+
+    @staticmethod
+    def _finish_indices(rows: list[dict], command: str) -> list[int]:
+        """返回指定命令的 finish started/终态原始行下标。"""
+        return [
+            index
+            for index, item in enumerate(rows)
+            if item.get("operation") == "action_finish_command"
+            and item.get("command") == command
+        ]
+
+    @staticmethod
+    def _remove_group(rows: list[dict], command: str, *, instance: int = 0) -> list[dict]:
+        """删除指定命令第 N 个实例的 finish 组，保留其余行原样。"""
+        indices = M5LogAndLedgerOracleTests._finish_indices(rows, command)
+        if len(indices) < 2 * (instance + 1):
+            raise AssertionError("finish group missing")
+        removed = set(indices[2 * instance : 2 * instance + 2])
+        return [copy.deepcopy(item) for index, item in enumerate(rows) if index not in removed]
+
+    @staticmethod
+    def _duplicate_group(rows: list[dict], command: str, *, instance: int = 0) -> list[dict]:
+        """把指定命令第 N 个实例的 finish 组复制到该组终态之后。"""
+        indices = M5LogAndLedgerOracleTests._finish_indices(rows, command)
+        terminal = indices[2 * instance + 1]
+        group = [copy.deepcopy(rows[indices[2 * instance]]), copy.deepcopy(rows[terminal])]
+        mutated: list[dict] = []
+        for index, item in enumerate(rows):
+            mutated.append(copy.deepcopy(item))
+            if index == terminal:
+                mutated.extend(copy.deepcopy(value) for value in group)
+        return mutated
+
+    @staticmethod
+    def _move_group(
+        rows: list[dict], source: str, target: str, *, target_instance: int = 0
+    ) -> list[dict]:
+        """把 source 的 finish 组移动到 target 已有 perform 窗口内。"""
+        source_indices = M5LogAndLedgerOracleTests._finish_indices(rows, source)
+        group = [copy.deepcopy(rows[source_indices[0]]), copy.deepcopy(rows[source_indices[1]])]
+        target_indices = M5LogAndLedgerOracleTests._finish_indices(rows, target)
+        anchor = target_indices[2 * target_instance + 1]
+        mutated: list[dict] = []
+        for index, item in enumerate(rows):
+            if index in {source_indices[0], source_indices[1]}:
+                continue
+            mutated.append(copy.deepcopy(item))
+            if index == anchor:
+                mutated.extend(copy.deepcopy(value) for value in group)
+        return mutated
+
+    def test_input_finish_replaced_by_second_tap_finish_is_rejected(self) -> None:
+        """固定 92 实际 FE 变异：删 input finish、重复 tap finish 必须被拒绝。"""
+        rows = self._a01_fe_rows()
+        input_indices = self._finish_indices(rows, "adb_action_input")
+        tap_indices = self._finish_indices(rows, "adb_action_tap")
+        self.assertEqual(len(input_indices), 2)
+        self.assertEqual([rows[i]["result"] for i in tap_indices], ["started", "ok"])
+        tap_group = [copy.deepcopy(rows[i]) for i in tap_indices]
+        mutated: list[dict] = []
+        for index, item in enumerate(rows):
+            if index in set(input_indices):
+                continue
+            mutated.append(copy.deepcopy(item))
+            if index == tap_indices[1]:
+                mutated.extend(copy.deepcopy(value) for value in tap_group)
+        result = self._project(mutated)
+        self.assertEqual(result["log_finish"]["started"], 13)
+        self.assertEqual(result["log_finish"]["ok"], 13)
+        self.assertGreater(result["log_association_errors"], 0)
+        self.assertGreater(result["log_finish"]["unpaired"], 0)
+        self.assertNotIn("adb_action_input", result["log_finish_by_command"])
+        self.assertEqual(result["log_finish_by_command"]["adb_action_tap"]["started"], 2)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_finish_moved_to_other_existing_command_is_rejected(self) -> None:
+        """把 finish 移到另一条已有 started 的合法命令必须被拒绝。"""
+        rows = self._move_group(
+            self._a01_fe_rows(), "adb_action_input", "adb_action_ime_set"
+        )
+        result = self._project(rows)
+        self.assertGreater(result["log_association_errors"], 0)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_duplicate_finish_group_is_rejected(self) -> None:
+        """同一 perform 内重复一组 finish 必须被拒绝。"""
+        rows = self._duplicate_group(self._a01_fe_rows(), "adb_action_input")
+        result = self._project(rows)
+        self.assertGreater(result["log_association_errors"], 0)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_misordered_finish_group_is_rejected(self) -> None:
+        """finish 终态先于 started 的乱序必须被拒绝。"""
+        rows = self._a01_fe_rows()
+        indices = self._finish_indices(rows, "adb_action_input")
+        swapped = [copy.deepcopy(item) for item in rows]
+        swapped[indices[0]], swapped[indices[1]] = swapped[indices[1]], swapped[indices[0]]
+        result = self._project(swapped)
+        self.assertGreater(result["log_association_errors"], 0)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_same_label_instance_boundaries_are_enforced(self) -> None:
+        """相同 label 的两个实例必须各自恰一组 finish，不能互相顶替。"""
+        rows = self._a01_fe_rows()
+        missing = self._remove_group(rows, "adb_action_ime_get", instance=0)
+        missing_result = self._project(missing)
+        self.assertGreater(missing_result["log_association_errors"], 0)
+        self.assertTrue(
+            compare_step(missing_result, {"stdout_paths": self.log_paths})
+        )
+        duplicated = self._duplicate_group(rows, "adb_action_ime_get", instance=1)
+        duplicate_result = self._project(duplicated)
+        self.assertGreater(duplicate_result["log_association_errors"], 0)
+        self.assertTrue(
+            compare_step(duplicate_result, {"stdout_paths": self.log_paths})
+        )
+
+    def test_unlabeled_shared_finishes_remain_independent(self) -> None:
+        """共享采集无标签 finish 保持独立聚合，不伪造命令归属或 unpaired。"""
+        result = self._project(self._a01_fe_rows())
+        self.assertEqual(result["log_finish"]["unpaired"], 0)
+        self.assertEqual(result["log_association_errors"], 0)
+        self.assertEqual(
+            result["log_finish_by_command"][""],
+            {"started": 6, "ok": 6, "failed": 0},
+        )
+        self.assertEqual(result["log_reasons_by_command"], {})
+
+    def _project(
+        self, rows: list[dict], *, forbidden: tuple[str, ...] = (), root: Path | None = None
+    ) -> dict:
+        """把原始行写入独立日志文件，再调用现有投影输出结果形状。"""
+        from app.process_log import ProcessLog
+
+        log = ProcessLog(path=(root or self.root) / "m5-a01-fe.jsonl")
+        text = "\n".join(json.dumps(item, ensure_ascii=False) for item in rows) + "\n"
+        log.path.write_text(text, encoding="utf-8", newline="\n")
+        if forbidden:
+            projection = m5_probe._log_projection(log, forbidden_values=forbidden)
+            return {
+                "log_schema_violations": projection["schema_violations"],
+                "log_sensitive_hits": projection["sensitive_hits"],
+                "log_finish": projection["finish"],
+                "log_finish_by_command": projection["finish_by_command"],
+                "log_reasons": projection["reasons"],
+                "log_reasons_by_command": projection["reasons_by_command"],
+                "log_association_errors": projection["association_errors"],
+                "log_pairs": m5_probe._log_pairs(log),
+                "log_correlations": m5_probe._log_correlations(log),
+            }
+        result: dict = {}
+        m5_probe._attach_log(result, log)
+        return result
+
+    def _production_ledger(self, count: int = 13, root: Path | None = None):
+        """用生产写入器生成真实格式账本，返回目录、动作键与生产 checker。"""
+        from app.adapters.adb.command import CommandIdentityStore
+
+        directory = (root or self.root) / "ledger"
+        store = CommandIdentityStore(directory)
+        key = "synthetic-a01-fe-action"
+        for index in range(count):
+            pid = 7100 + index
+            store.mark_started(key)
+            store.record(key, pid)
+            store.finish_family(key, pid, lambda _pid: [], bounded=True, proven=True)
+        return directory, key, store
+
+    @staticmethod
+    def _ledger_entries(directory: Path) -> tuple[Path, list[dict]]:
+        """读取唯一账本文件的原始行，供变异后重写。"""
+        path = next(directory.glob("*.jsonl"))
+        return path, [
+            json.loads(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+    @staticmethod
+    def _rewrite_ledger(path: Path, entries: list[dict]) -> None:
+        """把变异后的账本行按原始 JSONL 写回同一路径。"""
+        path.write_text(
+            "\n".join(json.dumps(item, separators=(",", ":")) for item in entries)
+            + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+
+    def test_raw_baseline_accepts_original_a01_fe_criteria(self) -> None:
+        """原始行基线经现有投影后满足原 A01_FE 日志/账本判据。"""
+        directory, key, store = self._production_ledger()
+        summary = m5_probe._ledger_summary(directory)
+        self.assertEqual(summary["files"], 1)
+        self.assertEqual(summary["begin"], 13)
+        self.assertEqual(summary["complete"], 13)
+        self.assertEqual(summary["pids"], 13)
+        self.assertEqual(summary["unresolved"], 0)
+        self.assertTrue(summary["closed"])
+        self.assertEqual(store.check(key, 1, lambda _pid: "stopped"), "stopped")
+
+        result = self._project(self._a01_fe_rows())
+        result["ledger"] = summary
+        self.assertEqual(result["log_finish"]["started"], 13)
+        self.assertEqual(result["log_finish"]["unpaired"], 0)
+        self.assertEqual(
+            sum(bucket["started"] for bucket in result["log_finish_by_command"].values()),
+            13,
+        )
+        self.assertEqual(
+            result["log_pairs"]["action_commit"], ["started", "failed"]
+        )
+        self.assertEqual(
+            compare_step(result, {"stdout_paths": self.log_paths + self.ledger_paths}),
+            [],
+        )
+
+    def test_missing_begin_is_rejected_by_ledger_rule(self) -> None:
+        """删掉真实 begin 后统计不得把 pid 当 begin，生产 checker 也拒绝。"""
+        directory, key, store = self._production_ledger()
+        path, entries = self._ledger_entries(directory)
+        self._rewrite_ledger(
+            path, [item for item in entries if item.get("begin") is not True]
+        )
+        summary = m5_probe._ledger_summary(directory)
+        self.assertEqual(summary["begin"], 0)
+        self.assertEqual(summary["pids"], 13)
+        self.assertFalse(summary["closed"])
+        self.assertEqual(store.check(key, 1, lambda _pid: "stopped"), "unknown")
+        mutated = self._project(self._a01_fe_rows())
+        mutated["ledger"] = summary
+        self.assertTrue(
+            compare_step(mutated, {"stdout_paths": self.ledger_paths})
+        )
+
+    def test_missing_complete_multiple_files_and_bad_lines_are_rejected(self) -> None:
+        """缺 complete、多文件、坏行都不得默认为闭合。"""
+        for name in ("missing_complete", "multiple_files", "bad_line"):
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory() as temporary:
+                    case_root = Path(temporary)
+                    directory, _key, _store = self._production_ledger(root=case_root)
+                    path, entries = self._ledger_entries(directory)
+                    if name == "missing_complete":
+                        index = max(
+                            i for i, item in enumerate(entries) if item.get("complete")
+                        )
+                        entries.pop(index)
+                        self._rewrite_ledger(path, entries)
+                    elif name == "multiple_files":
+                        (directory / "action-second.jsonl").write_text(
+                            path.read_text(encoding="utf-8"),
+                            encoding="utf-8",
+                            newline="\n",
+                        )
+                    else:
+                        with path.open("a", encoding="utf-8", newline="\n") as handle:
+                            handle.write("{not-json\n")
+                    summary = m5_probe._ledger_summary(directory)
+                    self.assertFalse(summary["closed"], name)
+                    mutated = self._project(self._a01_fe_rows(), root=case_root)
+                    mutated["ledger"] = summary
+                    self.assertTrue(
+                        compare_step(mutated, {"stdout_paths": self.ledger_paths}),
+                        name,
+                    )
+
+    def test_out_of_order_ledger_is_rejected(self) -> None:
+        """complete 先于 begin 时场景严格证据完整性拒绝，生产计数/停止检查接受。
+
+        `_ledger_summary.closed` 是场景层严格证据完整性，不是生产
+        `CommandIdentityStore.check` 的返回值；两者语义差异如实保留，不据此
+        复用私有 `_load` 或扩大生产语义。
+        """
+        directory, key, store = self._production_ledger()
+        path, entries = self._ledger_entries(directory)
+        index = next(i for i, item in enumerate(entries) if item.get("complete"))
+        entries.insert(0, entries.pop(index))
+        self._rewrite_ledger(path, entries)
+        summary = m5_probe._ledger_summary(directory)
+        self.assertGreater(summary["order_errors"], 0)
+        self.assertFalse(summary["closed"])
+        self.assertEqual(store.check(key, 1, lambda _pid: "stopped"), "stopped")
+        mutated = self._project(self._a01_fe_rows())
+        mutated["ledger"] = summary
+        self.assertTrue(compare_step(mutated, {"stdout_paths": self.ledger_paths}))
+
+    def test_missing_finish_command_is_rejected(self) -> None:
+        """删掉 action_finish_command 后原日志判据必须失败。"""
+        rows = [
+            item
+            for item in self._a01_fe_rows()
+            if item.get("operation") != "action_finish_command"
+        ]
+        result = self._project(rows)
+        self.assertEqual(result["log_finish"]["started"], 0)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_wrong_failure_classification_is_rejected(self) -> None:
+        """把完成事务失败改成别的分类必须被原判据拒绝。"""
+        rows = copy.deepcopy(self._a01_fe_rows())
+        for item in rows:
+            if item.get("operation") == "action_commit" and item.get("result") == "failed":
+                item["error_category"] = "device"
+        result = self._project(rows)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_illegal_field_or_sensitive_payload_is_rejected(self) -> None:
+        """非法字段和合成正文/附件名/坐标载荷均被原判据拒绝。"""
+        illegal = self._a01_fe_rows() + [
+            {
+                "schema_version": 1,
+                "stage": "action",
+                "operation": "action_extra",
+                "result": "ok",
+                "extra_field": "x",
+            }
+        ]
+        self.assertGreater(self._project(illegal)["log_schema_violations"], 0)
+        self.assertTrue(
+            compare_step(self._project(illegal), {"stdout_paths": self.log_paths})
+        )
+        for payload in ("合成回复正文", "合成附件简历.pdf", "10,20"):
+            with self.subTest(payload=payload):
+                rows = self._a01_fe_rows() + [
+                    {
+                        "schema_version": 1,
+                        "stage": "store",
+                        "operation": payload,
+                        "result": "ok",
+                    }
+                ]
+                self.assertEqual(self._project(rows)["log_sensitive_hits"], 1)
+                self.assertTrue(
+                    compare_step(self._project(rows), {"stdout_paths": self.log_paths})
+                )
+
+    def test_authorization_nonce_payload_is_rejected(self) -> None:
+        """合成授权 nonce 出现在原始行时敏感命中非零并拒绝原判据。"""
+        nonce = "00000000-0000-4000-8000-0000000000aa"
+        rows = self._a01_fe_rows() + [
+            {
+                "schema_version": 1,
+                "stage": "store",
+                "operation": nonce,
+                "result": "ok",
+            }
+        ]
+        result = self._project(rows, forbidden=(nonce,))
+        self.assertEqual(result["log_sensitive_hits"], 1)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_unpaired_finish_terminal_is_rejected(self) -> None:
+        """只留 finish 终态而删除 started 时原闭合判据必须失败。"""
+        rows = copy.deepcopy(self._a01_fe_rows())
+        index = next(
+            i
+            for i, item in enumerate(rows)
+            if item.get("operation") == "action_finish_command"
+            and item.get("command") is not None
+            and item.get("result") == "started"
+        )
+        rows.pop(index)
+        result = self._project(rows)
+        self.assertGreater(result["log_finish"]["unpaired"], 0)
+        self.assertTrue(compare_step(result, {"stdout_paths": self.log_paths}))
+
+    def test_lifecycle_failures_are_not_given_adb_command_attribution(self) -> None:
+        """action_commit/complete_action/begin_action 失败保留 operation 责任，不伪造 ADB 归属。"""
+        result = self._project(self._a01_fe_rows())
+        self.assertEqual(result["log_reasons_by_command"], {})
+        self.assertEqual(
+            result["log_reasons"]["action_commit"], ["store_io_error:action"]
+        )
+        self.assertEqual(
+            result["log_reasons"]["complete_action"], ["store_io_error:store"]
+        )
+        self.assertEqual(
+            result["log_reasons"]["begin_action"], ["action_conflict:store"]
+        )
+        self.assertEqual(
+            compare_step(result, {"stdout_paths": self.log_paths}), []
+        )
+
+
+class PopenCounterBoundaryTests(unittest.TestCase):
+    """纯合成 FakePopen 验证边界窗口实测计数与恢复，不启动真实进程。"""
+
+    class _FakeDevice:
+        """只提供 _synthetic_device 需要的 popen 与计数器。"""
+
+        def __init__(self) -> None:
+            """初始化实测计数。"""
+            self.real_popen_attempts = 0
+
+        def popen(self, *_args, **_kwargs):
+            """生产边界不应回落到合成 popen。"""
+            raise AssertionError("synthetic popen must not be called")
+
+    def _window(self, body, *, explode: bool = False):
+        """在 FakePopen 类上进入 _synthetic_device，返回设备、调用计数与原 init。"""
+        device = self._FakeDevice()
+        calls: list[tuple] = []
+
+        class FakePopen:
+            """纯合成 Popen 类，只记录构造调用。"""
+
+            def __init__(self, *args, **kwargs):
+                """记录一次构造；explode 时模拟异常路径。"""
+                calls.append(args)
+                if explode:
+                    raise RuntimeError("synthetic popen failure")
+
+        original_init = FakePopen.__init__
+        with mock.patch.object(subprocess, "Popen", FakePopen):
+            try:
+                with m5_probe._synthetic_device(device):
+                    body(FakePopen)
+            except RuntimeError:
+                pass
+            self.assertIs(subprocess.Popen, FakePopen)
+            self.assertIs(FakePopen.__init__, original_init)
+        return device, calls, original_init
+
+    def test_one_real_popen_constructor_is_counted(self) -> None:
+        """窗口内经保存的原始类构造一次真实 Popen 时实测计数为 1。"""
+        device, calls, _original = self._window(
+            lambda fake: fake(["synthetic"], shell=False)
+        )
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(device.real_popen_attempts, 1)
+
+    def test_exception_path_is_counted_and_restored(self) -> None:
+        """构造抛异常仍计数 1，退出后 Popen 与 __init__ 均恢复。"""
+        device, calls, _original = self._window(
+            lambda fake: fake(["synthetic"], shell=False), explode=True
+        )
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(device.real_popen_attempts, 1)
+
+    def test_no_call_counts_zero(self) -> None:
+        """窗口内未调用原始构造时实测计数为 0。"""
+        device, calls, _original = self._window(lambda _fake: None)
+        self.assertEqual(calls, [])
+        self.assertEqual(device.real_popen_attempts, 0)
+
+
+class GateObservationBoundaryTests(unittest.TestCase):
+    """假 gate/假 sleep 验证有界观察轨迹与 D09 原强判据，不触真实门禁。"""
+
+    class _Gate:
+        """按序列返回行、None、固定 IO 错误或非预期错误。"""
+
+        def __init__(self, sequence):
+            """保存待消费序列。"""
+            self.sequence = list(sequence)
+
+        def inspect(self):
+            """消费一个预设结果。"""
+            value = self.sequence.pop(0)
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+    def _observe(self, sequence, attempts=80):
+        """用零耗时 sleep 调用真实有界观察函数。"""
+        sleeps: list[float] = []
+        result = m4c_probe.observe_gate_after_busy(
+            self._Gate(sequence),
+            attempts=attempts,
+            interval=0.025,
+            sleep=lambda value: sleeps.append(value),
+        )
+        return result, sleeps
+
+    def test_sustained_none_is_exhausted_not_success(self) -> None:
+        """持续 None 80 次仍无行，如实 exhausted，不产生 shared。"""
+        result, sleeps = self._observe([None] * 80)
+        self.assertEqual(result["trace"], ["none"] * 80)
+        self.assertEqual(result["attempts"], 80)
+        self.assertTrue(result["exhausted"])
+        self.assertFalse(result["shared_found"])
+        self.assertTrue(result["saw_none"])
+        self.assertFalse(result["saw_io_error"])
+        self.assertEqual(len(sleeps), 79)
+
+    def test_sustained_io_error_is_exhausted_with_fixed_category(self) -> None:
+        """持续 device_gate_io_error 只记录固定类别，不输出原异常。"""
+        from app.ports.device_gate import DeviceGateError
+
+        errors = [DeviceGateError("device_gate_io_error")] * 80
+        result, _sleeps = self._observe(errors)
+        self.assertEqual(result["trace"], ["io_error"] * 80)
+        self.assertEqual(result["last_error"], "device_gate_io_error")
+        self.assertTrue(result["exhausted"])
+        self.assertTrue(result["saw_io_error"])
+
+    def test_row_after_delay_is_returned(self) -> None:
+        """正常延迟后在窗口内出现的行被返回。"""
+        row = {"state": "held"}
+        result, sleeps = self._observe([None, None, row])
+        self.assertEqual(result["trace"], ["none", "none", "row"])
+        self.assertEqual(result["attempts"], 3)
+        self.assertFalse(result["exhausted"])
+        self.assertEqual(result["shared"], row)
+        self.assertEqual(len(sleeps), 2)
+
+    def test_row_at_81st_attempt_is_not_observed(self) -> None:
+        """第 81 次才出现的行超出上限，必须保持 exhausted。"""
+        result, _sleeps = self._observe([None] * 80 + [{"state": "held"}])
+        self.assertEqual(result["attempts"], 80)
+        self.assertTrue(result["exhausted"])
+        self.assertFalse(result["shared_found"])
+
+    def test_unexpected_gate_error_propagates(self) -> None:
+        """非 device_gate_io_error 立即传播，不被等待吞掉。"""
+        from app.ports.device_gate import DeviceGateError
+
+        with self.assertRaises(DeviceGateError) as captured:
+            self._observe([DeviceGateError("device_busy")])
+        self.assertEqual(captured.exception.reason_code, "device_busy")
+
+    def _relation_payloads(self):
+        """构造符合 D09 原关系的 winner/loser 投影。"""
+        nonce = "00000000-0000-4000-8000-000000000091"
+        common = {
+            "owner_id": "00000000-0000-4000-8000-000000000081",
+            "owner_pid": 1,
+            "owner_host": "a" * 64,
+            "profile_path_token": "b" * 64,
+            "profile_id": "synthetic-alpha",
+            "session_nonce": nonce,
+            "shared_owner_id": "00000000-0000-4000-8000-000000000081",
+            "shared_owner_pid": 1,
+            "shared_owner_host": "a" * 64,
+            "shared_nonce": nonce,
+            "shared_profile_id": "synthetic-alpha",
+            "shared_profile_path_token": "b" * 64,
+            "shared_state": "held",
+        }
+        winner = {
+            **common,
+            "outcome": "held",
+            "shared_owner_matches_self": True,
+            "shared_nonce_matches_session": True,
+            "shared_profile_matches_self": True,
+        }
+        loser = {
+            **common,
+            "outcome": "busy",
+            "shared_owner_matches_self": False,
+            "shared_nonce_matches_session": False,
+            "shared_profile_matches_self": False,
+        }
+        relation = self.assets.oracles["variants"]["SC-D09/m4c_single_primary"][
+            "acceptance"
+        ]["steps"][0]["children_relation"]
+        return winner, loser, relation
+
+    class _RaceStore:
+        """提供 _gate_race 需要的 close，不创建真实 profile 库。"""
+
+        def close(self) -> None:
+            """无资源需要关闭。"""
+
+    class _RaceGate:
+        """只服务实际 _gate_race 包装：acquire 固定 busy，inspect 返回预设行。"""
+
+        def __init__(self, row):
+            """保存预设 inspect 行与 acquire 次数。"""
+            self.row = row
+            self.acquire_calls = 0
+
+        def acquire(self, **_kwargs) -> None:
+            """记录并固定抛出 device_busy，模拟另一进程先占用。"""
+            from app.ports.device_gate import DeviceGateError
+
+            self.acquire_calls += 1
+            raise DeviceGateError("device_busy")
+
+        def inspect(self):
+            """返回预设共享行或 None。"""
+            return self.row
+
+    def _actual_gate_race_loser(self, shared):
+        """调用真实 _gate_race 包装，只替换 profile/barrier/gate 边界。"""
+        gate = self._RaceGate(shared)
+        profile = Path("synthetic-profile.sqlite3")
+        with (
+            mock.patch.object(
+                m4c_probe, "_profile", return_value=(self._RaceStore(), profile)
+            ),
+            mock.patch.object(m4c_probe, "_os_root", return_value=Path("synthetic-os")),
+            mock.patch.object(m4c_probe, "_barrier"),
+            mock.patch.object(
+                m4c_probe, "SharedDeviceGate", return_value=gate
+            ),
+        ):
+            payload = m4c_probe._gate_race({"profile_id": "synthetic-alpha"})
+        self.assertEqual(gate.acquire_calls, 1)
+        return payload
+
+    def _winner_for(self, loser, nonce="00000000-0000-4000-8000-000000000093"):
+        """按 loser 自身声明的真实身份构造唯一 winner，用于原关系判据。"""
+        return {
+            "outcome": "held",
+            "owner_id": loser["owner_id"],
+            "owner_pid": loser["owner_pid"],
+            "owner_host": loser["owner_host"],
+            "profile_id": loser["profile_id"],
+            "profile_path_token": loser["profile_path_token"],
+            "session_nonce": nonce,
+            "shared_owner_id": loser["owner_id"],
+            "shared_owner_pid": loser["owner_pid"],
+            "shared_owner_host": loser["owner_host"],
+            "shared_nonce": nonce,
+            "shared_profile_id": loser["profile_id"],
+            "shared_profile_path_token": loser["profile_path_token"],
+            "shared_state": "held",
+            "shared_owner_matches_self": True,
+            "shared_nonce_matches_session": True,
+            "shared_profile_matches_self": True,
+        }
+
+    def _d09_relation(self) -> dict:
+        """返回原 D09 children_relation 判据。"""
+        return self.assets.oracles["variants"]["SC-D09/m4c_single_primary"][
+            "acceptance"
+        ]["steps"][0]["children_relation"]
+
+    def test_actual_gate_race_sustained_none_fails_d09_relation(self) -> None:
+        """实际 _gate_race 持续 None 输出保留轨迹并产生 8 条原关系差异。"""
+        loser = self._actual_gate_race_loser(None)
+        self.assertEqual(loser["inspect_trace"], ["none"] * 80)
+        self.assertEqual(loser["inspect_attempts"], 80)
+        self.assertTrue(loser["inspect_exhausted"])
+        self.assertIsNone(loser["inspect_last_error"])
+        winner = self._winner_for(loser)
+        errors = runner._compare_children_relation(
+            [{"stdout_json": winner}, {"stdout_json": loser}], self._d09_relation()
+        )
+        self.assertEqual(len(errors), 8, errors)
+
+    def test_actual_gate_race_wrong_identity_fails_d09_relation(self) -> None:
+        """实际 _gate_race 返回错身份时保留行观察并产生 6 条原关系差异。"""
+        shared = {
+            "owner_id": "00000000-0000-4000-8000-000000000099",
+            "owner_pid": 9,
+            "owner_host": "c" * 64,
+            "nonce": "00000000-0000-4000-8000-000000000092",
+            "profile_id": "synthetic-beta",
+            "profile_db_path": "other-profile.sqlite3",
+            "state": "held",
+        }
+        loser = self._actual_gate_race_loser(shared)
+        self.assertEqual(loser["inspect_trace"], ["row"])
+        self.assertEqual(loser["inspect_attempts"], 1)
+        self.assertFalse(loser["inspect_exhausted"])
+        self.assertIsNone(loser["inspect_last_error"])
+        winner = self._winner_for(loser)
+        errors = runner._compare_children_relation(
+            [{"stdout_json": winner}, {"stdout_json": loser}], self._d09_relation()
+        )
+        self.assertEqual(len(errors), 6, errors)
+
+    def test_sustained_none_output_fails_original_d09_relation(self) -> None:
+        """持续 None 的实际投影送入原 D09 children_relation 会失败。"""
+        winner, loser, relation = self._relation_payloads()
+        loser.update(
+            {
+                "shared_owner_id": None,
+                "shared_owner_pid": None,
+                "shared_owner_host": None,
+                "shared_nonce": None,
+                "shared_profile_id": None,
+                "shared_profile_path_token": None,
+                "shared_state": None,
+            }
+        )
+        self.assertTrue(runner._compare_children_relation([{'stdout_json': winner}, {'stdout_json': loser}], relation))
+
+    def test_seven_identity_tamper_fields_are_rejected(self) -> None:
+        """7 个身份/状态字段逐一篡改都被原 D09 关系拒绝。"""
+        winner, loser, relation = self._relation_payloads()
+        self.assertEqual(runner._compare_children_relation([{'stdout_json': winner}, {'stdout_json': loser}], relation), [])
+        tamper = {
+            "shared_owner_id": "00000000-0000-4000-8000-000000000099",
+            "shared_owner_pid": 9,
+            "shared_owner_host": "c" * 64,
+            "shared_nonce": "00000000-0000-4000-8000-000000000092",
+            "shared_profile_id": "synthetic-beta",
+            "shared_profile_path_token": "d" * 64,
+            "shared_state": "quarantined",
+        }
+        for field, value in tamper.items():
+            mutated = copy.deepcopy(loser)
+            mutated[field] = value
+            self.assertTrue(
+                runner._compare_children_relation([{'stdout_json': winner}, {'stdout_json': mutated}], relation), field
+            )
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """加载 D09 原预期供关系负控使用。"""
+        cls.assets = load_assets()
 
 
 if __name__ == "__main__":
