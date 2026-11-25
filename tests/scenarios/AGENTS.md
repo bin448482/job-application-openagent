@@ -46,7 +46,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --target .
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-C01 --target .
 ```
 
-- unittest：资产完整性、严格比较、逐元素键/类型、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝、M3 探针/真实阶梯 mutant、真实日志变异、非首项输出变异、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant、M4c 探针正常执行/越界与 junction 拒绝/生产字段变异被 oracle 拒绝/D06 forget 残留/并发 winner 关联/隔离 LF 边界（含 BOM/NUL 原样）/单文件夹具映射与根内绝对/上跳/Windows 语义/答案名拒绝/完整 prepare 字节矩阵（自动与显式 LF）/资产校验同规则/合成无上传合同正例与缺合同零桥调用反例/受控异常安全 JSON、M5 原始设备链路/真实仓储锁/人工对账，以及 6 个真实 facts CLI 持久/held/quarantined/unknown/busy 拒写案例等 117 项检查（117 = 111 资产/判据 + 6 facts）；M5 探针只在 acceptance 运行，不计入 unittest 117。只证明判据能抓错误。
+- unittest：资产完整性、严格比较、逐元素键/类型、时钟/重放、路径安全、隔离 tripwire、缺 app 拒绝、M3 探针/真实阶梯 mutant、真实日志变异、非首项输出变异、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant、M4c 探针正常执行/越界与 junction 拒绝/生产字段变异被 oracle 拒绝/D06 forget 残留/并发 winner 关联/隔离 LF 边界（含 BOM/NUL 原样）/单文件夹具映射与根内绝对/上跳/Windows 语义/答案名拒绝/完整 prepare 字节矩阵（自动与显式 LF）/资产校验同规则/合成无上传合同正例与缺合同零桥调用反例/受控异常安全 JSON、M5 日志/账本/D09 门禁观察负控，以及 6 个真实 facts CLI 持久/held/quarantined/unknown/busy 拒写案例等 129 项检查（129 = 123 资产/判据 + 6 facts）；M5 探针只在 acceptance 运行，不计入 unittest 129。只证明判据能抓错误。
 - `--mode assets`：只读清单/预期/夹具并校验；退出 0 仅表示资产自洽，不表示产品通过。
 - `--mode acceptance`：先校验资产，失败即拒绝执行；只为已实现里程碑的 READY F 变体创建隔离根，运行真实 `python -m app`、M0 协议边界替身、M1 探针/受控两进程、M2 受限探针、M3 探针、M4 探针或 M4c profile/门禁/租约探针/CLI。全量当前 256 PASS、0 FAIL，但 M5+ ASSET_ONLY/DEFERRED/MODULE/设备门槛使总体 BLOCKED、退出 3；M0 子集退出 0，M1 子集退出 3，M2 子集退出 0，M3 子集退出 3，M4 子集退出 3，M5 子集退出 3，均不声明产品 PASS。
 - 报告 JSON 写入被忽略的 `data/evals/scenario-runs/`；不提交生成报告，不修改 `.gitignore`。

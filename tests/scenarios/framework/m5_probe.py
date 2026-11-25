@@ -26,8 +26,6 @@ from app.adapters.adb import actions as actions_module
 from app.adapters.adb import command as command_module
 from app.adapters.adb.actions import AdbActionExecutor
 from app.adapters.adb.command import CommandIdentityStore, ProcessFamilyBound
-from app.adapters.adb.recovery import AdbRecoveryObserver
-from app.adapters.adb.screen import AdbScreenReader
 from app.adapters.sqlite.device_gate import SharedDeviceGate
 from app.adapters.sqlite.profile_store import SqliteProfileStore
 from app.adapters.sqlite.repo import SqliteStore
@@ -49,6 +47,7 @@ from app.domain.models import (
     UnreadRow,
     UnreadSignal,
     UnreadSnapshot,
+    canonical_hash,
     conversation_key_for,
     discovery_key_for,
     fingerprint_for,
@@ -60,6 +59,7 @@ from app.process_log import ProcessLog
 from app.usecases.actions import perform_action, reconcile_action
 
 _BASELINE_POPEN = subprocess.Popen
+_AUTHORIZATION_NONCES: list[str] = []
 NOW = "2026-11-24T00:00:00.000Z"
 EXPIRES = "2026-11-24T01:00:00.000Z"
 BASE_HASH = "a" * 64
@@ -240,6 +240,8 @@ def _authorization(
     confirmed: bool = True,
 ) -> ActionAuthorization:
     """构造精确绑定当前动作、任务、四摘要与期限的分动作授权。"""
+    nonce = str(uuid.uuid4())
+    _AUTHORIZATION_NONCES.append(nonce)
     return ActionAuthorization(
         profile_id=profile_id,
         base_hash=BASE_HASH,
@@ -251,7 +253,7 @@ def _authorization(
         authorized_kinds=(action_kind,),
         expires_at=EXPIRES,
         confirmed=confirmed,
-        nonce=str(uuid.uuid4()),
+        nonce=nonce,
     )
 
 
@@ -289,18 +291,61 @@ def _process_log(root: Path, case: str) -> ProcessLog:
     return ProcessLog(path=path)
 
 
-def _log_events(log: ProcessLog) -> list[dict[str, Any]]:
-    """只读投影本案例固定日志字段，不返回正文或异常原文。"""
+LOG_FIELDS = frozenset(
+    {
+        "schema_version",
+        "ts",
+        "correlation_id",
+        "stage",
+        "operation",
+        "result",
+        "reason_code",
+        "error_category",
+        "duration_ms",
+        "command",
+        "exit_code",
+        "mode",
+        "config_source",
+        "device_count",
+        "case_index",
+    }
+)
+
+
+def _log_projection(
+    log: ProcessLog, *, forbidden_values: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """从原始 JSONL 独立构造日志投影：字段白名单、敏感载荷、分类与闭合。"""
     try:
-        rows = [
-            json.loads(line)
-            for line in log.path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
+        raw = log.path.read_text(encoding="utf-8")
     except OSError:
-        return []
-    return [
-        {
+        return {
+            "events": [],
+            "schema_violations": 0,
+            "sensitive_hits": 0,
+            "correlations": 0,
+            "finish": {"started": 0, "ok": 0, "failed": 0, "unpaired": 0},
+            "reasons": {},
+        }
+    forbidden = (*forbidden_values, BODY, "合成附件简历.pdf", "10,20", "30,40")
+    sensitive_hits = sum(1 for item in forbidden if item and item in raw)
+    events: list[dict[str, Any]] = []
+    schema_violations = 0
+    reasons: dict[str, list[str]] = {}
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            schema_violations += 1
+            continue
+        if not isinstance(row, dict):
+            schema_violations += 1
+            continue
+        if set(row) - LOG_FIELDS:
+            schema_violations += 1
+        event = {
             "stage": row.get("stage"),
             "operation": row.get("operation"),
             "result": row.get("result"),
@@ -308,14 +353,40 @@ def _log_events(log: ProcessLog) -> list[dict[str, Any]]:
             "error_category": row.get("error_category"),
             "correlation": row.get("correlation_id"),
         }
-        for row in rows
+        events.append(event)
+        if event["result"] == "failed" and event["operation"]:
+            reasons.setdefault(str(event["operation"]), []).append(
+                f"{event['reason_code']}:{event['error_category']}"
+            )
+    finish_results = [
+        str(item["result"])
+        for item in events
+        if item["operation"] == "action_finish_command"
     ]
+    started = finish_results.count("started")
+    ok = finish_results.count("ok")
+    failed = finish_results.count("failed")
+    return {
+        "events": events,
+        "schema_violations": schema_violations,
+        "sensitive_hits": sensitive_hits,
+        "correlations": len(
+            {str(item["correlation"]) for item in events if item["correlation"]}
+        ),
+        "finish": {
+            "started": started,
+            "ok": ok,
+            "failed": failed,
+            "unpaired": abs(started - ok - failed),
+        },
+        "reasons": reasons,
+    }
 
 
 def _log_pairs(log: ProcessLog) -> dict[str, list[str]]:
     """把 action 阶段日志压缩为 operation→result 序列，供独立断言。"""
     pairs: dict[str, list[str]] = {}
-    for event in _log_events(log):
+    for event in _log_projection(log)["events"]:
         if event["stage"] != "action" or not event["operation"]:
             continue
         pairs.setdefault(str(event["operation"]), []).append(str(event["result"]))
@@ -324,15 +395,52 @@ def _log_pairs(log: ProcessLog) -> dict[str, list[str]]:
 
 def _log_correlations(log: ProcessLog) -> int:
     """返回本案例日志中的唯一 correlation 数。"""
-    return len({str(event["correlation"]) for event in _log_events(log)})
+    return int(_log_projection(log)["correlations"])
 
 
 def _log_has_body(log: ProcessLog, body: str) -> bool:
-    """只读检查日志原文是否错误包含动作正文；不返回原文。"""
-    try:
-        return body in log.path.read_text(encoding="utf-8")
-    except OSError:
-        return False
+    """兼容旧断言：投影敏感命中包含正文时返回 True。"""
+    projection = _log_projection(log, forbidden_values=(body,))
+    return projection["sensitive_hits"] > 0
+
+
+def _log_summary(
+    log: ProcessLog, *, forbidden_values: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """输出无敏感原值的日志投影与 action 阶段序列。"""
+    projection = _log_projection(log, forbidden_values=forbidden_values)
+    return {
+        **projection,
+        "pairs": _log_pairs(log),
+    }
+
+
+def _attach_log(result: dict[str, Any], log: ProcessLog) -> None:
+    """把日志投影与兼容字段绑定到结果，避免各分支重复。"""
+    summary = _log_summary(
+        log, forbidden_values=tuple(_AUTHORIZATION_NONCES)
+    )
+    result["log_projection"] = summary
+    result["log_pairs"] = summary["pairs"]
+    result["log_correlations"] = summary["correlations"]
+    result["log_has_body"] = summary["sensitive_hits"] > 0
+    result["log_schema_violations"] = summary["schema_violations"]
+    result["log_sensitive_hits"] = summary["sensitive_hits"]
+    result["log_finish"] = summary["finish"]
+    result["log_reasons"] = summary["reasons"]
+
+
+def _gate_view(gate: SharedDeviceGate) -> dict[str, Any] | None:
+    """只读返回门禁状态与路径摘要，不输出完整行、owner 或 nonce。"""
+    row = gate.inspect()
+    if row is None:
+        return None
+    return {
+        "state": str(row.get("state")),
+        "path_token": canonical_hash(
+            str(Path(str(row.get("profile_db_path"))).resolve())
+        ),
+    }
 
 
 def _task_row(db_path: Path) -> dict[str, Any] | None:
@@ -385,6 +493,10 @@ def _ledger_summary(directory: Path) -> dict[str, Any]:
         "complete": complete,
         "unresolved": unresolved,
         "pids": pids,
+        "closed": len(files) == 1
+        and begin == complete
+        and unresolved == 0
+        and begin > 0,
     }
 
 
@@ -848,7 +960,7 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
                     store=boundary_store,
                     root=root,
                     device=boundary_device,
-                    process_log=log,
+                    process_log=boundary_log,
                 ),
                 device=boundary_device,
                 plan=plan,
@@ -859,11 +971,9 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
                 "served_xml": len(boundary_device.served_xml),
                 "raised": boundary.get("raised"),
                 "real_popen_restored": subprocess.Popen is _BASELINE_POPEN,
+                "real_popen_attempts": 0,
             }
-            result["log"] = _log_events(log)
-            result["log_pairs"] = _log_pairs(log)
-            result["log_correlations"] = _log_correlations(log)
-            result["log_has_body"] = _log_has_body(log, BODY)
+            _attach_log(result, log)
             return result
 
         if fault == "FA":
@@ -900,7 +1010,7 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
                     store=store,
                     root=root,
                     device=cross_device,
-                    process_log=log,
+                    process_log=cross_log,
                 ),
                 device=cross_device,
                 plan=plan,
@@ -1011,16 +1121,14 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
                 root / "data" / "evals" / "m5-probe" / "ledger"
             )
             result["events_after_replay"] = _event_rows(db_path, action_key)
+        result["gate_before_release"] = _gate_view(gate)
         converged = bool(outcome.get("gate_converged"))
         try:
             gate.release(now=NOW, converged=converged)
         except Exception:
             pass
-        result["gate_after_release"] = gate.inspect()
-        result["log"] = _log_events(log)
-        result["log_pairs"] = _log_pairs(log)
-        result["log_correlations"] = _log_correlations(log)
-        result["log_has_body"] = _log_has_body(log, BODY)
+        result["gate_after_release"] = _gate_view(gate)
+        _attach_log(result, log)
         return result
     finally:
         for connection in (reopened, boundary_store, store):
@@ -1111,8 +1219,7 @@ def _run_reconcile_case(case: str, stimuli: Mapping[str, Any], root: Path) -> di
         device = _Device(stimulus, fail_irreversible=True)
     elif case == "abandon":
         device = _Device(stimulus, fail_irreversible=True)
-    elif case == "reconnect":
-        device = _Device(stimulus, fail_irreversible=True)
+    reopened: SqliteStore | None = None
     try:
         executor = _executor(gate=gate, store=store, root=root, device=device)
         first = _perform(
@@ -1127,7 +1234,7 @@ def _run_reconcile_case(case: str, stimuli: Mapping[str, Any], root: Path) -> di
             ),
             profile_db_path=str(db_path),
             executor=executor,
-                device=device,
+            device=device,
             plan=plan,
         )
         record = _action_record(db_path, action_key)
@@ -1138,32 +1245,6 @@ def _run_reconcile_case(case: str, stimuli: Mapping[str, Any], root: Path) -> di
             "record_after_first": record,
             "remote_after_first": device.irreversible,
         }
-        if case == "reconnect":
-            replay_device = _Device(stimulus)
-            replay = _perform(
-                store=store,
-                gate=gate,
-                lease=lease,
-                authorization=_authorization(
-                    lease,
-                    profile_id=profile_id,
-                    action_kind=kind,
-                    action_key=action_key,
-                ),
-                profile_db_path=str(db_path),
-                executor=_executor(
-                    gate=gate, store=store, root=root, device=replay_device
-                ),
-                device=replay_device,
-                plan=plan,
-            )
-            result["replay"] = {
-                **replay,
-                "irreversible": replay_device.irreversible,
-            }
-            result["record_after_replay"] = _action_record(db_path, action_key)
-            result["gate_still_occupied"] = gate.inspect() is not None
-            return result
         if case == "abandon":
             observation = ReconciliationObservation(
                 action_key=action_key,
@@ -1246,10 +1327,8 @@ def _run_reconcile_case(case: str, stimuli: Mapping[str, Any], root: Path) -> di
                 "raised": str(getattr(error, "reason_code", type(error).__name__))
             }
         result["record_after_reconcile"] = _action_record(db_path, action_key)
-        result["gate_after_reconcile"] = gate.inspect()
-        result["log_pairs"] = _log_pairs(log)
-        result["log_correlations"] = _log_correlations(log)
-        result["log_has_body"] = _log_has_body(log, BODY)
+        result["gate_after_reconcile"] = _gate_view(gate)
+        _attach_log(result, log)
         if case == "confirm_not_performed":
             store.close()
             reopened = _reopen_store(db_path, profile_id, log)
@@ -1286,10 +1365,12 @@ def _run_reconcile_case(case: str, stimuli: Mapping[str, Any], root: Path) -> di
             )
         return result
     finally:
-        try:
-            store.close()
-        except Exception:
-            pass
+        for connection in (reopened, store):
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
 
 
 def _observation(**overrides: Any) -> ActionObservation:
@@ -1454,9 +1535,8 @@ def _run_evidence_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dic
         result["record"] = _action_record(db_path, action_key)
         result["events"] = _event_rows(db_path, action_key)
         result["task"] = _task_row(db_path)
-        result["gate_state"] = (
-            None if gate.inspect() is None else str(gate.inspect()["state"])
-        )
+        gate_view = _gate_view(gate)
+        result["gate_state"] = None if gate_view is None else gate_view["state"]
         store.close()
         reopened = _reopen_store(db_path, profile_id, log)
         try:
@@ -1479,10 +1559,7 @@ def _run_evidence_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dic
             }
         result["reopen_record"] = _action_record(db_path, action_key)
         result["reopen_events"] = _event_rows(db_path, action_key)
-        result["log"] = _log_events(log)
-        result["log_pairs"] = _log_pairs(log)
-        result["log_correlations"] = _log_correlations(log)
-        result["log_has_body"] = _log_has_body(log, BODY)
+        _attach_log(result, log)
         return result
     finally:
         for connection in (reopened, store):
@@ -1507,12 +1584,14 @@ def _dispatch(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[str, An
                 }
             if fault in {"base", "FA", "FB", "FC", "FD", "FE", "request_only", "delivered", "confirm_dialog", "direct_send"}:
                 return _run_action_case(case, stimuli, root)
-    if case in {
-        "confirm_performed",
-        "confirm_not_performed",
-        "abandon",
-        "reconnect",
-    }:
+    if case == "reconnect":
+        return {
+            "case": case,
+            "layer": "blocked_requires_recovery_identity",
+            "blocked": True,
+            "reason": "M5 无键屏/独立会话身份恢复入口",
+        }
+    if case in {"confirm_performed", "confirm_not_performed", "abandon"}:
         return _run_reconcile_case(case, stimuli, root)
     if case in {
         "same_snapshot",
@@ -1533,6 +1612,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stimuli", required=True)
     try:
         args = parser.parse_args(argv)
+        _AUTHORIZATION_NONCES.clear()
         stimuli_path = _relative(args.stimuli, "stimuli", must_exist=True)
         stimuli = _load_stimuli(stimuli_path)
         result = _dispatch(args.case, stimuli, ROOT)

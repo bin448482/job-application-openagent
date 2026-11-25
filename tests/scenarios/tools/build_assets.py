@@ -7475,6 +7475,85 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
     ) -> dict[str, Any]:
         """构造一个已接真实 perform_action 的动作变体与独立预期。"""
         case = f"{action_id}_{suffix}"
+        fault = suffix if suffix in {"FA", "FB", "FC", "FD", "FE"} else "base"
+        extra: list[dict[str, Any]] = [
+            {"path": "log_schema_violations", "equals": 0},
+            {"path": "log_sensitive_hits", "equals": 0},
+            {"path": "log_finish.unpaired", "equals": 0},
+        ]
+        if fault in {"FA", "FB"}:
+            extra.append({"path": "log_finish.started", "equals": 0})
+        else:
+            extra.append({"path": "log_finish.started", "in": [6, 8, 11, 13]})
+        if fault == "base":
+            extra.extend(
+                [
+                    {"path": "gate_before_release.state", "equals": "held"},
+                    {
+                        "path": "log_reasons.action_validate",
+                        "equals": ["precondition_failed:action"],
+                    },
+                ]
+            )
+        elif fault == "FA":
+            extra.append(
+                {
+                    "path": "log_reasons.action_validate",
+                    "equals": ["authorization_required:action"],
+                }
+            )
+        elif fault == "FB":
+            extra.extend(
+                [
+                    {
+                        "path": "log_reasons.action_admit",
+                        "equals": [
+                            "action_conflict:action",
+                            "action_conflict:action",
+                        ],
+                    },
+                    {
+                        "path": "log_reasons.begin_action",
+                        "equals": [
+                            "action_conflict:store",
+                            "action_conflict:store",
+                        ],
+                    },
+                ]
+            )
+        elif fault == "FC":
+            extra.extend(
+                [
+                    {
+                        "path": "log_reasons.action_execute",
+                        "equals": ["device_disconnected:action"],
+                    },
+                    {
+                        "path": "log_reasons.action_validate",
+                        "equals": ["precondition_failed:action"],
+                    },
+                ]
+            )
+        elif fault == "FE":
+            extra.extend(
+                [
+                    {"path": "ledger.closed", "equals": True},
+                    {"path": "gate_before_release.state", "equals": "held"},
+                    {
+                        "path": "log_reasons.action_commit",
+                        "equals": ["store_io_error:action"],
+                    },
+                    {
+                        "path": "log_reasons.complete_action",
+                        "equals": ["store_io_error:store"],
+                    },
+                    {
+                        "path": "log_reasons.begin_action",
+                        "equals": ["action_conflict:store"],
+                    },
+                ]
+            )
+        paths = tuple(paths) + tuple(extra)
         return ready_variant(
             case,
             label=(
@@ -7577,6 +7656,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 {"path": "replay.state", "equals": None},
                 {"path": "boundary_control.all_commands", "in": [8, 13]},
                 {"path": "boundary_control.real_popen_restored", "equals": True},
+                {"path": "boundary_control.real_popen_attempts", "equals": 0},
                 {"path": "log_pairs.action_validate.1", "equals": "ok"},
                 {"path": "log_pairs.action_admit.1", "equals": "ok"},
                 {"path": "log_pairs.action_execute.0", "equals": "started"},
@@ -7818,6 +7898,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     {"path": "log_pairs.action_reconcile_commit", "equals": ["started", "ok"]},
                     {"path": "log_correlations", "equals": 1},
                     {"path": "log_has_body", "equals": False},
+                    {"path": "log_schema_violations", "equals": 0},
+                    {"path": "log_sensitive_hits", "equals": 0},
+                    {"path": "log_finish.started", "equals": 0},
                 ),
             ),
             ready_variant(
@@ -7841,6 +7924,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     {"path": "log_pairs.action_reconcile_commit", "equals": ["started", "ok"]},
                     {"path": "log_correlations", "equals": 1},
                     {"path": "log_has_body", "equals": False},
+                    {"path": "log_schema_violations", "equals": 0},
+                    {"path": "log_sensitive_hits", "equals": 0},
+                    {"path": "log_finish.started", "equals": 0},
                 ),
             ),
             ready_variant(
@@ -7861,6 +7947,9 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     {"path": "log_pairs.action_reconcile_commit", "equals": ["started", "ok"]},
                     {"path": "log_correlations", "equals": 1},
                     {"path": "log_has_body", "equals": False},
+                    {"path": "log_schema_violations", "equals": 0},
+                    {"path": "log_sensitive_hits", "equals": 0},
+                    {"path": "log_finish.started", "equals": 0},
                 ),
             ),
             variant(

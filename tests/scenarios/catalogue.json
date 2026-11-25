@@ -26528,6 +26528,37 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -26618,6 +26649,28 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "authorization_required:action"
+                    ]
                   }
                 ]
               }
@@ -26725,6 +26778,10 @@
                     "equals": true
                   },
                   {
+                    "path": "boundary_control.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
                     "path": "log_pairs.action_validate.1",
                     "equals": "ok"
                   },
@@ -26747,6 +26804,36 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_admit",
+                    "equals": [
+                      "action_conflict:action",
+                      "action_conflict:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store",
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -26874,6 +26961,39 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_execute",
+                    "equals": [
+                      "device_disconnected:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -26972,6 +27092,27 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
                   }
                 ]
               }
@@ -27110,6 +27251,53 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "ledger.closed",
+                    "equals": true
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_commit",
+                    "equals": [
+                      "store_io_error:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.complete_action",
+                    "equals": [
+                      "store_io_error:store"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -27341,6 +27529,37 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -27431,6 +27650,28 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "authorization_required:action"
+                    ]
                   }
                 ]
               }
@@ -27538,6 +27779,10 @@
                     "equals": true
                   },
                   {
+                    "path": "boundary_control.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
                     "path": "log_pairs.action_validate.1",
                     "equals": "ok"
                   },
@@ -27560,6 +27805,36 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_admit",
+                    "equals": [
+                      "action_conflict:action",
+                      "action_conflict:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store",
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -27687,6 +27962,39 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_execute",
+                    "equals": [
+                      "device_disconnected:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -27785,6 +28093,27 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
                   }
                 ]
               }
@@ -27923,6 +28252,53 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "ledger.closed",
+                    "equals": true
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_commit",
+                    "equals": [
+                      "store_io_error:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.complete_action",
+                    "equals": [
+                      "store_io_error:store"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -28064,6 +28440,37 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -28145,6 +28552,37 @@
                   {
                     "path": "record.state",
                     "equals": "performed"
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -28334,6 +28772,37 @@
                   {
                     "path": "dialog_checks.0.has_confirm",
                     "equals": true
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -28424,6 +28893,28 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "authorization_required:action"
+                    ]
                   }
                 ]
               }
@@ -28531,6 +29022,10 @@
                     "equals": true
                   },
                   {
+                    "path": "boundary_control.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
                     "path": "log_pairs.action_validate.1",
                     "equals": "ok"
                   },
@@ -28553,6 +29048,36 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_admit",
+                    "equals": [
+                      "action_conflict:action",
+                      "action_conflict:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store",
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -28680,6 +29205,39 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_execute",
+                    "equals": [
+                      "device_disconnected:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -28778,6 +29336,27 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
                   }
                 ]
               }
@@ -28916,6 +29495,53 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "ledger.closed",
+                    "equals": true
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_commit",
+                    "equals": [
+                      "store_io_error:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.complete_action",
+                    "equals": [
+                      "store_io_error:store"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -29077,6 +29703,37 @@
                   {
                     "path": "dialog_checks.0.has_confirm",
                     "equals": true
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -29309,6 +29966,37 @@
                   {
                     "path": "cross_kind.record",
                     "equals": null
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -29399,6 +30087,28 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "authorization_required:action"
+                    ]
                   }
                 ]
               }
@@ -29506,6 +30216,10 @@
                     "equals": true
                   },
                   {
+                    "path": "boundary_control.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
                     "path": "log_pairs.action_validate.1",
                     "equals": "ok"
                   },
@@ -29528,6 +30242,36 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_admit",
+                    "equals": [
+                      "action_conflict:action",
+                      "action_conflict:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store",
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -29655,6 +30399,39 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_execute",
+                    "equals": [
+                      "device_disconnected:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -29753,6 +30530,27 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
                   }
                 ]
               }
@@ -29891,6 +30689,53 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "ledger.closed",
+                    "equals": true
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_commit",
+                    "equals": [
+                      "store_io_error:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.complete_action",
+                    "equals": [
+                      "store_io_error:store"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -30064,6 +30909,37 @@
                   {
                     "path": "cross_kind.record",
                     "equals": null
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -30281,6 +31157,37 @@
                   {
                     "path": "dialog_checks.0.has_confirm",
                     "equals": true
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -30371,6 +31278,28 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "authorization_required:action"
+                    ]
                   }
                 ]
               }
@@ -30478,6 +31407,10 @@
                     "equals": true
                   },
                   {
+                    "path": "boundary_control.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
                     "path": "log_pairs.action_validate.1",
                     "equals": "ok"
                   },
@@ -30500,6 +31433,36 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_reasons.action_admit",
+                    "equals": [
+                      "action_conflict:action",
+                      "action_conflict:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store",
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -30627,6 +31590,39 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_execute",
+                    "equals": [
+                      "device_disconnected:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.action_validate",
+                    "equals": [
+                      "precondition_failed:action"
+                    ]
                   }
                 ]
               }
@@ -30725,6 +31721,27 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
                   }
                 ]
               }
@@ -30863,6 +31880,53 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "in": [
+                      6,
+                      8,
+                      11,
+                      13
+                    ]
+                  },
+                  {
+                    "path": "ledger.closed",
+                    "equals": true
+                  },
+                  {
+                    "path": "gate_before_release.state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "log_reasons.action_commit",
+                    "equals": [
+                      "store_io_error:action"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.complete_action",
+                    "equals": [
+                      "store_io_error:store"
+                    ]
+                  },
+                  {
+                    "path": "log_reasons.begin_action",
+                    "equals": [
+                      "action_conflict:store"
+                    ]
                   }
                 ]
               }
@@ -31209,6 +32273,18 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
                   }
                 ]
               }
@@ -31320,6 +32396,18 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
                   }
                 ]
               }
@@ -31419,6 +32507,18 @@
                   {
                     "path": "log_has_body",
                     "equals": false
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_finish.started",
+                    "equals": 0
                   }
                 ]
               }

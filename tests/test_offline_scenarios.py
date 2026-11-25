@@ -3363,5 +3363,225 @@ class FactsCliPersistenceTests(unittest.TestCase):
         self.assertTrue(self._profile_db().is_file())
 
 
+class M5LogAndLedgerOracleTests(unittest.TestCase):
+    """用原 A01_FE 判据证明日志/账本变异会被拒绝，不引入宽松比较器。"""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """加载一次原独立预期，只取日志与账本路径。"""
+        cls.assets = load_assets()
+        acceptance = cls.assets.oracles["variants"]["SC-A01/A01_FE"]["acceptance"]
+        cls.paths = acceptance["steps"][0]["stdout_paths"]
+        cls.log_paths = [
+            item for item in cls.paths if str(item["path"]).startswith("log_")
+        ]
+        cls.ledger_paths = [
+            item for item in cls.paths if str(item["path"]).startswith("ledger.")
+        ]
+        cls.baseline = {
+            "log_pairs": {
+                "action_validate": ["started", "ok", "started", "ok"],
+                "action_admit": ["started", "ok", "started", "failed"],
+                "action_execute": ["started", "ok"],
+                "action_derive": ["started", "ok"],
+                "action_commit": ["started", "failed"],
+            },
+            "log_correlations": 1,
+            "log_has_body": False,
+            "log_schema_violations": 0,
+            "log_sensitive_hits": 0,
+            "log_finish": {"started": 13, "ok": 13, "failed": 0, "unpaired": 0},
+            "log_reasons": {
+                "action_commit": ["store_io_error:action"],
+                "complete_action": ["store_io_error:store"],
+                "begin_action": ["action_conflict:store"],
+            },
+            "ledger": {"closed": True, "complete": 13, "unresolved": 0},
+        }
+
+    def test_original_log_and_ledger_paths_accept_baseline(self) -> None:
+        """基线投影满足原 scene 判据。"""
+        self.assertEqual(compare_step(self.baseline, {"stdout_paths": self.log_paths + self.ledger_paths}), [])
+
+    def test_missing_finish_command_is_rejected(self) -> None:
+        """去掉 action_finish_command 后原日志判据必须失败。"""
+        mutated = copy.deepcopy(self.baseline)
+        mutated["log_finish"] = {"started": 0, "ok": 0, "failed": 0, "unpaired": 0}
+        self.assertTrue(compare_step(mutated, {"stdout_paths": self.log_paths}))
+
+    def test_wrong_failure_classification_is_rejected(self) -> None:
+        """把完成事务失败改成别的分类必须被原判据拒绝。"""
+        mutated = copy.deepcopy(self.baseline)
+        mutated["log_reasons"]["action_commit"] = ["device_disconnected:action"]
+        self.assertTrue(compare_step(mutated, {"stdout_paths": self.log_paths}))
+
+    def test_illegal_field_or_sensitive_payload_is_rejected(self) -> None:
+        """非法字段或敏感载荷计数非零时原判据必须失败。"""
+        for name in ("log_schema_violations", "log_sensitive_hits"):
+            mutated = copy.deepcopy(self.baseline)
+            mutated[name] = 1
+            self.assertTrue(compare_step(mutated, {"stdout_paths": self.log_paths}), name)
+
+    def test_unclosed_ledger_is_rejected(self) -> None:
+        """begin/complete 不闭合时原账本判据必须失败。"""
+        mutated = copy.deepcopy(self.baseline)
+        mutated["ledger"]["closed"] = False
+        self.assertTrue(compare_step(mutated, {"stdout_paths": self.ledger_paths}))
+
+
+class GateObservationBoundaryTests(unittest.TestCase):
+    """假 gate/假 sleep 验证有界观察轨迹与 D09 原强判据，不触真实门禁。"""
+
+    class _Gate:
+        """按序列返回行、None、固定 IO 错误或非预期错误。"""
+
+        def __init__(self, sequence):
+            """保存待消费序列。"""
+            self.sequence = list(sequence)
+
+        def inspect(self):
+            """消费一个预设结果。"""
+            value = self.sequence.pop(0)
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+    def _observe(self, sequence, attempts=80):
+        """用零耗时 sleep 调用真实有界观察函数。"""
+        sleeps: list[float] = []
+        result = m4c_probe.observe_gate_after_busy(
+            self._Gate(sequence),
+            attempts=attempts,
+            interval=0.025,
+            sleep=lambda value: sleeps.append(value),
+        )
+        return result, sleeps
+
+    def test_sustained_none_is_exhausted_not_success(self) -> None:
+        """持续 None 80 次仍无行，如实 exhausted，不产生 shared。"""
+        result, sleeps = self._observe([None] * 80)
+        self.assertEqual(result["trace"], ["none"] * 80)
+        self.assertEqual(result["attempts"], 80)
+        self.assertTrue(result["exhausted"])
+        self.assertFalse(result["shared_found"])
+        self.assertTrue(result["saw_none"])
+        self.assertFalse(result["saw_io_error"])
+        self.assertEqual(len(sleeps), 79)
+
+    def test_sustained_io_error_is_exhausted_with_fixed_category(self) -> None:
+        """持续 device_gate_io_error 只记录固定类别，不输出原异常。"""
+        from app.ports.device_gate import DeviceGateError
+
+        errors = [DeviceGateError("device_gate_io_error")] * 80
+        result, _sleeps = self._observe(errors)
+        self.assertEqual(result["trace"], ["io_error"] * 80)
+        self.assertEqual(result["last_error"], "device_gate_io_error")
+        self.assertTrue(result["exhausted"])
+        self.assertTrue(result["saw_io_error"])
+
+    def test_row_after_delay_is_returned(self) -> None:
+        """正常延迟后在窗口内出现的行被返回。"""
+        row = {"state": "held"}
+        result, sleeps = self._observe([None, None, row])
+        self.assertEqual(result["trace"], ["none", "none", "row"])
+        self.assertEqual(result["attempts"], 3)
+        self.assertFalse(result["exhausted"])
+        self.assertEqual(result["shared"], row)
+        self.assertEqual(len(sleeps), 2)
+
+    def test_row_at_81st_attempt_is_not_observed(self) -> None:
+        """第 81 次才出现的行超出上限，必须保持 exhausted。"""
+        result, _sleeps = self._observe([None] * 80 + [{"state": "held"}])
+        self.assertEqual(result["attempts"], 80)
+        self.assertTrue(result["exhausted"])
+        self.assertFalse(result["shared_found"])
+
+    def test_unexpected_gate_error_propagates(self) -> None:
+        """非 device_gate_io_error 立即传播，不被等待吞掉。"""
+        from app.ports.device_gate import DeviceGateError
+
+        with self.assertRaises(DeviceGateError) as captured:
+            self._observe([DeviceGateError("device_busy")])
+        self.assertEqual(captured.exception.reason_code, "device_busy")
+
+    def _relation_payloads(self):
+        """构造符合 D09 原关系的 winner/loser 投影。"""
+        nonce = "00000000-0000-4000-8000-000000000091"
+        common = {
+            "owner_id": "00000000-0000-4000-8000-000000000081",
+            "owner_pid": 1,
+            "owner_host": "a" * 64,
+            "profile_path_token": "b" * 64,
+            "profile_id": "synthetic-alpha",
+            "session_nonce": nonce,
+            "shared_owner_id": "00000000-0000-4000-8000-000000000081",
+            "shared_owner_pid": 1,
+            "shared_owner_host": "a" * 64,
+            "shared_nonce": nonce,
+            "shared_profile_id": "synthetic-alpha",
+            "shared_profile_path_token": "b" * 64,
+            "shared_state": "held",
+        }
+        winner = {
+            **common,
+            "outcome": "held",
+            "shared_owner_matches_self": True,
+            "shared_nonce_matches_session": True,
+            "shared_profile_matches_self": True,
+        }
+        loser = {
+            **common,
+            "outcome": "busy",
+            "shared_owner_matches_self": False,
+            "shared_nonce_matches_session": False,
+            "shared_profile_matches_self": False,
+        }
+        relation = self.assets.oracles["variants"]["SC-D09/m4c_single_primary"][
+            "acceptance"
+        ]["steps"][0]["children_relation"]
+        return winner, loser, relation
+
+    def test_sustained_none_output_fails_original_d09_relation(self) -> None:
+        """持续 None 的实际投影送入原 D09 children_relation 会失败。"""
+        winner, loser, relation = self._relation_payloads()
+        loser.update(
+            {
+                "shared_owner_id": None,
+                "shared_owner_pid": None,
+                "shared_owner_host": None,
+                "shared_nonce": None,
+                "shared_profile_id": None,
+                "shared_profile_path_token": None,
+                "shared_state": None,
+            }
+        )
+        self.assertTrue(runner._compare_children_relation([{'stdout_json': winner}, {'stdout_json': loser}], relation))
+
+    def test_seven_identity_tamper_fields_are_rejected(self) -> None:
+        """7 个身份/状态字段逐一篡改都被原 D09 关系拒绝。"""
+        winner, loser, relation = self._relation_payloads()
+        self.assertEqual(runner._compare_children_relation([{'stdout_json': winner}, {'stdout_json': loser}], relation), [])
+        tamper = {
+            "shared_owner_id": "00000000-0000-4000-8000-000000000099",
+            "shared_owner_pid": 9,
+            "shared_owner_host": "c" * 64,
+            "shared_nonce": "00000000-0000-4000-8000-000000000092",
+            "shared_profile_id": "synthetic-beta",
+            "shared_profile_path_token": "d" * 64,
+            "shared_state": "quarantined",
+        }
+        for field, value in tamper.items():
+            mutated = copy.deepcopy(loser)
+            mutated[field] = value
+            self.assertTrue(
+                runner._compare_children_relation([{'stdout_json': winner}, {'stdout_json': mutated}], relation), field
+            )
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """加载 D09 原预期供关系负控使用。"""
+        cls.assets = load_assets()
+
+
 if __name__ == "__main__":
     unittest.main()

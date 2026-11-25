@@ -40,7 +40,7 @@ python -m tests.scenarios.framework.runner --mode acceptance --only SC-R --targe
 python -m tests.scenarios.framework.runner --mode acceptance --only SC-D --target .
 ```
 
-- unittest：117 项（111 资产判据 + 6 个真实 facts CLI 持久案例），验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant，以及 M4c 探针正常执行/越界拒绝/junction 拒绝/生产字段变异被 oracle 拒绝、D06 forget 残留、并发 winner 关联、隔离 LF 规范化边界（自动与显式 LF 均保持 BOM/NUL）、单文件夹具根内绝对/上跳/Windows 语义/答案名拒绝、资产校验复用同一路径规则、合成无上传合同正例与缺合同零桥调用反例和受控异常安全 JSON。
+- unittest：129 项（123 资产/判据 + 6 个真实 facts CLI 持久案例），验证资产完整性、严格比较反例、逐元素键/类型、时钟/重放、路径安全、junction/symlink、隔离 tripwire、缺 app 拒绝、M3 探针路径、真实阶梯 mutant、真实日志变异、非首项输出、M4 提交后重试/桥工具泄露/模拟验收/常量摘要/首次失败收尾/regression 篡改 mutant，以及 M4c 探针正常执行/越界拒绝/junction 拒绝/生产字段变异被 oracle 拒绝、D06 forget 残留、并发 winner 关联、隔离 LF 规范化边界（自动与显式 LF 均保持 BOM/NUL）、单文件夹具根内绝对/上跳/Windows 语义/答案名拒绝、资产校验复用同一路径规则、合成无上传合同正例与缺合同零桥调用反例和受控异常安全 JSON。
 - assets：0 = 资产自洽；1 = 资产错误。**不执行产品，不等于业务通过。**
 - acceptance：
   - 0 = 全部 F 变体被执行且一致；报告 `product_acceptance` 仍为 `NOT_ACCEPTED_DEVICE_GATES_UNVERIFIED`；
@@ -76,7 +76,7 @@ acceptance 对每个可执行变体：
 - M2 四源冲突、区域/bounds、9+/0+、新招呼语义、全覆盖否定、预览/时间、多页、时间窗、profile/路径、身份歧义、终态与时间倒退；
 - M3 页面/职位/未读/会话完整路径、字段阶梯/像素/上下文冲突、稳定消息身份/跨屏重叠/new_message_keys、定向核对 API 与边界、版本漂移、读侧不关闭发现；rows/cards/messages/field_evidence 的每个元素校验固定键、必要类型与非首项身份/摘要/证据；真实日志按单次调用与 correlation 校验有序事件、成对次数和敏感字段；真实进入/返回/到达时序仍依赖 M4–M6 或设备；
 - M4a/b/c 旧 24 映射、Decision 校验、提交前重试/提交后超时/2048 限额、事实/注入/档位纯契约、策略包 45 键与真实链接拒绝、init/validate/preview、摘要/渲染/篡改、显式 restore activity 子证据、公开/eval 留出首次与重复访问/整批退役/真实 regression 准入；M4c 真实事实过期/冲突/白名单/跨 profile、共享门禁两进程与失败隔离、真实租约与桥前后拒绝、活动 stopped/active/unknown、真实 restore 与旧凭证失效已接稳定接口；完整 M5 待办/授权与整轮 run 仍 DEFERRED；
-- M5 已接真实 `perform_action`/`AdbActionExecutor`/`reconcile_action`/`complete_action`/领域证据校验：A01 文本 6 PASS + 2 BLOCKED、A02 8 PASS、A03 7 PASS + 1 BLOCKED、A04 7 PASS + 1 BLOCKED、A05 6 PASS、A07 3 PASS + 1 BLOCKED、A08 6 PASS；A06 六个保留 ASSET_ONLY/BLOCKED_ENTRY_UNFROZEN（依赖 M6 apply_job）。A01 输入法/发送控件候选缺 M5 控件发现；A03/A04 direct_send 被生产执行器前置拒绝（非文本需先有可逆槽位点击）；A07 reconnect 缺 M5 键屏/会话身份入口，均保持 BLOCKED，未伪造 PASS。
+- M5 已接真实 `perform_action`/`AdbActionExecutor`/`reconcile_action`/`complete_action`/领域证据校验：A01 文本 6 PASS + 2 BLOCKED、A02 8 PASS、A03 7 PASS + 1 BLOCKED、A04 7 PASS + 1 BLOCKED、A05 6 PASS、A07 3 PASS + 1 BLOCKED、A08 6 PASS；A06 六个保留 ASSET_ONLY/BLOCKED_ENTRY_UNFROZEN（依赖 M6 apply_job）。A01 输入法/发送控件候选缺 M5 控件发现；A03/A04 direct_send 被生产执行器前置拒绝（非文本需先有可逆槽位点击）；A07 reconnect 缺 M5 键屏/会话身份入口，均保持 BLOCKED，未伪造 PASS。确认框场景只证明调用方 tap_points 合同下的 dialog 状态，不证明坐标命中控件；base 重放的 precondition_failed 属于任务已完成，不是 pending 动作键 action_conflict。
 - M6 安全点、第 6 次抢占、预算边界、双钟/续租、三个观察钩子；
 - M7 清理保护、身份核验、台账与删除后核验；
 - M8 分桶/零分母、固定 C、降级回滚。
