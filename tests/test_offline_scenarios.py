@@ -3393,9 +3393,9 @@ class M5LogAndLedgerOracleTests(unittest.TestCase):
     def _a01_fe_rows() -> list[dict]:
         """构造与固定 A01_FE 原始 action 序列同形的新合成 JSONL 行。
 
-        序列来自固定 92ec 的合成 A01_FE 日志：13 个带标签 perform 实例、6 组
-        共享采集无标签 finish、动作/仓储生命周期失败。这里只重建原始字段，
-        不读取 expected，也不从产品结论反推输入。
+        序列来自固定 92ec 的合成 A01_FE 日志：7 个带标签 perform 实例 + 6 组
+        共享采集无标签 finish = 13 个 finish 组，另有动作/仓储生命周期失败。
+        这里只重建原始字段，不读取 expected，也不从产品结论反推输入。
         """
         correlation = "00000000-0000-4000-8000-0000000000fe"
         sequence = [
