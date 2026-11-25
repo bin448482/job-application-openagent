@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable
@@ -19,7 +18,6 @@ from app.domain.models import (
     is_conversation_key,
     is_job_task_key,
     parse_utc,
-    validate_read_result,
 )
 from app.domain.policy import (
     PolicyPack,
@@ -175,31 +173,54 @@ def _facts_hash(selected: dict[str, object]) -> str:
     return canonical_hash(selected)
 
 
-def _iter_read_values(read_results: tuple[object, ...]) -> Iterator[object]:
-    """只迭代严格有效且 status=ok 的真实读取值，坏结果不冒充现场。"""
-    for result in read_results:
-        if not isinstance(result, ReadResult):
-            continue
-        try:
-            validate_read_result(result)
-        except ValueError:
-            continue
-        if result.status == "ok" and result.value is not None:
-            yield result.value
-
-
 def _list_returned(read_results: tuple[object, ...]) -> bool:
-    """只把真实列表页/列表值视为已回到列表；详情、会话与 unknown 页面不算。
+    """按冻结公开 M6 合同的页面语义判断是否已回到列表。
 
-    这里判断的是页面/导航事实，不要求当前列表已经存在可处理目标：合法
-    全覆盖 absent 的 `UnreadRead` 仍是回到列表，只是没有任务可做。
+    兼容旧七布尔契约：真实可行动的 JobDetail/PageSnapshot 与 JobList/
+    UnreadRead 一样算回到列表；unknown/不可行动页面仍不算。该判断只服务
+    安全点第一项，其余六项与 fail-closed 规则不变。
     """
-    for value in _iter_read_values(read_results):
-        if isinstance(value, (JobList, UnreadRead)):
-            return True
-        if isinstance(value, PageSnapshot) and value.page == "chat_list":
-            return True
+    for result in read_results:
+        actionable, _reason = (
+            is_actionable(result) if hasattr(result, "status") else (False, None)
+        )
+        if not actionable:
+            continue
+        value = result.value if getattr(result, "status", None) == "ok" else None
+        if isinstance(value, (UnreadRead, JobList, JobDetail, PageSnapshot)):
+            if getattr(value, "coverage", "viewport") in {"viewport", "all"}:
+                return True
     return False
+
+
+def _safe_scene(
+    *,
+    store: RuntimeStorePort,
+    batch_id: str,
+    task_key: str,
+    read_results: tuple[object, ...],
+    raw: RawScene,
+) -> tuple[object, ...]:
+    """冻结公开 M6 场景合同的七布尔兼容入口，供既有探针调用。
+
+    生产 `execute_run` 仍走 `derive_safe_point`/`SafePoint`；本函数只把同一
+    页面与仓储事实投影为旧 tuple，不接收调用方布尔答案，不放宽未决/租约/
+    预算/unknown 规则。
+    """
+    pending = store.pending_actions("boss")
+    state_probe = getattr(store, "last_action_state", None)
+    last_state = state_probe(task_key) if callable(state_probe) else "unknown"
+    checkpoint = store.checkpoint_status(batch_id)
+    return (
+        _list_returned(read_results),
+        raw.input_text == "",
+        raw.confirmation_title is None,
+        raw.inflight_commands == 0,
+        not pending,
+        last_state in {None, "performed", "not_performed"},
+        checkpoint["last_checkpoint_id"] is not None
+        and int(checkpoint["checkpoint_events"]) > 0,
+    )
 
 
 def _action_state_committed(
@@ -1464,6 +1485,7 @@ def execute_run(
                     now=active_clock(),
                     payload={
                         "outcome": outcome,
+                        "result": step.unread_verification,
                         "device_calls": calls,
                         "elapsed_ms": elapsed_ms,
                     },
