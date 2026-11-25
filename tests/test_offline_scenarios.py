@@ -26,7 +26,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, m4_probe, m4c_probe, m5_probe, model, replay, runner  # noqa: E402
+from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, m4_probe, m4c_probe, m5_probe, m6_probe, model, replay, runner  # noqa: E402
 from scenarios.framework.compare import compare_invocation, compare_step, strict_equal  # noqa: E402
 
 SCENARIO_ROOT = TESTS_DIR / "scenarios"
@@ -932,13 +932,13 @@ class IsolationTripwireTests(unittest.TestCase):
 class P2M0BindingTests(unittest.TestCase):
     """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
 
-    def test_milestone_gate_blocks_unimplemented_m6(self) -> None:
-        """M6 未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
-        load_assets()
+    def test_milestone_gate_blocks_unimplemented_and_unfrozen(self) -> None:
+        """M6 已分派，但未交接变体与未实现里程碑仍只能 BLOCKED。"""
+        assets = load_assets()
         self.assertEqual(
-            runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4", "M5"}
+            runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4", "M5", "M6"}
         )
-        scenario = {"id": "SC-R99", "milestone": "M6"}
+        scenario = {"id": "SC-R99", "milestone": "M7"}
         variant = {
             "id": "synthetic",
             "layer": "F",
@@ -952,6 +952,40 @@ class P2M0BindingTests(unittest.TestCase):
             runner._variant_status(scenario, variant, target),
             "BLOCKED_MILESTONE_UNIMPLEMENTED",
         )
+        index = {
+            f"{item['id']}/{entry['id']}": (item, entry)
+            for item, entry in model.iter_variants(assets.catalogue)
+        }
+        for ref in (
+            "SC-S01/safe_point_preempts",
+            "SC-S01/arrival_after_commit",
+            "SC-S02/single_false_blocks",
+            "SC-S02/all_true",
+            "SC-S04/targeted_once",
+            "SC-S04/count_no_target",
+            "SC-S08/three_hooks",
+        ):
+            item, entry = index[ref]
+            self.assertEqual(
+                runner._variant_status(item, entry, target),
+                "BLOCKED_ENTRY_UNFROZEN",
+                ref,
+            )
+
+    def test_m6_probe_rejects_unsafe_or_missing_stimuli(self) -> None:
+        """M6 探针必须在读取前拒绝绝对/上跳/越界或不存在的刺激。"""
+        for value in (
+            "../outside-stimuli.json",
+            "C:/outside-stimuli.json",
+            "tests/scenarios/fixtures/m6/does-not-exist.stimuli.json",
+        ):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = m6_probe.main(["--case", "boundaries", "--stimuli", value])
+            self.assertEqual(code, 2, value)
+            payload = json.loads(output.getvalue())
+            self.assertEqual(payload["status"], "probe_error")
+            self.assertEqual(payload["reason"], "刺激路径非法" if ".." in value or value.startswith("C:") else "刺激文件不可读")
 
     def test_deferred_and_module_evidence_are_not_pass(self) -> None:
         """DEFERRED 与 MODULE_EVIDENCE 不能被当 PASS 或普通入口阻塞。"""

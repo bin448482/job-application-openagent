@@ -112,6 +112,16 @@
       "after_request_only": "<hierarchy rotation=\"0\"><node bounds=\"[0,0][1080,1920]\" class=\"androidx.recyclerview.widget.RecyclerView\" scrollable=\"false\"><node bounds=\"[0,0][1080,200]\" text=\"合成邻居乙\"></node></node></hierarchy>",
       "after_delivered": "<hierarchy rotation=\"0\"><node bounds=\"[0,0][1080,1920]\" class=\"androidx.recyclerview.widget.RecyclerView\" scrollable=\"false\"><node bounds=\"[0,0][1080,200]\" text=\"合成邻居乙\"></node></node></hierarchy>",
       "after_missing_anchor": "<hierarchy rotation=\"0\"><node bounds=\"[0,0][1080,1920]\" class=\"androidx.recyclerview.widget.RecyclerView\" scrollable=\"false\"></node></hierarchy>"
+    },
+    "apply": {
+      "ime": "com.example.default/.Ime",
+      "target_ime": null,
+      "xml_sequence": [
+        "<hierarchy rotation=\"0\"><node bounds=\"[10,100][1070,400]\" text=\"合成联系人甲\"><node bounds=\"[20,120][1060,140]\" text=\"合成机构甲\"></node><node bounds=\"[20,140][1060,160]\" text=\"合成岗位甲\"></node><node bounds=\"[20,160][1060,180]\" text=\"岗位详情\"></node><node bounds=\"[700,2100][1040,2300]\" text=\"立即申请\" clickable=\"true\" enabled=\"true\"></node></node></hierarchy>",
+        "<hierarchy rotation=\"0\"><node bounds=\"[10,100][1070,400]\" text=\"合成联系人甲\"><node bounds=\"[20,120][1060,140]\" text=\"合成机构甲\"></node><node bounds=\"[20,140][1060,160]\" text=\"合成岗位甲\"></node><node bounds=\"[20,160][1060,180]\" text=\"岗位详情\"></node><node bounds=\"[700,2100][1040,2300]\" text=\"已申请\" clickable=\"false\" enabled=\"false\"></node></node></hierarchy>"
+      ],
+      "taps": [],
+      "irreversible_index": 0
     }
   }
 }

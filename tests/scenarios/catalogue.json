@@ -31970,15 +31970,17 @@
         "A06_FD",
         "A06_FE"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "A06_base",
           "label": "职位沟通成功路径",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A06_base --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
           "setup": "依赖 M6 apply_job 组合入口；当前仅保留人工判据",
           "required_api": "M5 动作执行与 Evidence",
@@ -31987,9 +31989,179 @@
           "assertions": [
             "本次前后证据充分才 performed+applied",
             "先写 pending",
-            "重复请求被动作键锁拒绝"
+            "重复请求被动作键锁拒绝",
+            "本次前后独立目标效果增量才 performed+applied",
+            "重复键/终态后不二次执行"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A06_base"
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "observed.evidence.effect",
+                    "equals": "applied"
+                  },
+                  {
+                    "path": "observed.gate_converged",
+                    "equals": true
+                  },
+                  {
+                    "path": "pending_before_execute",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "performed"
+                  },
+                  {
+                    "path": "record.effect",
+                    "equals": "applied"
+                  },
+                  {
+                    "path": "job.state",
+                    "equals": "done"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.reopened",
+                    "equals": true
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "log_has_body",
+                    "equals": false
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done.observed.state",
+                    "equals": "not_performed"
+                  },
+                  {
+                    "path": "controls.preexisting_done.observed.evidence.reason_code",
+                    "equals": "precondition_failed"
+                  },
+                  {
+                    "path": "controls.preexisting_done.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done.after_consumed",
+                    "equals": false
+                  },
+                  {
+                    "path": "controls.preexisting_done.facts.target_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.preexisting_done.facts.target_after_done",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.preexisting_done.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done.log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done.log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.observed.state",
+                    "equals": "not_performed"
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.after_consumed",
+                    "equals": false
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.facts.target_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.facts.external_changed",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.env.profile_meta.profile_id",
+                    "equals": "m6-apply-preexisting_unrelated"
+                  },
+                  {
+                    "path": "controls.preexisting_done_unrelated_change.env.gate.profile_id",
+                    "equals": "m6-apply-preexisting_unrelated"
+                  },
+                  {
+                    "path": "controls.unrelated_change.observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "controls.unrelated_change.observed.evidence.reason_code",
+                    "equals": "result_unverified"
+                  },
+                  {
+                    "path": "controls.unrelated_change.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.unrelated_change.after_consumed",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.unrelated_change.facts.target_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.unrelated_change.facts.external_changed",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.unrelated_change.real_popen_attempts",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -32008,9 +32180,11 @@
           "id": "A06_FA",
           "label": "职位沟通/F-A",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A06_FA --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
           "setup": "依赖 M6 apply_job；注入 F-A",
           "required_api": "M5 动作执行与 Evidence",
@@ -32019,9 +32193,54 @@
           "assertions": [
             "not_performed+none",
             "原因限 authorization_missing/precondition_failed/cancelled_before_action",
-            "独立 oracle 证明未点击任何写入控件"
+            "独立 oracle 证明未点击任何写入控件",
+            "授权缺失在零点击处固定拒绝"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A06_FA"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "authorization_required"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "record",
+                    "equals": null
+                  },
+                  {
+                    "path": "job.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_popen_attempts",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -32040,9 +32259,11 @@
           "id": "A06_FB",
           "label": "职位沟通/F-B",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A06_FB --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
           "setup": "依赖 M6 apply_job；注入 F-B",
           "required_api": "M5 动作执行与 Evidence",
@@ -32051,9 +32272,99 @@
           "assertions": [
             "pending 残留保锁",
             "不能凭无返回降为 not_sent",
-            "人工核对"
+            "人工核对",
+            "pending 已提交后中断保持锁与 running",
+            "重开仍 pending，不凭无返回降级"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A06_FB"
+                  },
+                  {
+                    "path": "interrupted",
+                    "equals": true
+                  },
+                  {
+                    "path": "after_interrupt.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "job_after_interrupt.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "same_connection_replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "record_after_replay.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "job_after_replay.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.reopened",
+                    "equals": true
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "ledger.files",
+                    "equals": 0
+                  },
+                  {
+                    "path": "ledger.begin",
+                    "equals": 0
+                  },
+                  {
+                    "path": "ledger.complete",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "log_has_body",
+                    "equals": false
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -32072,9 +32383,11 @@
           "id": "A06_FC",
           "label": "职位沟通/F-C",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A06_FC --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
           "setup": "依赖 M6 apply_job；注入 F-C",
           "required_api": "M5 动作执行与 Evidence",
@@ -32086,7 +32399,103 @@
             "blocked+设备隔离",
             "执行次数最多 1，不重放"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A06_FC"
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.reason_code",
+                    "equals": "device_disconnected"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "job.state",
+                    "equals": "blocked"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.all_commands",
+                    "equals": 0
+                  },
+                  {
+                    "path": "ledger.files",
+                    "equals": 1
+                  },
+                  {
+                    "path": "ledger.begin",
+                    "equals": 3
+                  },
+                  {
+                    "path": "ledger.complete",
+                    "equals": 3
+                  },
+                  {
+                    "path": "ledger.closed",
+                    "equals": true
+                  },
+                  {
+                    "path": "ledger.unresolved",
+                    "equals": 0
+                  },
+                  {
+                    "path": "ledger.order_errors",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "log_has_body",
+                    "equals": false
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -32105,9 +32514,11 @@
           "id": "A06_FD",
           "label": "职位沟通/F-D",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A06_FD --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
           "setup": "依赖 M6 apply_job；注入 F-D",
           "required_api": "M5 动作执行与 Evidence",
@@ -32118,7 +32529,155 @@
             "Toast/确认框/空返回不证明成功",
             "不换会话继续"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A06_FD"
+                  },
+                  {
+                    "path": "observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.outcome",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "observed.evidence.reason_code",
+                    "equals": "result_unverified"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "job.state",
+                    "equals": "blocked"
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "log_has_body",
+                    "equals": false
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.toast.observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "controls.toast.observed.evidence.reason_code",
+                    "equals": "result_unverified"
+                  },
+                  {
+                    "path": "controls.toast.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.toast.after_consumed",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.toast.facts.toast_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.toast.facts.target_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.toast.facts.target_after_done",
+                    "equals": false
+                  },
+                  {
+                    "path": "controls.toast.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.dialog.observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "controls.dialog.observed.evidence.reason_code",
+                    "equals": "result_unverified"
+                  },
+                  {
+                    "path": "controls.dialog.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.dialog.after_consumed",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.dialog.facts.dialog_container_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.dialog.facts.dialog_controls_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.dialog.facts.target_unchanged",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.dialog.real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "controls.empty.observed.state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "controls.empty.observed.evidence.reason_code",
+                    "equals": "result_unverified"
+                  },
+                  {
+                    "path": "controls.empty.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "controls.empty.after_consumed",
+                    "equals": true
+                  },
+                  {
+                    "path": "controls.empty.facts.target_unchanged",
+                    "equals": false
+                  },
+                  {
+                    "path": "controls.empty.real_popen_attempts",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -32137,9 +32696,11 @@
           "id": "A06_FE",
           "label": "职位沟通/F-E",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m5_probe.py --case A06_FE --stimuli tests/scenarios/fixtures/m5/stimuli/actions.json"
+          ],
           "fixture": "fixtures/m5/actions/fault-matrix.json",
           "setup": "依赖 M6 apply_job；注入 F-E",
           "required_api": "M5 动作执行与 Evidence",
@@ -32151,7 +32712,99 @@
             "保留可对账 pending 锁",
             "不执行第二次，失败不得标 done"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "A06_FE"
+                  },
+                  {
+                    "path": "observed.raised",
+                    "equals": "store_io_error"
+                  },
+                  {
+                    "path": "remote.irreversible",
+                    "equals": 1
+                  },
+                  {
+                    "path": "record.state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "job.state",
+                    "equals": "running"
+                  },
+                  {
+                    "path": "replay.irreversible",
+                    "equals": 0
+                  },
+                  {
+                    "path": "replay.reopened",
+                    "equals": true
+                  },
+                  {
+                    "path": "replay.raised",
+                    "equals": "action_conflict"
+                  },
+                  {
+                    "path": "ledger.files",
+                    "equals": 1
+                  },
+                  {
+                    "path": "ledger.begin",
+                    "equals": 5
+                  },
+                  {
+                    "path": "ledger.complete",
+                    "equals": 5
+                  },
+                  {
+                    "path": "ledger.closed",
+                    "equals": true
+                  },
+                  {
+                    "path": "ledger.unresolved",
+                    "equals": 0
+                  },
+                  {
+                    "path": "ledger.order_errors",
+                    "equals": 0
+                  },
+                  {
+                    "path": "real_popen_attempts",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_schema_violations",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_sensitive_hits",
+                    "equals": 0
+                  },
+                  {
+                    "path": "log_correlations",
+                    "equals": 1
+                  },
+                  {
+                    "path": "log_has_body",
+                    "equals": false
+                  },
+                  {
+                    "path": "log_finish.unpaired",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -33525,15 +34178,17 @@
       "offline_subscenarios": [
         "five_then_pause"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "five_then_pause",
           "label": "五次实际切换后第 6 次需求暂停",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m6_probe.py --case five_then_pause --stimuli tests/scenarios/fixtures/m6/events/s03-preemption-limit.stimuli.json"
+          ],
           "fixture": "fixtures/m6/events/s03-preemption-limit.stimuli.json",
           "setup": "六轮外部 job/未读/快照/安全点刺激；结果只在独立 expected",
           "required_api": "M6 调度",
@@ -33547,7 +34202,82 @@
             "未切换不伪造 stage_preempted",
             "不降低未读优先级"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "five_then_pause"
+                  },
+                  {
+                    "path": "processed",
+                    "equals": 11
+                  },
+                  {
+                    "path": "actual_stage_preempted_count",
+                    "equals": 5
+                  },
+                  {
+                    "path": "per_cycle_switch_count",
+                    "equals": [
+                      1,
+                      1,
+                      1,
+                      1,
+                      1,
+                      0
+                    ]
+                  },
+                  {
+                    "path": "unsafe_claimed",
+                    "equals": 0
+                  },
+                  {
+                    "path": "unsafe_observation_incremented",
+                    "equals": false
+                  },
+                  {
+                    "path": "sixth_switch_required",
+                    "equals": true
+                  },
+                  {
+                    "path": "sixth_stage_preempted",
+                    "equals": false
+                  },
+                  {
+                    "path": "u6_claims",
+                    "equals": 0
+                  },
+                  {
+                    "path": "cleanup_claims",
+                    "equals": 0
+                  },
+                  {
+                    "path": "unread_priority_order_ok",
+                    "equals": true
+                  },
+                  {
+                    "path": "pause_reason",
+                    "equals": "preemption_limit"
+                  },
+                  {
+                    "path": "preemptions_used",
+                    "equals": 5
+                  },
+                  {
+                    "path": "cursor_preserved",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -33556,7 +34286,12 @@
           "observations_ref": "expected/m6-observations.json",
           "deferred_to": null,
           "module_evidence": null,
-          "shared_inputs": [],
+          "shared_inputs": [
+            "tests/fixtures/read",
+            "prompts/base",
+            "prompts/examples",
+            "evals/policy-suite"
+          ],
           "local_packs": {},
           "fixture_copies": {},
           "lf_inputs": [],

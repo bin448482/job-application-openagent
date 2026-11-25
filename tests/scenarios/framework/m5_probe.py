@@ -27,18 +27,20 @@ from app.adapters.adb import command as command_module
 from app.adapters.adb.actions import AdbActionExecutor
 from app.adapters.adb.command import CommandIdentityStore, ProcessFamilyBound
 from app.adapters.sqlite.device_gate import SharedDeviceGate
-from app.adapters.sqlite.profile_store import SqliteProfileStore
+from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
 from app.adapters.sqlite.repo import SqliteStore
 from app.domain.actions import (
     ActionAuthorization,
     ActionIdentity,
     ActionObservation,
     ActionOutcome,
+    ApplyQuotaContract,
     ReconciliationObservation,
     action_key_for,
     derive_action_outcome,
     validate_evidence,
 )
+from app.domain.runtime import BudgetLimits
 from app.domain.models import (
     Candidate,
     Evidence,
@@ -528,6 +530,8 @@ def _gate_view(gate: SharedDeviceGate) -> dict[str, Any] | None:
         "path_token": canonical_hash(
             str(Path(str(row.get("profile_db_path"))).resolve())
         ),
+        "profile_id": row.get("profile_id"),
+        "owner_pid": row.get("owner_pid"),
     }
 
 
@@ -909,6 +913,661 @@ def _reopen_store(db_path: Path, profile_id: str, log: ProcessLog) -> SqliteStor
         stop_checker=lambda pid: "stopped",
         process_log=log,
     )
+
+
+def _job_state(db_path: Path) -> dict[str, Any] | None:
+    """只读返回合成职位任务状态与租约存在性，不返回职位正文。"""
+    connection = sqlite3.connect(str(db_path))
+    try:
+        row = connection.execute(
+            "SELECT state, lease_owner, lease_expires_at FROM jobs "
+            "WHERE state IN ('queued', 'leased', 'running', 'blocked', 'done', 'not_sent') "
+            "ORDER BY updated_at DESC LIMIT 1"
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    return {
+        "state": row[0],
+        "has_lease": row[1] is not None,
+        "has_expiry": row[2] is not None,
+    }
+
+
+def _job_profile_context(
+    profile_id: str,
+    os_root: Path,
+    process_log: ProcessLog | None = None,
+    fault_hook: Callable[[str, object], None] | None = None,
+    *,
+    project_root: Path = ROOT,
+) -> tuple[SqliteStore, Any, SharedDeviceGate, Path, str, str]:
+    """先取得共享门禁，再在显式项目根创建/打开 profile v3 并领取职位。"""
+    db_path = profile_runtime_path(project_root, profile_id)
+    owner = _owner()
+    gate = SharedDeviceGate(
+        profile_id=profile_id, profile_db_path=db_path, os_root=os_root
+    )
+    gate.acquire(
+        profile_id=profile_id, profile_db_path=str(db_path), owner=owner, now=NOW
+    )
+    try:
+        profile = SqliteProfileStore(project_root, profile_id, create=True, now=NOW)
+        profile.open()
+        profile_path = profile.path
+        profile.close()
+        if profile_path != db_path:
+            raise ProbeError("profile 路径与门禁绑定不一致")
+        store = SqliteStore(
+            db_path,
+            profile_id=profile_id,
+            local_host=OWNER_HOST,
+            monotonic=lambda: 1000.0,
+            stop_checker=lambda pid: "stopped",
+            fault_hook=fault_hook,
+            process_log=process_log,
+            require_runtime=True,
+        )
+        batch = str(uuid.uuid4())
+        job = "boss:job:" + canonical_hash({"job": f"apply-{profile_id}"})
+        store.ensure_batch(batch, BudgetLimits(), NOW)
+        store.enqueue_jobs(batch, (job,), NOW)
+        claimed = store.claim_job(batch, owner, NOW, job)
+        if claimed is None:
+            store.close()
+            raise ProbeError("合成职位领取失败")
+        lease = store.start_job(claimed, NOW)
+    except Exception:
+        try:
+            gate.release(now=NOW, converged=False)
+        except Exception:
+            pass
+        raise
+    return store, lease, gate, db_path, job, batch
+
+
+def _apply_quota(
+    *,
+    profile_id: str,
+    task_key: str,
+    action_key: str,
+    allowance: int = 1,
+    used: int = 0,
+) -> ApplyQuotaContract:
+    """构造绑定当前 job 任务与动作键的显式合成 apply 配额合同。"""
+    return ApplyQuotaContract(
+        profile_id=profile_id,
+        task_key=task_key,
+        action_key=action_key,
+        allowance=allowance,
+        used=used,
+        confirmed=True,
+        nonce=str(uuid.uuid4()),
+        expires_at=EXPIRES,
+    )
+
+
+def _apply_stimulus_for_fault(
+    base: Mapping[str, Any], fault: str
+) -> dict[str, Any]:
+    """按 apply 故障窗口变形原始 XML；只改外部刺激，不写产品结论。"""
+    sequence = list(base["xml_sequence"])
+    if fault == "FD":
+        sequence[-1] = sequence[0]
+    return {
+        "ime": base["ime"],
+        "target_ime": None,
+        "xml_sequence": sequence,
+        "taps": [],
+        "irreversible_index": 0,
+    }
+
+
+def _run_apply_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[str, Any]:
+    """用真实 perform_action 跑 apply_job 六个窗口；只输出可观察原始事实。"""
+    _, _, fault = case.partition("_")
+    base = stimuli["actions"]["apply"]
+    stimulus = _apply_stimulus_for_fault(base, fault)
+    controls: dict[str, Any] = {}
+    if fault == "base":
+        done = base["xml_sequence"][1]
+        controls["preexisting_done"] = _apply_once(
+            root, "preexisting", {**stimulus, "xml_sequence": [done, done]}
+        )
+        unrelated = base["xml_sequence"][0].replace(
+            "</hierarchy>",
+            '<node text="合成邻居乙" class="android.widget.TextView" bounds="[0,1800][1080,1900]"/></hierarchy>',
+        )
+        controls["unrelated_change"] = _apply_once(
+            root,
+            "unrelated",
+            {**stimulus, "xml_sequence": [base["xml_sequence"][0], unrelated]},
+        )
+        external_done = done.replace(
+            "</hierarchy>",
+            '<node text="合成邻居乙" class="android.widget.TextView" bounds="[0,1800][1080,1900]"/></hierarchy>',
+        )
+        external_done_changed = external_done.replace(
+            'text="合成邻居乙"', 'text="合成邻居乙更新"'
+        )
+        controls["preexisting_done_unrelated_change"] = _apply_once(
+            root,
+            "preexisting_unrelated",
+            {**stimulus, "xml_sequence": [external_done, external_done_changed]},
+        )
+    if fault == "FD":
+        first = base["xml_sequence"][0]
+        controls["toast"] = _apply_once(
+            root,
+            "toast",
+            {
+                **stimulus,
+                "xml_sequence": [
+                    first,
+                    first.replace(
+                        "</hierarchy>",
+                        '<node class="android.widget.Toast" text="已投递" bounds="[0,1700][1080,1800]"/></hierarchy>',
+                    ),
+                ],
+            },
+        )
+        controls["dialog"] = _apply_once(
+            root,
+            "dialog",
+            {
+                **stimulus,
+                "xml_sequence": [
+                    first,
+                    first.replace(
+                        "</hierarchy>",
+                        '<node class="android.app.Dialog" text="确认框" bounds="[0,1500][1080,1750]"><node text="确认" clickable="true" bounds="[0,1600][500,1700]"/><node text="取消" clickable="true" bounds="[520,1600][1000,1700]"/></node></hierarchy>',
+                    ),
+                ],
+            },
+        )
+        controls["empty"] = _apply_once(
+            root,
+            "empty",
+            {**stimulus, "xml_sequence": [first, '<hierarchy rotation="0"></hierarchy>']},
+        )
+    profile_id = "m6-apply"
+    log = _process_log(root, case)
+    store, lease, gate, db_path, job, batch = _job_profile_context(
+        profile_id,
+        _os_root(root),
+        log,
+        _completion_fault if fault == "FE" else None,
+    )
+    action_key = action_key_for("apply_job", app="boss", message_key=job)
+    result: dict[str, Any] = {
+        "case": case,
+        "action_kind": "apply_job",
+        "layer": "raw_device_usecase",
+        "job_key_shape": job.split(":")[0] + ":" + job.split(":")[1],
+        "batch_present": isinstance(batch, str) and bool(batch),
+        "controls": controls,
+    }
+    reopened: SqliteStore | None = None
+
+    def authorization(confirmed: bool = True) -> ActionAuthorization:
+        """构造绑定当前 job 任务的精确合成授权。"""
+        return _authorization(
+            lease,
+            profile_id=profile_id,
+            action_kind="apply_job",
+            action_key=action_key,
+            confirmed=confirmed,
+        )
+
+    def admit(dev: _Device, store_: SqliteStore, executor: AdbActionExecutor, *, confirmed: bool = True) -> dict[str, Any]:
+        """调用真实 perform_action；异常只压缩为固定原因码。"""
+        try:
+            with _synthetic_device(dev):
+                value = perform_action(
+                    store=store_,
+                    gate=gate,
+                    authorization=authorization(confirmed),
+                    lease=lease,
+                    action_kind="apply_job",
+                    action_key=action_key,
+                    target_key=job,
+                    conversation_key=job,
+                    body_text=None,
+                    attachment_name=None,
+                    identity=_identity(),
+                    anchor_label=None,
+                    ime_component=None,
+                    tap_points=(),
+                    current_base_hash=BASE_HASH,
+                    current_pack_hash=PACK_HASH,
+                    daily_sends=5,
+                    reply_cooldown_seconds=0,
+                    profile_db_path=str(db_path),
+                    executor=executor,
+                    now=NOW,
+                    apply_quota=_apply_quota(
+                        profile_id=profile_id,
+                        task_key=lease.key,
+                        action_key=action_key,
+                    ),
+                    process_log=log,
+                    clock=lambda: NOW,
+                    reload_snapshot=lambda: {
+                        "base_hash": BASE_HASH,
+                        "pack_hash": PACK_HASH,
+                        "acceptance_base_hash": BASE_HASH,
+                        "acceptance_pack_hash": PACK_HASH,
+                    },
+                )
+        except Exception as error:
+            return {
+                "raised": str(getattr(error, "reason_code", type(error).__name__)),
+                "state": None,
+                "evidence": None,
+            }
+        return {
+            "raised": None,
+            "state": value.get("state"),
+            "evidence": value.get("evidence"),
+            "gate_converged": value.get("gate_converged"),
+            "card": value.get("card"),
+            "requested_effect": value.get("requested_effect"),
+        }
+
+    try:
+        if fault == "FB":
+            fb_device = _Device(stimulus)
+            crashing = _executor(
+                gate=gate,
+                store=store,
+                root=root,
+                device=fb_device,
+                process_log=log,
+                crash=True,
+            )
+            try:
+                admit(
+                    fb_device,
+                    store,
+                    crashing,
+                )
+            except SystemExit:
+                result["interrupted"] = True
+            result["after_interrupt"] = _action_record(db_path, action_key)
+            result["job_after_interrupt"] = _job_state(db_path)
+            same_device = _Device(stimulus)
+            result["same_connection_replay"] = {
+                **admit(
+                    same_device,
+                    store,
+                    _executor(
+                        gate=gate,
+                        store=store,
+                        root=root,
+                        device=same_device,
+                        process_log=log,
+                    ),
+                ),
+                "irreversible": same_device.irreversible,
+                "reopened": False,
+            }
+            store.close()
+            reopened = _reopen_store(db_path, profile_id, log)
+            replay_device = _Device(stimulus)
+            result["replay"] = {
+                **admit(
+                    replay_device,
+                    reopened,
+                    _executor(
+                        gate=gate,
+                        store=reopened,
+                        root=root,
+                        device=replay_device,
+                        process_log=log,
+                    ),
+                ),
+                "irreversible": replay_device.irreversible,
+                "all_commands": len(replay_device.calls),
+                "reopened": True,
+            }
+            result["record_after_replay"] = _action_record(db_path, action_key)
+            result["job_after_replay"] = _job_state(db_path)
+            result["ledger"] = _ledger_summary(
+                root / "data" / "evals" / "m5-probe" / "ledger"
+            )
+            result["real_popen_attempts"] = fb_device.real_popen_attempts
+            _attach_log(result, log)
+            return result
+
+        if fault == "FC":
+            device = _Device(stimulus, fail_irreversible=True)
+        else:
+            device = _Device(stimulus)
+        executor = _executor(
+            gate=gate,
+            store=store,
+            root=root,
+            device=device,
+            process_log=log,
+        )
+        outcome = admit(
+            device,
+            store,
+            executor,
+            confirmed=fault != "FA",
+        )
+        result["observed"] = outcome
+        result["remote"] = {
+            "irreversible": device.irreversible,
+            "all_commands": len(device.calls),
+            "failed_after_irreversible": device.failed_after_irreversible,
+            "argv": [[item for item in call if item != "adb"] for call in device.calls],
+        }
+        result["pending_before_execute"] = getattr(
+            executor, "probe_pending_before_exec", None
+        )
+        result["record"] = _action_record(db_path, action_key)
+        result["events"] = _event_rows(db_path, action_key)
+        result["job"] = _job_state(db_path)
+        if fault in {"base", "FC", "FE"}:
+            store.close()
+            reopened = _reopen_store(db_path, profile_id, log)
+            replay_device = _Device(stimulus)
+            replay = admit(
+                replay_device,
+                reopened,
+                _executor(
+                    gate=gate,
+                    store=reopened,
+                    root=root,
+                    device=replay_device,
+                    process_log=log,
+                ),
+            )
+            result["replay"] = {
+                **replay,
+                "irreversible": replay_device.irreversible,
+                "all_commands": len(replay_device.calls),
+                "reopened": True,
+                "events": _event_rows(db_path, action_key),
+                "job": _job_state(db_path),
+            }
+        result["ledger"] = _ledger_summary(
+            root / "data" / "evals" / "m5-probe" / "ledger"
+        )
+        result["real_popen_attempts"] = device.real_popen_attempts
+        result["gate_before_release"] = _gate_view(gate)
+        converged = bool((outcome.get("gate_converged") if outcome else None))
+        try:
+            gate.release(now=NOW, converged=converged)
+        except Exception:
+            pass
+        result["gate_after_release"] = _gate_view(gate)
+        _attach_log(result, log)
+        return result
+    finally:
+        for connection in (reopened, store):
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+
+
+def _xml_facts(before: str, after: str, target_text: str) -> dict[str, Any]:
+    """独立解析原始 XML：目标子树 canonical/相等、目标外变化与 Toast/Dialog 结构。"""
+    import xml.etree.ElementTree as ET
+
+    def canonical(node: ET.Element) -> dict[str, Any]:
+        """递归投影节点结构，不包含产品判定。"""
+        return {
+            "tag": node.tag,
+            "attrs": dict(sorted(node.attrib.items())),
+            "children": [canonical(child) for child in list(node)],
+        }
+
+    def target_canonical(xml_text: str) -> dict[str, Any] | None:
+        """返回唯一目标节点的 canonical 投影；缺失/重复/坏 XML 为 None。"""
+        try:
+            root = ET.fromstring(xml_text)
+        except (ET.ParseError, ValueError):
+            return None
+        matches = [node for node in root.iter("node") if node.get("text") == target_text]
+        if len(matches) != 1:
+            return None
+        return canonical(matches[0])
+
+    def outside_texts(xml_text: str) -> list[str]:
+        """返回目标节点之外的文本集合，用于目标外变化比较。"""
+        try:
+            root = ET.fromstring(xml_text)
+        except (ET.ParseError, ValueError):
+            return []
+        matches = [node for node in root.iter("node") if node.get("text") == target_text]
+        if len(matches) != 1:
+            return [node.get("text") or "" for node in root.iter("node")]
+        target = matches[0]
+        target_ids = {id(node) for node in target.iter("node")}
+        return [
+            node.get("text") or ""
+            for node in root.iter("node")
+            if id(node) not in target_ids
+        ]
+
+    def has_class(root: ET.Element, token: str) -> bool:
+        """判断任意节点 class 是否包含固定 token。"""
+        return any(token in (node.get("class") or "") for node in root.iter("node"))
+
+    def dialog_nodes(xml_text: str) -> tuple[bool, bool]:
+        """返回是否存在独立 Dialog 容器与确认/取消孩子。"""
+        try:
+            root = ET.fromstring(xml_text)
+        except (ET.ParseError, ValueError):
+            return False, False
+        container = False
+        controls = False
+        for node in root.iter("node"):
+            if "Dialog" in (node.get("class") or "") or "dialog" in (node.get("class") or ""):
+                texts = {child.get("text") for child in node.iter("node")}
+                if {"确认", "取消"} <= texts:
+                    container = True
+                    controls = True
+        return container, controls
+
+    target_before = target_canonical(before)
+    target_after = target_canonical(after)
+    outside_before = outside_texts(before)
+    outside_after = outside_texts(after)
+    try:
+        after_root = ET.fromstring(after)
+    except (ET.ParseError, ValueError):
+        after_root = None
+    try:
+        before_root = ET.fromstring(before)
+    except (ET.ParseError, ValueError):
+        before_root = None
+    toast_present = bool(
+        after_root is not None
+        and has_class(after_root, "Toast")
+        and any(
+            node.get("text") == "已投递" and "Toast" in (node.get("class") or "")
+            for node in after_root.iter("node")
+        )
+    )
+    dialog_present, dialog_controls = (
+        dialog_nodes(after) if after_root is not None else (False, False)
+    )
+    target_done = bool(
+        target_after is not None
+        and any(
+            (node.get("text") or "") in {"已申请", "继续沟通"}
+            for node in _iter_canonical_texts(target_after)
+        )
+    )
+    return {
+        "target_before_sha": canonical_hash(target_before),
+        "target_after_sha": canonical_hash(target_after),
+        "target_unchanged": target_before is not None and target_before == target_after,
+        "target_after_done": target_done,
+        "outside_before": outside_before,
+        "outside_after": outside_after,
+        "external_changed": sorted(outside_before) != sorted(outside_after),
+        "toast_present": toast_present,
+        "dialog_container_present": dialog_present,
+        "dialog_controls_present": dialog_controls,
+    }
+
+
+def _iter_canonical_texts(value: dict[str, Any]):
+    """遍历 canonical 投影中的文本，供独立目标状态检查。"""
+    text = value.get("attrs", {}).get("text")
+    if text is not None:
+        yield {"text": text}
+    for child in value.get("children", []):
+        yield from _iter_canonical_texts(child)
+
+
+def _profile_meta(db_path: Path) -> dict[str, Any] | None:
+    """只读返回真实 profile_meta 身份行。"""
+    connection = sqlite3.connect(str(db_path))
+    try:
+        row = connection.execute(
+            "SELECT profile_id, schema_version FROM profile_meta LIMIT 1"
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    return {"profile_id": row[0], "schema_version": row[1]}
+
+
+def _relative_token(path: Path, root: Path) -> str:
+    """返回隔离根内相对 token；无法相对时只留文件名。"""
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.name
+
+
+def _apply_once(
+    root: Path,
+    label: str,
+    stimulus: Mapping[str, Any],
+    *,
+    confirmed: bool = True,
+) -> dict[str, Any]:
+    """在独立合成 job/profile 上执行一次 apply 观察；只返回真实原始事实。"""
+    profile_id = f"m6-apply-{label}"
+    control_root = root / "controls" / label
+    control_root.mkdir(parents=True, exist_ok=True)
+    control_os = control_root / "os"
+    control_os.mkdir(parents=True, exist_ok=True)
+    log = _process_log(control_root, f"apply-{label}")
+    store, lease, gate, db_path, job, _batch = _job_profile_context(
+        profile_id,
+        control_os,
+        log,
+        project_root=control_root,
+    )
+    action_key = action_key_for("apply_job", app="boss", message_key=job)
+    device = _Device(stimulus)
+    executor = _executor(
+        gate=gate, store=store, root=control_root, device=device, process_log=log
+    )
+    try:
+        try:
+            with _synthetic_device(device):
+                value = perform_action(
+                    store=store,
+                    gate=gate,
+                    authorization=_authorization(
+                        lease,
+                        profile_id=profile_id,
+                        action_kind="apply_job",
+                        action_key=action_key,
+                        confirmed=confirmed,
+                    ),
+                    lease=lease,
+                    action_kind="apply_job",
+                    action_key=action_key,
+                    target_key=job,
+                    conversation_key=job,
+                    body_text=None,
+                    attachment_name=None,
+                    identity=_identity(),
+                    anchor_label=None,
+                    ime_component=None,
+                    tap_points=(),
+                    current_base_hash=BASE_HASH,
+                    current_pack_hash=PACK_HASH,
+                    daily_sends=5,
+                    reply_cooldown_seconds=0,
+                    profile_db_path=str(db_path),
+                    executor=executor,
+                    now=NOW,
+                    apply_quota=_apply_quota(
+                        profile_id=profile_id,
+                        task_key=lease.key,
+                        action_key=action_key,
+                    ),
+                    process_log=log,
+                    clock=lambda: NOW,
+                    reload_snapshot=lambda: {
+                        "base_hash": BASE_HASH,
+                        "pack_hash": PACK_HASH,
+                        "acceptance_base_hash": BASE_HASH,
+                        "acceptance_pack_hash": PACK_HASH,
+                    },
+                )
+        except Exception as error:
+            observed = {
+                "raised": str(getattr(error, "reason_code", type(error).__name__)),
+                "state": None,
+                "evidence": None,
+                "gate_converged": False,
+            }
+        else:
+            observed = {
+                "raised": None,
+                "state": value.get("state"),
+                "evidence": value.get("evidence"),
+                "gate_converged": value.get("gate_converged"),
+            }
+        record = _action_record(db_path, action_key)
+        facts = _xml_facts(
+            str(stimulus["xml_sequence"][0]),
+            str(stimulus["xml_sequence"][1]),
+            _identity().contact,
+        )
+        result = {
+            "observed": observed,
+            "irreversible": device.irreversible,
+            "record": record,
+            "ledger": _ledger_summary(control_root / "data" / "evals" / "m5-probe" / "ledger"),
+            "env": {
+                "project_root": f"controls/{label}",
+                "os_root": f"controls/{label}/os",
+                "db_path_token": _relative_token(db_path, root),
+                "profile_meta": _profile_meta(db_path),
+                "gate": _gate_view(gate),
+            },
+            "facts": facts,
+            "after_consumed": len(device.served_xml) > 1,
+            "served_xml": len(device.served_xml),
+            "real_popen_attempts": device.real_popen_attempts,
+        }
+        _attach_log(result, log)
+    finally:
+        try:
+            gate.release(
+                now=NOW,
+                converged=bool(observed.get("gate_converged")) if "observed" in locals() else False,
+            )
+        except Exception:
+            pass
+        store.close()
+    return result
 
 
 def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[str, Any]:
@@ -1694,6 +2353,8 @@ def _run_evidence_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dic
 
 def _dispatch(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[str, Any]:
     """按案例前缀分派到原始设备链路、人工对账或合同层。"""
+    if case.startswith("A06_"):
+        return _run_apply_case(case, stimuli, root)
     if case.startswith("A0") and "_" in case:
         action_id = case.split("_", 1)[0]
         if action_id in {"A01", "A02", "A03", "A04", "A05"}:
