@@ -6,6 +6,7 @@
 
 ## 二、直接子项
 
+- `converged-retry.stimuli.json`：合成输入文件。
 - `vector.json`：合成输入文件。
 
 ## 三、维护要求

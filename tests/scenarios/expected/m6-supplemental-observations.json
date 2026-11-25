@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "role": "expected_observation_only_not_sut_input",
+  "note": "原 m6-observations.json 保持 raw 字节不变；本文件只补充新增变体的独立观测。",
+  "cases": {
+    "SC-S01/arrival_after_commit": {
+      "variant_ref": "SC-S01/arrival_after_commit",
+      "stimulus_ref": "fixtures/m6/events/s01-arrival-after-commit.stimuli.json",
+      "observation": {
+        "arrival_at": 500,
+        "first_observed_at": 1000,
+        "handling_started_at": 1000,
+        "waited_ms": 0,
+        "arrival_not_first_observed": true
+      }
+    }
+  }
+}

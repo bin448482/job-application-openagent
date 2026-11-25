@@ -933,7 +933,7 @@ class P2M0BindingTests(unittest.TestCase):
     """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
 
     def test_milestone_gate_blocks_unimplemented_and_unfrozen(self) -> None:
-        """M6 已分派，但未交接变体与未实现里程碑仍只能 BLOCKED。"""
+        """M6 已分派；S01/S02 all_true/S08 已接线，其余变体仍只能 BLOCKED。"""
         assets = load_assets()
         self.assertEqual(
             runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4", "M5", "M6"}
@@ -959,11 +959,19 @@ class P2M0BindingTests(unittest.TestCase):
         for ref in (
             "SC-S01/safe_point_preempts",
             "SC-S01/arrival_after_commit",
-            "SC-S02/single_false_blocks",
             "SC-S02/all_true",
+            "SC-S08/three_hooks",
+        ):
+            item, entry = index[ref]
+            self.assertEqual(
+                runner._variant_status(item, entry, target),
+                "READY",
+                ref,
+            )
+        for ref in (
+            "SC-S02/single_false_blocks",
             "SC-S04/targeted_once",
             "SC-S04/count_no_target",
-            "SC-S08/three_hooks",
         ):
             item, entry = index[ref]
             self.assertEqual(
@@ -1185,6 +1193,519 @@ class P2M0BindingTests(unittest.TestCase):
         self.assertEqual(result["reason_code"], "device_disconnected")
         self.assertEqual(result["call_count"], 1)
         self.assertFalse(result["retried"])
+
+
+class M6SevenVariantTests(unittest.TestCase):
+    """M6 七个原变体的独立接线、缺口与变异负控；作者自检，不是产品验收。"""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """加载 oracle 供 comparator 复用。"""
+        cls.assets = load_assets()
+
+    def _run_case(self, name: str, stimuli_rel: str, mutate=None):
+        """在唯一临时根准备路径运行真实 M6 探针；正负控共用同一 helper。"""
+        import action_helpers
+
+        tmp, root = action_helpers.temp_project()
+        try:
+            shutil.copytree(
+                TESTS_DIR.parent / "tests" / "fixtures" / "read",
+                root / "tests" / "fixtures" / "read",
+            )
+            shutil.copytree(
+                SCENARIO_ROOT / "fixtures" / "m3",
+                root / "tests" / "scenarios" / "fixtures" / "m3",
+            )
+            stimuli = json.loads((SCENARIO_ROOT / stimuli_rel).read_text(encoding="utf-8"))
+            if mutate is not None:
+                mutate(stimuli)
+            old_root = m6_probe.ROOT
+            try:
+                m6_probe.ROOT = root
+                ctx = m6_probe._Context()
+                return {"status": "ok", "case": name, **m6_probe.CASES[name](ctx, stimuli)}
+            finally:
+                m6_probe.ROOT = old_root
+        finally:
+            tmp.cleanup()
+
+    def _oracle_paths(self, ref: str) -> dict:
+        """返回该变体独立 oracle 的 stdout path → equals 映射。"""
+        step = self.assets.oracles["variants"][ref]["acceptance"]["steps"][0]
+        return {item["path"]: item.get("equals") for item in step["stdout_paths"]}
+
+    def _envelope(self, payload: dict, case: str) -> dict:
+        """按真实 M6 CLI 输出补齐 status/case 协议封套。"""
+        return {"status": "ok", "case": case, **payload}
+
+    def _assert_business_reject(
+        self, payload: dict, ref: str, case: str, expected_paths: tuple[str, ...]
+    ) -> None:
+        """断言负控由预期业务路径拒绝，且不是缺 status/case 的协议误拒。"""
+        differences = compare_step(
+            self._envelope(payload, case),
+            self.assets.oracles["variants"][ref]["acceptance"]["steps"][0],
+        )
+        self.assertNotEqual(differences, [])
+        protocol = [
+            item
+            for item in differences
+            if "缺少输出路径 status" in item or "缺少输出路径 case" in item
+        ]
+        self.assertEqual(protocol, [], differences)
+        self.assertTrue(
+            any(any(path in item for item in differences) for path in expected_paths),
+            differences,
+        )
+
+    def test_s01_safe_point_uses_real_detection_and_clock(self) -> None:
+        """检测切页是独立刺激；delay 改变实际 handling/waited，旧 oracle 拒绝。"""
+        payload = self._run_case(
+            "safe_point_preempts",
+            "fixtures/m6/events/s01-preemption.stimuli.json",
+        )
+        self.assertEqual(payload["first_observed_ms"], 10000)
+        self.assertEqual(payload["handling_started_ms"], 20200)
+        self.assertEqual(payload["waited_ms"], 10200)
+        self.assertEqual(payload["detection_ms"], 180)
+        self.assertTrue(payload["arrival_not_first_observed"])
+        self.assertTrue(payload["stage_preempted_after_safe_point"])
+        self.assertFalse(payload["preempted_before_safe_point"])
+        self.assertTrue(payload["checkpoint_before_stage"])
+        self.assertEqual(
+            payload["clock_trace"], [0, 8000, 10000, 20020, 20200]
+        )
+        oracle = self.assets.oracles["variants"]["SC-S01/safe_point_preempts"]["acceptance"]
+        self.assertEqual(compare_step(payload, oracle["steps"][0]), [])
+        def delay(stimuli):
+            stimuli["detect_after_ms"] = 300
+
+        changed = self._run_case(
+            "safe_point_preempts",
+            "fixtures/m6/events/s01-preemption.stimuli.json",
+            delay,
+        )
+        self.assertEqual(changed["handling_started_ms"], 20320)
+        self.assertEqual(changed["waited_ms"], 10320)
+        self.assertEqual(changed["detection_ms"], 300)
+        self._assert_business_reject(
+            changed,
+            "SC-S01/safe_point_preempts",
+            "safe_point_preempts",
+            ("handling_started_ms", "waited_ms", "detection_ms", "clock_trace"),
+        )
+
+        def arrival_only(stimuli):
+            stimuli["events"][1]["arrival_at"] = 7000
+
+        arrival_payload = self._run_case(
+            "safe_point_preempts",
+            "fixtures/m6/events/s01-preemption.stimuli.json",
+            arrival_only,
+        )
+        self.assertEqual(arrival_payload["first_observed_ms"], 10000)
+        self.assertEqual(arrival_payload["handling_started_ms"], 20200)
+        self.assertEqual(arrival_payload["clock_trace"][1], 7000)
+
+    def test_s01_arrival_after_commit_observed_only_at_normal_check(self) -> None:
+        """到达不产生 first_observed；下一次正常检查才记录并切换。"""
+        payload = self._run_case(
+            "arrival_after_commit",
+            "fixtures/m6/events/s01-arrival-after-commit.stimuli.json",
+        )
+        self.assertEqual(payload["arrival_at"], 500)
+        self.assertEqual(payload["first_observed_ms"], 1000)
+        self.assertEqual(payload["handling_started_ms"], 1000)
+        self.assertEqual(payload["waited_ms"], 0)
+        self.assertTrue(payload["arrival_not_first_observed"])
+        self.assertTrue(payload["first_observed_at_normal_check"])
+        self.assertTrue(payload["checkpoint_before_stage"])
+        oracle = self.assets.oracles["variants"]["SC-S01/arrival_after_commit"]["acceptance"]
+        self.assertEqual(compare_step(payload, oracle["steps"][0]), [])
+        def snapshot_late(stimuli):
+            stimuli["events"][2]["virtual_ms"] = 1200
+
+        changed = self._run_case(
+            "arrival_after_commit",
+            "fixtures/m6/events/s01-arrival-after-commit.stimuli.json",
+            snapshot_late,
+        )
+        self.assertEqual(changed["first_observed_ms"], 1200)
+        self._assert_business_reject(
+            changed,
+            "SC-S01/arrival_after_commit",
+            "arrival_after_commit",
+            (
+                "first_observed_ms",
+                "handling_started_ms",
+                "first_observation_call_ms",
+                "first_observed_at_normal_check",
+            ),
+        )
+
+    def test_s08_consumes_third_window_without_observe(self) -> None:
+        """第三时窗确实被消费且零观察调用；刷新/到达变异改变真实轨迹。"""
+        payload = self._run_case(
+            "three_hooks",
+            "fixtures/m6/events/s08-observation-boundaries.stimuli.json",
+        )
+        self.assertEqual(
+            payload["hook_first_observed"], [0, 1000, None]
+        )
+        self.assertTrue(payload["third_window_consumed"])
+        self.assertEqual(payload["third_window_observe_calls"], 0)
+        self.assertFalse(payload["third_refresh_visible"])
+        self.assertTrue(payload["third_arrival_event_consumed"])
+        self.assertEqual(payload["third_arrival_event_consumed_at_ms"], 1900)
+        self.assertTrue(payload["third_arrival_payload_present"])
+        self.assertEqual(len(payload["third_arrival_payload_sha256"]), 64)
+        self.assertEqual(
+            payload["third_arrival_injection_boundary"],
+            "driver_inbox_at_arrival_ms_refresh_selects_source",
+        )
+        self.assertTrue(payload["third_refresh_inbox_present"])
+        self.assertFalse(payload["third_refresh_source_visible"])
+        self.assertFalse(payload["third_refresh_consumed_payload"])
+        self.assertEqual(
+            payload["third_refresh_selected_fixture"],
+            "tests/fixtures/read/page.json",
+        )
+        self.assertEqual(payload["third_arrival_product_state"], "absent")
+        self.assertFalse(payload["third_arrival_claimed"])
+        self.assertFalse(payload["third_arrival_observed"])
+        self.assertIsNone(payload["third_window_first_observed_ms"])
+        self.assertEqual(payload["consumed_step_count"], 11)
+        self.assertEqual(payload["observe_call_ms"], [0, 100, 1000, 1100])
+        self.assertTrue(payload["unobserved_not_fabricated"])
+        self.assertTrue(payload["visible_at_refresh_preempts"])
+        oracle = self.assets.oracles["variants"]["SC-S08/three_hooks"]["acceptance"]
+        self.assertEqual(compare_step(payload, oracle["steps"][0]), [])
+        def refresh_mutant(stimuli):
+            stimuli["events"][1]["virtual_ms"] = 1100
+
+        def arrival_mutant(stimuli):
+            stimuli["events"][1]["arrival_at"] = 800
+
+        def visible_mutant(stimuli):
+            stimuli["third_refresh_visible"] = True
+
+        def missing_mutant(stimuli):
+            stimuli["third_arrival"] = False
+            stimuli["third_refresh_visible"] = True
+
+        base_rel = "fixtures/m6/events/s08-observation-boundaries.stimuli.json"
+        changed_refresh = self._run_case("three_hooks", base_rel, refresh_mutant)
+        changed_arrival = self._run_case("three_hooks", base_rel, arrival_mutant)
+        visible = self._run_case("three_hooks", base_rel, visible_mutant)
+        missing = self._run_case("three_hooks", base_rel, missing_mutant)
+        self.assertEqual(changed_refresh["second_hook_first_observed_at"], 1100)
+        self._assert_business_reject(
+            changed_refresh,
+            "SC-S08/three_hooks",
+            "three_hooks",
+            (
+                "second_hook_first_observed_at",
+                "visible_at_refresh_preempts",
+                "clock_trace",
+            ),
+        )
+        self.assertEqual(changed_arrival["second_hook_first_observed_at"], 1000)
+        self._assert_business_reject(
+            changed_arrival,
+            "SC-S08/three_hooks",
+            "three_hooks",
+            ("second_arrival_at", "no_arrival_latency_claim"),
+        )
+        self.assertEqual(visible["third_window_first_observed_ms"], 2000)
+        self.assertEqual(visible["third_window_observe_calls"], 1)
+        self.assertFalse(visible["third_arrival_claimed"])
+        self.assertTrue(visible["third_arrival_observed"])
+        self.assertTrue(visible["third_refresh_inbox_present"])
+        self.assertTrue(visible["third_refresh_source_visible"])
+        self.assertTrue(visible["third_refresh_consumed_payload"])
+        self.assertEqual(
+            visible["third_refresh_selected_fixture"],
+            "tests/fixtures/m6/read-s08-third-arrival/unread.json",
+        )
+        self.assertEqual(visible["third_arrival_product_state"], "absent")
+        self._assert_business_reject(
+            visible,
+            "SC-S08/three_hooks",
+            "three_hooks",
+            (
+                "third_window_first_observed_ms",
+                "third_window_observe_calls",
+                "third_refresh_consumed_payload",
+                "third_refresh_selected_fixture",
+            ),
+        )
+        self.assertFalse(missing["third_arrival_event_consumed"])
+        self.assertFalse(missing["third_arrival_payload_present"])
+        self.assertFalse(missing["third_refresh_inbox_present"])
+        self.assertFalse(missing["third_refresh_source_visible"])
+        self.assertFalse(missing["third_refresh_consumed_payload"])
+        self.assertEqual(
+            missing["third_refresh_selected_fixture"],
+            "tests/fixtures/read/page.json",
+        )
+        self.assertIsNone(missing["third_window_first_observed_ms"])
+        self.assertEqual(missing["third_window_observe_calls"], 0)
+        self.assertEqual(missing["stage_preempted_count"], 2)
+        self._assert_business_reject(
+            missing,
+            "SC-S08/three_hooks",
+            "three_hooks",
+            (
+                "third_arrival_event_consumed",
+                "third_arrival_payload_present",
+                "third_refresh_inbox_present",
+            ),
+        )
+
+    def test_s02_converged_retry_real_lifecycle_and_checkpoint_order(self) -> None:
+        """pending/unknown 真实收敛后重跑；未决仍保锁并拒绝，检查点先于切换。"""
+        payload = self._run_case(
+            "safe_point_converged",
+            "fixtures/m6/safe-point/converged-retry.stimuli.json",
+        )
+        self.assertEqual(payload["pending_action_state"], "pending")
+        self.assertEqual(payload["unknown_action_state"], "unknown")
+        self.assertEqual(payload["pending_reconciled_state"], "not_performed")
+        self.assertEqual(payload["unknown_reconciled_state"], "not_performed")
+        self.assertEqual(payload["pending_after_actions"], 0)
+        self.assertEqual(payload["unknown_after_actions"], 0)
+        self.assertEqual(payload["all_true_stage_preempted_count"], 1)
+        self.assertEqual(payload["all_true_first_observed_ms"], 1000)
+        self.assertEqual(payload["all_true_pre_pending_actions"], 0)
+        self.assertEqual(payload["all_true_pre_last_state"], "not_performed")
+        self.assertEqual(payload["all_true_read_status"], "ok")
+        self.assertTrue(payload["all_true_read_actionable"])
+        self.assertTrue(payload["all_true_input_empty"])
+        self.assertTrue(payload["all_true_confirmation_closed"])
+        self.assertTrue(payload["all_true_no_inflight"])
+        self.assertLess(
+            payload["all_true_checkpoint_event_id"],
+            payload["all_true_stage_event_id"],
+        )
+        self.assertEqual(payload["all_true_checkpoint_stage_delta"], 3)
+        self.assertTrue(payload["all_true_checkpoint_before_stage"])
+        self.assertEqual(payload["refusal_reason"], "device_busy")
+        self.assertEqual(payload["refusal_gate_state"], "held")
+        self.assertTrue(payload["refusal_lock_retained"])
+        self.assertEqual(payload["refusal_scene_reads"], 0)
+        self.assertEqual(payload["refusal_action_state"], "pending")
+        oracle = self.assets.oracles["variants"]["SC-S02/all_true"]["acceptance"]
+        self.assertEqual(compare_step(payload, oracle["steps"][0]), [])
+        corrupted = copy.deepcopy(payload)
+        corrupted["all_true_checkpoint_before_stage"] = False
+        self._assert_business_reject(
+            corrupted,
+            "SC-S02/all_true",
+            "safe_point_converged",
+            ("all_true_checkpoint_before_stage",),
+        )
+        reversed_order = copy.deepcopy(payload)
+        reversed_order["all_true_checkpoint_event_id"] = (
+            payload["all_true_stage_event_id"] + 1
+        )
+        reversed_order["all_true_checkpoint_stage_delta"] = -1
+        self._assert_business_reject(
+            reversed_order,
+            "SC-S02/all_true",
+            "safe_point_converged",
+            ("all_true_checkpoint_stage_delta",),
+        )
+
+    def test_s02_list_semantics_separates_unknown_and_recognized_pages(self) -> None:
+        """真实 M3 页面：unknown 不算 list；会话/职位详情/主页面当前算 list。"""
+        payload = self._run_case(
+            "safe_point_list_semantics",
+            "fixtures/m6/safe-point/converged-retry.stimuli.json",
+        )
+        cases = payload["cases"]
+        self.assertEqual(cases["unknown_page"]["status"], "ok")
+        self.assertEqual(cases["unknown_page"]["page"], "unknown")
+        self.assertFalse(cases["unknown_page"]["page_ok"])
+        self.assertEqual(cases["unknown_page"]["failed"], ["list_returned"])
+        self.assertEqual(cases["chat_list_page"]["page"], "chat_list")
+        self.assertTrue(cases["chat_list_page"]["page_ok"])
+        self.assertEqual(cases["conversation_page"]["page"], "chat_detail")
+        self.assertTrue(cases["conversation_page"]["page_ok"])
+        self.assertEqual(cases["job_detail_page"]["page"], "job_detail")
+        self.assertTrue(cases["job_detail_page"]["page_ok"])
+        self.assertEqual(cases["main_page"]["page"], "main")
+        self.assertTrue(cases["main_page"]["page_ok"])
+        forged = copy.deepcopy(payload)
+        forged["cases"]["unknown_page"]["page_ok"] = True
+        self.assertNotEqual(
+            compare_step(
+                forged,
+                {
+                    "stdout_paths": [
+                        {"path": "cases.unknown_page.page_ok", "equals": False}
+                    ]
+                },
+            ),
+            [],
+        )
+
+    def test_s04_gap_counts_actual_reads_only(self) -> None:
+        """S04 只记真实初始读取；静态接口缺失单列，不升级业务 PASS。"""
+        payload = self._run_case(
+            "unread_verification_gap",
+            "fixtures/m6/events/s04-verification-gap.stimuli.json",
+        )
+        self.assertEqual(payload["read_calls"], len(payload["read_requests"]))
+        self.assertEqual(payload["read_calls"], 1)
+        self.assertEqual(payload["unread_verified_events"], 1)
+        self.assertEqual(payload["verification_payload"], "still_unknown")
+        self.assertEqual(payload["pause_reason"], "unread_unverified")
+        self.assertTrue(payload["diagnostic_only"])
+        self.assertTrue(payload["not_business_pass"])
+        self.assertNotIn("targeted_verification_api_calls", payload)
+        self.assertIn(
+            "targeted_verification_outcome", payload["source_audit"]["missing_call"]
+        )
+        def cleared_stimulus(stimuli):
+            stimuli["verification"] = "cleared"
+
+        accepted = self._run_case(
+            "unread_verification_gap",
+            "fixtures/m6/events/s04-verification-gap.stimuli.json",
+            cleared_stimulus,
+        )
+        self.assertEqual(accepted["read_calls"], 1)
+        self.assertEqual(accepted["unread_verified_events"], 1)
+        self.assertEqual(accepted["verification_payload"], "cleared")
+        self.assertEqual(accepted["processed"], 0)
+        self.assertTrue(accepted["scene_declaration_only"])
+
+    def test_observations_ref_binding_contract_check(self) -> None:
+        """test-local 契约检查：只验证引用谓词，不宣称资产/生产校验器拒绝。"""
+        ref = "SC-S01/arrival_after_commit"
+        assets = self.assets
+        variant = next(
+            entry
+            for scenario, entry in model.iter_variants(assets.catalogue)
+            if f"{scenario['id']}/{entry['id']}" == ref
+        )
+        supplemental = json.loads(
+            (SCENARIO_ROOT / "expected/m6-supplemental-observations.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        original = json.loads(
+            (SCENARIO_ROOT / "expected/m6-observations.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        case = supplemental["cases"].get(ref)
+
+        def errors(observations_ref, case_value, variant_value, old_value):
+            """按接线合同返回引用错误列表；只比较元数据，不执行产品。"""
+            found = []
+            if observations_ref != "expected/m6-supplemental-observations.json":
+                found.append("observations_ref")
+            if not isinstance(case_value, dict):
+                found.append("missing_case")
+            else:
+                if case_value.get("variant_ref") != ref:
+                    found.append("variant_ref")
+                if case_value.get("stimulus_ref") != variant_value["fixture"]:
+                    found.append("stimulus_ref")
+            if ref in old_value.get("cases", {}):
+                found.append("old_file_contains_case")
+            return found
+
+        self.assertEqual(
+            errors(variant["observations_ref"], case, variant, original), []
+        )
+        self.assertEqual(
+            assets.oracles["variants"][ref]["observations_ref"],
+            "expected/m6-supplemental-observations.json",
+        )
+        self.assertNotEqual(
+            errors("expected/m6-observations.json", case, variant, original), []
+        )
+        self.assertNotEqual(
+            errors(
+                variant["observations_ref"],
+                {**case, "stimulus_ref": "fixtures/m6/events/other.json"},
+                variant,
+                original,
+            ),
+            [],
+        )
+        self.assertNotEqual(
+            errors(
+                variant["observations_ref"],
+                case,
+                variant,
+                {"cases": {ref: case}},
+            ),
+            [],
+        )
+
+    def test_supplemental_observation_is_wired_to_oracle(self) -> None:
+        """新增变体 expected 独立于原观察文件，并与 oracle 比较值一致。"""
+        supplemental = json.loads(
+            (SCENARIO_ROOT / "expected/m6-supplemental-observations.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            supplemental["role"], "expected_observation_only_not_sut_input"
+        )
+        observation = supplemental["cases"]["SC-S01/arrival_after_commit"][
+            "observation"
+        ]
+        paths = self._oracle_paths("SC-S01/arrival_after_commit")
+        mapping = {
+            "arrival_at": "arrival_at",
+            "first_observed_at": "first_observed_ms",
+            "handling_started_at": "handling_started_ms",
+            "waited_ms": "waited_ms",
+            "arrival_not_first_observed": "arrival_not_first_observed",
+        }
+        for source, target in mapping.items():
+            self.assertEqual(paths[target], observation[source], source)
+
+
+class M6UnconvergedIsolationTests(unittest.TestCase):
+    """真实未决门禁 release(converged=False) 的 quarantine 与后续拒绝。"""
+
+    def test_release_false_quarantines_and_rejects_reads_and_actions(self) -> None:
+        """未决 pending 保留占用并 quarantine；场景读取与动作入口均被拒绝。"""
+        import action_helpers
+
+        temp, root = action_helpers.temp_project()
+        old_root = m6_probe.ROOT
+        try:
+            shutil.copytree(
+                TESTS_DIR.parent / "tests" / "fixtures" / "read",
+                root / "tests" / "fixtures" / "read",
+            )
+            m6_probe.ROOT = root
+            ctx = m6_probe._Context()
+            payload = m6_probe._run_s02_unconverged(
+                ctx,
+                {
+                    "script_id": "SC-S02/unconverged-release",
+                    "role": "driver_stimuli_only",
+                    "note": "真实 pending 后 release(converged=False)",
+                },
+            )
+        finally:
+            m6_probe.ROOT = old_root
+            temp.cleanup()
+        self.assertEqual(payload["gate_state"], "quarantined")
+        self.assertTrue(payload["occupancy_retained"])
+        self.assertEqual(payload["occupancy_state"], "quarantined")
+        self.assertEqual(payload["action_rejection"], "device_not_held")
+        self.assertEqual(payload["action_state_after"], "pending")
+        self.assertEqual(payload["run_rejection"], "device_quarantined")
+        self.assertEqual(payload["run_scene_reads"], 0)
 
 
 class M1DriverBoundaryTests(unittest.TestCase):

@@ -6,7 +6,8 @@
 
 ## 二、文件清单
 
-- `m6-observations.json`：M6 S01/S03/S06/S08 的只读期望轨迹，明确 `expected_observation_only_not_sut_input`；不复制进 SUT，不作为刺激喂给产品。
+- `m6-observations.json`：M6 S01/S03/S06/S08 的只读期望轨迹，明确 `expected_observation_only_not_sut_input`；不复制进 SUT，不作为刺激喂给产品。本任务保持其 raw Git 字节不变。
+- `m6-supplemental-observations.json`：新增 M6 变体（如 S01/arrival_after_commit）的独立观测，与 oracle 比较值由测试 comparator 核对；不进入 SUT，不替代原观察文件。
 - `oracles.json`：以 `SC-.../变体` 为键，逐项记录层、摘要、断言、可执行 acceptance、禁止结果、源契约与前置。T/O/W 变体的 acceptance 固定为 null，保留未验收。
 - `AGENTS.md`：本文件。
 - `CLAUDE.md`：只包含 `@AGENTS.md`。

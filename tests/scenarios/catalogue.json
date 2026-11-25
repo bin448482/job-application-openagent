@@ -34324,15 +34324,17 @@
         "safe_point_preempts",
         "arrival_after_commit"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "safe_point_preempts",
           "label": "安全点后优先未读",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m6_probe.py --case safe_point_preempts --stimuli tests/scenarios/fixtures/m6/events/s01-preemption.stimuli.json"
+          ],
           "fixture": "fixtures/m6/events/s01-preemption.stimuli.json",
           "setup": "仅外部刺激；产品观察在独立 expected",
           "required_api": "M6 调度",
@@ -34345,7 +34347,101 @@
             "arrival 不冒充 first_observed",
             "开始处理才写 stage_preempted"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "safe_point_preempts"
+                  },
+                  {
+                    "path": "processed",
+                    "equals": 2
+                  },
+                  {
+                    "path": "pause_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "arrival_at",
+                    "equals": 8000
+                  },
+                  {
+                    "path": "snapshot_at",
+                    "equals": 10000
+                  },
+                  {
+                    "path": "safe_point_at",
+                    "equals": 20020
+                  },
+                  {
+                    "path": "detect_at",
+                    "equals": 20200
+                  },
+                  {
+                    "path": "stage_preempted_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "first_observed_ms",
+                    "equals": 10000
+                  },
+                  {
+                    "path": "handling_started_ms",
+                    "equals": 20200
+                  },
+                  {
+                    "path": "waited_ms",
+                    "equals": 10200
+                  },
+                  {
+                    "path": "detection_ms",
+                    "equals": 180
+                  },
+                  {
+                    "path": "stage_preempted_after_safe_point",
+                    "equals": true
+                  },
+                  {
+                    "path": "preempted_before_safe_point",
+                    "equals": false
+                  },
+                  {
+                    "path": "arrival_not_first_observed",
+                    "equals": true
+                  },
+                  {
+                    "path": "first_observation_call_ms",
+                    "equals": 10000
+                  },
+                  {
+                    "path": "observe_call_count",
+                    "equals": 2
+                  },
+                  {
+                    "path": "checkpoint_before_stage",
+                    "equals": true
+                  },
+                  {
+                    "path": "clock_trace",
+                    "equals": [
+                      0,
+                      8000,
+                      10000,
+                      20020,
+                      20200
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -34354,7 +34450,12 @@
           "observations_ref": "expected/m6-observations.json",
           "deferred_to": null,
           "module_evidence": null,
-          "shared_inputs": [],
+          "shared_inputs": [
+            "tests/fixtures/read",
+            "prompts/base",
+            "prompts/examples",
+            "evals/policy-suite"
+          ],
           "local_packs": {},
           "fixture_copies": {},
           "lf_inputs": [],
@@ -34364,10 +34465,12 @@
           "id": "arrival_after_commit",
           "label": "检查点提交后到达",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
-          "fixture": null,
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m6_probe.py --case arrival_after_commit --stimuli tests/scenarios/fixtures/m6/events/s01-arrival-after-commit.stimuli.json"
+          ],
+          "fixture": "fixtures/m6/events/s01-arrival-after-commit.stimuli.json",
           "setup": "在 checkpoint 后、下次取任务前注入到达",
           "required_api": "M6 调度",
           "expected_ref": "SC-S01/arrival_after_commit",
@@ -34376,16 +34479,85 @@
             "下次正常检查观察后优先",
             "不伪造 first_observed"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "arrival_after_commit"
+                  },
+                  {
+                    "path": "processed",
+                    "equals": 2
+                  },
+                  {
+                    "path": "pause_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "arrival_at",
+                    "equals": 500
+                  },
+                  {
+                    "path": "stage_preempted_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "first_observed_ms",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "handling_started_ms",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "waited_ms",
+                    "equals": 0
+                  },
+                  {
+                    "path": "arrival_not_first_observed",
+                    "equals": true
+                  },
+                  {
+                    "path": "first_observed_at_normal_check",
+                    "equals": true
+                  },
+                  {
+                    "path": "preempted_at_normal_check",
+                    "equals": true
+                  },
+                  {
+                    "path": "first_observation_call_ms",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "checkpoint_before_stage",
+                    "equals": true
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
           ],
           "expected_missing_inputs": [],
-          "observations_ref": null,
+          "observations_ref": "expected/m6-supplemental-observations.json",
           "deferred_to": null,
           "module_evidence": null,
-          "shared_inputs": [],
+          "shared_inputs": [
+            "tests/fixtures/read",
+            "prompts/base",
+            "prompts/examples",
+            "evals/policy-suite"
+          ],
           "local_packs": {},
           "fixture_copies": {},
           "lf_inputs": [],
@@ -34409,7 +34581,7 @@
         "single_false_blocks",
         "all_true"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "single_false_blocks",
@@ -34446,9 +34618,11 @@
           "id": "all_true",
           "label": "全部条件真",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m6_probe.py --case safe_point_converged --stimuli tests/scenarios/fixtures/m6/safe-point/converged-retry.stimuli.json"
+          ],
           "fixture": "fixtures/m6/safe-point/vector.json",
           "setup": "全部条件真且有可领取正目标",
           "required_api": "M6 调度",
@@ -34458,7 +34632,183 @@
             "只有全真才切换",
             "状态证据收敛后重跑"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "safe_point_converged"
+                  },
+                  {
+                    "path": "pending_before_actions",
+                    "equals": 1
+                  },
+                  {
+                    "path": "pending_before_pending",
+                    "equals": 1
+                  },
+                  {
+                    "path": "pending_before_last_state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "pending_action_state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "pending_reconciled_state",
+                    "equals": "not_performed"
+                  },
+                  {
+                    "path": "pending_reconciled_task_state",
+                    "equals": "not_sent"
+                  },
+                  {
+                    "path": "pending_after_actions",
+                    "equals": 0
+                  },
+                  {
+                    "path": "pending_after_pending",
+                    "equals": 0
+                  },
+                  {
+                    "path": "unknown_before_actions",
+                    "equals": 1
+                  },
+                  {
+                    "path": "unknown_before_pending",
+                    "equals": 1
+                  },
+                  {
+                    "path": "unknown_action_state",
+                    "equals": "unknown"
+                  },
+                  {
+                    "path": "unknown_reconciled_state",
+                    "equals": "not_performed"
+                  },
+                  {
+                    "path": "unknown_reconciled_task_state",
+                    "equals": "not_sent"
+                  },
+                  {
+                    "path": "unknown_after_actions",
+                    "equals": 0
+                  },
+                  {
+                    "path": "unknown_after_pending",
+                    "equals": 0
+                  },
+                  {
+                    "path": "all_true_processed",
+                    "equals": 2
+                  },
+                  {
+                    "path": "all_true_pre_pending_actions",
+                    "equals": 0
+                  },
+                  {
+                    "path": "all_true_pre_pending_running",
+                    "equals": 0
+                  },
+                  {
+                    "path": "all_true_pre_last_state",
+                    "equals": "not_performed"
+                  },
+                  {
+                    "path": "all_true_read_status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "all_true_read_actionable",
+                    "equals": true
+                  },
+                  {
+                    "path": "all_true_input_empty",
+                    "equals": true
+                  },
+                  {
+                    "path": "all_true_confirmation_closed",
+                    "equals": true
+                  },
+                  {
+                    "path": "all_true_no_inflight",
+                    "equals": true
+                  },
+                  {
+                    "path": "all_true_pause_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "all_true_stage_preempted_count",
+                    "equals": 1
+                  },
+                  {
+                    "path": "all_true_first_observed_ms",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "all_true_handling_started_ms",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "all_true_waited_ms",
+                    "equals": 0
+                  },
+                  {
+                    "path": "all_true_checkpoint_event_id",
+                    "type": "integer"
+                  },
+                  {
+                    "path": "all_true_stage_event_id",
+                    "type": "integer"
+                  },
+                  {
+                    "path": "all_true_checkpoint_stage_delta",
+                    "equals": 3
+                  },
+                  {
+                    "path": "all_true_checkpoint_before_stage",
+                    "equals": true
+                  },
+                  {
+                    "path": "refusal_pending_actions",
+                    "equals": 1
+                  },
+                  {
+                    "path": "refusal_action_state",
+                    "equals": "pending"
+                  },
+                  {
+                    "path": "refusal_gate_state",
+                    "equals": "held"
+                  },
+                  {
+                    "path": "refusal_lock_retained",
+                    "equals": true
+                  },
+                  {
+                    "path": "refusal_reason",
+                    "equals": "device_busy"
+                  },
+                  {
+                    "path": "refusal_processed",
+                    "equals": 0
+                  },
+                  {
+                    "path": "refusal_scene_reads",
+                    "equals": 0
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -34467,7 +34817,13 @@
           "observations_ref": null,
           "deferred_to": null,
           "module_evidence": null,
-          "shared_inputs": [],
+          "shared_inputs": [
+            "tests/fixtures/read",
+            "prompts/base",
+            "prompts/examples",
+            "evals/policy-suite",
+            "tests/scenarios/fixtures/m6/safe-point"
+          ],
           "local_packs": {},
           "fixture_copies": {},
           "lf_inputs": [],
@@ -35059,15 +35415,17 @@
       "offline_subscenarios": [
         "three_hooks"
       ],
-      "coverage_status": "F_DECLARATIVE_ONLY",
+      "coverage_status": "F_READY_AWAITING_APP",
       "variants": [
         {
           "id": "three_hooks",
           "label": "安全点前/刷新前/刷新后到达",
           "layer": "F",
-          "asset_status": "ASSET_ONLY",
-          "entry_state": "unfrozen",
-          "steps": [],
+          "asset_status": "READY_FOR_APP",
+          "entry_state": "frozen",
+          "steps": [
+            "python tests/scenarios/framework/m6_probe.py --case three_hooks --stimuli tests/scenarios/fixtures/m6/events/s08-observation-boundaries.stimuli.json"
+          ],
           "fixture": "fixtures/m6/events/s08-observation-boundaries.stimuli.json",
           "setup": "每次只推进一个外部到达/快照刺激；产品观察单列 expected",
           "required_api": "M6 调度",
@@ -35080,7 +35438,184 @@
             "最多一条职位事务再加检测/切页",
             "记录 arrival/observed 分离"
           ],
-          "acceptance": null,
+          "acceptance": {
+            "steps": [
+              {
+                "exit_code": 0,
+                "stdout_paths": [
+                  {
+                    "path": "status",
+                    "equals": "ok"
+                  },
+                  {
+                    "path": "case",
+                    "equals": "three_hooks"
+                  },
+                  {
+                    "path": "processed",
+                    "equals": 5
+                  },
+                  {
+                    "path": "pause_reason",
+                    "equals": null
+                  },
+                  {
+                    "path": "stage_preempted_count",
+                    "equals": 2
+                  },
+                  {
+                    "path": "first_hook_first_observed_at",
+                    "equals": 0
+                  },
+                  {
+                    "path": "second_hook_first_observed_at",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "third_hook_first_observed_at",
+                    "equals": null
+                  },
+                  {
+                    "path": "hook_first_observed",
+                    "equals": [
+                      0,
+                      1000,
+                      null
+                    ]
+                  },
+                  {
+                    "path": "observed_before_safe_point_preempts",
+                    "equals": true
+                  },
+                  {
+                    "path": "visible_at_refresh_preempts",
+                    "equals": true
+                  },
+                  {
+                    "path": "unobserved_not_fabricated",
+                    "equals": true
+                  },
+                  {
+                    "path": "no_arrival_latency_claim",
+                    "equals": true
+                  },
+                  {
+                    "path": "second_arrival_at",
+                    "equals": 900
+                  },
+                  {
+                    "path": "second_refresh_at",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "third_arrival_at",
+                    "equals": 1900
+                  },
+                  {
+                    "path": "third_refresh_at",
+                    "equals": 2000
+                  },
+                  {
+                    "path": "third_window_observe_calls",
+                    "equals": 0
+                  },
+                  {
+                    "path": "third_window_consumed",
+                    "equals": true
+                  },
+                  {
+                    "path": "third_refresh_visible",
+                    "equals": false
+                  },
+                  {
+                    "path": "third_arrival_event_consumed",
+                    "equals": true
+                  },
+                  {
+                    "path": "third_arrival_event_consumed_at_ms",
+                    "equals": 1900
+                  },
+                  {
+                    "path": "third_arrival_payload_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "third_arrival_payload_sha256",
+                    "type": "string"
+                  },
+                  {
+                    "path": "third_arrival_injection_boundary",
+                    "equals": "driver_inbox_at_arrival_ms_refresh_selects_source"
+                  },
+                  {
+                    "path": "third_arrival_product_state",
+                    "equals": "absent"
+                  },
+                  {
+                    "path": "third_arrival_claimed",
+                    "equals": false
+                  },
+                  {
+                    "path": "third_arrival_observed",
+                    "equals": false
+                  },
+                  {
+                    "path": "third_refresh_inbox_present",
+                    "equals": true
+                  },
+                  {
+                    "path": "third_refresh_source_visible",
+                    "equals": false
+                  },
+                  {
+                    "path": "third_refresh_consumed_payload",
+                    "equals": false
+                  },
+                  {
+                    "path": "third_refresh_selected_fixture",
+                    "equals": "tests/fixtures/read/page.json"
+                  },
+                  {
+                    "path": "third_window_first_observed_ms",
+                    "equals": null
+                  },
+                  {
+                    "path": "consumed_step_count",
+                    "equals": 11
+                  },
+                  {
+                    "path": "observe_call_ms",
+                    "equals": [
+                      0,
+                      100,
+                      1000,
+                      1100
+                    ]
+                  },
+                  {
+                    "path": "clock_trace",
+                    "equals": [
+                      0,
+                      0,
+                      0,
+                      100,
+                      500,
+                      900,
+                      1000,
+                      1100,
+                      1500,
+                      1900,
+                      2000
+                    ]
+                  },
+                  {
+                    "path": "step_count",
+                    "equals": 11
+                  }
+                ]
+              }
+            ]
+          },
           "forbidden": [
             "不得以资产自检代替产品执行",
             "未执行或 BLOCKED 时不得记 PASS"
@@ -35089,7 +35624,12 @@
           "observations_ref": "expected/m6-observations.json",
           "deferred_to": null,
           "module_evidence": null,
-          "shared_inputs": [],
+          "shared_inputs": [
+            "tests/fixtures/read",
+            "prompts/base",
+            "prompts/examples",
+            "evals/policy-suite"
+          ],
           "local_packs": {},
           "fixture_copies": {},
           "lf_inputs": [],

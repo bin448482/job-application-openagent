@@ -1,0 +1,5 @@
+{
+  "script_id": "SC-S02/converged-retry",
+  "role": "driver_stimuli_only",
+  "note": "真实 pending/unknown 经 reconcile 收敛后重跑；不声明产品结果"
+}

@@ -1,20 +1,23 @@
-"""在隔离根内用真实 M6 生产入口执行 S03/S05/S06/S07 的可执行边界。
+"""在隔离根内用真实 M6 生产入口执行 S01/S03/S08 的可执行边界。
 
 只注入外部刺激：合成 M3 读取引用、原始时钟/单调时钟与设备读取计数；真实
 profile/共享门禁/唯一 SqliteStore/execute_run/租约/预算/游标均为生产实现。
 不读取 expected/oracle，不返回 performed/pause/ready 等结论之外的推导结果；
-所有结论由独立 expected 比较。G1/G2/G3 未交付项不在本探针内伪造。
+所有结论由独立 expected 比较。S04 缺口探针只记录当前流程未做真实定向读取。
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
 import sqlite3
 import sys
+import uuid
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -33,9 +36,11 @@ from app.adapters.simulated.runtime import (
 from app.adapters.sqlite.device_gate import SharedDeviceGate
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
 from app.adapters.sqlite.repo import SqliteStore
+from app.domain.actions import ReconciliationObservation, action_key_for
 from app.domain.models import (
     APP,
     Candidate,
+    Evidence,
     Owner,
     ReadResult,
     UnreadRow,
@@ -48,7 +53,11 @@ from app.domain.models import (
     identity_hash_for,
     parse_utc,
 )
-from app.domain.reading import job_identity_hash_for, job_key_from_identity
+from app.domain.reading import (
+    job_identity_hash_for,
+    job_key_from_identity,
+    message_key_from_stable,
+)
 from app.domain.runtime import (
     BudgetLimits,
     BudgetState,
@@ -60,6 +69,7 @@ from app.ports.decision import BridgeDescriptor
 from app.usecases import policy as policy_usecases
 from app.usecases.policy_eval import RepositorySnapshot, eval_pack
 from app.usecases.runtime import execute_run
+from app.usecases.actions import reconcile_action
 
 NOW = "2026-11-25T10:00:00.000Z"
 BASE_MS = 1_764_000_000_000  # 2025-11-25T10:00:00Z, only for synthetic wall math
@@ -252,27 +262,42 @@ class _TimedScene:
         profile_id: str,
         times: list[int],
         clock: EnvironmentClock,
+        arrivals: Mapping[int, Mapping[str, Any]] | None = None,
+        step_hook: Any | None = None,
     ) -> None:
-        """保存真实场景适配器、每步单调毫秒与环境时钟。"""
+        """保存真实场景适配器、每步单调毫秒、环境时钟与外部到达边界。"""
         self._inner = StimulusRuntimeScene(spec, profile_id=profile_id)
         self.batch_id = self._inner.batch_id
         self._times = list(times)
         self._clock = clock
+        self._arrivals = {int(key): dict(value) for key, value in (arrivals or {}).items()}
+        self._step_hook = step_hook
         self._index = 0
         self.consumed: list[Any] = []
         self.current_step: Any = None
         self.advance_trace: list[int] = []
+        self.arrivals_consumed: list[dict[str, Any]] = []
 
     def next_step(self) -> Any:
-        """返回下一步；在返回前按外部时间表推进环境并记录实际消费。"""
+        """返回下一步；在返回前按外部时间表推进环境、消费到达并解析刷新源。"""
         step = self._inner.next_step()
         if step is not None:
             self.consumed.append(step)
         self.current_step = step
         if step is not None and self._index < len(self._times):
-            self._clock.advance(self._times[self._index])
+            at = self._times[self._index]
+            self._clock.advance(at)
             self.advance_trace.append(self._clock.mono_ms)
             self._index += 1
+            arrival = self._arrivals.get(at)
+            if arrival is not None:
+                self.arrivals_consumed.append({"at_ms": at, **arrival})
+            if self._step_hook is not None:
+                resolved = self._step_hook(at, step, self.arrivals_consumed)
+                if resolved is not None:
+                    step = resolved
+                    self.consumed[-1] = step
+                    self.current_step = step
         return step
 
 
@@ -456,6 +481,48 @@ def _make_job(label: str) -> tuple[str, str]:
     return f"tests/fixtures/m6/job-{label}/job_detail.json", key
 
 
+def _make_unknown_unread(label: str) -> str:
+    """复制公开未读夹具并移除角标，返回真实解析后未读状态为 unknown 的 manifest。"""
+    target = ROOT / "tests" / "fixtures" / "m6" / f"unknown-{label}"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("profile.json", "unread.xml", "unread.json"):
+        shutil.copyfile(ROOT / "tests" / "fixtures" / "read" / name, target / name)
+    path = target / "unread.xml"
+    text = path.read_text(encoding="utf-8")
+    badge = (
+        '        <node text="1" class="android.widget.TextView" '
+        'bounds="[20,220][80,280]" />\n'
+    )
+    if badge not in text:
+        raise ProbeError("未读夹具缺少合成角标")
+    path.write_text(text.replace(badge, ""), encoding="utf-8")
+    return f"tests/fixtures/m6/unknown-{label}/unread.json"
+
+
+def _make_unknown_page(label: str) -> str:
+    """生成真实 M3 解析为 page=unknown 的页面 manifest；status 仍为 ok。"""
+    target = ROOT / "tests" / "fixtures" / "m6" / f"unknown-page-{label}"
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(
+        ROOT / "tests" / "fixtures" / "read" / "profile.json", target / "profile.json"
+    )
+    (target / "page.xml").write_text(
+        '<hierarchy rotation="0">\n'
+        '  <node class="android.widget.TextView" package="com.hpbr.bosszhipin" '
+        'text="合成未知页面" bounds="[0,0][1080,2400]" />\n'
+        "</hierarchy>\n",
+        encoding="utf-8",
+    )
+    manifest = json.loads(
+        (ROOT / "tests" / "fixtures" / "read" / "page.json").read_text(encoding="utf-8")
+    )
+    manifest["hierarchy_paths"] = ["page.xml"]
+    (target / "page.json").write_text(
+        json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+    )
+    return f"tests/fixtures/m6/unknown-page-{label}/page.json"
+
+
 def _seed_discovery(
     db_path: Path, profile_id: str, host: str, conversation_key: str
 ) -> None:
@@ -569,6 +636,8 @@ class _Context:
         limits: BudgetLimits | None = None,
         batch: str | None = None,
         times: list[int] | None = None,
+        arrivals: Mapping[int, Mapping[str, Any]] | None = None,
+        step_hook: Any | None = None,
     ) -> dict[str, Any]:
         """在真实 profile/gate/store 上运行一次 execute_run 并返回其摘要。"""
         credential, provider, model_id, config_hash = self.credential()
@@ -583,6 +652,8 @@ class _Context:
                 profile_id=self.profile_id,
                 times=times or [1000] * len(steps),
                 clock=clock,
+                arrivals=arrivals,
+                step_hook=step_hook,
             )
         else:
             scene = StimulusRuntimeScene(_scene(batch, steps), profile_id=self.profile_id)
@@ -1090,6 +1161,1078 @@ def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _relative_ms(value: str) -> int:
+    """把规范 UTC 文本换算为相对本次合成时钟起点的毫秒。"""
+    return _wall_ms(value) - _wall_ms(_iso(0))
+
+
+def _stage_event_ids(db_path: Path) -> list[int]:
+    """只读返回 stage_preempted 的真实 event_id 顺序。"""
+    connection = sqlite3.connect(str(db_path))
+    try:
+        rows = connection.execute(
+            "SELECT event_id FROM scheduler_events "
+            "WHERE event = 'stage_preempted' ORDER BY event_id"
+        ).fetchall()
+    finally:
+        connection.close()
+    return [int(row[0]) for row in rows]
+
+
+def _parse_s01_timeline(
+    stimuli: Mapping[str, Any], *, require_safe: bool
+) -> dict[str, int | None]:
+    """严格解析 S01 原始 job/arrival/snapshot/safe 边界；未知/乱序失败关闭。"""
+    if not isinstance(stimuli, dict):
+        raise ProbeError("S01 刺激不是对象")
+    if stimuli.get("role") != "driver_stimuli_only":
+        raise ProbeError("S01 role 非法")
+    allowed = {"script_id", "role", "clock_start_ms", "events", "detect_after_ms"}
+    if set(stimuli) - allowed:
+        raise ProbeError("S01 刺激形状非法")
+    clock_start = stimuli.get("clock_start_ms")
+    if type(clock_start) is not int or clock_start < 0:
+        raise ProbeError("S01 clock_start_ms 非法")
+    detect = stimuli.get("detect_after_ms")
+    if require_safe:
+        if type(detect) is not int or detect < 1:
+            raise ProbeError("S01 detect_after_ms 非法")
+    elif detect is not None:
+        raise ProbeError("S01 detect_after_ms 不得用于无安全点变体")
+    events = stimuli.get("events")
+    if not isinstance(events, list):
+        raise ProbeError("S01 事件不是数组")
+    expected = ["job_task_started", "synthetic_unread_arrives", "snapshot_available"]
+    if require_safe:
+        expected.append("safe_point_reached")
+    if len(events) != len(expected):
+        raise ProbeError("S01 事件数量不符")
+    positions: dict[str, int] = {}
+    last_ms = clock_start
+    arrival: int | None = None
+    for index, (item, name) in enumerate(zip(events, expected), start=1):
+        if not isinstance(item, dict) or set(item) - {
+            "seq",
+            "virtual_ms",
+            "event",
+            "arrival_at",
+            "note",
+        }:
+            raise ProbeError("S01 事件形状非法")
+        if item.get("seq") != index or item.get("event") != name:
+            raise ProbeError("S01 事件顺序非法")
+        ms = item.get("virtual_ms")
+        if type(ms) is not int or ms < last_ms:
+            raise ProbeError("S01 virtual_ms 回退")
+        last_ms = ms
+        positions[name] = ms
+        if name == "synthetic_unread_arrives":
+            value = item.get("arrival_at")
+            if type(value) is not int or value < clock_start or value > ms:
+                raise ProbeError("S01 arrival_at 非法")
+            arrival = value
+        elif "arrival_at" in item:
+            raise ProbeError("S01 非 arrival 事件含 arrival_at")
+    if positions["job_task_started"] != clock_start:
+        raise ProbeError("S01 首 job 与 clock_start 不一致")
+    if arrival is None:
+        raise ProbeError("S01 arrival 缺失")
+    snapshot = positions["snapshot_available"]
+    safe = positions.get("safe_point_reached")
+    if snapshot < arrival:
+        raise ProbeError("S01 snapshot 早于 arrival")
+    if require_safe and (safe is None or safe < snapshot):
+        raise ProbeError("S01 安全点缺失或早于 snapshot")
+    if not require_safe and safe is not None:
+        raise ProbeError("S01 无安全点变体不得声明 safe")
+    return {
+        "job_ms": positions["job_task_started"],
+        "arrival_at": arrival,
+        "snapshot_ms": snapshot,
+        "safe_ms": safe,
+        "detect_after_ms": detect if require_safe else None,
+    }
+
+
+def _collect_observe_trace(original: Any) -> tuple[Any, list[dict[str, Any]]]:
+    """包住真实 observe_unread 并记录调用返回；不改变任何业务返回值。"""
+    trace: list[dict[str, Any]] = []
+
+    def wrapper(previous, *, wall_now: str, monotonic_ms: int):
+        """调用原函数并记录实际首次观察与调用时刻。"""
+        value = original(previous, wall_now=wall_now, monotonic_ms=monotonic_ms)
+        trace.append(
+            {
+                "monotonic_ms": monotonic_ms,
+                "first_observed_at": value.first_observed_at,
+                "first_observed_monotonic_ms": value.first_observed_monotonic_ms,
+                "previous": previous is not None,
+            }
+        )
+        return value
+
+    return wrapper, trace
+
+
+def _run_s01(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
+    """真实 job→观察→安全点→独立检测切页；阶段只在开始处理后记录。"""
+    parsed = _parse_s01_timeline(stimuli, require_safe=True)
+    job_ms = int(parsed["job_ms"])
+    arrival = int(parsed["arrival_at"])
+    snapshot = int(parsed["snapshot_ms"])
+    safe = int(parsed["safe_ms"])
+    detect = safe + int(parsed["detect_after_ms"])
+    job_manifest, job_key = _make_job("s01")
+    unread_manifest, conversation_manifest, key = _make_unread("s01")
+    _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, key)
+    steps = [
+        _step(read_fixture=job_manifest),
+        _step(read_fixture="tests/fixtures/read/page.json", in_progress=True),
+        _step(
+            read_fixture=unread_manifest,
+            conversation_fixture=conversation_manifest,
+            in_progress=True,
+        ),
+        _step(read_fixture="tests/fixtures/read/page.json", in_progress=True),
+        _step(
+            read_fixture=unread_manifest,
+            conversation_fixture=conversation_manifest,
+        ),
+    ]
+    times = [job_ms, arrival, snapshot, safe, detect]
+    if any(b < a for a, b in zip(times, times[1:])):
+        raise ProbeError("S01 步骤时间回退")
+    import app.usecases.runtime as runtime_module
+
+    original_observe = runtime_module.observe_unread
+    wrapper, trace = _collect_observe_trace(original_observe)
+    runtime_module.observe_unread = wrapper
+    try:
+        result = ctx.execute(
+            steps,
+            clock=EnvironmentClock(),
+            limits=BudgetLimits(
+                candidates=30, device_calls=200, round_seconds=900, job_seconds=30
+            ),
+            times=times,
+        )
+    finally:
+        runtime_module.observe_unread = original_observe
+    run = result["run"]
+    events = _stage_preempted_events(ctx.db_path)
+    event_ids = _stage_event_ids(ctx.db_path)
+    order = _checkpoint_order(
+        ctx.db_path, str(run["batch_id"]), event_ids[0] if event_ids else None
+    )
+    first_ms = _relative_ms(str(events[0]["first_observed_at"])) if events else None
+    handling_ms = _relative_ms(str(events[0]["handling_started_at"])) if events else None
+    return {
+        "processed": run["processed"],
+        "pause_reason": run["pause_reason"],
+        "job_key": job_key,
+        "arrival_at": arrival,
+        "snapshot_at": snapshot,
+        "safe_point_at": safe,
+        "detect_at": detect,
+        "stage_preempted_count": len(events),
+        "first_observed_ms": first_ms,
+        "handling_started_ms": handling_ms,
+        "waited_ms": events[0]["waited_ms"] if events else None,
+        "detection_ms": events[0].get("detection_ms") if events else None,
+        "stage_preempted_after_safe_point": bool(
+            events and handling_ms is not None and handling_ms >= safe
+        ),
+        "preempted_before_safe_point": any(
+            _relative_ms(str(event["handling_started_at"])) < safe for event in events
+        ),
+        "arrival_not_first_observed": first_ms is not None and first_ms != arrival,
+        "first_observation_call_ms": (
+            _relative_ms(str(trace[0]["first_observed_at"])) if trace else None
+        ),
+        "observe_call_count": len(trace),
+        "clock_trace": list(getattr(ctx.last_scene, "advance_trace", [])),
+        "checkpoint_before_stage": order["checkpoint_before_stage"],
+    }
+
+
+def _run_s01_arrival(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
+    """检查点后到达但未观察；下一次正常检查才记录 first_observed 并优先。"""
+    parsed = _parse_s01_timeline(stimuli, require_safe=False)
+    job_ms = int(parsed["job_ms"])
+    arrival = int(parsed["arrival_at"])
+    snapshot = int(parsed["snapshot_ms"])
+    job_manifest, job_key = _make_job("s01-arrival")
+    unread_manifest, conversation_manifest, key = _make_unread("s01-arrival")
+    _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, key)
+    steps = [
+        _step(read_fixture=job_manifest),
+        _step(read_fixture="tests/fixtures/read/page.json", in_progress=True),
+        _step(
+            read_fixture=unread_manifest,
+            conversation_fixture=conversation_manifest,
+        ),
+    ]
+    times = [job_ms, arrival, snapshot]
+    if any(b < a for a, b in zip(times, times[1:])):
+        raise ProbeError("S01 arrival 步骤时间回退")
+    import app.usecases.runtime as runtime_module
+
+    original_observe = runtime_module.observe_unread
+    wrapper, trace = _collect_observe_trace(original_observe)
+    runtime_module.observe_unread = wrapper
+    try:
+        result = ctx.execute(steps, clock=EnvironmentClock(), times=times)
+    finally:
+        runtime_module.observe_unread = original_observe
+    run = result["run"]
+    events = _stage_preempted_events(ctx.db_path)
+    event_ids = _stage_event_ids(ctx.db_path)
+    order = _checkpoint_order(
+        ctx.db_path, str(run["batch_id"]), event_ids[0] if event_ids else None
+    )
+    first_ms = _relative_ms(str(events[0]["first_observed_at"])) if events else None
+    handling_ms = _relative_ms(str(events[0]["handling_started_at"])) if events else None
+    return {
+        "processed": run["processed"],
+        "pause_reason": run["pause_reason"],
+        "job_key": job_key,
+        "arrival_at": arrival,
+        "first_observed_ms": first_ms,
+        "handling_started_ms": handling_ms,
+        "waited_ms": events[0]["waited_ms"] if events else None,
+        "stage_preempted_count": len(events),
+        "arrival_not_first_observed": first_ms is not None and first_ms != arrival,
+        "first_observed_at_normal_check": first_ms == snapshot,
+        "preempted_at_normal_check": handling_ms == snapshot,
+        "first_observation_call_ms": (
+            _relative_ms(str(trace[0]["first_observed_at"])) if trace else None
+        ),
+        "checkpoint_before_stage": order["checkpoint_before_stage"],
+    }
+
+
+def _parse_s08_timeline(stimuli: Mapping[str, Any]) -> list[dict[str, int]]:
+    """严格解析 S08 三个到达/刷新时窗；未知/缺失/乱序失败关闭。"""
+    if not isinstance(stimuli, dict):
+        raise ProbeError("S08 刺激不是对象")
+    if stimuli.get("role") != "driver_stimuli_only":
+        raise ProbeError("S08 role 非法")
+    if set(stimuli) - {
+        "script_id",
+        "role",
+        "clock_start_ms",
+        "events",
+        "third_arrival",
+        "third_refresh_visible",
+    }:
+        raise ProbeError("S08 刺激形状非法")
+    if type(stimuli.get("third_arrival")) is not bool:
+        raise ProbeError("S08 third_arrival 非法")
+    if type(stimuli.get("third_refresh_visible")) is not bool:
+        raise ProbeError("S08 third_refresh_visible 非法")
+    clock_start = stimuli.get("clock_start_ms")
+    if type(clock_start) is not int or clock_start < 0:
+        raise ProbeError("S08 clock_start_ms 非法")
+    events = stimuli.get("events")
+    names = (
+        "arrival_before_safe_point",
+        "arrival_after_checkpoint_visible_at_refresh",
+        "arrival_after_refresh_not_yet_observed",
+    )
+    if not isinstance(events, list) or len(events) != 3:
+        raise ProbeError("S08 事件数量不符")
+    windows: list[dict[str, int]] = []
+    last_refresh = clock_start
+    for index, (item, name) in enumerate(zip(events, names), start=1):
+        if not isinstance(item, dict) or set(item) - {
+            "seq",
+            "virtual_ms",
+            "event",
+            "arrival_at",
+            "note",
+        }:
+            raise ProbeError("S08 事件形状非法")
+        if item.get("seq") != index or item.get("event") != name:
+            raise ProbeError("S08 事件顺序非法")
+        refresh = item.get("virtual_ms")
+        arrival = item.get("arrival_at")
+        if type(refresh) is not int or refresh < last_refresh:
+            raise ProbeError("S08 virtual_ms 回退")
+        if type(arrival) is not int or arrival < clock_start or arrival > refresh:
+            raise ProbeError("S08 arrival_at 非法")
+        last_refresh = refresh
+        windows.append({"arrival_at": arrival, "refresh_at": refresh})
+    return windows
+
+
+def _run_s08(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
+    """真实三个时窗：安全点前/刷新时观察，刷新后到达未观察；不伪造等待。"""
+    windows = _parse_s08_timeline(stimuli)
+    third_arrival_enabled = bool(stimuli["third_arrival"])
+    third_refresh_visible = bool(stimuli["third_refresh_visible"])
+    first_arrival = windows[0]["arrival_at"]
+    first_refresh = windows[0]["refresh_at"]
+    second_arrival = windows[1]["arrival_at"]
+    second_refresh = windows[1]["refresh_at"]
+    third_arrival = windows[2]["arrival_at"]
+    third_refresh = windows[2]["refresh_at"]
+    hook1_switch = first_refresh + 100
+    hook2_job = max(first_refresh + 200, second_arrival - 400)
+    hook2_switch = second_refresh + 100
+    hook3_job = max(second_refresh + 200, third_arrival - 400)
+    times = [
+        first_refresh,
+        first_arrival,
+        first_refresh,
+        hook1_switch,
+        hook2_job,
+        second_arrival,
+        second_refresh,
+        hook2_switch,
+        hook3_job,
+        third_arrival,
+        third_refresh,
+    ]
+    if any(b < a for a, b in zip(times, times[1:])):
+        raise ProbeError("S08 步骤时间回退")
+    job1, job1_key = _make_job("s08-first")
+    job2, job2_key = _make_job("s08-second")
+    job3, job3_key = _make_job("s08-third")
+    unread1, conversation1, key1 = _make_unread("s08-first")
+    unread2, conversation2, key2 = _make_unread("s08-second")
+    unread3, conversation3, key3 = _make_unread("s08-third-arrival")
+    payload_dir = ROOT / "tests" / "fixtures" / "m6" / "read-s08-third-arrival"
+    payload_hash = hashlib.sha256()
+    for name in ("unread.json", "unread.xml", "conversation-0.xml", "conversation-1.xml"):
+        payload_hash.update((payload_dir / name).read_bytes())
+    third_payload_sha = payload_hash.hexdigest()
+    third_discovery = discovery_key_for(APP, key3, fingerprint_for(None, None, 1))
+    _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, key1)
+    _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, key2)
+    arrivals = (
+        {
+            third_arrival: {
+                "payload": "third-unread",
+                "conversation_key": key3,
+                "manifest": unread3,
+                "sha256": third_payload_sha,
+            }
+        }
+        if third_arrival_enabled
+        else None
+    )
+    page = "tests/fixtures/read/page.json"
+    steps = [
+        _step(read_fixture=job1),
+        _step(read_fixture=page, in_progress=True),
+        _step(
+            read_fixture=unread1,
+            conversation_fixture=conversation1,
+            in_progress=True,
+        ),
+        _step(read_fixture=unread1, conversation_fixture=conversation1),
+        _step(read_fixture=job2),
+        _step(read_fixture=page, in_progress=True),
+        _step(
+            read_fixture=unread2,
+            conversation_fixture=conversation2,
+            in_progress=True,
+        ),
+        _step(read_fixture=unread2, conversation_fixture=conversation2),
+        _step(read_fixture=job3),
+        _step(read_fixture=page, in_progress=True),
+        _step(read_fixture=page),
+    ]
+    import app.usecases.runtime as runtime_module
+
+    refresh_choice = {
+        "inbox_present": False,
+        "source_visible": False,
+        "consumed": False,
+        "fixture": page,
+    }
+
+    def refresh_hook(at: int, step: Any, consumed: list[dict[str, Any]]) -> Any:
+        """1900 外部到达进入驱动 inbox；2000 刷新按 inbox 与可见性选择真实源。"""
+        if at != third_refresh:
+            return None
+        delivered = any(
+            item.get("payload") == "third-unread"
+            and item.get("at_ms") == third_arrival
+            for item in consumed
+        )
+        refresh_choice["inbox_present"] = delivered
+        refresh_choice["source_visible"] = bool(third_refresh_visible and delivered)
+        if third_refresh_visible and delivered:
+            refresh_choice["consumed"] = True
+            refresh_choice["fixture"] = unread3
+            return replace(
+                step,
+                read_fixture=unread3,
+                conversation_fixture=conversation3,
+            )
+        refresh_choice["consumed"] = False
+        refresh_choice["fixture"] = page
+        return replace(step, read_fixture=page, conversation_fixture=None)
+
+    original_observe = runtime_module.observe_unread
+    wrapper, trace = _collect_observe_trace(original_observe)
+    runtime_module.observe_unread = wrapper
+    try:
+        result = ctx.execute(
+            steps,
+            clock=EnvironmentClock(),
+            limits=BudgetLimits(
+                candidates=30, device_calls=200, round_seconds=900, job_seconds=30
+            ),
+            times=times,
+            arrivals=arrivals,
+            step_hook=refresh_hook,
+        )
+    finally:
+        runtime_module.observe_unread = original_observe
+    run = result["run"]
+    events = _stage_preempted_events(ctx.db_path)
+    observed = [_relative_ms(str(event["first_observed_at"])) for event in events]
+    handled = [_relative_ms(str(event["handling_started_at"])) for event in events]
+    first_observed = observed + [None] * (3 - len(observed))
+    third_calls = [
+        item for item in trace if int(item["monotonic_ms"]) >= third_arrival
+    ]
+    scene = getattr(ctx, "last_scene", None)
+    consumed = list(getattr(scene, "consumed", []))
+    clock_trace = list(getattr(scene, "advance_trace", []))
+    third_window_consumed = bool(
+        len(clock_trace) == len(steps)
+        and clock_trace[-1] == third_refresh
+        and len(consumed) == len(steps)
+    )
+    connection = sqlite3.connect(str(ctx.db_path))
+    try:
+        row = connection.execute(
+            "SELECT state FROM hr_discoveries WHERE app = ? AND \"key\" = ?",
+            (APP, third_discovery),
+        ).fetchone()
+        third_claimed = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM events WHERE event = 'task_claimed' "
+                "AND subject_key = ?",
+                (third_discovery,),
+            ).fetchone()[0]
+        )
+    finally:
+        connection.close()
+    third_state = None if row is None else str(row[0])
+    arrivals_consumed = list(getattr(scene, "arrivals_consumed", []))
+    third_events = [
+        item
+        for item in arrivals_consumed
+        if item.get("payload") == "third-unread" and item.get("at_ms") == third_arrival
+    ]
+    third_event_consumed = bool(third_events)
+    third_payload_present = bool(
+        third_events and third_events[0].get("sha256") == third_payload_sha
+    )
+    third_observations = [
+        _relative_ms(str(item["first_observed_at"]))
+        for item in trace
+        if int(item["monotonic_ms"]) >= third_arrival
+    ]
+    third_window_first_observed = (
+        third_observations[0] if third_observations else None
+    )
+    third_observed = bool(third_window_first_observed is not None or len(events) >= 3)
+    return {
+        "processed": run["processed"],
+        "pause_reason": run["pause_reason"],
+        "stage_preempted_count": len(events),
+        "hook_first_observed": first_observed[:3],
+        "first_hook_first_observed_at": first_observed[0],
+        "second_hook_first_observed_at": first_observed[1],
+        "third_hook_first_observed_at": first_observed[2],
+        "observed_before_safe_point_preempts": bool(
+            len(events) >= 1 and handled[0] > observed[0] and handled[0] < hook2_job
+        ),
+        "visible_at_refresh_preempts": bool(
+            len(events) >= 2
+            and observed[1] == second_refresh
+            and handled[1] == hook2_switch
+        ),
+        "unobserved_not_fabricated": bool(
+            len(events) == 2 and first_observed[2] is None and not third_calls
+        ),
+        "no_arrival_latency_claim": bool(
+            len(events) >= 2
+            and observed[1] != second_arrival
+            and third_window_first_observed is None
+        ),
+        "second_arrival_at": second_arrival,
+        "second_refresh_at": second_refresh,
+        "third_arrival_at": third_arrival,
+        "third_refresh_at": third_refresh,
+        "third_window_observe_calls": len(third_calls),
+        "third_window_consumed": third_window_consumed,
+        "third_refresh_visible": third_refresh_visible,
+        "third_arrival_event_consumed": third_event_consumed,
+        "third_arrival_event_consumed_at_ms": (
+            int(third_events[0]["at_ms"]) if third_events else None
+        ),
+        "third_arrival_payload_present": third_payload_present,
+        "third_arrival_payload_sha256": third_payload_sha,
+        "third_arrival_injection_boundary": "driver_inbox_at_arrival_ms_refresh_selects_source",
+        "third_arrival_product_state": third_state if row is not None else "absent",
+        "third_arrival_claimed": third_claimed > 0,
+        "third_arrival_observed": third_observed,
+        "third_refresh_inbox_present": refresh_choice["inbox_present"],
+        "third_refresh_source_visible": refresh_choice["source_visible"],
+        "third_refresh_consumed_payload": refresh_choice["consumed"],
+        "third_refresh_selected_fixture": refresh_choice["fixture"],
+        "third_window_first_observed_ms": third_window_first_observed,
+        "consumed_step_count": len(consumed),
+        "observe_call_ms": [int(item["monotonic_ms"]) for item in trace],
+        "clock_trace": clock_trace,
+        "step_count": len(steps),
+        "job_keys": [job1_key, job2_key, job3_key],
+    }
+
+
+def _run_s04_gap(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
+    """记录当前真实流程对 unknown 未读只消费声明字段，不执行定向采集。"""
+    if not isinstance(stimuli, dict) or stimuli.get("role") != "driver_stimuli_only":
+        raise ProbeError("S04 刺激非法")
+    mode = stimuli.get("verification")
+    if mode not in {"still_unknown", "cleared"}:
+        raise ProbeError("S04 核对声明非法")
+    manifest = _make_unknown_unread("s04")
+    step = _step(read_fixture=manifest)
+    step["unread_verification"] = mode
+    import app.adapters.simulated.runtime as simulated
+
+    original_read = simulated.FixtureM3Read.read
+    reads: list[str] = []
+
+    def counting(self, relative: str):
+        """记录真实 M3 读取调用并原样返回解析结果。"""
+        reads.append(relative)
+        return original_read(self, relative)
+
+    simulated.FixtureM3Read.read = counting  # type: ignore[assignment]
+    try:
+        result = ctx.execute([step], clock=EnvironmentClock(), times=[0])
+    finally:
+        simulated.FixtureM3Read.read = original_read  # type: ignore[assignment]
+    run = result["run"]
+    connection = sqlite3.connect(str(ctx.db_path))
+    try:
+        verified = [
+            json.loads(str(row[0]))
+            for row in connection.execute(
+                "SELECT payload_json FROM scheduler_events WHERE event = 'unread_verified'"
+            ).fetchall()
+        ]
+    finally:
+        connection.close()
+    return {
+        "processed": run["processed"],
+        "pause_reason": run["pause_reason"],
+        "read_calls": len(reads),
+        "read_requests": list(reads),
+        "unread_verified_events": len(verified),
+        "verification_payload": verified[0].get("result") if verified else None,
+        "scene_declaration_only": bool(verified),
+        "diagnostic_only": True,
+        "not_business_pass": True,
+        "source_audit": {
+            "consumer": "app/usecases/runtime.py:1093-1116",
+            "missing_call": "app/usecases/read.py:104 targeted_verification_outcome",
+            "note": "静态源码缺口，不计入本轮实际调用数",
+        },
+    }
+
+
+def _pending_snapshot(ctx: _Context) -> dict[str, object]:
+    """只读真实 profile pending_activity；execute_run 的前置拒绝使用同一来源。"""
+    profile = SqliteProfileStore(ROOT, ctx.profile_id, create=False, now=NOW)
+    profile.open()
+    try:
+        return profile.pending_activity()
+    finally:
+        profile.close()
+
+
+def _open_action_store(ctx: _Context) -> SqliteStore:
+    """打开带合成停止检查边界的真实 profile 仓储；不替代业务转换。"""
+    return SqliteStore(
+        ctx.db_path,
+        profile_id=ctx.profile_id,
+        local_host=ctx.host,
+        require_runtime=True,
+        stop_checker=lambda _pid: "stopped",
+    )
+
+
+def _acquire_probe_gate(ctx: _Context) -> SharedDeviceGate:
+    """取得并复核本 probe 自己的共享门禁；用于真实动作与对账收敛。"""
+    gate = SharedDeviceGate(
+        profile_id=ctx.profile_id,
+        profile_db_path=ctx.db_path,
+        os_root=ctx._oroot,
+    )
+    gate.acquire(
+        profile_id=ctx.profile_id,
+        profile_db_path=str(ctx.db_path),
+        owner=ctx.owner,
+        now=NOW,
+    )
+    gate.verify(now=NOW)
+    return gate
+
+
+def _begin_pending_text_action(
+    store: SqliteStore, ctx: _Context, conversation_key: str
+) -> tuple[object, str]:
+    """用真实 claim/start/begin_action 留下 pending 文本动作并返回 Lease/动作键。"""
+    lease = store.claim(
+        "boss", "unread", ctx.owner, NOW, conversation_key=conversation_key
+    )
+    if lease is None:
+        raise ProbeError("S02 职位领取失败")
+    lease = store.start(lease, NOW)
+    message_key = message_key_from_stable(
+        conversation_key, canonical_hash({"synthetic": "s02-message"})
+    )
+    action_key = action_key_for("send_text", app="boss", message_key=message_key)
+    store.begin_action(
+        lease,
+        action_kind="send_text",
+        action_key=action_key,
+        target_key=message_key,
+        conversation_key=conversation_key,
+        authorization_json=json.dumps({"synthetic": "s02-authorization"}),
+        daily_sends=10,
+        reply_cooldown_seconds=0,
+        ime_original="synthetic-ime",
+        now=NOW,
+    )
+    return lease, action_key
+
+
+def _reconcile_not_performed(
+    store: SqliteStore, gate: SharedDeviceGate, ctx: _Context, action_key: str
+) -> dict[str, object]:
+    """经真实 reconcile_action 收敛为 not_performed；停止检查为合成边界。"""
+    observation = ReconciliationObservation(
+        action_key=action_key,
+        resolution="confirm_not_performed",
+        observed_at=NOW,
+        evidence=Evidence(
+            action_key=action_key,
+            outcome="not_performed",
+            effect="none",
+            reason_code="cancelled_before_action",
+            before_snapshot_id=str(uuid.uuid4()),
+            after_snapshot_id=None,
+            observed_at=NOW,
+        ),
+        command_quiet=True,
+        scene_settled=True,
+        confirmation_open=False,
+        ime_original="synthetic-ime",
+        ime_current="synthetic-ime",
+        matched_action_key=action_key,
+        confirmed=True,
+    )
+    return reconcile_action(
+        store=store,
+        gate=gate,
+        observation=observation,
+        profile_id=ctx.profile_id,
+        profile_db_path=str(ctx.db_path),
+        explicit_confirm=True,
+        command_stop_checker=lambda _pid: "stopped",
+        now=NOW,
+    )
+
+
+def _activity_clear(pending: Mapping[str, object]) -> bool:
+    """判断真实 pending_activity 是否已无任务/设备/动作/批次未决。"""
+    return all(
+        int(pending.get(name, 0) or 0) == 0
+        for name in (
+            "leased",
+            "running",
+            "blocked",
+            "device_lease",
+            "actions",
+            "jobs",
+            "queued_jobs",
+            "batches",
+        )
+    )
+
+
+def _checkpoint_order(
+    db_path: Path, batch_id: str, stage_event_id: int | None
+) -> dict[str, object]:
+    """按同批次真实 scheduler_events 的 event_id 核对 checkpoint 是否先于切换。"""
+    connection = sqlite3.connect(str(db_path))
+    try:
+        checkpoint = connection.execute(
+            "SELECT MIN(event_id) FROM scheduler_events "
+            "WHERE batch_id = ? AND event = 'checkpoint_committed'",
+            (batch_id,),
+        ).fetchone()
+        stage = connection.execute(
+            "SELECT batch_id FROM scheduler_events WHERE event_id = ?",
+            (stage_event_id,),
+        ).fetchone() if stage_event_id is not None else None
+    finally:
+        connection.close()
+    checkpoint_id = None if checkpoint is None else checkpoint[0]
+    stage_batch = None if stage is None else str(stage[0])
+    return {
+        "checkpoint_event_id": checkpoint_id,
+        "stage_event_id": stage_event_id,
+        "checkpoint_before_stage": bool(
+            checkpoint_id is not None
+            and stage_event_id is not None
+            and int(checkpoint_id) < int(stage_event_id)
+            and stage_batch == batch_id
+        ),
+    }
+
+
+def _run_s02_converged(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
+    """真实 pending/unknown 生命周期收敛后重跑；再验证未决动作前置拒绝。"""
+    if not isinstance(stimuli, dict) or stimuli.get("role") != "driver_stimuli_only":
+        raise ProbeError("S02 收敛刺激非法")
+    if set(stimuli) - {"script_id", "role", "note"}:
+        raise ProbeError("S02 收敛刺激形状非法")
+    gate = _acquire_probe_gate(ctx)
+    store = _open_action_store(ctx)
+    lifecycle_converged = False
+    try:
+        pending_key = _make_unread("s02-pending")[2]
+        _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, pending_key)
+        _lease, pending_action = _begin_pending_text_action(store, ctx, pending_key)
+        pending_source = {
+            "pending_activity": _pending_snapshot(ctx),
+            "pending_actions": len(store.pending_actions("boss")),
+            "last_action_state": store.last_action_state(""),
+            "action_state": str(store.get_action(pending_action)["state"]),
+        }
+        pending_reconciled = _reconcile_not_performed(
+            store, gate, ctx, pending_action
+        )
+        pending_after = {
+            "pending_activity": _pending_snapshot(ctx),
+            "pending_actions": len(store.pending_actions("boss")),
+            "last_action_state": store.last_action_state(""),
+        }
+        unknown_key = _make_unread("s02-unknown")[2]
+        _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, unknown_key)
+        unknown_lease, unknown_action = _begin_pending_text_action(
+            store, ctx, unknown_key
+        )
+        store.freeze_attempted_action(
+            unknown_lease,
+            action_key=unknown_action,
+            reason_code="result_unverified",
+            now=NOW,
+        )
+        unknown_source = {
+            "pending_activity": _pending_snapshot(ctx),
+            "pending_actions": len(store.pending_actions("boss")),
+            "last_action_state": store.last_action_state(""),
+            "action_state": str(store.get_action(unknown_action)["state"]),
+        }
+        unknown_reconciled = _reconcile_not_performed(
+            store, gate, ctx, unknown_action
+        )
+        unknown_after = {
+            "pending_activity": _pending_snapshot(ctx),
+            "pending_actions": len(store.pending_actions("boss")),
+            "last_action_state": store.last_action_state(""),
+        }
+        lifecycle_converged = _activity_clear(
+            pending_after["pending_activity"]
+        ) and _activity_clear(unknown_after["pending_activity"])
+    finally:
+        store.close()
+        gate.release(now=NOW, converged=lifecycle_converged)
+    job_manifest, _job_key = _make_job("s02-run")
+    unread_manifest, conversation_manifest, run_key = _make_unread("s02-run")
+    _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, run_key)
+    steps = [
+        _step(read_fixture=job_manifest),
+        _step(
+            read_fixture=unread_manifest,
+            conversation_fixture=conversation_manifest,
+        ),
+    ]
+    pre_pending = _pending_snapshot(ctx)
+    pre_store = _open_action_store(ctx)
+    try:
+        pre_last_state = pre_store.last_action_state("")
+    finally:
+        pre_store.close()
+    import app.adapters.simulated.runtime as simulated
+    from app.usecases.read import is_actionable
+
+    original_read = simulated.FixtureM3Read.read
+    run_reads: list[tuple[str, object]] = []
+
+    def counting_read(self, relative: str):
+        """记录真实 execute_run 内每次 M3 读取结果，不改变返回。"""
+        value = original_read(self, relative)
+        run_reads.append((relative, value))
+        return value
+
+    simulated.FixtureM3Read.read = counting_read  # type: ignore[assignment]
+    try:
+        result = ctx.execute(steps, clock=EnvironmentClock(), times=[0, 1000])
+    finally:
+        simulated.FixtureM3Read.read = original_read  # type: ignore[assignment]
+    switch_result = next(
+        (item[1] for item in run_reads if item[0] == steps[1]["read_fixture"]), None
+    )
+    switch_actionable = (
+        is_actionable(switch_result) if switch_result is not None else (False, None)
+    )
+    consumed = list(getattr(ctx.last_scene, "consumed", []))
+    switch_scene = consumed[1].raw_scene if len(consumed) > 1 else None
+    run = result["run"]
+    batch_id = str(run["batch_id"])
+    events = _stage_preempted_events(ctx.db_path)
+    event_ids = _stage_event_ids(ctx.db_path)
+    order = _checkpoint_order(
+        ctx.db_path, batch_id, event_ids[0] if event_ids else None
+    )
+    first_ms = _relative_ms(str(events[0]["first_observed_at"])) if events else None
+    handling_ms = _relative_ms(str(events[0]["handling_started_at"])) if events else None
+    gate2 = _acquire_probe_gate(ctx)
+    store2 = _open_action_store(ctx)
+    try:
+        refusal_key = _make_unread("s02-refusal")[2]
+        _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, refusal_key)
+        _refusal_lease, refusal_action = _begin_pending_text_action(
+            store2, ctx, refusal_key
+        )
+        refusal_pending = _pending_snapshot(ctx)
+        refusal_action_state = str(store2.get_action(refusal_action)["state"])
+    finally:
+        store2.close()
+    refusal_gate_state = gate2.session_identity().state
+    import app.adapters.simulated.runtime as simulated
+
+    original_read = simulated.FixtureM3Read.read
+    refusal_reads: list[str] = []
+
+    def counting(self, relative: str):
+        """记录拒绝运行是否在场景读取前停止。"""
+        refusal_reads.append(relative)
+        return original_read(self, relative)
+
+    simulated.FixtureM3Read.read = counting  # type: ignore[assignment]
+    refusal_reason = "none"
+    refusal_processed: int | None = None
+    try:
+        ctx.execute([_step()], clock=EnvironmentClock(), times=[2000])
+        refusal_reason = "not_rejected"
+    except Exception as error:  # noqa: BLE001 - 固定原因码出口
+        refusal_reason = str(getattr(error, "reason_code", type(error).__name__))
+        refusal_processed = 0
+    finally:
+        simulated.FixtureM3Read.read = original_read  # type: ignore[assignment]
+        # 未决动作仍在，保留自己取得的 held 门禁，不释放、不伪造收敛。
+        pass
+    return {
+        "pending_before_actions": pending_source["pending_activity"]["actions"],
+        "pending_before_pending": pending_source["pending_actions"],
+        "pending_before_last_state": pending_source["last_action_state"],
+        "pending_action_state": pending_source["action_state"],
+        "pending_reconciled_state": pending_reconciled.get("state"),
+        "pending_reconciled_task_state": pending_reconciled.get("task_state"),
+        "pending_after_actions": pending_after["pending_activity"]["actions"],
+        "pending_after_pending": pending_after["pending_actions"],
+        "unknown_before_actions": unknown_source["pending_activity"]["actions"],
+        "unknown_before_pending": unknown_source["pending_actions"],
+        "unknown_before_last_state": unknown_source["last_action_state"],
+        "unknown_action_state": unknown_source["action_state"],
+        "unknown_reconciled_state": unknown_reconciled.get("state"),
+        "unknown_reconciled_task_state": unknown_reconciled.get("task_state"),
+        "unknown_after_actions": unknown_after["pending_activity"]["actions"],
+        "unknown_after_pending": unknown_after["pending_actions"],
+        "all_true_batch_id": batch_id,
+        "all_true_pre_pending_actions": pre_pending["actions"],
+        "all_true_pre_pending_running": pre_pending["running"],
+        "all_true_pre_last_state": pre_last_state,
+        "all_true_read_status": (
+            getattr(switch_result, "status", None) if switch_result is not None else None
+        ),
+        "all_true_read_actionable": bool(switch_actionable[0]),
+        "all_true_input_empty": (
+            switch_scene is not None and switch_scene.input_text == ""
+        ),
+        "all_true_confirmation_closed": (
+            switch_scene is not None and switch_scene.confirmation_title is None
+        ),
+        "all_true_no_inflight": (
+            switch_scene is not None and switch_scene.inflight_commands == 0
+        ),
+        "all_true_processed": run["processed"],
+        "all_true_pause_reason": run["pause_reason"],
+        "all_true_stage_preempted_count": len(events),
+        "all_true_first_observed_ms": first_ms,
+        "all_true_handling_started_ms": handling_ms,
+        "all_true_waited_ms": events[0]["waited_ms"] if events else None,
+        "all_true_checkpoint_event_id": order["checkpoint_event_id"],
+        "all_true_stage_event_id": order["stage_event_id"],
+        "all_true_checkpoint_stage_delta": (
+            int(order["stage_event_id"]) - int(order["checkpoint_event_id"])
+            if order["checkpoint_event_id"] is not None
+            and order["stage_event_id"] is not None
+            else None
+        ),
+        "all_true_checkpoint_before_stage": order["checkpoint_before_stage"],
+        "refusal_pending_actions": refusal_pending["actions"],
+        "refusal_action_state": refusal_action_state,
+        "refusal_gate_state": refusal_gate_state,
+        "refusal_lock_retained": refusal_gate_state == "held",
+        "refusal_reason": refusal_reason,
+        "refusal_processed": refusal_processed,
+        "refusal_scene_reads": len(refusal_reads),
+    }
+
+
+def _run_s02_unconverged(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
+    """真实未决 pending 下 release(converged=False)，验证 quarantine 与后续拒绝。"""
+    if not isinstance(stimuli, dict) or stimuli.get("role") != "driver_stimuli_only":
+        raise ProbeError("S02 未收敛刺激非法")
+    if set(stimuli) - {"script_id", "role", "note"}:
+        raise ProbeError("S02 未收敛刺激形状非法")
+    gate = _acquire_probe_gate(ctx)
+    store = _open_action_store(ctx)
+    scene_reads: list[str] = []
+    try:
+        key = _make_unread("s02-unconverged")[2]
+        _seed_discovery(ctx.db_path, ctx.profile_id, ctx.host, key)
+        _lease, action_key = _begin_pending_text_action(store, ctx, key)
+        gate.release(now=NOW, converged=False)
+        occupancy = gate.inspect()
+        try:
+            _reconcile_not_performed(store, gate, ctx, action_key)
+            action_rejection = "accepted"
+        except Exception as error:  # noqa: BLE001 - 固定原因码出口
+            action_rejection = str(getattr(error, "reason_code", type(error).__name__))
+        action_state = str(store.get_action(action_key)["state"])
+        import app.adapters.simulated.runtime as simulated
+
+        original_read = simulated.FixtureM3Read.read
+
+        def counting(self, relative: str):
+            """记录 quarantine 后是否在场景读取前停止。"""
+            scene_reads.append(relative)
+            return original_read(self, relative)
+
+        simulated.FixtureM3Read.read = counting  # type: ignore[assignment]
+        try:
+            ctx.execute([_step()], clock=EnvironmentClock(), times=[0])
+            run_rejection = "accepted"
+        except Exception as error:  # noqa: BLE001 - 固定原因码出口
+            run_rejection = str(getattr(error, "reason_code", type(error).__name__))
+        finally:
+            simulated.FixtureM3Read.read = original_read  # type: ignore[assignment]
+    finally:
+        store.close()
+    return {
+        "gate_state": None if occupancy is None else occupancy.get("state"),
+        "occupancy_retained": occupancy is not None,
+        "occupancy_state": None if occupancy is None else occupancy.get("state"),
+        "action_rejection": action_rejection,
+        "action_state_after": action_state,
+        "run_rejection": run_rejection,
+        "run_scene_reads": len(scene_reads),
+    }
+
+
+def _run_s02_list_semantics(
+    ctx: _Context, stimuli: Mapping[str, Any]
+) -> dict[str, Any]:
+    """用真实 M3 解析与真实 _safe_scene 观察 list_returned 对页面类型的口径。"""
+    if not isinstance(stimuli, dict) or stimuli.get("role") != "driver_stimuli_only":
+        raise ProbeError("S02 页面语义刺激非法")
+    from app.adapters.boss.read import parse_page
+    from app.ports.runtime import RawScene
+    from app.usecases.read import is_actionable
+    import app.usecases.runtime as runtime_module
+
+    profile = json.loads(
+        (ROOT / "tests/fixtures/read/profile.json").read_text(encoding="utf-8")
+    )
+    observed_at = "2026-11-24T00:00:00.000Z"
+    store = _open_action_store(ctx)
+    batch = str(uuid.uuid4())
+    try:
+        row = store.ensure_batch(batch, BudgetLimits(), NOW)
+        cursor = row["cursor"]
+        store.save_checkpoint(batch, cursor, now=NOW)
+        cases: dict[str, Any] = {}
+        for name, relative in (
+            ("unknown_page", "tests/scenarios/fixtures/m3/read/page_unknown/page.xml"),
+            ("conversation_page", "tests/scenarios/fixtures/m3/read/conversation_known/page.xml"),
+            ("job_detail_page", "tests/scenarios/fixtures/m3/read/job_detail_complete/page.xml"),
+            ("chat_list_page", "tests/scenarios/fixtures/m3/read/unique_unread/page.xml"),
+            ("main_page", "tests/scenarios/fixtures/m3/read/page_main/page.xml"),
+        ):
+            xml_text = (ROOT / relative).read_text(encoding="utf-8")
+            result = parse_page(
+                xml_text,
+                profile,
+                observed_at,
+                str(uuid.uuid4()),
+                app_version=str(profile["version"]),
+            )
+            page = getattr(result.value, "page", None) if result.value is not None else None
+            actionable, reason = is_actionable(result)
+            safe = runtime_module._safe_scene(
+                store=store,
+                batch_id=batch,
+                task_key="",
+                read_results=(result,),
+                raw=RawScene("", None, 0, "synthetic-ime"),
+            )
+            cases[name] = {
+                "status": result.status,
+                "page": page,
+                "actionable": actionable,
+                "actionable_reason": reason,
+                "page_ok": bool(safe[0]),
+                "failed": [
+                    label
+                    for label, value in zip(
+                        (
+                            "list_returned",
+                            "input_empty",
+                            "confirmation_closed",
+                            "no_inflight_command",
+                            "no_pending_action",
+                            "action_state_committed",
+                            "checkpoint_committed",
+                        ),
+                        safe,
+                    )
+                    if not value
+                ],
+            }
+    finally:
+        store.close()
+    return {
+        "cases": cases,
+        "source_order": "execute_run:_safe_scene_before_handle_job_or_discovery",
+    }
+
+
 def _run_s05_cursor(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
     """先处理 J1，再以完成 J1 在前的顺序重跑，确认不重复沟通并跳过缺项。"""
     job1_manifest, job1 = _make_job("s05-a")
@@ -1361,6 +2504,13 @@ def _run_s07_clock(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
 
 
 CASES = {
+    "safe_point_preempts": _run_s01,
+    "arrival_after_commit": _run_s01_arrival,
+    "three_hooks": _run_s08,
+    "safe_point_converged": _run_s02_converged,
+    "safe_point_unconverged": _run_s02_unconverged,
+    "safe_point_list_semantics": _run_s02_list_semantics,
+    "unread_verification_gap": _run_s04_gap,
     "five_then_pause": _run_s03,
     "cursor_resume": _run_s05_cursor,
     "budget_not_reset": _run_s05_budget,

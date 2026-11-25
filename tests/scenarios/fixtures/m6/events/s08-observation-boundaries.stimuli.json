@@ -2,6 +2,8 @@
   "script_id": "SC-S08/three-hooks",
   "role": "driver_stimuli_only",
   "clock_start_ms": 0,
+  "third_arrival": true,
+  "third_refresh_visible": false,
   "events": [
     {
       "seq": 1,

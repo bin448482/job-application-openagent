@@ -1,0 +1,6 @@
+{
+  "script_id": "SC-S04/verification-gap",
+  "role": "driver_stimuli_only",
+  "verification": "still_unknown",
+  "note": "仅声明核对结果；用于记录当前生产流程没有真实定向读取的缺口"
+}
