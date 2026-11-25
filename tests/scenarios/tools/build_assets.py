@@ -2535,6 +2535,8 @@ def ready_variant(
     assertions: list[str],
     fixture: str | None = None,
     acceptance: dict[str, Any] | None = None,
+    setup: str | None = None,
+    required_api: str | None = None,
     expected_missing_inputs: list[str] | None = None,
     shared_inputs: list[str] | None = None,
     local_packs: dict[str, str] | None = None,
@@ -2542,6 +2544,7 @@ def ready_variant(
     fixture_files: dict[str, str] | None = None,
     lf_inputs: list[str] | None = None,
     junctions: dict[str, str] | None = None,
+    observations_ref: str | None = None,
 ) -> dict[str, Any]:
     """构造已绑定冻结 CLI 的离线变体。"""
     return variant(
@@ -2553,6 +2556,8 @@ def ready_variant(
         steps=steps,
         fixture=fixture,
         acceptance=acceptance,
+        setup=setup,
+        required_api=required_api,
         expected_missing_inputs=expected_missing_inputs,
         shared_inputs=shared_inputs,
         local_packs=local_packs,
@@ -2560,6 +2565,7 @@ def ready_variant(
         fixture_files=fixture_files,
         lf_inputs=lf_inputs,
         junctions=junctions,
+        observations_ref=observations_ref,
     )
 
 
@@ -7840,6 +7846,226 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         ["M5 删除动作", "G01–G04 已通过的合成候选"],
         [item for item in action_variants if item["id"].startswith("A05_")],
     )
+    apply_assertions = {
+        "base": [
+            "本次前后证据充分才 performed+applied",
+            "先写 pending",
+            "重复请求被动作键锁拒绝",
+            "本次前后独立目标效果增量才 performed+applied",
+            "重复键/终态后不二次执行",
+        ],
+        "FA": [
+            "not_performed+none",
+            "原因限 authorization_missing/precondition_failed/cancelled_before_action",
+            "独立 oracle 证明未点击任何写入控件",
+            "授权缺失在零点击处固定拒绝",
+        ],
+        "FB": [
+            "pending 残留保锁",
+            "不能凭无返回降为 not_sent",
+            "人工核对",
+            "pending 已提交后中断保持锁与 running",
+            "重开仍 pending，不凭无返回降级",
+        ],
+        "FC": [
+            "Evidence.unknown",
+            "原因限 device_disconnected/executor_interrupted",
+            "blocked+设备隔离",
+            "执行次数最多 1，不重放",
+        ],
+        "FD": [
+            "unknown/result_unverified",
+            "Toast/确认框/空返回不证明成功",
+            "不换会话继续",
+        ],
+        "FE": [
+            "远端可能已执行",
+            "本地回滚不撤销远端动作",
+            "保留可对账 pending 锁",
+            "不执行第二次，失败不得标 done",
+        ],
+    }
+    apply_paths = {
+        "A06_base": [
+            {"path": "observed.state", "equals": "performed"},
+            {"path": "observed.evidence.effect", "equals": "applied"},
+            {"path": "observed.gate_converged", "equals": True},
+            {"path": "pending_before_execute", "equals": "pending"},
+            {"path": "remote.irreversible", "equals": 1},
+            {"path": "record.state", "equals": "performed"},
+            {"path": "record.effect", "equals": "applied"},
+            {"path": "job.state", "equals": "done"},
+            {"path": "replay.irreversible", "equals": 0},
+            {"path": "replay.reopened", "equals": True},
+            {"path": "log_schema_violations", "equals": 0},
+            {"path": "log_sensitive_hits", "equals": 0},
+            {"path": "log_correlations", "equals": 1},
+            {"path": "log_has_body", "equals": False},
+            {"path": "log_finish.unpaired", "equals": 0},
+            {"path": "controls.preexisting_done.observed.state", "equals": "not_performed"},
+            {"path": "controls.preexisting_done.observed.evidence.reason_code", "equals": "precondition_failed"},
+            {"path": "controls.preexisting_done.irreversible", "equals": 0},
+            {"path": "controls.preexisting_done.after_consumed", "equals": False},
+            {"path": "controls.preexisting_done.facts.target_unchanged", "equals": True},
+            {"path": "controls.preexisting_done.facts.target_after_done", "equals": True},
+            {"path": "controls.preexisting_done.real_popen_attempts", "equals": 0},
+            {"path": "controls.preexisting_done.log_schema_violations", "equals": 0},
+            {"path": "controls.preexisting_done.log_sensitive_hits", "equals": 0},
+            {"path": "controls.preexisting_done_unrelated_change.observed.state", "equals": "not_performed"},
+            {"path": "controls.preexisting_done_unrelated_change.irreversible", "equals": 0},
+            {"path": "controls.preexisting_done_unrelated_change.after_consumed", "equals": False},
+            {"path": "controls.preexisting_done_unrelated_change.facts.target_unchanged", "equals": True},
+            {"path": "controls.preexisting_done_unrelated_change.facts.external_changed", "equals": True},
+            {"path": "controls.preexisting_done_unrelated_change.env.profile_meta.profile_id", "equals": "m6-apply-preexisting_unrelated"},
+            {"path": "controls.preexisting_done_unrelated_change.env.gate.profile_id", "equals": "m6-apply-preexisting_unrelated"},
+            {"path": "controls.unrelated_change.observed.state", "equals": "unknown"},
+            {"path": "controls.unrelated_change.observed.evidence.reason_code", "equals": "result_unverified"},
+            {"path": "controls.unrelated_change.irreversible", "equals": 1},
+            {"path": "controls.unrelated_change.after_consumed", "equals": True},
+            {"path": "controls.unrelated_change.facts.target_unchanged", "equals": True},
+            {"path": "controls.unrelated_change.facts.external_changed", "equals": True},
+            {"path": "controls.unrelated_change.real_popen_attempts", "equals": 0},
+        ],
+        "A06_FA": [
+            {"path": "observed.raised", "equals": "authorization_required"},
+            {"path": "remote.irreversible", "equals": 0},
+            {"path": "record", "equals": None},
+            {"path": "job.state", "equals": "running"},
+            {"path": "log_schema_violations", "equals": 0},
+            {"path": "log_sensitive_hits", "equals": 0},
+            {"path": "real_popen_attempts", "equals": 0},
+        ],
+        "A06_FB": [
+            {"path": "interrupted", "equals": True},
+            {"path": "after_interrupt.state", "equals": "pending"},
+            {"path": "job_after_interrupt.state", "equals": "running"},
+            {"path": "same_connection_replay.irreversible", "equals": 0},
+            {"path": "record_after_replay.state", "equals": "pending"},
+            {"path": "job_after_replay.state", "equals": "running"},
+            {"path": "replay.irreversible", "equals": 0},
+            {"path": "replay.reopened", "equals": True},
+            {"path": "replay.raised", "equals": "action_conflict"},
+            {"path": "ledger.files", "equals": 0},
+            {"path": "ledger.begin", "equals": 0},
+            {"path": "ledger.complete", "equals": 0},
+            {"path": "real_popen_attempts", "equals": 0},
+            {"path": "log_schema_violations", "equals": 0},
+            {"path": "log_sensitive_hits", "equals": 0},
+            {"path": "log_correlations", "equals": 1},
+            {"path": "log_has_body", "equals": False},
+            {"path": "log_finish.unpaired", "equals": 0},
+        ],
+        "A06_FC": [
+            {"path": "observed.state", "equals": "unknown"},
+            {"path": "observed.evidence.outcome", "equals": "unknown"},
+            {"path": "observed.evidence.reason_code", "equals": "device_disconnected"},
+            {"path": "remote.irreversible", "equals": 1},
+            {"path": "record.state", "equals": "unknown"},
+            {"path": "job.state", "equals": "blocked"},
+            {"path": "replay.irreversible", "equals": 0},
+            {"path": "replay.all_commands", "equals": 0},
+            {"path": "ledger.files", "equals": 1},
+            {"path": "ledger.begin", "equals": 3},
+            {"path": "ledger.complete", "equals": 3},
+            {"path": "ledger.closed", "equals": True},
+            {"path": "ledger.unresolved", "equals": 0},
+            {"path": "ledger.order_errors", "equals": 0},
+            {"path": "real_popen_attempts", "equals": 0},
+            {"path": "log_schema_violations", "equals": 0},
+            {"path": "log_sensitive_hits", "equals": 0},
+            {"path": "log_correlations", "equals": 1},
+            {"path": "log_has_body", "equals": False},
+            {"path": "log_finish.unpaired", "equals": 0},
+        ],
+        "A06_FD": [
+            {"path": "observed.state", "equals": "unknown"},
+            {"path": "observed.evidence.outcome", "equals": "unknown"},
+            {"path": "observed.evidence.reason_code", "equals": "result_unverified"},
+            {"path": "remote.irreversible", "equals": 1},
+            {"path": "record.state", "equals": "unknown"},
+            {"path": "job.state", "equals": "blocked"},
+            {"path": "log_schema_violations", "equals": 0},
+            {"path": "log_sensitive_hits", "equals": 0},
+            {"path": "log_correlations", "equals": 1},
+            {"path": "log_has_body", "equals": False},
+            {"path": "log_finish.unpaired", "equals": 0},
+            {"path": "controls.toast.observed.state", "equals": "unknown"},
+            {"path": "controls.toast.observed.evidence.reason_code", "equals": "result_unverified"},
+            {"path": "controls.toast.irreversible", "equals": 1},
+            {"path": "controls.toast.after_consumed", "equals": True},
+            {"path": "controls.toast.facts.toast_present", "equals": True},
+            {"path": "controls.toast.facts.target_unchanged", "equals": True},
+            {"path": "controls.toast.facts.target_after_done", "equals": False},
+            {"path": "controls.toast.real_popen_attempts", "equals": 0},
+            {"path": "controls.dialog.observed.state", "equals": "unknown"},
+            {"path": "controls.dialog.observed.evidence.reason_code", "equals": "result_unverified"},
+            {"path": "controls.dialog.irreversible", "equals": 1},
+            {"path": "controls.dialog.after_consumed", "equals": True},
+            {"path": "controls.dialog.facts.dialog_container_present", "equals": True},
+            {"path": "controls.dialog.facts.dialog_controls_present", "equals": True},
+            {"path": "controls.dialog.facts.target_unchanged", "equals": True},
+            {"path": "controls.dialog.real_popen_attempts", "equals": 0},
+            {"path": "controls.empty.observed.state", "equals": "unknown"},
+            {"path": "controls.empty.observed.evidence.reason_code", "equals": "result_unverified"},
+            {"path": "controls.empty.irreversible", "equals": 1},
+            {"path": "controls.empty.after_consumed", "equals": True},
+            {"path": "controls.empty.facts.target_unchanged", "equals": False},
+            {"path": "controls.empty.real_popen_attempts", "equals": 0},
+        ],
+        "A06_FE": [
+            {"path": "observed.raised", "equals": "store_io_error"},
+            {"path": "remote.irreversible", "equals": 1},
+            {"path": "record.state", "equals": "pending"},
+            {"path": "job.state", "equals": "running"},
+            {"path": "replay.irreversible", "equals": 0},
+            {"path": "replay.reopened", "equals": True},
+            {"path": "replay.raised", "equals": "action_conflict"},
+            {"path": "ledger.files", "equals": 1},
+            {"path": "ledger.begin", "equals": 5},
+            {"path": "ledger.complete", "equals": 5},
+            {"path": "ledger.closed", "equals": True},
+            {"path": "ledger.unresolved", "equals": 0},
+            {"path": "ledger.order_errors", "equals": 0},
+            {"path": "real_popen_attempts", "equals": 0},
+            {"path": "log_schema_violations", "equals": 0},
+            {"path": "log_sensitive_hits", "equals": 0},
+            {"path": "log_correlations", "equals": 1},
+            {"path": "log_has_body", "equals": False},
+            {"path": "log_finish.unpaired", "equals": 0},
+        ],
+    }
+
+    def _control_paths(key: str, label: str, profile_id: str) -> list[dict[str, Any]]:
+        """逐控制真实根/profile/gate/日志/Popen 的独立 acceptance 路径。"""
+        return [
+            {"path": f"controls.{key}.env.project_root", "equals": f"controls/{label}"},
+            {"path": f"controls.{key}.env.os_root", "equals": f"controls/{label}/os"},
+            {
+                "path": f"controls.{key}.env.db_path_token",
+                "pattern": rf"controls/{label}/data/runtime/profiles/{profile_id}/runtime\.sqlite3",
+            },
+            {"path": f"controls.{key}.env.profile_meta.profile_id", "equals": profile_id},
+            {"path": f"controls.{key}.env.gate.profile_id", "equals": profile_id},
+            {"path": f"controls.{key}.env.gate.state", "equals": "held"},
+            {"path": f"controls.{key}.env.binding_ok", "equals": True},
+            {"path": f"controls.{key}.real_popen_attempts", "equals": 0},
+            {"path": f"controls.{key}.log_correlations", "equals": 1},
+            {"path": f"controls.{key}.log_schema_violations", "equals": 0},
+            {"path": f"controls.{key}.log_sensitive_hits", "equals": 0},
+            {"path": f"controls.{key}.log_finish.unpaired", "equals": 0},
+            {"path": f"controls.{key}.log_has_body", "equals": False},
+        ]
+
+    apply_paths["A06_base"].extend(
+        _control_paths("preexisting_done", "preexisting", "m6-apply-preexisting")
+        + _control_paths("preexisting_done_unrelated_change", "preexisting_unrelated", "m6-apply-preexisting_unrelated")
+        + _control_paths("unrelated_change", "unrelated", "m6-apply-unrelated")
+    )
+    apply_paths["A06_FD"].extend(
+        _control_paths("toast", "toast", "m6-apply-toast")
+        + _control_paths("dialog", "dialog", "m6-apply-dialog")
+        + _control_paths("empty", "empty", "m6-apply-empty")
+    )
     add(
         "SC-A06",
         "M5",
@@ -7850,26 +8076,28 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 "A06_base",
                 "F",
                 label="职位沟通成功路径",
+                asset_status="READY_FOR_APP",
+                steps=[m5_cmd("A06_base")],
                 fixture="fixtures/m5/actions/fault-matrix.json",
                 setup="依赖 M6 apply_job 组合入口；当前仅保留人工判据",
                 required_api="M5 动作执行与 Evidence",
-                assertions=[
-                    "本次前后证据充分才 performed+applied",
-                    "先写 pending",
-                    "重复请求被动作键锁拒绝",
-                ],
+                assertions=apply_assertions["base"],
+                acceptance=m5_ok("A06_base", *apply_paths["A06_base"]),
             ),
             *[
                 variant(
-                    f"A06_{fault.replace('-', '')}",
+                    f"A06_{fault}",
                     "F",
-                    label=f"职位沟通/{fault}",
+                    label=f"职位沟通/F-{fault[1]}",
+                    asset_status="READY_FOR_APP",
+                    steps=[m5_cmd(f"A06_{fault}")],
                     fixture="fixtures/m5/actions/fault-matrix.json",
-                    setup=f"依赖 M6 apply_job；注入 {fault}",
+                    setup=f"依赖 M6 apply_job；注入 F-{fault[1]}",
                     required_api="M5 动作执行与 Evidence",
-                    assertions=assertions,
+                    assertions=apply_assertions[fault],
+                    acceptance=m5_ok(f"A06_{fault}", *apply_paths[f"A06_{fault}"]),
                 )
-                for fault, assertions in fault_assertions.items()
+                for fault in ("FA", "FB", "FC", "FD", "FE")
             ],
         ],
     )
@@ -8112,6 +8340,35 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
     )
 
     # ---- M6 ----
+    m6_shared = [
+        "tests/fixtures/read",
+        "prompts/base",
+        "prompts/examples",
+        "evals/policy-suite",
+    ]
+
+    def m6_cmd(case: str, stimuli: str) -> str:
+        """构造真实 M6 探针步骤；只传案例名与纯外部刺激声明。"""
+        return (
+            "python tests/scenarios/framework/m6_probe.py "
+            f"--case {case} --stimuli tests/scenarios/{stimuli}"
+        )
+
+    def m6_ok(case: str, *paths: dict[str, Any]) -> dict[str, Any]:
+        """构造 M6 探针单步成功预期。"""
+        return {
+            "steps": [
+                {
+                    "exit_code": 0,
+                    "stdout_paths": [
+                        {"path": "status", "equals": "ok"},
+                        {"path": "case", "equals": case},
+                        *paths,
+                    ],
+                }
+            ]
+        }
+
     add(
         "SC-S01",
         "M6",
@@ -8138,7 +8395,72 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         "连续抢占与第 6 次暂停",
         ["M6 抢占上限 5"],
         [
-            variant("five_then_pause", "F", label="五次实际切换后第 6 次需求暂停", fixture="fixtures/m6/events/s03-preemption-limit.stimuli.json", observations_ref="expected/m6-observations.json", setup="六轮外部 job/未读/快照/安全点刺激；结果只在独立 expected", required_api="M6 调度", assertions=["仅实际 job→unread 切换累加", "观察到但未切换不累加", "前五次实际切换后第 6 次需求暂停", "保存游标并记 preemption_limit", "未切换不伪造 stage_preempted", "不降低未读优先级"]),
+            ready_variant(
+                "five_then_pause",
+                label="五次实际切换后第 6 次需求暂停",
+                steps=[m6_cmd("five_then_pause", "fixtures/m6/events/s03-preemption-limit.stimuli.json")],
+                fixture="fixtures/m6/events/s03-preemption-limit.stimuli.json",
+                shared_inputs=m6_shared,
+                setup="六轮外部 job/未读/快照/安全点刺激；结果只在独立 expected",
+                required_api="M6 调度",
+                observations_ref="expected/m6-observations.json",
+                assertions=[
+                    "仅实际 job→unread 切换累加",
+                    "观察到但未切换不累加",
+                    "前五次实际切换后第 6 次需求暂停",
+                    "保存游标并记 preemption_limit",
+                    "未切换不伪造 stage_preempted",
+                    "不降低未读优先级",
+                ],
+                acceptance=m6_ok(
+                    "five_then_pause",
+                    {"path": "processed", "equals": 11},
+                    {"path": "actual_stage_preempted_count", "equals": 5},
+                    {"path": "per_cycle_switch_count", "equals": [1, 1, 1, 1, 1, 0]},
+                    {"path": "unsafe_claimed", "equals": 0},
+                    {"path": "unsafe_observation_incremented", "equals": False},
+                    {"path": "sixth_switch_required", "equals": True},
+                    {"path": "sixth_stage_preempted", "equals": False},
+                    {"path": "u6_claims", "equals": 0},
+                    {"path": "cleanup_claims", "equals": 0},
+                    {"path": "unread_priority_order_ok", "equals": True},
+                    {"path": "pause_reason", "equals": "preemption_limit"},
+                    {"path": "preemptions_used", "equals": 5},
+                    {"path": "cursor_preserved", "equals": True},
+                    {"path": "unsafe_claim_count", "equals": 0},
+                    {"path": "unsafe_observations", "equals": 1},
+                    {"path": "unsafe_stage_before", "equals": 0},
+                    {"path": "unsafe_stage_after", "equals": 0},
+                    {"path": "unsafe_stage_delta", "equals": 0},
+                    {"path": "timeline_length", "equals": 25},
+                    {"path": "step_count", "equals": 25},
+                    {"path": "timeline.0.virtual_ms", "equals": 0},
+                    {"path": "timeline.1.virtual_ms", "equals": 1000},
+                    {"path": "timeline.2.event", "equals": "snapshot_available"},
+                    {"path": "timeline.2.virtual_ms", "equals": 1500},
+                    {"path": "timeline.3.event", "equals": "safe_point_not_reached"},
+                    {"path": "timeline.3.virtual_ms", "equals": 1800},
+                    {"path": "timeline.4.event", "equals": "safe_point_reached"},
+                    {"path": "timeline.4.virtual_ms", "equals": 2000},
+                    {"path": "timeline.5.virtual_ms", "equals": 2000},
+                    {"path": "timeline.6.virtual_ms", "equals": 2200},
+                    {"path": "timeline.7.virtual_ms", "equals": 2400},
+                    {"path": "arrival_trace.1", "equals": 1000},
+                    {"path": "arrival_trace.6", "equals": 2200},
+                    {"path": "unsafe_sample_monotonic", "equals": 1800},
+                    {"path": "unsafe_preemptions_before", "equals": 0},
+                    {"path": "unsafe_preemptions_after", "equals": 0},
+                    {"path": "unsafe_preemptions_delta", "equals": 0},
+                    {"path": "clock_trace_length", "equals": 25},
+                    {"path": "clock_trace.0", "equals": 0},
+                    {"path": "clock_trace.1", "equals": 1000},
+                    {"path": "clock_trace.2", "equals": 1500},
+                    {"path": "clock_trace.3", "equals": 1800},
+                    {"path": "clock_trace.4", "equals": 2000},
+                    {"path": "clock_trace.6", "equals": 2200},
+                    {"path": "clock_trace.9", "equals": 3000},
+                ),
+            ),
         ],
     )
     add(
@@ -9600,6 +9922,32 @@ def build_m5_stimuli() -> None:
     text_base["after_request_only"] = text_base["xml_sequence"][-1]
     text_base["after_delivered"] = text_base["xml_sequence"][-1]
     text_base["after_missing_anchor"] = text_base["xml_sequence"][-1]
+    apply_before = _m5_xml(
+        _m5_target(
+            [
+                _m5_node(text="岗位详情", bounds="20,160,1060,180"),
+                _m5_node(
+                    text="立即申请",
+                    bounds="700,2100,1040,2300",
+                    clickable=True,
+                    enabled=True,
+                ),
+            ]
+        )
+    )
+    apply_after = _m5_xml(
+        _m5_target(
+            [
+                _m5_node(text="岗位详情", bounds="20,160,1060,180"),
+                _m5_node(
+                    text="已申请",
+                    bounds="700,2100,1040,2300",
+                    clickable=False,
+                    enabled=False,
+                ),
+            ]
+        )
+    )
     value = {
         "schema_version": 1,
         "description": "M5 纯合成原始设备刺激；不含 performed/隔离/重试等产品结论",
@@ -9609,9 +9957,33 @@ def build_m5_stimuli() -> None:
             "wechat": dialog_pair("wechat"),
             "phone": dialog_pair("phone"),
             "delete": dialog_pair("delete"),
+            "apply": {
+                "ime": "com.example.default/.Ime",
+                "target_ime": None,
+                "xml_sequence": [apply_before, apply_after],
+                "taps": [],
+                "irreversible_index": 0,
+            },
         },
     }
     write_json("fixtures/m5/stimuli/actions.json", value)
+
+
+def build_m6_probe_fixtures() -> None:
+    """生成 S05/S07 共用的纯声明式探针刺激声明。"""
+    write_json(
+        "fixtures/m6/probe/s05-s07.stimuli.json",
+        {
+            "schema_version": 1,
+            "role": "driver_stimuli_only",
+            "cases": [
+                "cursor_resume",
+                "budget_not_reset",
+                "renew_before_finish",
+                "clock_changed",
+            ],
+        },
+    )
 
 
 def build_catalogue() -> dict[str, Any]:
@@ -9629,6 +10001,7 @@ def build_catalogue() -> dict[str, Any]:
     sensor = build_sensor_cases()
     build_support_fixtures()
     build_m5_stimuli()
+    build_m6_probe_fixtures()
     m3 = build_m3_fixtures()
     build_m1_fixtures()
     build_m2_requests()

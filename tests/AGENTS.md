@@ -74,7 +74,7 @@ M0–M4b Python 测试不依赖 Node；`npm test` 验证既有 24 案例判据�
 
 ## 六、已知限制
 
-- 当前覆盖 M0–M6；M7 清理、M8 完整 run/灰度、真实 provider/真机/真实 OS 门禁目录与真实动作执行测试尚未实现。M6 场景只含刺激，不含 expected/oracle；测试协调端维护的 `tests/scenarios`、`tests/test_offline_scenarios.py` 与 `tests/private_regression/` 独立判据不属于本目录维护范围。
+- 当前覆盖 M0–M6；M7 清理、M8 完整 run/灰度、真实 provider/真机/真实 OS 门禁目录与真实动作执行测试尚未实现。M6 场景现有 S01–S08 刺激与 `expected/m6-observations.json`；仅 A06 六变体（`framework/m5_probe.py`）与 S03（`framework/m6_probe.py`）有限接线，S05–S07 仍 BLOCKED，M6 全量/真机/模型未验收。测试协调端维护的 `tests/scenarios`、`tests/test_offline_scenarios.py` 与 `tests/private_regression/` 独立判据不属于本目录维护范围。
 - 真实 ADB、真实机型、窗口/截图输出与真实消息稳定标识未验证；M1 停止检查器只用注入值或 mock ctypes；M2 只用合成 XML/profile；M3 只用合成 XML/RGBA 与 mock subprocess；M4a 只用临时项目根、合成 base/包/preview 与真实 stopped 检查；M4b 只用合成本机桥桩/模拟 transport；M4c 只用临时项目/OS 根、合成事实/凭证/桥桩与跨进程模拟；M5 只用合成动作脚本/mock ADB/临时 profile 库，真实 provider、私有留出、真实租约、真实 OS 门禁目录、真机动作与恢复时序未测。
 - 独立离线场景与私有回归测试不在本 Task 范围。
 - 日志测试验证的是本机 best-effort 行为，不代表磁盘故障时仍能保留完整日志。

@@ -39,7 +39,7 @@ EXIT_FAIL = 1
 EXIT_BLOCKED = 3
 RUN_ROOT = Path("data") / "evals" / "scenario-runs"
 # 只有已独立验收并进入稳定 main 的里程碑才允许执行；扩展前先更新指南。
-IMPLEMENTED_MILESTONES = {"M0", "M1", "M2", "M3", "M4", "M5"}
+IMPLEMENTED_MILESTONES = {"M0", "M1", "M2", "M3", "M4", "M5", "M6"}
 
 
 def _utc_stamp() -> str:
@@ -189,6 +189,7 @@ M3_PROBE_PATH = "tests/scenarios/framework/m3_probe.py"
 M4_PROBE_PATH = "tests/scenarios/framework/m4_probe.py"
 M4C_PROBE_PATH = "tests/scenarios/framework/m4c_probe.py"
 M5_PROBE_PATH = "tests/scenarios/framework/m5_probe.py"
+M6_PROBE_PATH = "tests/scenarios/framework/m6_probe.py"
 
 
 
@@ -403,6 +404,17 @@ def _prepare_isolation(
         destination_m5 = root / M5_PROBE_PATH
         destination_m5.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(resolved_m5, destination_m5)
+    if any(M6_PROBE_PATH in command for command in _iter_command_strings(variant)):
+        source_m6 = target / M6_PROBE_PATH
+        _reject_link_ancestors(source_m6, target, "m6_probe")
+        if source_m6.is_symlink():
+            raise IsolationError("M6 探针不得是符号链接")
+        resolved_m6 = source_m6.resolve()
+        if not _within(resolved_m6, target.resolve()) or not resolved_m6.is_file():
+            raise IsolationError("M6 探针路径越界或不存在")
+        destination_m6 = root / M6_PROBE_PATH
+        destination_m6.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(resolved_m6, destination_m6)
     if any(M0_PROBE_PATH in command for command in _iter_command_strings(variant)):
         source_probe = target / M0_PROBE_PATH
         _reject_link_ancestors(source_probe, target, "m0_protocol_probe")
@@ -1067,6 +1079,7 @@ def _run_concurrent(
             or command.startswith(f"python {M4_PROBE_PATH} ")
             or command.startswith(f"python {M4C_PROBE_PATH} ")
             or command.startswith(f"python {M5_PROBE_PATH} ")
+            or command.startswith(f"python {M6_PROBE_PATH} ")
         ):
             raise IsolationError("并发子进程命令不在白名单")
     barrier = root / "barrier"
@@ -1210,6 +1223,7 @@ def _variant_status(scenario: dict[str, Any], variant: dict[str, Any], target: P
             or command.startswith(f"python {M4_PROBE_PATH} ")
             or command.startswith(f"python {M4C_PROBE_PATH} ")
             or command.startswith(f"python {M5_PROBE_PATH} ")
+            or command.startswith(f"python {M6_PROBE_PATH} ")
         ):
             return "BLOCKED_ENTRY_UNFROZEN"
     return "READY"

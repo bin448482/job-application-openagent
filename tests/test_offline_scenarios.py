@@ -26,7 +26,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, m4_probe, m4c_probe, m5_probe, model, replay, runner  # noqa: E402
+from scenarios.framework import m0_protocol_probe, m1_probe, m2_probe, m3_probe, m4_probe, m4c_probe, m5_probe, m6_probe, model, replay, runner  # noqa: E402
 from scenarios.framework.compare import compare_invocation, compare_step, strict_equal  # noqa: E402
 
 SCENARIO_ROOT = TESTS_DIR / "scenarios"
@@ -932,13 +932,13 @@ class IsolationTripwireTests(unittest.TestCase):
 class P2M0BindingTests(unittest.TestCase):
     """M0 稳定 app 接入后的里程碑门禁与设备边界替身检查。"""
 
-    def test_milestone_gate_blocks_unimplemented_m6(self) -> None:
-        """M6 未进入稳定 main 前只能 BLOCKED，不得被当 FAIL/PASS。"""
-        load_assets()
+    def test_milestone_gate_blocks_unimplemented_and_unfrozen(self) -> None:
+        """M6 已分派，但未交接变体与未实现里程碑仍只能 BLOCKED。"""
+        assets = load_assets()
         self.assertEqual(
-            runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4", "M5"}
+            runner.IMPLEMENTED_MILESTONES, {"M0", "M1", "M2", "M3", "M4", "M5", "M6"}
         )
-        scenario = {"id": "SC-R99", "milestone": "M6"}
+        scenario = {"id": "SC-R99", "milestone": "M7"}
         variant = {
             "id": "synthetic",
             "layer": "F",
@@ -952,6 +952,208 @@ class P2M0BindingTests(unittest.TestCase):
             runner._variant_status(scenario, variant, target),
             "BLOCKED_MILESTONE_UNIMPLEMENTED",
         )
+        index = {
+            f"{item['id']}/{entry['id']}": (item, entry)
+            for item, entry in model.iter_variants(assets.catalogue)
+        }
+        for ref in (
+            "SC-S01/safe_point_preempts",
+            "SC-S01/arrival_after_commit",
+            "SC-S02/single_false_blocks",
+            "SC-S02/all_true",
+            "SC-S04/targeted_once",
+            "SC-S04/count_no_target",
+            "SC-S08/three_hooks",
+        ):
+            item, entry = index[ref]
+            self.assertEqual(
+                runner._variant_status(item, entry, target),
+                "BLOCKED_ENTRY_UNFROZEN",
+                ref,
+            )
+
+    def test_m6_probe_rejects_unsafe_or_missing_stimuli(self) -> None:
+        """M6 探针必须在读取前拒绝绝对/上跳/越界或不存在的刺激。"""
+        for value in (
+            "../outside-stimuli.json",
+            "C:/outside-stimuli.json",
+            "tests/scenarios/fixtures/m6/does-not-exist.stimuli.json",
+        ):
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = m6_probe.main(["--case", "boundaries", "--stimuli", value])
+            self.assertEqual(code, 2, value)
+            payload = json.loads(output.getvalue())
+            self.assertEqual(payload["status"], "probe_error")
+            self.assertEqual(payload["reason"], "刺激路径非法" if ".." in value or value.startswith("C:") else "刺激文件不可读")
+
+    def test_s03_timeline_consumes_original_events(self) -> None:
+        """S03 原始 virtual_ms/arrival_at/安全点顺序必须实际进入解析轨迹。"""
+        stimuli = json.loads(
+            (SCENARIO_ROOT / "fixtures/m6/events/s03-preemption-limit.stimuli.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        start, cycles, timeline = m6_probe._parse_s03_timeline(stimuli)
+        self.assertEqual(start, 0)
+        self.assertEqual(len(cycles), 6)
+        self.assertEqual(len(timeline), 25)
+        self.assertEqual(
+            (cycles[0]["job_ms"], cycles[0]["arrival_at"], cycles[0]["snapshot_ms"],
+             cycles[0]["not_reached_ms"], cycles[0]["safe_ms"]),
+            (0, 1000, 1500, 1800, 2000),
+        )
+        self.assertEqual(
+            (cycles[1]["job_ms"], cycles[1]["arrival_at"], cycles[1]["snapshot_ms"],
+             cycles[1]["not_reached_ms"], cycles[1]["safe_ms"]),
+            (2000, 2200, 2400, None, 2600),
+        )
+        changed = copy.deepcopy(stimuli)
+        changed["events"][2]["virtual_ms"] = 1600
+        _start, _cycles, changed_timeline = m6_probe._parse_s03_timeline(changed)
+        self.assertNotEqual(changed_timeline[2]["virtual_ms"], 1500)
+        arrival_only = copy.deepcopy(stimuli)
+        arrival_only["events"][1]["arrival_at"] = 900
+        _start, _cycles, arrival_timeline = m6_probe._parse_s03_timeline(arrival_only)
+        self.assertEqual(arrival_timeline[1]["arrival_at"], 900)
+
+    def _run_s03_temp(self, stimuli):
+        """在临时合成项目根上运行真实 _Context/_run_s03，返回输出与上下文。"""
+        import action_helpers
+
+        tmp, root = action_helpers.temp_project()
+        shutil.copytree(
+            TESTS_DIR.parent / "tests" / "fixtures" / "read",
+            root / "tests" / "fixtures" / "read",
+        )
+        (root / "tests" / "fixtures" / "runtime").mkdir(parents=True, exist_ok=True)
+        old_root = m6_probe.ROOT
+        try:
+            m6_probe.ROOT = root
+            ctx = m6_probe._Context()
+            return m6_probe._run_s03(ctx, stimuli), ctx
+        finally:
+            m6_probe.ROOT = old_root
+            tmp.cleanup()
+
+    def test_s03_arrival_only_changes_execution_clock(self) -> None:
+        """arrival-only 变异必须改变真实 execute_run 的 EnvironmentClock 轨迹。"""
+        stimuli = json.loads(
+            (SCENARIO_ROOT / "fixtures/m6/events/s03-preemption-limit.stimuli.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        original, _ctx = self._run_s03_temp(stimuli)
+        mutant = copy.deepcopy(stimuli)
+        mutant["events"][1]["arrival_at"] = 900
+        changed, _ctx2 = self._run_s03_temp(mutant)
+        self.assertEqual(original["clock_trace"][1], 1000)
+        self.assertEqual(changed["clock_trace"][1], 900)
+        self.assertNotEqual(original["clock_trace"], changed["clock_trace"])
+        self.assertNotEqual(original["timeline"], changed["timeline"])
+        self.assertEqual(original["step_count"], 25)
+        self.assertEqual(changed["step_count"], 25)
+
+    def test_s03_unsafe_sampling_is_real_and_corruption_rejected(self) -> None:
+        """unsafe 前后真实采样为 1 次观察/0 增量；破坏采样的输出被原断言拒绝。"""
+        stimuli = json.loads(
+            (SCENARIO_ROOT / "fixtures/m6/events/s03-preemption-limit.stimuli.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        original, _ctx = self._run_s03_temp(stimuli)
+        self.assertEqual(original["unsafe_observations"], 1)
+        self.assertEqual(original["unsafe_sample_monotonic"], 1800)
+        for key in (
+            "unsafe_stage_before",
+            "unsafe_stage_after",
+            "unsafe_stage_delta",
+            "unsafe_preemptions_before",
+            "unsafe_preemptions_after",
+            "unsafe_preemptions_delta",
+        ):
+            self.assertEqual(original[key], 0, key)
+        self.assertFalse(original["unsafe_observation_incremented"])
+        paths = [
+            {"path": "unsafe_stage_delta", "equals": 0},
+            {"path": "unsafe_preemptions_delta", "equals": 0},
+            {"path": "unsafe_observation_incremented", "equals": False},
+        ]
+        self.assertEqual(compare_step(original, {"stdout_paths": paths}), [])
+        corrupted = copy.deepcopy(original)
+        corrupted["unsafe_stage_delta"] = 1
+        corrupted["unsafe_observation_incremented"] = True
+        self.assertNotEqual(compare_step(corrupted, {"stdout_paths": paths}), [])
+
+    def test_s03_timeline_rejects_unknown_missing_duplicate_out_of_order(self) -> None:
+        """S03 未知/缺失/重复/乱序/clock_start 不符必须拒绝。"""
+        base = json.loads(
+            (SCENARIO_ROOT / "fixtures/m6/events/s03-preemption-limit.stimuli.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        def unknown(value):
+            value["events"][2]["event"] = "ignored_marker"
+
+        def missing_snapshot(value):
+            value["events"].pop(2)
+
+        def duplicate_seq(value):
+            value["events"][1]["seq"] = value["events"][0]["seq"]
+
+        def out_of_order(value):
+            value["events"][3]["virtual_ms"] = 1400
+
+        def clock_mismatch(value):
+            value["clock_start_ms"] = 999999
+
+        def missing_arrival(value):
+            value["events"][1].pop("arrival_at")
+
+        for mutate in (
+            unknown,
+            missing_snapshot,
+            duplicate_seq,
+            out_of_order,
+            clock_mismatch,
+            missing_arrival,
+        ):
+            value = copy.deepcopy(base)
+            mutate(value)
+            with self.assertRaises(m6_probe.ProbeError):
+                m6_probe._parse_s03_timeline(value)
+
+    def test_a06_control_binding_fact_is_consumed(self) -> None:
+        """比较器必须消费逐控制真实绑定事实；错绑定被拒绝。"""
+        step = {
+            "stdout_paths": [
+                {"path": "env.binding_ok", "equals": True},
+                {"path": "env.profile_meta.profile_id", "equals": "m6-apply-preexisting"},
+            ]
+        }
+        payload = {
+            "env": {
+                "binding_ok": True,
+                "profile_meta": {"profile_id": "m6-apply-preexisting"},
+            }
+        }
+        self.assertEqual(compare_step(payload, step), [])
+        bad = copy.deepcopy(payload)
+        bad["env"]["binding_ok"] = False
+        self.assertNotEqual(compare_step(bad, step), [])
+
+    def test_a06_control_log_fact_missing_is_rejected(self) -> None:
+        """删除未断言的日志事实后比较器必须报缺失。"""
+        step = {"stdout_paths": [{"path": "log_finish.unpaired", "equals": 0}]}
+        self.assertEqual(compare_step({"log_finish": {"unpaired": 0}}, step), [])
+        self.assertNotEqual(compare_step({}, step), [])
+
+    def test_a06_control_nonzero_popen_is_rejected(self) -> None:
+        """非零真实 Popen 尝试必须被比较器拒绝。"""
+        step = {"stdout_paths": [{"path": "real_popen_attempts", "equals": 0}]}
+        self.assertEqual(compare_step({"real_popen_attempts": 0}, step), [])
+        self.assertNotEqual(compare_step({"real_popen_attempts": 1}, step), [])
 
     def test_deferred_and_module_evidence_are_not_pass(self) -> None:
         """DEFERRED 与 MODULE_EVIDENCE 不能被当 PASS 或普通入口阻塞。"""

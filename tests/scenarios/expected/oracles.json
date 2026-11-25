@@ -5255,11 +5255,56 @@
       "variant_id": "A05_base"
     },
     "SC-A06/A06_FA": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A06_FA",
+                "path": "case"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": null,
+                "path": "record"
+              },
+              {
+                "equals": "running",
+                "path": "job.state"
+              },
+              {
+                "equals": 0,
+                "path": "log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "log_sensitive_hits"
+              },
+              {
+                "equals": 0,
+                "path": "real_popen_attempts"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "not_performed+none",
         "原因限 authorization_missing/precondition_failed/cancelled_before_action",
-        "独立 oracle 证明未点击任何写入控件"
+        "独立 oracle 证明未点击任何写入控件",
+        "授权缺失在零点击处固定拒绝"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -5285,11 +5330,101 @@
       "variant_id": "A06_FA"
     },
     "SC-A06/A06_FB": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A06_FB",
+                "path": "case"
+              },
+              {
+                "equals": true,
+                "path": "interrupted"
+              },
+              {
+                "equals": "pending",
+                "path": "after_interrupt.state"
+              },
+              {
+                "equals": "running",
+                "path": "job_after_interrupt.state"
+              },
+              {
+                "equals": 0,
+                "path": "same_connection_replay.irreversible"
+              },
+              {
+                "equals": "pending",
+                "path": "record_after_replay.state"
+              },
+              {
+                "equals": "running",
+                "path": "job_after_replay.state"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.files"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.begin"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.complete"
+              },
+              {
+                "equals": 0,
+                "path": "real_popen_attempts"
+              },
+              {
+                "equals": 0,
+                "path": "log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "log_sensitive_hits"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": 0,
+                "path": "log_finish.unpaired"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "pending 残留保锁",
         "不能凭无返回降为 not_sent",
-        "人工核对"
+        "人工核对",
+        "pending 已提交后中断保持锁与 running",
+        "重开仍 pending，不凭无返回降级"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -5315,7 +5450,103 @@
       "variant_id": "A06_FB"
     },
     "SC-A06/A06_FC": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A06_FC",
+                "path": "case"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "device_disconnected",
+                "path": "observed.evidence.reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "blocked",
+                "path": "job.state"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": 0,
+                "path": "replay.all_commands"
+              },
+              {
+                "equals": 1,
+                "path": "ledger.files"
+              },
+              {
+                "equals": 3,
+                "path": "ledger.begin"
+              },
+              {
+                "equals": 3,
+                "path": "ledger.complete"
+              },
+              {
+                "equals": true,
+                "path": "ledger.closed"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.unresolved"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.order_errors"
+              },
+              {
+                "equals": 0,
+                "path": "real_popen_attempts"
+              },
+              {
+                "equals": 0,
+                "path": "log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "log_sensitive_hits"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": 0,
+                "path": "log_finish.unpaired"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "Evidence.unknown",
         "原因限 device_disconnected/executor_interrupted",
@@ -5346,7 +5577,311 @@
       "variant_id": "A06_FC"
     },
     "SC-A06/A06_FD": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A06_FD",
+                "path": "case"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.state"
+              },
+              {
+                "equals": "unknown",
+                "path": "observed.evidence.outcome"
+              },
+              {
+                "equals": "result_unverified",
+                "path": "observed.evidence.reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "unknown",
+                "path": "record.state"
+              },
+              {
+                "equals": "blocked",
+                "path": "job.state"
+              },
+              {
+                "equals": 0,
+                "path": "log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "log_sensitive_hits"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": 0,
+                "path": "log_finish.unpaired"
+              },
+              {
+                "equals": "unknown",
+                "path": "controls.toast.observed.state"
+              },
+              {
+                "equals": "result_unverified",
+                "path": "controls.toast.observed.evidence.reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "controls.toast.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "controls.toast.after_consumed"
+              },
+              {
+                "equals": true,
+                "path": "controls.toast.facts.toast_present"
+              },
+              {
+                "equals": true,
+                "path": "controls.toast.facts.target_unchanged"
+              },
+              {
+                "equals": false,
+                "path": "controls.toast.facts.target_after_done"
+              },
+              {
+                "equals": 0,
+                "path": "controls.toast.real_popen_attempts"
+              },
+              {
+                "equals": "unknown",
+                "path": "controls.dialog.observed.state"
+              },
+              {
+                "equals": "result_unverified",
+                "path": "controls.dialog.observed.evidence.reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "controls.dialog.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "controls.dialog.after_consumed"
+              },
+              {
+                "equals": true,
+                "path": "controls.dialog.facts.dialog_container_present"
+              },
+              {
+                "equals": true,
+                "path": "controls.dialog.facts.dialog_controls_present"
+              },
+              {
+                "equals": true,
+                "path": "controls.dialog.facts.target_unchanged"
+              },
+              {
+                "equals": 0,
+                "path": "controls.dialog.real_popen_attempts"
+              },
+              {
+                "equals": "unknown",
+                "path": "controls.empty.observed.state"
+              },
+              {
+                "equals": "result_unverified",
+                "path": "controls.empty.observed.evidence.reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "controls.empty.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "controls.empty.after_consumed"
+              },
+              {
+                "equals": false,
+                "path": "controls.empty.facts.target_unchanged"
+              },
+              {
+                "equals": 0,
+                "path": "controls.empty.real_popen_attempts"
+              },
+              {
+                "equals": "controls/toast",
+                "path": "controls.toast.env.project_root"
+              },
+              {
+                "equals": "controls/toast/os",
+                "path": "controls.toast.env.os_root"
+              },
+              {
+                "path": "controls.toast.env.db_path_token",
+                "pattern": "controls/toast/data/runtime/profiles/m6-apply-toast/runtime\\.sqlite3"
+              },
+              {
+                "equals": "m6-apply-toast",
+                "path": "controls.toast.env.profile_meta.profile_id"
+              },
+              {
+                "equals": "m6-apply-toast",
+                "path": "controls.toast.env.gate.profile_id"
+              },
+              {
+                "equals": "held",
+                "path": "controls.toast.env.gate.state"
+              },
+              {
+                "equals": true,
+                "path": "controls.toast.env.binding_ok"
+              },
+              {
+                "equals": 0,
+                "path": "controls.toast.real_popen_attempts"
+              },
+              {
+                "equals": 1,
+                "path": "controls.toast.log_correlations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.toast.log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.toast.log_sensitive_hits"
+              },
+              {
+                "equals": 0,
+                "path": "controls.toast.log_finish.unpaired"
+              },
+              {
+                "equals": false,
+                "path": "controls.toast.log_has_body"
+              },
+              {
+                "equals": "controls/dialog",
+                "path": "controls.dialog.env.project_root"
+              },
+              {
+                "equals": "controls/dialog/os",
+                "path": "controls.dialog.env.os_root"
+              },
+              {
+                "path": "controls.dialog.env.db_path_token",
+                "pattern": "controls/dialog/data/runtime/profiles/m6-apply-dialog/runtime\\.sqlite3"
+              },
+              {
+                "equals": "m6-apply-dialog",
+                "path": "controls.dialog.env.profile_meta.profile_id"
+              },
+              {
+                "equals": "m6-apply-dialog",
+                "path": "controls.dialog.env.gate.profile_id"
+              },
+              {
+                "equals": "held",
+                "path": "controls.dialog.env.gate.state"
+              },
+              {
+                "equals": true,
+                "path": "controls.dialog.env.binding_ok"
+              },
+              {
+                "equals": 0,
+                "path": "controls.dialog.real_popen_attempts"
+              },
+              {
+                "equals": 1,
+                "path": "controls.dialog.log_correlations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.dialog.log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.dialog.log_sensitive_hits"
+              },
+              {
+                "equals": 0,
+                "path": "controls.dialog.log_finish.unpaired"
+              },
+              {
+                "equals": false,
+                "path": "controls.dialog.log_has_body"
+              },
+              {
+                "equals": "controls/empty",
+                "path": "controls.empty.env.project_root"
+              },
+              {
+                "equals": "controls/empty/os",
+                "path": "controls.empty.env.os_root"
+              },
+              {
+                "path": "controls.empty.env.db_path_token",
+                "pattern": "controls/empty/data/runtime/profiles/m6-apply-empty/runtime\\.sqlite3"
+              },
+              {
+                "equals": "m6-apply-empty",
+                "path": "controls.empty.env.profile_meta.profile_id"
+              },
+              {
+                "equals": "m6-apply-empty",
+                "path": "controls.empty.env.gate.profile_id"
+              },
+              {
+                "equals": "held",
+                "path": "controls.empty.env.gate.state"
+              },
+              {
+                "equals": true,
+                "path": "controls.empty.env.binding_ok"
+              },
+              {
+                "equals": 0,
+                "path": "controls.empty.real_popen_attempts"
+              },
+              {
+                "equals": 1,
+                "path": "controls.empty.log_correlations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.empty.log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.empty.log_sensitive_hits"
+              },
+              {
+                "equals": 0,
+                "path": "controls.empty.log_finish.unpaired"
+              },
+              {
+                "equals": false,
+                "path": "controls.empty.log_has_body"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "unknown/result_unverified",
         "Toast/确认框/空返回不证明成功",
@@ -5376,7 +5911,99 @@
       "variant_id": "A06_FD"
     },
     "SC-A06/A06_FE": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A06_FE",
+                "path": "case"
+              },
+              {
+                "equals": "store_io_error",
+                "path": "observed.raised"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "pending",
+                "path": "record.state"
+              },
+              {
+                "equals": "running",
+                "path": "job.state"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "equals": "action_conflict",
+                "path": "replay.raised"
+              },
+              {
+                "equals": 1,
+                "path": "ledger.files"
+              },
+              {
+                "equals": 5,
+                "path": "ledger.begin"
+              },
+              {
+                "equals": 5,
+                "path": "ledger.complete"
+              },
+              {
+                "equals": true,
+                "path": "ledger.closed"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.unresolved"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.order_errors"
+              },
+              {
+                "equals": 0,
+                "path": "real_popen_attempts"
+              },
+              {
+                "equals": 0,
+                "path": "log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "log_sensitive_hits"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": 0,
+                "path": "log_finish.unpaired"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "远端可能已执行",
         "本地回滚不撤销远端动作",
@@ -5407,11 +6034,337 @@
       "variant_id": "A06_FE"
     },
     "SC-A06/A06_base": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "A06_base",
+                "path": "case"
+              },
+              {
+                "equals": "performed",
+                "path": "observed.state"
+              },
+              {
+                "equals": "applied",
+                "path": "observed.evidence.effect"
+              },
+              {
+                "equals": true,
+                "path": "observed.gate_converged"
+              },
+              {
+                "equals": "pending",
+                "path": "pending_before_execute"
+              },
+              {
+                "equals": 1,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed",
+                "path": "record.state"
+              },
+              {
+                "equals": "applied",
+                "path": "record.effect"
+              },
+              {
+                "equals": "done",
+                "path": "job.state"
+              },
+              {
+                "equals": 0,
+                "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "equals": 0,
+                "path": "log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "log_sensitive_hits"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": 0,
+                "path": "log_finish.unpaired"
+              },
+              {
+                "equals": "not_performed",
+                "path": "controls.preexisting_done.observed.state"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "controls.preexisting_done.observed.evidence.reason_code"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done.irreversible"
+              },
+              {
+                "equals": false,
+                "path": "controls.preexisting_done.after_consumed"
+              },
+              {
+                "equals": true,
+                "path": "controls.preexisting_done.facts.target_unchanged"
+              },
+              {
+                "equals": true,
+                "path": "controls.preexisting_done.facts.target_after_done"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done.real_popen_attempts"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done.log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done.log_sensitive_hits"
+              },
+              {
+                "equals": "not_performed",
+                "path": "controls.preexisting_done_unrelated_change.observed.state"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done_unrelated_change.irreversible"
+              },
+              {
+                "equals": false,
+                "path": "controls.preexisting_done_unrelated_change.after_consumed"
+              },
+              {
+                "equals": true,
+                "path": "controls.preexisting_done_unrelated_change.facts.target_unchanged"
+              },
+              {
+                "equals": true,
+                "path": "controls.preexisting_done_unrelated_change.facts.external_changed"
+              },
+              {
+                "equals": "m6-apply-preexisting_unrelated",
+                "path": "controls.preexisting_done_unrelated_change.env.profile_meta.profile_id"
+              },
+              {
+                "equals": "m6-apply-preexisting_unrelated",
+                "path": "controls.preexisting_done_unrelated_change.env.gate.profile_id"
+              },
+              {
+                "equals": "unknown",
+                "path": "controls.unrelated_change.observed.state"
+              },
+              {
+                "equals": "result_unverified",
+                "path": "controls.unrelated_change.observed.evidence.reason_code"
+              },
+              {
+                "equals": 1,
+                "path": "controls.unrelated_change.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "controls.unrelated_change.after_consumed"
+              },
+              {
+                "equals": true,
+                "path": "controls.unrelated_change.facts.target_unchanged"
+              },
+              {
+                "equals": true,
+                "path": "controls.unrelated_change.facts.external_changed"
+              },
+              {
+                "equals": 0,
+                "path": "controls.unrelated_change.real_popen_attempts"
+              },
+              {
+                "equals": "controls/preexisting",
+                "path": "controls.preexisting_done.env.project_root"
+              },
+              {
+                "equals": "controls/preexisting/os",
+                "path": "controls.preexisting_done.env.os_root"
+              },
+              {
+                "path": "controls.preexisting_done.env.db_path_token",
+                "pattern": "controls/preexisting/data/runtime/profiles/m6-apply-preexisting/runtime\\.sqlite3"
+              },
+              {
+                "equals": "m6-apply-preexisting",
+                "path": "controls.preexisting_done.env.profile_meta.profile_id"
+              },
+              {
+                "equals": "m6-apply-preexisting",
+                "path": "controls.preexisting_done.env.gate.profile_id"
+              },
+              {
+                "equals": "held",
+                "path": "controls.preexisting_done.env.gate.state"
+              },
+              {
+                "equals": true,
+                "path": "controls.preexisting_done.env.binding_ok"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done.real_popen_attempts"
+              },
+              {
+                "equals": 1,
+                "path": "controls.preexisting_done.log_correlations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done.log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done.log_sensitive_hits"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done.log_finish.unpaired"
+              },
+              {
+                "equals": false,
+                "path": "controls.preexisting_done.log_has_body"
+              },
+              {
+                "equals": "controls/preexisting_unrelated",
+                "path": "controls.preexisting_done_unrelated_change.env.project_root"
+              },
+              {
+                "equals": "controls/preexisting_unrelated/os",
+                "path": "controls.preexisting_done_unrelated_change.env.os_root"
+              },
+              {
+                "path": "controls.preexisting_done_unrelated_change.env.db_path_token",
+                "pattern": "controls/preexisting_unrelated/data/runtime/profiles/m6-apply-preexisting_unrelated/runtime\\.sqlite3"
+              },
+              {
+                "equals": "m6-apply-preexisting_unrelated",
+                "path": "controls.preexisting_done_unrelated_change.env.profile_meta.profile_id"
+              },
+              {
+                "equals": "m6-apply-preexisting_unrelated",
+                "path": "controls.preexisting_done_unrelated_change.env.gate.profile_id"
+              },
+              {
+                "equals": "held",
+                "path": "controls.preexisting_done_unrelated_change.env.gate.state"
+              },
+              {
+                "equals": true,
+                "path": "controls.preexisting_done_unrelated_change.env.binding_ok"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done_unrelated_change.real_popen_attempts"
+              },
+              {
+                "equals": 1,
+                "path": "controls.preexisting_done_unrelated_change.log_correlations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done_unrelated_change.log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done_unrelated_change.log_sensitive_hits"
+              },
+              {
+                "equals": 0,
+                "path": "controls.preexisting_done_unrelated_change.log_finish.unpaired"
+              },
+              {
+                "equals": false,
+                "path": "controls.preexisting_done_unrelated_change.log_has_body"
+              },
+              {
+                "equals": "controls/unrelated",
+                "path": "controls.unrelated_change.env.project_root"
+              },
+              {
+                "equals": "controls/unrelated/os",
+                "path": "controls.unrelated_change.env.os_root"
+              },
+              {
+                "path": "controls.unrelated_change.env.db_path_token",
+                "pattern": "controls/unrelated/data/runtime/profiles/m6-apply-unrelated/runtime\\.sqlite3"
+              },
+              {
+                "equals": "m6-apply-unrelated",
+                "path": "controls.unrelated_change.env.profile_meta.profile_id"
+              },
+              {
+                "equals": "m6-apply-unrelated",
+                "path": "controls.unrelated_change.env.gate.profile_id"
+              },
+              {
+                "equals": "held",
+                "path": "controls.unrelated_change.env.gate.state"
+              },
+              {
+                "equals": true,
+                "path": "controls.unrelated_change.env.binding_ok"
+              },
+              {
+                "equals": 0,
+                "path": "controls.unrelated_change.real_popen_attempts"
+              },
+              {
+                "equals": 1,
+                "path": "controls.unrelated_change.log_correlations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.unrelated_change.log_schema_violations"
+              },
+              {
+                "equals": 0,
+                "path": "controls.unrelated_change.log_sensitive_hits"
+              },
+              {
+                "equals": 0,
+                "path": "controls.unrelated_change.log_finish.unpaired"
+              },
+              {
+                "equals": false,
+                "path": "controls.unrelated_change.log_has_body"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "本次前后证据充分才 performed+applied",
         "先写 pending",
-        "重复请求被动作键锁拒绝"
+        "重复请求被动作键锁拒绝",
+        "本次前后独立目标效果增量才 performed+applied",
+        "重复键/终态后不二次执行"
       ],
       "deferred_to": null,
       "device_gate": false,
@@ -24896,7 +25849,210 @@
       "variant_id": "single_false_blocks"
     },
     "SC-S03/five_then_pause": {
-      "acceptance": null,
+      "acceptance": {
+        "steps": [
+          {
+            "exit_code": 0,
+            "stdout_paths": [
+              {
+                "equals": "ok",
+                "path": "status"
+              },
+              {
+                "equals": "five_then_pause",
+                "path": "case"
+              },
+              {
+                "equals": 11,
+                "path": "processed"
+              },
+              {
+                "equals": 5,
+                "path": "actual_stage_preempted_count"
+              },
+              {
+                "equals": [
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  0
+                ],
+                "path": "per_cycle_switch_count"
+              },
+              {
+                "equals": 0,
+                "path": "unsafe_claimed"
+              },
+              {
+                "equals": false,
+                "path": "unsafe_observation_incremented"
+              },
+              {
+                "equals": true,
+                "path": "sixth_switch_required"
+              },
+              {
+                "equals": false,
+                "path": "sixth_stage_preempted"
+              },
+              {
+                "equals": 0,
+                "path": "u6_claims"
+              },
+              {
+                "equals": 0,
+                "path": "cleanup_claims"
+              },
+              {
+                "equals": true,
+                "path": "unread_priority_order_ok"
+              },
+              {
+                "equals": "preemption_limit",
+                "path": "pause_reason"
+              },
+              {
+                "equals": 5,
+                "path": "preemptions_used"
+              },
+              {
+                "equals": true,
+                "path": "cursor_preserved"
+              },
+              {
+                "equals": 0,
+                "path": "unsafe_claim_count"
+              },
+              {
+                "equals": 1,
+                "path": "unsafe_observations"
+              },
+              {
+                "equals": 0,
+                "path": "unsafe_stage_before"
+              },
+              {
+                "equals": 0,
+                "path": "unsafe_stage_after"
+              },
+              {
+                "equals": 0,
+                "path": "unsafe_stage_delta"
+              },
+              {
+                "equals": 25,
+                "path": "timeline_length"
+              },
+              {
+                "equals": 25,
+                "path": "step_count"
+              },
+              {
+                "equals": 0,
+                "path": "timeline.0.virtual_ms"
+              },
+              {
+                "equals": 1000,
+                "path": "timeline.1.virtual_ms"
+              },
+              {
+                "equals": "snapshot_available",
+                "path": "timeline.2.event"
+              },
+              {
+                "equals": 1500,
+                "path": "timeline.2.virtual_ms"
+              },
+              {
+                "equals": "safe_point_not_reached",
+                "path": "timeline.3.event"
+              },
+              {
+                "equals": 1800,
+                "path": "timeline.3.virtual_ms"
+              },
+              {
+                "equals": "safe_point_reached",
+                "path": "timeline.4.event"
+              },
+              {
+                "equals": 2000,
+                "path": "timeline.4.virtual_ms"
+              },
+              {
+                "equals": 2000,
+                "path": "timeline.5.virtual_ms"
+              },
+              {
+                "equals": 2200,
+                "path": "timeline.6.virtual_ms"
+              },
+              {
+                "equals": 2400,
+                "path": "timeline.7.virtual_ms"
+              },
+              {
+                "equals": 1000,
+                "path": "arrival_trace.1"
+              },
+              {
+                "equals": 2200,
+                "path": "arrival_trace.6"
+              },
+              {
+                "equals": 1800,
+                "path": "unsafe_sample_monotonic"
+              },
+              {
+                "equals": 0,
+                "path": "unsafe_preemptions_before"
+              },
+              {
+                "equals": 0,
+                "path": "unsafe_preemptions_after"
+              },
+              {
+                "equals": 0,
+                "path": "unsafe_preemptions_delta"
+              },
+              {
+                "equals": 25,
+                "path": "clock_trace_length"
+              },
+              {
+                "equals": 0,
+                "path": "clock_trace.0"
+              },
+              {
+                "equals": 1000,
+                "path": "clock_trace.1"
+              },
+              {
+                "equals": 1500,
+                "path": "clock_trace.2"
+              },
+              {
+                "equals": 1800,
+                "path": "clock_trace.3"
+              },
+              {
+                "equals": 2000,
+                "path": "clock_trace.4"
+              },
+              {
+                "equals": 2200,
+                "path": "clock_trace.6"
+              },
+              {
+                "equals": 3000,
+                "path": "clock_trace.9"
+              }
+            ]
+          }
+        ]
+      },
       "assertions": [
         "仅实际 job→unread 切换累加",
         "观察到但未切换不累加",
