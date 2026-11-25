@@ -38,6 +38,22 @@
               {
                 "length_equals": 0,
                 "path": "events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -102,6 +118,18 @@
               },
               {
                 "equals": "action_conflict",
+                "path": "same_connection_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "same_connection_replay.irreversible"
+              },
+              {
+                "equals": false,
+                "path": "same_connection_replay.reopened"
+              },
+              {
+                "equals": "action_conflict",
                 "path": "replay.raised"
               },
               {
@@ -109,8 +137,47 @@
                 "path": "replay.irreversible"
               },
               {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
                 "equals": null,
                 "path": "replay.state"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "boundary_control.all_commands"
+              },
+              {
+                "equals": true,
+                "path": "boundary_control.real_popen_restored"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_execute.0"
+              },
+              {
+                "length_equals": 1,
+                "path": "log_pairs.action_execute"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -200,6 +267,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -278,6 +377,22 @@
               {
                 "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -349,8 +464,27 @@
                 "path": "events.0.event"
               },
               {
-                "equals": "held",
+                "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "running",
+                "path": "task.state"
+              },
+              {
+                "equals": true,
+                "path": "task.has_lease"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "ledger.complete"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.unresolved"
               },
               {
                 "equals": "action_conflict",
@@ -359,6 +493,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "length_equals": 1,
+                "path": "replay.events"
+              },
+              {
+                "length_equals": 1,
+                "path": "events_after_replay"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -441,6 +607,62 @@
               {
                 "equals": null,
                 "path": "gate_after_release"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "base_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "base_replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "base_replay.reopened"
+              },
+              {
+                "equals": null,
+                "path": "base_replay.state"
+              },
+              {
+                "equals": "done",
+                "path": "base_replay.task.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "base_replay.events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -566,6 +788,22 @@
               {
                 "length_equals": 0,
                 "path": "events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -630,6 +868,18 @@
               },
               {
                 "equals": "action_conflict",
+                "path": "same_connection_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "same_connection_replay.irreversible"
+              },
+              {
+                "equals": false,
+                "path": "same_connection_replay.reopened"
+              },
+              {
+                "equals": "action_conflict",
                 "path": "replay.raised"
               },
               {
@@ -637,8 +887,47 @@
                 "path": "replay.irreversible"
               },
               {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
                 "equals": null,
                 "path": "replay.state"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "boundary_control.all_commands"
+              },
+              {
+                "equals": true,
+                "path": "boundary_control.real_popen_restored"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_execute.0"
+              },
+              {
+                "length_equals": 1,
+                "path": "log_pairs.action_execute"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -728,6 +1017,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -806,6 +1127,22 @@
               {
                 "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -877,8 +1214,27 @@
                 "path": "events.0.event"
               },
               {
-                "equals": "held",
+                "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "running",
+                "path": "task.state"
+              },
+              {
+                "equals": true,
+                "path": "task.has_lease"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "ledger.complete"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.unresolved"
               },
               {
                 "equals": "action_conflict",
@@ -887,6 +1243,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "length_equals": 1,
+                "path": "replay.events"
+              },
+              {
+                "length_equals": 1,
+                "path": "events_after_replay"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -969,6 +1357,62 @@
               {
                 "equals": null,
                 "path": "gate_after_release"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "base_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "base_replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "base_replay.reopened"
+              },
+              {
+                "equals": null,
+                "path": "base_replay.state"
+              },
+              {
+                "equals": "done",
+                "path": "base_replay.task.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "base_replay.events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -1126,6 +1570,62 @@
               {
                 "equals": null,
                 "path": "gate_after_release"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "base_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "base_replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "base_replay.reopened"
+              },
+              {
+                "equals": null,
+                "path": "base_replay.state"
+              },
+              {
+                "equals": "done",
+                "path": "base_replay.task.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "base_replay.events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -1194,6 +1694,22 @@
               {
                 "length_equals": 0,
                 "path": "events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -1258,6 +1774,18 @@
               },
               {
                 "equals": "action_conflict",
+                "path": "same_connection_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "same_connection_replay.irreversible"
+              },
+              {
+                "equals": false,
+                "path": "same_connection_replay.reopened"
+              },
+              {
+                "equals": "action_conflict",
                 "path": "replay.raised"
               },
               {
@@ -1265,8 +1793,47 @@
                 "path": "replay.irreversible"
               },
               {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
                 "equals": null,
                 "path": "replay.state"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "boundary_control.all_commands"
+              },
+              {
+                "equals": true,
+                "path": "boundary_control.real_popen_restored"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_execute.0"
+              },
+              {
+                "length_equals": 1,
+                "path": "log_pairs.action_execute"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -1356,6 +1923,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -1434,6 +2033,22 @@
               {
                 "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -1505,8 +2120,27 @@
                 "path": "events.0.event"
               },
               {
-                "equals": "held",
+                "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "running",
+                "path": "task.state"
+              },
+              {
+                "equals": true,
+                "path": "task.has_lease"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "ledger.complete"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.unresolved"
               },
               {
                 "equals": "action_conflict",
@@ -1515,6 +2149,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "length_equals": 1,
+                "path": "replay.events"
+              },
+              {
+                "length_equals": 1,
+                "path": "events_after_replay"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -1597,6 +2263,82 @@
               {
                 "equals": null,
                 "path": "gate_after_release"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "base_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "base_replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "base_replay.reopened"
+              },
+              {
+                "equals": null,
+                "path": "base_replay.state"
+              },
+              {
+                "equals": "done",
+                "path": "base_replay.task.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "base_replay.events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": true,
+                "path": "dialog_distinct"
+              },
+              {
+                "equals": "dialog",
+                "path": "dialog_checks.0.phase"
+              },
+              {
+                "equals": "pending",
+                "path": "dialog_checks.0.action_state"
+              },
+              {
+                "equals": "held",
+                "path": "dialog_checks.0.gate_state"
+              },
+              {
+                "equals": true,
+                "path": "dialog_checks.0.has_confirm"
               }
             ]
           }
@@ -1678,6 +2420,82 @@
               {
                 "equals": null,
                 "path": "gate_after_release"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "base_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "base_replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "base_replay.reopened"
+              },
+              {
+                "equals": null,
+                "path": "base_replay.state"
+              },
+              {
+                "equals": "done",
+                "path": "base_replay.task.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "base_replay.events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": true,
+                "path": "dialog_distinct"
+              },
+              {
+                "equals": "dialog",
+                "path": "dialog_checks.0.phase"
+              },
+              {
+                "equals": "pending",
+                "path": "dialog_checks.0.action_state"
+              },
+              {
+                "equals": "held",
+                "path": "dialog_checks.0.gate_state"
+              },
+              {
+                "equals": true,
+                "path": "dialog_checks.0.has_confirm"
               }
             ]
           }
@@ -1774,6 +2592,22 @@
               {
                 "length_equals": 0,
                 "path": "events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -1838,6 +2672,18 @@
               },
               {
                 "equals": "action_conflict",
+                "path": "same_connection_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "same_connection_replay.irreversible"
+              },
+              {
+                "equals": false,
+                "path": "same_connection_replay.reopened"
+              },
+              {
+                "equals": "action_conflict",
                 "path": "replay.raised"
               },
               {
@@ -1845,8 +2691,47 @@
                 "path": "replay.irreversible"
               },
               {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
                 "equals": null,
                 "path": "replay.state"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "boundary_control.all_commands"
+              },
+              {
+                "equals": true,
+                "path": "boundary_control.real_popen_restored"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_execute.0"
+              },
+              {
+                "length_equals": 1,
+                "path": "log_pairs.action_execute"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -1936,6 +2821,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -2014,6 +2931,22 @@
               {
                 "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -2085,8 +3018,27 @@
                 "path": "events.0.event"
               },
               {
-                "equals": "held",
+                "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "running",
+                "path": "task.state"
+              },
+              {
+                "equals": true,
+                "path": "task.has_lease"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "ledger.complete"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.unresolved"
               },
               {
                 "equals": "action_conflict",
@@ -2095,6 +3047,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "length_equals": 1,
+                "path": "replay.events"
+              },
+              {
+                "length_equals": 1,
+                "path": "events_after_replay"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -2177,6 +3161,94 @@
               {
                 "equals": null,
                 "path": "gate_after_release"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "base_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "base_replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "base_replay.reopened"
+              },
+              {
+                "equals": null,
+                "path": "base_replay.state"
+              },
+              {
+                "equals": "done",
+                "path": "base_replay.task.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "base_replay.events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": true,
+                "path": "dialog_distinct"
+              },
+              {
+                "equals": "dialog",
+                "path": "dialog_checks.0.phase"
+              },
+              {
+                "equals": "pending",
+                "path": "dialog_checks.0.action_state"
+              },
+              {
+                "equals": "held",
+                "path": "dialog_checks.0.gate_state"
+              },
+              {
+                "equals": true,
+                "path": "dialog_checks.0.has_confirm"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "cross_kind.raised"
+              },
+              {
+                "equals": 0,
+                "path": "cross_kind.irreversible"
+              },
+              {
+                "equals": null,
+                "path": "cross_kind.record"
               }
             ]
           }
@@ -2258,6 +3330,94 @@
               {
                 "equals": null,
                 "path": "gate_after_release"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "base_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "base_replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "base_replay.reopened"
+              },
+              {
+                "equals": null,
+                "path": "base_replay.state"
+              },
+              {
+                "equals": "done",
+                "path": "base_replay.task.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "base_replay.events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": true,
+                "path": "dialog_distinct"
+              },
+              {
+                "equals": "dialog",
+                "path": "dialog_checks.0.phase"
+              },
+              {
+                "equals": "pending",
+                "path": "dialog_checks.0.action_state"
+              },
+              {
+                "equals": "held",
+                "path": "dialog_checks.0.gate_state"
+              },
+              {
+                "equals": true,
+                "path": "dialog_checks.0.has_confirm"
+              },
+              {
+                "equals": "authorization_required",
+                "path": "cross_kind.raised"
+              },
+              {
+                "equals": 0,
+                "path": "cross_kind.irreversible"
+              },
+              {
+                "equals": null,
+                "path": "cross_kind.record"
               }
             ]
           }
@@ -2353,6 +3513,22 @@
               {
                 "length_equals": 0,
                 "path": "events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -2417,6 +3593,18 @@
               },
               {
                 "equals": "action_conflict",
+                "path": "same_connection_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "same_connection_replay.irreversible"
+              },
+              {
+                "equals": false,
+                "path": "same_connection_replay.reopened"
+              },
+              {
+                "equals": "action_conflict",
                 "path": "replay.raised"
               },
               {
@@ -2424,8 +3612,47 @@
                 "path": "replay.irreversible"
               },
               {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
                 "equals": null,
                 "path": "replay.state"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "boundary_control.all_commands"
+              },
+              {
+                "equals": true,
+                "path": "boundary_control.real_popen_restored"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_execute.0"
+              },
+              {
+                "length_equals": 1,
+                "path": "log_pairs.action_execute"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -2515,6 +3742,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -2593,6 +3852,22 @@
               {
                 "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -2664,8 +3939,27 @@
                 "path": "events.0.event"
               },
               {
-                "equals": "held",
+                "equals": "quarantined",
                 "path": "gate_after_release.state"
+              },
+              {
+                "equals": "running",
+                "path": "task.state"
+              },
+              {
+                "equals": true,
+                "path": "task.has_lease"
+              },
+              {
+                "in": [
+                  8,
+                  13
+                ],
+                "path": "ledger.complete"
+              },
+              {
+                "equals": 0,
+                "path": "ledger.unresolved"
               },
               {
                 "equals": "action_conflict",
@@ -2674,6 +3968,38 @@
               {
                 "equals": 0,
                 "path": "replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "replay.reopened"
+              },
+              {
+                "length_equals": 1,
+                "path": "replay.events"
+              },
+              {
+                "length_equals": 1,
+                "path": "events_after_replay"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -2756,6 +4082,82 @@
               {
                 "equals": null,
                 "path": "gate_after_release"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "base_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "base_replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "base_replay.reopened"
+              },
+              {
+                "equals": null,
+                "path": "base_replay.state"
+              },
+              {
+                "equals": "done",
+                "path": "base_replay.task.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "base_replay.events"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.action_validate.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_validate.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_admit.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_execute.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_derive.1"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.action_commit.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
+              },
+              {
+                "equals": true,
+                "path": "dialog_distinct"
+              },
+              {
+                "equals": "dialog",
+                "path": "dialog_checks.0.phase"
+              },
+              {
+                "equals": "pending",
+                "path": "dialog_checks.0.action_state"
+              },
+              {
+                "equals": "held",
+                "path": "dialog_checks.0.gate_state"
+              },
+              {
+                "equals": true,
+                "path": "dialog_checks.0.has_confirm"
               }
             ]
           }
@@ -3007,6 +4409,32 @@
               {
                 "equals": "cancelled",
                 "path": "record_after_reconcile.state"
+              },
+              {
+                "equals": "held",
+                "path": "gate_after_reconcile.state"
+              },
+              {
+                "equals": [
+                  "started",
+                  "ok"
+                ],
+                "path": "log_pairs.action_reconcile_validate"
+              },
+              {
+                "equals": [
+                  "started",
+                  "ok"
+                ],
+                "path": "log_pairs.action_reconcile_commit"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -3071,6 +4499,48 @@
               {
                 "equals": "not_performed",
                 "path": "record_after_reconcile.state"
+              },
+              {
+                "equals": "held",
+                "path": "gate_after_reconcile.state"
+              },
+              {
+                "equals": "precondition_failed",
+                "path": "post_reconcile_replay.raised"
+              },
+              {
+                "equals": 0,
+                "path": "post_reconcile_replay.irreversible"
+              },
+              {
+                "equals": true,
+                "path": "post_reconcile_replay.reopened"
+              },
+              {
+                "equals": "not_performed",
+                "path": "record_after_post_replay.state"
+              },
+              {
+                "equals": [
+                  "started",
+                  "ok"
+                ],
+                "path": "log_pairs.action_reconcile_validate"
+              },
+              {
+                "equals": [
+                  "started",
+                  "ok"
+                ],
+                "path": "log_pairs.action_reconcile_commit"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -3143,6 +4613,32 @@
               {
                 "equals": "performed",
                 "path": "record_after_reconcile.state"
+              },
+              {
+                "equals": "held",
+                "path": "gate_after_reconcile.state"
+              },
+              {
+                "equals": [
+                  "started",
+                  "ok"
+                ],
+                "path": "log_pairs.action_reconcile_validate"
+              },
+              {
+                "equals": [
+                  "started",
+                  "ok"
+                ],
+                "path": "log_pairs.action_reconcile_commit"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -3175,43 +4671,7 @@
       "variant_id": "confirm_performed"
     },
     "SC-A07/reconnect": {
-      "acceptance": {
-        "steps": [
-          {
-            "exit_code": 0,
-            "stdout_paths": [
-              {
-                "equals": "ok",
-                "path": "status"
-              },
-              {
-                "equals": "reconnect",
-                "path": "case"
-              },
-              {
-                "equals": "unknown",
-                "path": "first.state"
-              },
-              {
-                "equals": "precondition_failed",
-                "path": "replay.raised"
-              },
-              {
-                "equals": 0,
-                "path": "replay.irreversible"
-              },
-              {
-                "equals": "unknown",
-                "path": "record_after_replay.state"
-              },
-              {
-                "equals": true,
-                "path": "gate_still_occupied"
-              }
-            ]
-          }
-        ]
-      },
+      "acceptance": null,
       "assertions": [
         "先核对锁屏/IME/身份/在途命令",
         "不自动续跑或重发"
@@ -3253,36 +4713,80 @@
                 "path": "case"
               },
               {
-                "equals": "contract_domain_plus_real_store_lock",
+                "equals": "contract_domain_plus_complete_action",
                 "path": "layer"
               },
               {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
                 "equals": "unknown",
-                "path": "outcome"
+                "path": "derivation.outcome"
               },
               {
                 "equals": "none",
-                "path": "effect"
+                "path": "derivation.effect"
               },
               {
-                "equals": "pending",
-                "path": "real_lock.pending_state"
+                "equals": null,
+                "path": "complete.raised"
               },
               {
-                "equals": "action_conflict",
-                "path": "real_lock.replay_raised"
+                "equals": "unknown",
+                "path": "complete.state"
               },
               {
-                "equals": 0,
-                "path": "real_lock.replay_irreversible"
+                "equals": "unknown",
+                "path": "record.state"
               },
               {
-                "equals": true,
-                "path": "real_lock.gate_occupied"
+                "length_equals": 2,
+                "path": "events"
               },
               {
-                "equals": "pending",
-                "path": "real_lock.record_after_replay.state"
+                "equals": "blocked",
+                "path": "task.state"
+              },
+              {
+                "equals": "held",
+                "path": "gate_state"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "reopen_replay.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "reopen_record.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "reopen_events"
+              },
+              {
+                "keys": [
+                  "gate_converged",
+                  "raised",
+                  "state"
+                ],
+                "path": "complete"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.complete_action.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.complete_action.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -3302,7 +4806,8 @@
       "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M5 Evidence 校验"
+        "M5 Evidence 校验",
+        "同一证据进入真实 complete_action 与持久锁"
       ],
       "scenario_id": "SC-A08",
       "source": [
@@ -3327,32 +4832,76 @@
                 "path": "case"
               },
               {
-                "equals": "contract_domain_plus_real_store_lock",
+                "equals": "contract_domain_plus_complete_action",
                 "path": "layer"
               },
               {
-                "equals": true,
-                "path": "rejected"
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "not_performed_sent",
+                "path": "derivation.constructed"
+              },
+              {
+                "equals": "invalid_observation",
+                "path": "complete.raised"
               },
               {
                 "equals": "pending",
-                "path": "real_lock.pending_state"
+                "path": "record.state"
+              },
+              {
+                "length_equals": 1,
+                "path": "events"
+              },
+              {
+                "equals": "running",
+                "path": "task.state"
+              },
+              {
+                "equals": true,
+                "path": "task.has_lease"
+              },
+              {
+                "equals": "held",
+                "path": "gate_state"
               },
               {
                 "equals": "action_conflict",
-                "path": "real_lock.replay_raised"
-              },
-              {
-                "equals": 0,
-                "path": "real_lock.replay_irreversible"
-              },
-              {
-                "equals": true,
-                "path": "real_lock.gate_occupied"
+                "path": "reopen_replay.raised"
               },
               {
                 "equals": "pending",
-                "path": "real_lock.record_after_replay.state"
+                "path": "reopen_record.state"
+              },
+              {
+                "length_equals": 1,
+                "path": "reopen_events"
+              },
+              {
+                "keys": [
+                  "gate_converged",
+                  "raised",
+                  "state"
+                ],
+                "path": "complete"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.complete_action.0"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.complete_action.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -3372,7 +4921,8 @@
       "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M5 Evidence 校验"
+        "M5 Evidence 校验",
+        "同一证据进入真实 complete_action 与持久锁"
       ],
       "scenario_id": "SC-A08",
       "source": [
@@ -3397,32 +4947,76 @@
                 "path": "case"
               },
               {
-                "equals": "contract_domain_plus_real_store_lock",
+                "equals": "contract_domain_plus_complete_action",
                 "path": "layer"
               },
               {
-                "equals": true,
-                "path": "rejected"
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
+                "equals": "performed_none",
+                "path": "derivation.constructed"
+              },
+              {
+                "equals": "invalid_observation",
+                "path": "complete.raised"
               },
               {
                 "equals": "pending",
-                "path": "real_lock.pending_state"
+                "path": "record.state"
+              },
+              {
+                "length_equals": 1,
+                "path": "events"
+              },
+              {
+                "equals": "running",
+                "path": "task.state"
+              },
+              {
+                "equals": true,
+                "path": "task.has_lease"
+              },
+              {
+                "equals": "held",
+                "path": "gate_state"
               },
               {
                 "equals": "action_conflict",
-                "path": "real_lock.replay_raised"
-              },
-              {
-                "equals": 0,
-                "path": "real_lock.replay_irreversible"
-              },
-              {
-                "equals": true,
-                "path": "real_lock.gate_occupied"
+                "path": "reopen_replay.raised"
               },
               {
                 "equals": "pending",
-                "path": "real_lock.record_after_replay.state"
+                "path": "reopen_record.state"
+              },
+              {
+                "length_equals": 1,
+                "path": "reopen_events"
+              },
+              {
+                "keys": [
+                  "gate_converged",
+                  "raised",
+                  "state"
+                ],
+                "path": "complete"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.complete_action.0"
+              },
+              {
+                "equals": "failed",
+                "path": "log_pairs.complete_action.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -3442,7 +5036,8 @@
       "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M5 Evidence 校验"
+        "M5 Evidence 校验",
+        "同一证据进入真实 complete_action 与持久锁"
       ],
       "scenario_id": "SC-A08",
       "source": [
@@ -3467,36 +5062,84 @@
                 "path": "case"
               },
               {
-                "equals": "contract_domain_plus_real_store_lock",
+                "equals": "contract_domain_plus_complete_action",
                 "path": "layer"
               },
               {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
                 "equals": "not_performed",
-                "path": "outcome"
+                "path": "derivation.outcome"
               },
               {
                 "equals": "none",
-                "path": "effect"
+                "path": "derivation.effect"
               },
               {
-                "equals": "pending",
-                "path": "real_lock.pending_state"
+                "equals": "cancelled_before_action",
+                "path": "derivation.reason"
               },
               {
-                "equals": "action_conflict",
-                "path": "real_lock.replay_raised"
+                "equals": null,
+                "path": "complete.raised"
               },
               {
-                "equals": 0,
-                "path": "real_lock.replay_irreversible"
+                "equals": "not_performed",
+                "path": "complete.state"
               },
               {
-                "equals": true,
-                "path": "real_lock.gate_occupied"
+                "equals": "not_performed",
+                "path": "record.state"
               },
               {
-                "equals": "pending",
-                "path": "real_lock.record_after_replay.state"
+                "length_equals": 2,
+                "path": "events"
+              },
+              {
+                "equals": "not_sent",
+                "path": "task.state"
+              },
+              {
+                "equals": "held",
+                "path": "gate_state"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "reopen_replay.raised"
+              },
+              {
+                "equals": "not_performed",
+                "path": "reopen_record.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "reopen_events"
+              },
+              {
+                "keys": [
+                  "gate_converged",
+                  "raised",
+                  "state"
+                ],
+                "path": "complete"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.complete_action.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.complete_action.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -3517,7 +5160,8 @@
       "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M5 Evidence 校验"
+        "M5 Evidence 校验",
+        "同一证据进入真实 complete_action 与持久锁"
       ],
       "scenario_id": "SC-A08",
       "source": [
@@ -3542,40 +5186,84 @@
                 "path": "case"
               },
               {
-                "equals": "contract_domain_plus_real_store_lock",
+                "equals": "contract_domain_plus_complete_action",
                 "path": "layer"
               },
               {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
                 "equals": "unknown",
-                "path": "outcome"
+                "path": "derivation.outcome"
               },
               {
                 "equals": "none",
-                "path": "effect"
+                "path": "derivation.effect"
               },
               {
                 "equals": "result_unverified",
-                "path": "reason"
+                "path": "derivation.reason"
               },
               {
-                "equals": "pending",
-                "path": "real_lock.pending_state"
+                "equals": null,
+                "path": "complete.raised"
               },
               {
-                "equals": "action_conflict",
-                "path": "real_lock.replay_raised"
+                "equals": "unknown",
+                "path": "complete.state"
               },
               {
-                "equals": 0,
-                "path": "real_lock.replay_irreversible"
+                "equals": "unknown",
+                "path": "record.state"
               },
               {
-                "equals": true,
-                "path": "real_lock.gate_occupied"
+                "length_equals": 2,
+                "path": "events"
               },
               {
-                "equals": "pending",
-                "path": "real_lock.record_after_replay.state"
+                "equals": "blocked",
+                "path": "task.state"
+              },
+              {
+                "equals": "held",
+                "path": "gate_state"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "reopen_replay.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "reopen_record.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "reopen_events"
+              },
+              {
+                "keys": [
+                  "gate_converged",
+                  "raised",
+                  "state"
+                ],
+                "path": "complete"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.complete_action.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.complete_action.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -3596,7 +5284,8 @@
       "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M5 Evidence 校验"
+        "M5 Evidence 校验",
+        "同一证据进入真实 complete_action 与持久锁"
       ],
       "scenario_id": "SC-A08",
       "source": [
@@ -3621,36 +5310,80 @@
                 "path": "case"
               },
               {
-                "equals": "contract_domain_plus_real_store_lock",
+                "equals": "contract_domain_plus_complete_action",
                 "path": "layer"
               },
               {
+                "equals": 0,
+                "path": "remote.irreversible"
+              },
+              {
                 "equals": "unknown",
-                "path": "outcome"
+                "path": "derivation.outcome"
               },
               {
                 "equals": "none",
-                "path": "effect"
+                "path": "derivation.effect"
               },
               {
-                "equals": "pending",
-                "path": "real_lock.pending_state"
+                "equals": null,
+                "path": "complete.raised"
               },
               {
-                "equals": "action_conflict",
-                "path": "real_lock.replay_raised"
+                "equals": "unknown",
+                "path": "complete.state"
               },
               {
-                "equals": 0,
-                "path": "real_lock.replay_irreversible"
+                "equals": "unknown",
+                "path": "record.state"
               },
               {
-                "equals": true,
-                "path": "real_lock.gate_occupied"
+                "length_equals": 2,
+                "path": "events"
               },
               {
-                "equals": "pending",
-                "path": "real_lock.record_after_replay.state"
+                "equals": "blocked",
+                "path": "task.state"
+              },
+              {
+                "equals": "held",
+                "path": "gate_state"
+              },
+              {
+                "equals": "stale_lease",
+                "path": "reopen_replay.raised"
+              },
+              {
+                "equals": "unknown",
+                "path": "reopen_record.state"
+              },
+              {
+                "length_equals": 2,
+                "path": "reopen_events"
+              },
+              {
+                "keys": [
+                  "gate_converged",
+                  "raised",
+                  "state"
+                ],
+                "path": "complete"
+              },
+              {
+                "equals": "started",
+                "path": "log_pairs.complete_action.0"
+              },
+              {
+                "equals": "ok",
+                "path": "log_pairs.complete_action.1"
+              },
+              {
+                "equals": 1,
+                "path": "log_correlations"
+              },
+              {
+                "equals": false,
+                "path": "log_has_body"
               }
             ]
           }
@@ -3670,7 +5403,8 @@
       "module_evidence": null,
       "observations_ref": null,
       "preconditions": [
-        "M5 Evidence 校验"
+        "M5 Evidence 校验",
+        "同一证据进入真实 complete_action 与持久锁"
       ],
       "scenario_id": "SC-A08",
       "source": [

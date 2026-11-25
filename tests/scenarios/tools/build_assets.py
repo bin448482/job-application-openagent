@@ -7500,8 +7500,29 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         "A05": "deleted",
     }
 
+    def dialog_paths(action_id: str) -> list[dict[str, Any]]:
+        """构造联系方式/删除确认阶段的独立观察判据。"""
+        if action_id not in {"A03", "A04", "A05"}:
+            return []
+        paths = [
+            {"path": "dialog_distinct", "equals": True},
+            {"path": "dialog_checks.0.phase", "equals": "dialog"},
+            {"path": "dialog_checks.0.action_state", "equals": "pending"},
+            {"path": "dialog_checks.0.gate_state", "equals": "held"},
+            {"path": "dialog_checks.0.has_confirm", "equals": True},
+        ]
+        if action_id == "A04":
+            paths.extend(
+                [
+                    {"path": "cross_kind.raised", "equals": "authorization_required"},
+                    {"path": "cross_kind.irreversible", "equals": 0},
+                    {"path": "cross_kind.record", "equals": None},
+                ]
+            )
+        return paths
+
     def base_paths(action_id: str) -> list[dict[str, Any]]:
-        """构造成功路径的独立观察判据。"""
+        """构造成功路径的独立观察判据，并包含本变体同键重放。"""
         return [
             {"path": "observed.raised", "equals": None},
             {"path": "observed.state", "equals": "performed"},
@@ -7511,6 +7532,21 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
             {"path": "remote.irreversible", "equals": 1},
             {"path": "record.state", "equals": "performed"},
             {"path": "gate_after_release", "equals": None},
+            {"path": "base_replay.raised", "equals": "precondition_failed"},
+            {"path": "base_replay.irreversible", "equals": 0},
+            {"path": "base_replay.reopened", "equals": True},
+            {"path": "base_replay.state", "equals": None},
+            {"path": "base_replay.task.state", "equals": "done"},
+            {"path": "base_replay.events", "length_equals": 2},
+            {"path": "log_pairs.action_validate.0", "equals": "started"},
+            {"path": "log_pairs.action_validate.1", "equals": "ok"},
+            {"path": "log_pairs.action_admit.1", "equals": "ok"},
+            {"path": "log_pairs.action_execute.1", "equals": "ok"},
+            {"path": "log_pairs.action_derive.1", "equals": "ok"},
+            {"path": "log_pairs.action_commit.1", "equals": "ok"},
+            {"path": "log_correlations", "equals": 1},
+            {"path": "log_has_body", "equals": False},
+            *dialog_paths(action_id),
         ]
 
     def fault_paths(action_id: str, fault: str) -> list[dict[str, Any]]:
@@ -7522,15 +7558,31 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 {"path": "remote.all_commands", "equals": 0},
                 {"path": "record", "equals": None},
                 {"path": "events", "length_equals": 0},
+                {"path": "log_pairs.action_validate.0", "equals": "started"},
+                {"path": "log_pairs.action_validate.1", "equals": "failed"},
+                {"path": "log_correlations", "equals": 1},
+                {"path": "log_has_body", "equals": False},
             ]
         if fault == "FB":
             return [
                 {"path": "interrupted", "equals": True},
                 {"path": "after_interrupt.state", "equals": "pending"},
                 {"path": "remote_after_interrupt.irreversible", "equals": 0},
+                {"path": "same_connection_replay.raised", "equals": "action_conflict"},
+                {"path": "same_connection_replay.irreversible", "equals": 0},
+                {"path": "same_connection_replay.reopened", "equals": False},
                 {"path": "replay.raised", "equals": "action_conflict"},
                 {"path": "replay.irreversible", "equals": 0},
+                {"path": "replay.reopened", "equals": True},
                 {"path": "replay.state", "equals": None},
+                {"path": "boundary_control.all_commands", "in": [8, 13]},
+                {"path": "boundary_control.real_popen_restored", "equals": True},
+                {"path": "log_pairs.action_validate.1", "equals": "ok"},
+                {"path": "log_pairs.action_admit.1", "equals": "ok"},
+                {"path": "log_pairs.action_execute.0", "equals": "started"},
+                {"path": "log_pairs.action_execute", "length_equals": 1},
+                {"path": "log_correlations", "equals": 1},
+                {"path": "log_has_body", "equals": False},
             ]
         if fault == "FC":
             return [
@@ -7544,6 +7596,14 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 {"path": "gate_after_release.state", "equals": "quarantined"},
                 {"path": "replay.raised", "equals": "precondition_failed"},
                 {"path": "replay.irreversible", "equals": 0},
+                {"path": "replay.reopened", "equals": True},
+                {"path": "log_pairs.action_validate.1", "equals": "ok"},
+                {"path": "log_pairs.action_admit.1", "equals": "ok"},
+                {"path": "log_pairs.action_execute.1", "equals": "failed"},
+                {"path": "log_pairs.action_derive.1", "equals": "ok"},
+                {"path": "log_pairs.action_commit.1", "equals": "ok"},
+                {"path": "log_correlations", "equals": 1},
+                {"path": "log_has_body", "equals": False},
             ]
         if fault == "FD":
             return [
@@ -7554,6 +7614,10 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 {"path": "remote.irreversible", "equals": 1},
                 {"path": "record.state", "equals": "unknown"},
                 {"path": "gate_after_release.state", "equals": "quarantined"},
+                {"path": "log_pairs.action_execute.1", "equals": "ok"},
+                {"path": "log_pairs.action_derive.1", "equals": "ok"},
+                {"path": "log_pairs.action_commit.1", "equals": "ok"},
+                {"path": "log_has_body", "equals": False},
             ]
         if fault == "FE":
             return [
@@ -7562,9 +7626,21 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                 {"path": "record.state", "equals": "pending"},
                 {"path": "events", "length_equals": 1},
                 {"path": "events.0.event", "equals": "action_pending"},
-                {"path": "gate_after_release.state", "equals": "held"},
+                {"path": "gate_after_release.state", "equals": "quarantined"},
+                {"path": "task.state", "equals": "running"},
+                {"path": "task.has_lease", "equals": True},
+                {"path": "ledger.complete", "in": [8, 13]},
+                {"path": "ledger.unresolved", "equals": 0},
                 {"path": "replay.raised", "equals": "action_conflict"},
                 {"path": "replay.irreversible", "equals": 0},
+                {"path": "replay.reopened", "equals": True},
+                {"path": "replay.events", "length_equals": 1},
+                {"path": "events_after_replay", "length_equals": 1},
+                {"path": "log_pairs.action_execute.1", "equals": "ok"},
+                {"path": "log_pairs.action_derive.1", "equals": "ok"},
+                {"path": "log_pairs.action_commit.1", "equals": "failed"},
+                {"path": "log_correlations", "equals": 1},
+                {"path": "log_has_body", "equals": False},
             ]
         raise ValueError(f"unknown fault {fault}")
 
@@ -7737,6 +7813,11 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     {"path": "reconciled.task_state", "equals": "done"},
                     {"path": "reconciled.gate_converged", "equals": True},
                     {"path": "record_after_reconcile.state", "equals": "performed"},
+                    {"path": "gate_after_reconcile.state", "equals": "held"},
+                    {"path": "log_pairs.action_reconcile_validate", "equals": ["started", "ok"]},
+                    {"path": "log_pairs.action_reconcile_commit", "equals": ["started", "ok"]},
+                    {"path": "log_correlations", "equals": 1},
+                    {"path": "log_has_body", "equals": False},
                 ),
             ),
             ready_variant(
@@ -7751,6 +7832,15 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     {"path": "reconciled.state", "equals": "not_performed"},
                     {"path": "reconciled.task_state", "equals": "not_sent"},
                     {"path": "record_after_reconcile.state", "equals": "not_performed"},
+                    {"path": "gate_after_reconcile.state", "equals": "held"},
+                    {"path": "post_reconcile_replay.raised", "equals": "precondition_failed"},
+                    {"path": "post_reconcile_replay.irreversible", "equals": 0},
+                    {"path": "post_reconcile_replay.reopened", "equals": True},
+                    {"path": "record_after_post_replay.state", "equals": "not_performed"},
+                    {"path": "log_pairs.action_reconcile_validate", "equals": ["started", "ok"]},
+                    {"path": "log_pairs.action_reconcile_commit", "equals": ["started", "ok"]},
+                    {"path": "log_correlations", "equals": 1},
+                    {"path": "log_has_body", "equals": False},
                 ),
             ),
             ready_variant(
@@ -7766,21 +7856,21 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     {"path": "reconciled.lock_retained", "equals": True},
                     {"path": "reconciled.gate_converged", "equals": False},
                     {"path": "record_after_reconcile.state", "equals": "cancelled"},
+                    {"path": "gate_after_reconcile.state", "equals": "held"},
+                    {"path": "log_pairs.action_reconcile_validate", "equals": ["started", "ok"]},
+                    {"path": "log_pairs.action_reconcile_commit", "equals": ["started", "ok"]},
+                    {"path": "log_correlations", "equals": 1},
+                    {"path": "log_has_body", "equals": False},
                 ),
             ),
-            ready_variant(
-                "reconnect", label="重连后不自动续跑",
-                steps=[m5_cmd("reconnect")],
-                fixture=stimuli,
+            variant(
+                "reconnect",
+                "F",
+                label="重连后不自动续跑",
+                fixture="fixtures/m5/stimuli/actions.json",
+                setup="缺 M5 键屏/会话身份生产入口；只保留原强判据，明确 BLOCKED",
+                required_api="M5 重连对账",
                 assertions=["先核对锁屏/IME/身份/在途命令", "不自动续跑或重发"],
-                acceptance=m5_ok(
-                    "reconnect",
-                    {"path": "first.state", "equals": "unknown"},
-                    {"path": "replay.raised", "equals": "precondition_failed"},
-                    {"path": "replay.irreversible", "equals": 0},
-                    {"path": "record_after_replay.state", "equals": "unknown"},
-                    {"path": "gate_still_occupied", "equals": True},
-                ),
             ),
         ],
     )
@@ -7788,7 +7878,7 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
         "SC-A08",
         "M5",
         "非法证据不得冒充成功",
-        ["M5 Evidence 校验"],
+        ["M5 Evidence 校验", "同一证据进入真实 complete_action 与持久锁"],
         [
             *[
                 ready_variant(
@@ -7799,64 +7889,133 @@ def build_scenarios(sensor: dict[str, dict[str, Any]], m3: dict[str, dict[str, A
                     assertions=assertions,
                     acceptance=m5_ok(
                         name,
-                        {"path": "layer", "equals": "contract_domain_plus_real_store_lock"},
+                        {"path": "layer", "equals": "contract_domain_plus_complete_action"},
+                        {"path": "remote.irreversible", "equals": 0},
                         *paths,
-                        {"path": "real_lock.pending_state", "equals": "pending"},
-                        {"path": "real_lock.replay_raised", "equals": "action_conflict"},
-                        {"path": "real_lock.replay_irreversible", "equals": 0},
-                        {"path": "real_lock.gate_occupied", "equals": True},
-                        {"path": "real_lock.record_after_replay.state", "equals": "pending"},
+                        {"path": "reopen_replay.raised", "equals": replay_reason},
+                        {"path": "reopen_record.state", "equals": record_state},
+                        {"path": "reopen_events", "length_equals": events},
+                        {"path": "complete", "keys": ["gate_converged", "raised", "state"]},
+                        {"path": "log_pairs.complete_action.0", "equals": "started"},
+                        {"path": "log_pairs.complete_action.1", "equals": complete_result},
+                        {"path": "log_correlations", "equals": 1},
+                        {"path": "log_has_body", "equals": False},
                     ),
                 )
-                for name, label, assertions, paths in (
+                for name, label, assertions, paths, replay_reason, record_state, events, complete_result in (
                     (
                         "same_snapshot",
                         "前后同一快照",
                         ["拒绝 performed", "转 unknown/result_unverified"],
                         [
-                            {"path": "outcome", "equals": "unknown"},
-                            {"path": "effect", "equals": "none"},
-                            {"path": "reason", "equals": "result_unverified"},
+                            {"path": "derivation.outcome", "equals": "unknown"},
+                            {"path": "derivation.effect", "equals": "none"},
+                            {"path": "derivation.reason", "equals": "result_unverified"},
+                            {"path": "complete.raised", "equals": None},
+                            {"path": "complete.state", "equals": "unknown"},
+                            {"path": "record.state", "equals": "unknown"},
+                            {"path": "events", "length_equals": 2},
+                            {"path": "task.state", "equals": "blocked"},
+                            {"path": "gate_state", "equals": "held"},
                         ],
+                        "stale_lease",
+                        "unknown",
+                        2,
+                        "ok",
                     ),
                     (
                         "missing_snapshot",
                         "缺快照",
                         ["拒绝伪成功"],
                         [
-                            {"path": "outcome", "equals": "unknown"},
-                            {"path": "effect", "equals": "none"},
+                            {"path": "derivation.outcome", "equals": "unknown"},
+                            {"path": "derivation.effect", "equals": "none"},
+                            {"path": "complete.raised", "equals": None},
+                            {"path": "complete.state", "equals": "unknown"},
+                            {"path": "record.state", "equals": "unknown"},
+                            {"path": "events", "length_equals": 2},
+                            {"path": "task.state", "equals": "blocked"},
+                            {"path": "gate_state", "equals": "held"},
                         ],
+                        "stale_lease",
+                        "unknown",
+                        2,
+                        "ok",
                     ),
                     (
                         "performed_none",
                         "performed+none",
                         ["非法组合转 unknown"],
-                        [{"path": "rejected", "equals": True}],
+                        [
+                            {"path": "derivation.constructed", "equals": "performed_none"},
+                            {"path": "complete.raised", "equals": "invalid_observation"},
+                            {"path": "record.state", "equals": "pending"},
+                            {"path": "events", "length_equals": 1},
+                            {"path": "task.state", "equals": "running"},
+                            {"path": "task.has_lease", "equals": True},
+                            {"path": "gate_state", "equals": "held"},
+                        ],
+                        "action_conflict",
+                        "pending",
+                        1,
+                        "failed",
                     ),
                     (
                         "not_performed_sent",
                         "not_performed+sent",
                         ["拒绝"],
-                        [{"path": "rejected", "equals": True}],
+                        [
+                            {"path": "derivation.constructed", "equals": "not_performed_sent"},
+                            {"path": "complete.raised", "equals": "invalid_observation"},
+                            {"path": "record.state", "equals": "pending"},
+                            {"path": "events", "length_equals": 1},
+                            {"path": "task.state", "equals": "running"},
+                            {"path": "task.has_lease", "equals": True},
+                            {"path": "gate_state", "equals": "held"},
+                        ],
+                        "action_conflict",
+                        "pending",
+                        1,
+                        "failed",
                     ),
                     (
                         "read_ok_no_action_delta",
                         "读取 ok 无动作增量",
                         ["不得 performed", "保锁"],
                         [
-                            {"path": "outcome", "equals": "not_performed"},
-                            {"path": "effect", "equals": "none"},
+                            {"path": "derivation.outcome", "equals": "not_performed"},
+                            {"path": "derivation.effect", "equals": "none"},
+                            {"path": "derivation.reason", "equals": "cancelled_before_action"},
+                            {"path": "complete.raised", "equals": None},
+                            {"path": "complete.state", "equals": "not_performed"},
+                            {"path": "record.state", "equals": "not_performed"},
+                            {"path": "events", "length_equals": 2},
+                            {"path": "task.state", "equals": "not_sent"},
+                            {"path": "gate_state", "equals": "held"},
                         ],
+                        "stale_lease",
+                        "not_performed",
+                        2,
+                        "ok",
                     ),
                     (
                         "screenshot_only",
                         "仅截图/高置信",
                         ["不构成动作证据"],
                         [
-                            {"path": "outcome", "equals": "unknown"},
-                            {"path": "effect", "equals": "none"},
+                            {"path": "derivation.outcome", "equals": "unknown"},
+                            {"path": "derivation.effect", "equals": "none"},
+                            {"path": "complete.raised", "equals": None},
+                            {"path": "complete.state", "equals": "unknown"},
+                            {"path": "record.state", "equals": "unknown"},
+                            {"path": "events", "length_equals": 2},
+                            {"path": "task.state", "equals": "blocked"},
+                            {"path": "gate_state", "equals": "held"},
                         ],
+                        "stale_lease",
+                        "unknown",
+                        2,
+                        "ok",
                     ),
                 )
             ],
@@ -9210,40 +9369,52 @@ def build_m5_stimuli() -> None:
                     ]
                 )
             )
+            after_missing_anchor = after
         elif slug in {"wechat", "phone"}:
             marker = "微信" if slug == "wechat" else "电话"
-            before = _m5_xml(
-                _m5_target(
-                    [
-                        _m5_node(text="消息", bounds="20,160,1060,180"),
-                        _m5_node(
-                            text=marker,
-                            bounds="20,200,400,240",
-                            clickable=True,
-                            enabled=True,
-                        ),
-                    ]
+
+            def contact_scene(*, requested: bool, dialog: bool) -> str:
+                """构造联系方式原始层级；确认框是独立且与 before 不同的屏幕。"""
+                slot = _m5_node(
+                    text=marker,
+                    bounds="20,200,400,240",
+                    clickable=True,
+                    enabled=True,
+                    children=(
+                        [_m5_node(text="请求中", bounds="20,200,400,240")]
+                        if requested
+                        else []
+                    ),
                 )
-            )
-            dialog = before
-            after = _m5_xml(
-                _m5_target(
-                    [
-                        _m5_node(text="消息", bounds="20,160,1060,180"),
-                        _m5_node(
-                            text=marker,
-                            bounds="20,200,400,240",
-                            clickable=True,
-                            enabled=True,
-                            children=[
-                                _m5_node(text="请求中", bounds="20,200,400,240")
-                            ],
-                        ),
-                    ]
-                )
-            )
+                nodes = [
+                    _m5_node(text="消息", bounds="20,160,1060,180"),
+                    slot,
+                ]
+                if dialog:
+                    nodes.extend(
+                        [
+                            _m5_node(
+                                text="确认",
+                                bounds="20,400,500,440",
+                                clickable=True,
+                                enabled=True,
+                            ),
+                            _m5_node(
+                                text="取消",
+                                bounds="520,400,1000,440",
+                                clickable=True,
+                                enabled=True,
+                            ),
+                        ]
+                    )
+                return _m5_xml(_m5_target(nodes))
+
+            before = contact_scene(requested=False, dialog=False)
+            dialog = contact_scene(requested=False, dialog=True)
+            after = contact_scene(requested=True, dialog=False)
             after_request = after
             after_delivered = after
+            after_missing_anchor = after
         else:
             def rows(
                 include_target: bool, *, include_anchor: bool = True
@@ -9274,9 +9445,50 @@ def build_m5_stimuli() -> None:
                 )
                 return container
 
-            before = _m5_xml(rows(True))
-            dialog = before
-            after = _m5_xml(rows(False))
+            def delete_scene(*, include_target: bool, dialog: bool) -> str:
+                """构造删除列表屏幕；确认框含独立确认/取消控件。"""
+                items = [_m5_node(text="合成邻居乙", bounds="0,0,1080,200")]
+                if include_target:
+                    items.append(
+                        _m5_node(
+                            text="合成联系人甲",
+                            bounds="0,200,1080,400",
+                            children=[
+                                _m5_node(text="合成机构甲", bounds="20,220,1060,240"),
+                                _m5_node(text="合成岗位甲", bounds="20,240,1060,260"),
+                                _m5_node(text="消息", bounds="20,260,1060,280"),
+                            ],
+                        )
+                    )
+                if dialog:
+                    items.extend(
+                        [
+                            _m5_node(
+                                text="确认",
+                                bounds="0,600,500,640",
+                                clickable=True,
+                                enabled=True,
+                            ),
+                            _m5_node(
+                                text="取消",
+                                bounds="520,600,1080,640",
+                                clickable=True,
+                                enabled=True,
+                            ),
+                        ]
+                    )
+                return _m5_xml(
+                    _m5_node(
+                        cls="androidx.recyclerview.widget.RecyclerView",
+                        bounds="0,0,1080,1920",
+                        scrollable=False,
+                        children=items,
+                    )
+                )
+
+            before = delete_scene(include_target=True, dialog=False)
+            dialog = delete_scene(include_target=True, dialog=True)
+            after = delete_scene(include_target=False, dialog=False)
             after_request = after
             after_delivered = after
             after_missing_anchor = _m5_xml(
@@ -9290,7 +9502,7 @@ def build_m5_stimuli() -> None:
             "irreversible_index": 1,
             "after_request_only": after_request,
             "after_delivered": after_delivered,
-            "after_missing_anchor": locals().get("after_missing_anchor", after),
+            "after_missing_anchor": after_missing_anchor,
         }
 
     text_base = text_pair(

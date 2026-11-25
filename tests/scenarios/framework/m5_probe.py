@@ -26,6 +26,8 @@ from app.adapters.adb import actions as actions_module
 from app.adapters.adb import command as command_module
 from app.adapters.adb.actions import AdbActionExecutor
 from app.adapters.adb.command import CommandIdentityStore, ProcessFamilyBound
+from app.adapters.adb.recovery import AdbRecoveryObserver
+from app.adapters.adb.screen import AdbScreenReader
 from app.adapters.sqlite.device_gate import SharedDeviceGate
 from app.adapters.sqlite.profile_store import SqliteProfileStore
 from app.adapters.sqlite.repo import SqliteStore
@@ -33,6 +35,7 @@ from app.domain.actions import (
     ActionAuthorization,
     ActionIdentity,
     ActionObservation,
+    ActionOutcome,
     ReconciliationObservation,
     action_key_for,
     derive_action_outcome,
@@ -53,8 +56,10 @@ from app.domain.models import (
 )
 from app.domain.reading import message_key_from_stable, message_stable_identity_hash
 from app.ports.store import StoreError
+from app.process_log import ProcessLog
 from app.usecases.actions import perform_action, reconcile_action
 
+_BASELINE_POPEN = subprocess.Popen
 NOW = "2026-11-24T00:00:00.000Z"
 EXPIRES = "2026-11-24T01:00:00.000Z"
 BASE_HASH = "a" * 64
@@ -188,6 +193,7 @@ def _seed_queued(store: SqliteStore, profile_id: str) -> None:
 def _profile_context(
     profile_id: str,
     os_root: Path,
+    process_log: ProcessLog | None = None,
     fault_hook: Callable[[str, object], None] | None = None,
 ) -> tuple[SqliteStore, Any, SharedDeviceGate, Path]:
     """创建真实 profile v2 库、seed、claim/start 并取得共享占用。"""
@@ -202,6 +208,7 @@ def _profile_context(
         monotonic=lambda: 1000.0,
         stop_checker=lambda pid: "stopped",
         fault_hook=fault_hook,
+        process_log=process_log,
     )
     _seed_queued(store, profile_id)
     owner = _owner()
@@ -268,6 +275,119 @@ def _synthetic_device(device: _Device) -> Iterator[None]:
         actions_module._utc_now = original_now  # type: ignore[assignment]
 
 
+def _os_root(root: Path) -> Path:
+    """固定合成 OS 根到被忽略的 data/evals 下，手工运行也不创建仓库根目录。"""
+    path = root / "data" / "evals" / "m5-probe" / "os-gate"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _process_log(root: Path, case: str) -> ProcessLog:
+    """为单个案例创建独立本机过程日志，不与其他案例共享追加。"""
+    path = root / "data" / "logs" / f"m5-{case}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return ProcessLog(path=path)
+
+
+def _log_events(log: ProcessLog) -> list[dict[str, Any]]:
+    """只读投影本案例固定日志字段，不返回正文或异常原文。"""
+    try:
+        rows = [
+            json.loads(line)
+            for line in log.path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except OSError:
+        return []
+    return [
+        {
+            "stage": row.get("stage"),
+            "operation": row.get("operation"),
+            "result": row.get("result"),
+            "reason_code": row.get("reason_code"),
+            "error_category": row.get("error_category"),
+            "correlation": row.get("correlation_id"),
+        }
+        for row in rows
+    ]
+
+
+def _log_pairs(log: ProcessLog) -> dict[str, list[str]]:
+    """把 action 阶段日志压缩为 operation→result 序列，供独立断言。"""
+    pairs: dict[str, list[str]] = {}
+    for event in _log_events(log):
+        if event["stage"] != "action" or not event["operation"]:
+            continue
+        pairs.setdefault(str(event["operation"]), []).append(str(event["result"]))
+    return pairs
+
+
+def _log_correlations(log: ProcessLog) -> int:
+    """返回本案例日志中的唯一 correlation 数。"""
+    return len({str(event["correlation"]) for event in _log_events(log)})
+
+
+def _log_has_body(log: ProcessLog, body: str) -> bool:
+    """只读检查日志原文是否错误包含动作正文；不返回原文。"""
+    try:
+        return body in log.path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+def _task_row(db_path: Path) -> dict[str, Any] | None:
+    """只读返回任务状态与租约是否存在，用于 FE/重放后的任务观察。"""
+    connection = sqlite3.connect(str(db_path))
+    try:
+        row = connection.execute(
+            "SELECT state, lease_owner, lease_expires_at FROM hr_discoveries "
+            "WHERE state IN ('leased', 'running', 'blocked', 'done', 'not_sent') "
+            "ORDER BY updated_at DESC LIMIT 1"
+        ).fetchone()
+    finally:
+        connection.close()
+    if row is None:
+        return None
+    return {
+        "state": row[0],
+        "has_lease": row[1] is not None,
+        "has_expiry": row[2] is not None,
+    }
+
+
+def _ledger_summary(directory: Path) -> dict[str, Any]:
+    """只读统计真实命令账本文件/行/阶段，不返回 PID 或键值。"""
+    files = sorted(directory.glob("*.jsonl")) if directory.is_dir() else []
+    begin = 0
+    complete = 0
+    unresolved = 0
+    pids = 0
+    for path in files:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                unresolved += 1
+                continue
+            if item.get("pid") is not None:
+                pids += 1
+            if item.get("complete") is True:
+                complete += 1
+            elif item.get("started") is True or item.get("pid") is not None:
+                begin += 1
+            if item.get("unresolved") is True:
+                unresolved += 1
+    return {
+        "files": len(files),
+        "begin": begin,
+        "complete": complete,
+        "unresolved": unresolved,
+        "pids": pids,
+    }
+
+
 class _Bound:
     """合成 Job：立即加入/恢复并证明空族；不触真实平台 Job。"""
 
@@ -304,6 +424,8 @@ class _Device:
         self.ime = str(stimuli["ime"])
         self.xml_queue = list(stimuli["xml_sequence"])
         self.calls: list[list[str]] = []
+        self.served_xml: list[str] = []
+        self.on_cat: Callable[[int, str], None] | None = None
         self.taps = 0
         self.irreversible = 0
         self.failed_after_irreversible = False
@@ -327,7 +449,12 @@ class _Device:
         if "cat" in args:
             if not self.xml_queue:
                 return "", 1
-            return self.xml_queue.pop(0), 0
+            text = self.xml_queue.pop(0)
+            index = len(self.served_xml)
+            self.served_xml.append(text)
+            if self.on_cat is not None:
+                self.on_cat(index, text)
+            return text, 0
         if "input" in args and "tap" in args:
             index = self.taps
             self.taps += 1
@@ -407,6 +534,7 @@ def _executor(
     store: SqliteStore,
     root: Path,
     device: _Device,
+    process_log: ProcessLog | None = None,
     crash: bool = False,
 ) -> AdbActionExecutor:
     """构造真实执行器，账本/证据在隔离根，设备边界由合成进程提供。"""
@@ -418,7 +546,7 @@ def _executor(
     return executor_class(
         serial="<synthetic-serial>",
         gate=gate,
-        process_log=None,
+        process_log=process_log,
         timeout=5,
         evidence_dir=evidence,
         command_store=CommandIdentityStore(ledger),
@@ -537,6 +665,18 @@ def _plan_for(
     }
 
 
+def _reopen_store(db_path: Path, profile_id: str, log: ProcessLog) -> SqliteStore:
+    """关闭后重建同 profile 仓储连接，用于真正的重开重放。"""
+    return SqliteStore(
+        db_path,
+        profile_id=profile_id,
+        local_host=OWNER_HOST,
+        monotonic=lambda: 1000.0,
+        stop_checker=lambda pid: "stopped",
+        process_log=log,
+    )
+
+
 def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[str, Any]:
     """用真实 perform_action 跑一个动作故障窗口，只输出可观察原始事实。"""
     action_id, _, fault = case.partition("_")
@@ -552,83 +692,178 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
         message_key=message_key if kind == "send_text" else None,
     )
     profile_id = "m5-action"
-    os_root = root / "localappdata"
+    log = _process_log(root, case)
     store, lease, gate, db_path = _profile_context(
-        profile_id, os_root, _completion_fault if fault == "FE" else None
+        profile_id,
+        _os_root(root),
+        log,
+        _completion_fault if fault == "FE" else None,
     )
     plan = _plan_for(action_id, kind, action_key, conversation, stimulus)
     device = _Device(stimulus)
+    dialog_checks: list[dict[str, Any]] = []
+
+    def on_cat(index: int, text: str) -> None:
+        """在原始 dialog cat 时独立读取真实仓储与门禁，不代替产品判定。"""
+        if index != 1:
+            return
+        record = store.get_action(action_key)
+        dialog_checks.append(
+            {
+                "phase": "dialog",
+                "action_state": None if record is None else str(record["state"]),
+                "gate_state": (gate.inspect() or {}).get("state"),
+                "has_confirm": "确认" in text and "取消" in text,
+            }
+        )
+
+    if action_id in {"A03", "A04", "A05"}:
+        device.on_cat = on_cat
     result: dict[str, Any] = {
         "case": case,
         "action_kind": kind,
         "action_key_shape": action_key.split(":")[0] + ":" + action_key.split(":")[-1],
         "layer": "raw_device_usecase",
+        "dialog_distinct": (
+            len(stimulus["xml_sequence"]) > 2
+            and stimulus["xml_sequence"][1] != stimulus["xml_sequence"][0]
+        ),
     }
+    reopened: SqliteStore | None = None
+    boundary_store: SqliteStore | None = None
+    boundary_gate: SharedDeviceGate | None = None
     try:
         if fault == "FB":
             crashing = _executor(
-                gate=gate, store=store, root=root, device=device, crash=True
+                gate=gate,
+                store=store,
+                root=root,
+                device=device,
+                process_log=log,
+                crash=True,
             )
             try:
-                perform_action(
+                _perform(
                     store=store,
                     gate=gate,
+                    lease=lease,
                     authorization=_authorization(
                         lease,
                         profile_id=profile_id,
                         action_kind=kind,
                         action_key=action_key,
                     ),
-                    lease=lease,
                     profile_db_path=str(db_path),
                     executor=crashing,
-                    now=NOW,
-                    clock=lambda: NOW,
-                    current_base_hash=BASE_HASH,
-                    current_pack_hash=PACK_HASH,
-                    daily_sends=5,
-                    reply_cooldown_seconds=0,
-                    identity=_identity(),
-                    reload_snapshot=lambda: {
-                        "base_hash": BASE_HASH,
-                        "pack_hash": PACK_HASH,
-                        "acceptance_base_hash": BASE_HASH,
-                        "acceptance_pack_hash": PACK_HASH,
-                    },
-                    **plan,
+                    device=device,
+                    plan=plan,
+                    process_log=log,
                 )
             except SystemExit:
                 result["interrupted"] = True
-            record = _action_record(db_path, action_key)
-            result["after_interrupt"] = record
+            result["after_interrupt"] = _action_record(db_path, action_key)
             result["remote_after_interrupt"] = {
                 "irreversible": device.irreversible,
                 "all_commands": len(device.calls),
             }
+            result["task_after_interrupt"] = _task_row(db_path)
+            same_device = _Device(stimulus)
+            result["same_connection_replay"] = {
+                **_perform(
+                    store=store,
+                    gate=gate,
+                    lease=lease,
+                    authorization=_authorization(
+                        lease,
+                        profile_id=profile_id,
+                        action_kind=kind,
+                        action_key=action_key,
+                    ),
+                    profile_db_path=str(db_path),
+                    executor=_executor(
+                        gate=gate,
+                        store=store,
+                        root=root,
+                        device=same_device,
+                        process_log=log,
+                    ),
+                    device=same_device,
+                    plan=plan,
+                    process_log=log,
+                ),
+                "irreversible": same_device.irreversible,
+                "reopened": False,
+            }
+            store.close()
+            reopened = _reopen_store(db_path, profile_id, log)
             replay_device = _Device(stimulus)
-            replay_executor = _executor(
-                gate=gate, store=store, root=root, device=replay_device
+            result["replay"] = {
+                **_perform(
+                    store=reopened,
+                    gate=gate,
+                    lease=lease,
+                    authorization=_authorization(
+                        lease,
+                        profile_id=profile_id,
+                        action_kind=kind,
+                        action_key=action_key,
+                    ),
+                    profile_db_path=str(db_path),
+                    executor=_executor(
+                        gate=gate,
+                        store=reopened,
+                        root=root,
+                        device=replay_device,
+                        process_log=log,
+                    ),
+                    device=replay_device,
+                    plan=plan,
+                    process_log=log,
+                ),
+                "irreversible": replay_device.irreversible,
+                "all_commands": len(replay_device.calls),
+                "reopened": True,
+            }
+            # 变异控制：移除崩溃点后，正常执行仍必须只触达合成 Popen。
+            boundary_root = _os_root(root) / "boundary"
+            boundary_root.mkdir(parents=True, exist_ok=True)
+            boundary_log = _process_log(root, f"{case}-boundary")
+            boundary_store, boundary_lease, boundary_gate, boundary_db = _profile_context(
+                "m5-boundary", boundary_root, boundary_log
             )
-            replay = _perform(
-                store=store,
-                gate=gate,
-                lease=lease,
+            boundary_device = _Device(stimulus)
+            boundary = _perform(
+                store=boundary_store,
+                gate=boundary_gate,
+                lease=boundary_lease,
                 authorization=_authorization(
-                    lease,
-                    profile_id=profile_id,
+                    boundary_lease,
+                    profile_id="m5-boundary",
                     action_kind=kind,
                     action_key=action_key,
                 ),
-                profile_db_path=str(db_path),
-                executor=replay_executor,
-                device=replay_device,
+                profile_db_path=str(boundary_db),
+                executor=_executor(
+                    gate=boundary_gate,
+                    store=boundary_store,
+                    root=root,
+                    device=boundary_device,
+                    process_log=log,
+                ),
+                device=boundary_device,
                 plan=plan,
+                process_log=boundary_log,
             )
-            result["replay"] = {
-                **replay,
-                "irreversible": replay_device.irreversible,
-                "all_commands": len(replay_device.calls),
+            result["boundary_control"] = {
+                "all_commands": len(boundary_device.calls),
+                "served_xml": len(boundary_device.served_xml),
+                "raised": boundary.get("raised"),
+                "real_popen_restored": subprocess.Popen is _BASELINE_POPEN,
             }
+            result["log"] = _log_events(log)
+            result["log_pairs"] = _log_pairs(log)
+            result["log_correlations"] = _log_correlations(log)
+            result["log_has_body"] = _log_has_body(log, BODY)
             return result
 
         if fault == "FA":
@@ -646,9 +881,47 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
                 action_kind=kind,
                 action_key=action_key,
             )
+        if action_id == "A04" and fault in {"base", "confirm_dialog"}:
+            cross_log = _process_log(root, f"{case}-cross-kind")
+            cross_device = _Device(stimulus)
+            cross = _perform(
+                store=store,
+                gate=gate,
+                lease=lease,
+                authorization=_authorization(
+                    lease,
+                    profile_id=profile_id,
+                    action_kind="change_wechat",
+                    action_key=action_key,
+                ),
+                profile_db_path=str(db_path),
+                executor=_executor(
+                    gate=gate,
+                    store=store,
+                    root=root,
+                    device=cross_device,
+                    process_log=log,
+                ),
+                device=cross_device,
+                plan=plan,
+                process_log=cross_log,
+            )
+            result["cross_kind"] = {
+                "raised": cross.get("raised"),
+                "irreversible": cross_device.irreversible,
+                "record": _action_record(db_path, action_key),
+            }
         if fault == "FC":
             device = _Device(stimulus, fail_irreversible=True)
-        executor = _executor(gate=gate, store=store, root=root, device=device)
+            if action_id in {"A03", "A04", "A05"}:
+                device.on_cat = on_cat
+        executor = _executor(
+            gate=gate,
+            store=store,
+            root=root,
+            device=device,
+            process_log=log,
+        )
         outcome = _perform(
             store=store,
             gate=gate,
@@ -656,8 +929,9 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
             authorization=authorization,
             profile_db_path=str(db_path),
             executor=executor,
-                device=device,
+            device=device,
             plan=plan,
+            process_log=log,
         )
         result["observed"] = outcome
         result["remote"] = {
@@ -693,23 +967,16 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
                     "command_quiet",
                 )
             }
-        record = _action_record(db_path, action_key)
-        result["record"] = record
+        result["dialog_checks"] = dialog_checks
+        result["record"] = _action_record(db_path, action_key)
         result["events"] = _event_rows(db_path, action_key)
-        converged = bool(outcome.get("gate_converged"))
-        if fault != "FE":
-            try:
-                gate.release(now=NOW, converged=converged)
-            except Exception:
-                pass
-        result["gate_after_release"] = gate.inspect()
-        if fault in {"FC", "FE"}:
+        result["task"] = _task_row(db_path)
+        if fault in {"base", "FC", "FE", "request_only", "delivered", "confirm_dialog"}:
+            store.close()
+            reopened = _reopen_store(db_path, profile_id, log)
             replay_device = _Device(stimulus)
-            replay_executor = _executor(
-                gate=gate, store=store, root=root, device=replay_device
-            )
             replay = _perform(
-                store=store,
+                store=reopened,
                 gate=gate,
                 lease=lease,
                 authorization=_authorization(
@@ -719,21 +986,54 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
                     action_key=action_key,
                 ),
                 profile_db_path=str(db_path),
-                executor=replay_executor,
+                executor=_executor(
+                    gate=gate,
+                    store=reopened,
+                    root=root,
+                    device=replay_device,
+                    process_log=log,
+                ),
                 device=replay_device,
                 plan=plan,
+                process_log=log,
             )
-            result["replay"] = {
+            key = "replay" if fault in {"FC", "FE"} else "base_replay"
+            result[key] = {
                 **replay,
                 "irreversible": replay_device.irreversible,
                 "all_commands": len(replay_device.calls),
+                "reopened": True,
+                "events": _event_rows(db_path, action_key),
+                "task": _task_row(db_path),
             }
-        return result
-    finally:
+        if fault == "FE":
+            result["ledger"] = _ledger_summary(
+                root / "data" / "evals" / "m5-probe" / "ledger"
+            )
+            result["events_after_replay"] = _event_rows(db_path, action_key)
+        converged = bool(outcome.get("gate_converged"))
         try:
-            store.close()
+            gate.release(now=NOW, converged=converged)
         except Exception:
             pass
+        result["gate_after_release"] = gate.inspect()
+        result["log"] = _log_events(log)
+        result["log_pairs"] = _log_pairs(log)
+        result["log_correlations"] = _log_correlations(log)
+        result["log_has_body"] = _log_has_body(log, BODY)
+        return result
+    finally:
+        for connection in (reopened, boundary_store, store):
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+        if boundary_gate is not None:
+            try:
+                boundary_gate.release(now=NOW, converged=False)
+            except Exception:
+                pass
 
 
 def _perform(
@@ -746,6 +1046,7 @@ def _perform(
     executor: AdbActionExecutor,
     device: _Device,
     plan: Mapping[str, Any],
+    process_log: ProcessLog | None = None,
 ) -> dict[str, Any]:
     """调用真实 perform_action；异常只压缩为固定原因码。"""
     try:
@@ -757,6 +1058,7 @@ def _perform(
                 lease=lease,
                 profile_db_path=profile_db_path,
                 executor=executor,
+                process_log=process_log,
                 now=NOW,
                 clock=lambda: NOW,
                 current_base_hash=BASE_HASH,
@@ -795,12 +1097,13 @@ def _run_reconcile_case(case: str, stimuli: Mapping[str, Any], root: Path) -> di
     action_key = action_key_for(
         kind, app="boss", conversation_key=conversation, message_key=message_key
     )
-    profile_id = "m5-action"
-    os_root = root / "localappdata"
+    profile_id = "m5-reconcile"
+    log = _process_log(root, f"reconcile-{case}")
     store, lease, gate, db_path = _profile_context(
         profile_id,
-        os_root,
-        _completion_fault if case == "confirm_performed" else None,
+        _os_root(root),
+        log,
+        fault_hook=_completion_fault if case == "confirm_performed" else None,
     )
     plan = _plan_for("A01", kind, action_key, conversation, stimulus)
     device = _Device(stimulus)
@@ -929,7 +1232,7 @@ def _run_reconcile_case(case: str, stimuli: Mapping[str, Any], root: Path) -> di
                 explicit_confirm=True,
                 command_stop_checker=lambda pid: "stopped",
                 now=NOW,
-                process_log=None,
+                process_log=log,
             )
             result["reconciled"] = {
                 "resolution": reconciled.get("resolution"),
@@ -944,6 +1247,43 @@ def _run_reconcile_case(case: str, stimuli: Mapping[str, Any], root: Path) -> di
             }
         result["record_after_reconcile"] = _action_record(db_path, action_key)
         result["gate_after_reconcile"] = gate.inspect()
+        result["log_pairs"] = _log_pairs(log)
+        result["log_correlations"] = _log_correlations(log)
+        result["log_has_body"] = _log_has_body(log, BODY)
+        if case == "confirm_not_performed":
+            store.close()
+            reopened = _reopen_store(db_path, profile_id, log)
+            replay_device = _Device(stimulus)
+            replay = _perform(
+                store=reopened,
+                gate=gate,
+                lease=lease,
+                authorization=_authorization(
+                    lease,
+                    profile_id=profile_id,
+                    action_kind=kind,
+                    action_key=action_key,
+                ),
+                profile_db_path=str(db_path),
+                executor=_executor(
+                    gate=gate,
+                    store=reopened,
+                    root=root,
+                    device=replay_device,
+                    process_log=log,
+                ),
+                device=replay_device,
+                plan=plan,
+                process_log=log,
+            )
+            result["post_reconcile_replay"] = {
+                **replay,
+                "irreversible": replay_device.irreversible,
+                "reopened": True,
+            }
+            result["record_after_post_replay"] = _action_record(
+                db_path, action_key
+            )
         return result
     finally:
         try:
@@ -987,109 +1327,44 @@ def _observation(**overrides: Any) -> ActionObservation:
     return ActionObservation(**values)
 
 
-def _real_lock_probe(
-    case: str, stimuli: Mapping[str, Any], root: Path
-) -> dict[str, Any]:
-    """真实仓储留下 pending，再验证动作键锁阻止第二次执行且零远端命令。"""
+def _run_evidence_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[str, Any]:
+    """同一非法/原始证据进入真实派生与 complete_action，再重开核验锁。"""
     kind, slug = ACTION_LAYOUT["A01"]
-    base = stimuli["actions"][slug]
-    stimulus = _stimulus_for_fault(base, "FB", "A01")
     conversation = conversation_key_for("boss", CONTACT, COMPANY, POSITION)
-    message_key = message_stable_identity_hash("synthetic-stable-message-1")
+    message_key = message_key_from_stable(conversation, STABLE)
     action_key = action_key_for(
-        kind,
-        app="boss",
-        conversation_key=conversation,
-        message_key=message_key_from_stable(conversation, message_key),
+        kind, app="boss", conversation_key=conversation, message_key=message_key
     )
     profile_id = "m5-evidence"
-    os_root = root / "localappdata"
+    log = _process_log(root, f"evidence-{case}")
     store, lease, gate, db_path = _profile_context(
-        profile_id,
-        os_root,
-        _completion_fault if case == "confirm_performed" else None,
+        profile_id, _os_root(root), log
     )
+    base = stimuli["actions"][slug]
+    stimulus = _stimulus_for_fault(base, "FD", "A01")
     plan = _plan_for("A01", kind, action_key, conversation, stimulus)
-    device = _Device(stimulus)
-    try:
-        crashing = _executor(
-            gate=gate, store=store, root=root, device=device, crash=True
-        )
-        try:
-            _perform(
-                store=store,
-                gate=gate,
-                lease=lease,
-                authorization=_authorization(
-                    lease,
-                    profile_id=profile_id,
-                    action_kind=kind,
-                    action_key=action_key,
-                ),
-                profile_db_path=str(db_path),
-                executor=crashing,
-                device=device,
-                plan=plan,
-            )
-        except SystemExit:
-            pass
-        pending = _action_record(db_path, action_key)
-        replay_device = _Device(stimulus)
-        replay = _perform(
-            store=store,
-            gate=gate,
-            lease=lease,
-            authorization=_authorization(
-                lease,
-                profile_id=profile_id,
-                action_kind=kind,
-                action_key=action_key,
-            ),
-            profile_db_path=str(db_path),
-            executor=_executor(
-                gate=gate, store=store, root=root, device=replay_device
-            ),
-            device=replay_device,
-            plan=plan,
-        )
-        return {
-            "pending_state": None if pending is None else pending["state"],
-            "replay_raised": replay.get("raised"),
-            "replay_irreversible": replay_device.irreversible,
-            "gate_occupied": gate.inspect() is not None,
-            "record_after_replay": _action_record(db_path, action_key),
-        }
-    finally:
-        try:
-            store.close()
-        except Exception:
-            pass
-
-
-def _run_evidence_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[str, Any]:
-    """合同层非法证据：实际调用领域派生/校验，并补真实仓储锁核验。"""
     result: dict[str, Any] = {
         "case": case,
-        "layer": "contract_domain_plus_real_store_lock",
+        "layer": "contract_domain_plus_complete_action",
+        "remote": {"irreversible": 0, "all_commands": 0},
     }
+    reopened: SqliteStore | None = None
     try:
-        if case == "same_snapshot":
-            before = str(uuid.uuid4())
-            outcome = derive_action_outcome(
-                _observation(before_snapshot_id=before, after_snapshot_id=before)
-            )
-            result["outcome"] = outcome.evidence.outcome
-            result["effect"] = outcome.evidence.effect
-            result["reason"] = outcome.evidence.reason_code
-        elif case == "missing_snapshot":
-            outcome = derive_action_outcome(
-                _observation(before_snapshot_id=None, after_snapshot_id=None)
-            )
-            result["outcome"] = outcome.evidence.outcome
-            result["effect"] = outcome.evidence.effect
-        elif case == "performed_none":
+        store.begin_action(
+            lease,
+            action_kind=kind,
+            action_key=action_key,
+            target_key=plan["target_key"],
+            conversation_key=conversation,
+            authorization_json=json.dumps({"synthetic": True}),
+            daily_sends=5,
+            reply_cooldown_seconds=0,
+            ime_original=None,
+            now=NOW,
+        )
+        if case == "performed_none":
             evidence = Evidence(
-                action_key="boss:boss:msg:" + "1" * 64 + ":reply",
+                action_key=action_key,
                 outcome="performed",
                 effect="none",
                 reason_code=None,
@@ -1097,14 +1372,19 @@ def _run_evidence_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dic
                 after_snapshot_id=str(uuid.uuid4()),
                 observed_at=NOW,
             )
-            try:
-                validate_evidence(evidence)
-                result["rejected"] = False
-            except ValueError:
-                result["rejected"] = True
+            outcome = ActionOutcome(
+                evidence=evidence,
+                scene_settled=True,
+                confirmation_open=False,
+                ime_restored=True,
+                command_quiet=True,
+                pause=False,
+                delivered=False,
+            )
+            result["derivation"] = {"constructed": "performed_none"}
         elif case == "not_performed_sent":
             evidence = Evidence(
-                action_key="boss:boss:msg:" + "1" * 64 + ":reply",
+                action_key=action_key,
                 outcome="not_performed",
                 effect="sent",
                 reason_code="cancelled_before_action",
@@ -1112,36 +1392,105 @@ def _run_evidence_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dic
                 after_snapshot_id=None,
                 observed_at=NOW,
             )
-            try:
-                validate_evidence(evidence)
-                result["rejected"] = False
-            except ValueError:
-                result["rejected"] = True
-        elif case == "read_ok_no_action_delta":
-            outcome = derive_action_outcome(
-                _observation(clicked=False, echo_count_after=0)
+            outcome = ActionOutcome(
+                evidence=evidence,
+                scene_settled=True,
+                confirmation_open=False,
+                ime_restored=True,
+                command_quiet=True,
+                pause=False,
+                delivered=False,
             )
-            result["outcome"] = outcome.evidence.outcome
-            result["effect"] = outcome.evidence.effect
-        elif case == "screenshot_only":
-            before = str(uuid.uuid4())
-            outcome = derive_action_outcome(
-                _observation(
+            result["derivation"] = {"constructed": "not_performed_sent"}
+        else:
+            if case == "same_snapshot":
+                before = str(uuid.uuid4())
+                observation = _observation(
+                    action_key=action_key,
+                    before_snapshot_id=before,
+                    after_snapshot_id=before,
+                )
+            elif case == "missing_snapshot":
+                observation = _observation(
+                    action_key=action_key,
+                    before_snapshot_id=None,
+                    after_snapshot_id=None,
+                )
+            elif case == "read_ok_no_action_delta":
+                observation = _observation(
+                    action_key=action_key,
+                    clicked=False,
+                    echo_count_after=0,
+                )
+            else:
+                before = str(uuid.uuid4())
+                observation = _observation(
+                    action_key=action_key,
                     before_snapshot_id=before,
                     after_snapshot_id=before,
                     echo_count_after=0,
                 )
+            outcome = derive_action_outcome(observation)
+            result["derivation"] = {
+                "outcome": outcome.evidence.outcome,
+                "effect": outcome.evidence.effect,
+                "reason": outcome.evidence.reason_code,
+            }
+        try:
+            completed = store.complete_action(
+                lease, action_key=action_key, outcome=outcome, now=NOW
             )
-            result["outcome"] = outcome.evidence.outcome
-            result["effect"] = outcome.evidence.effect
-        else:
-            raise ProbeError("未知证据案例")
-        result["real_lock"] = _real_lock_probe(case, stimuli, root)
-    except ProbeError:
-        raise
-    except Exception as error:
-        result["raised"] = str(getattr(error, "reason_code", type(error).__name__))
-    return result
+            result["complete"] = {
+                "raised": None,
+                "state": completed.get("state"),
+                "gate_converged": completed.get("gate_converged"),
+            }
+        except Exception as error:
+            result["complete"] = {
+                "raised": str(getattr(error, "reason_code", type(error).__name__)),
+                "state": None,
+                "gate_converged": False,
+            }
+        result["record"] = _action_record(db_path, action_key)
+        result["events"] = _event_rows(db_path, action_key)
+        result["task"] = _task_row(db_path)
+        result["gate_state"] = (
+            None if gate.inspect() is None else str(gate.inspect()["state"])
+        )
+        store.close()
+        reopened = _reopen_store(db_path, profile_id, log)
+        try:
+            reopened.begin_action(
+                lease,
+                action_kind=kind,
+                action_key=action_key,
+                target_key=plan["target_key"],
+                conversation_key=conversation,
+                authorization_json=json.dumps({"synthetic": True}),
+                daily_sends=5,
+                reply_cooldown_seconds=0,
+                ime_original=None,
+                now=NOW,
+            )
+            result["reopen_replay"] = {"raised": None}
+        except Exception as error:
+            result["reopen_replay"] = {
+                "raised": str(getattr(error, "reason_code", type(error).__name__))
+            }
+        result["reopen_record"] = _action_record(db_path, action_key)
+        result["reopen_events"] = _event_rows(db_path, action_key)
+        result["log"] = _log_events(log)
+        result["log_pairs"] = _log_pairs(log)
+        result["log_correlations"] = _log_correlations(log)
+        result["log_has_body"] = _log_has_body(log, BODY)
+        return result
+    finally:
+        for connection in (reopened, store):
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
 
 
 def _dispatch(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[str, Any]:

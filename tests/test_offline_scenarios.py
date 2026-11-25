@@ -3120,7 +3120,6 @@ class FactsCliPersistenceTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         (self.root / "localappdata").mkdir()
         shutil.copytree(TESTS_DIR.parent / "app", self.root / "app")
-        self._held = None
 
     def tearDown(self) -> None:
         """只清理本测试自建临时根。"""
@@ -3178,7 +3177,7 @@ class FactsCliPersistenceTests(unittest.TestCase):
         )
 
     def _fact_rows(self, profile_id: str = "demo") -> list[tuple]:
-        """只读返回事实值与事件的无正文投影，用于前后比较。"""
+        """只读返回含合成值的事实与无值事件投影，用于前后比较。"""
         connection = sqlite3.connect(str(self._profile_db(profile_id)))
         try:
             facts = connection.execute(
