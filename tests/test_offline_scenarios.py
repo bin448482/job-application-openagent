@@ -1012,6 +1012,78 @@ class P2M0BindingTests(unittest.TestCase):
         changed["events"][2]["virtual_ms"] = 1600
         _start, _cycles, changed_timeline = m6_probe._parse_s03_timeline(changed)
         self.assertNotEqual(changed_timeline[2]["virtual_ms"], 1500)
+        arrival_only = copy.deepcopy(stimuli)
+        arrival_only["events"][1]["arrival_at"] = 900
+        _start, _cycles, arrival_timeline = m6_probe._parse_s03_timeline(arrival_only)
+        self.assertEqual(arrival_timeline[1]["arrival_at"], 900)
+
+    def _run_s03_temp(self, stimuli):
+        """在临时合成项目根上运行真实 _Context/_run_s03，返回输出与上下文。"""
+        import action_helpers
+
+        tmp, root = action_helpers.temp_project()
+        shutil.copytree(
+            TESTS_DIR.parent / "tests" / "fixtures" / "read",
+            root / "tests" / "fixtures" / "read",
+        )
+        (root / "tests" / "fixtures" / "runtime").mkdir(parents=True, exist_ok=True)
+        old_root = m6_probe.ROOT
+        try:
+            m6_probe.ROOT = root
+            ctx = m6_probe._Context()
+            return m6_probe._run_s03(ctx, stimuli), ctx
+        finally:
+            m6_probe.ROOT = old_root
+            tmp.cleanup()
+
+    def test_s03_arrival_only_changes_execution_clock(self) -> None:
+        """arrival-only 变异必须改变真实 execute_run 的 EnvironmentClock 轨迹。"""
+        stimuli = json.loads(
+            (SCENARIO_ROOT / "fixtures/m6/events/s03-preemption-limit.stimuli.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        original, _ctx = self._run_s03_temp(stimuli)
+        mutant = copy.deepcopy(stimuli)
+        mutant["events"][1]["arrival_at"] = 900
+        changed, _ctx2 = self._run_s03_temp(mutant)
+        self.assertEqual(original["clock_trace"][1], 1000)
+        self.assertEqual(changed["clock_trace"][1], 900)
+        self.assertNotEqual(original["clock_trace"], changed["clock_trace"])
+        self.assertNotEqual(original["timeline"], changed["timeline"])
+        self.assertEqual(original["step_count"], 25)
+        self.assertEqual(changed["step_count"], 25)
+
+    def test_s03_unsafe_sampling_is_real_and_corruption_rejected(self) -> None:
+        """unsafe 前后真实采样为 1 次观察/0 增量；破坏采样的输出被原断言拒绝。"""
+        stimuli = json.loads(
+            (SCENARIO_ROOT / "fixtures/m6/events/s03-preemption-limit.stimuli.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        original, _ctx = self._run_s03_temp(stimuli)
+        self.assertEqual(original["unsafe_observations"], 1)
+        self.assertEqual(original["unsafe_sample_monotonic"], 1800)
+        for key in (
+            "unsafe_stage_before",
+            "unsafe_stage_after",
+            "unsafe_stage_delta",
+            "unsafe_preemptions_before",
+            "unsafe_preemptions_after",
+            "unsafe_preemptions_delta",
+        ):
+            self.assertEqual(original[key], 0, key)
+        self.assertFalse(original["unsafe_observation_incremented"])
+        paths = [
+            {"path": "unsafe_stage_delta", "equals": 0},
+            {"path": "unsafe_preemptions_delta", "equals": 0},
+            {"path": "unsafe_observation_incremented", "equals": False},
+        ]
+        self.assertEqual(compare_step(original, {"stdout_paths": paths}), [])
+        corrupted = copy.deepcopy(original)
+        corrupted["unsafe_stage_delta"] = 1
+        corrupted["unsafe_observation_incremented"] = True
+        self.assertNotEqual(compare_step(corrupted, {"stdout_paths": paths}), [])
 
     def test_s03_timeline_rejects_unknown_missing_duplicate_out_of_order(self) -> None:
         """S03 未知/缺失/重复/乱序/clock_start 不符必须拒绝。"""

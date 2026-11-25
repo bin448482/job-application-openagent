@@ -34612,7 +34612,7 @@
                   },
                   {
                     "path": "step_count",
-                    "equals": 19
+                    "equals": 25
                   },
                   {
                     "path": "timeline.0.virtual_ms",
@@ -34665,6 +34665,54 @@
                   {
                     "path": "arrival_trace.6",
                     "equals": 2200
+                  },
+                  {
+                    "path": "unsafe_sample_monotonic",
+                    "equals": 1800
+                  },
+                  {
+                    "path": "unsafe_preemptions_before",
+                    "equals": 0
+                  },
+                  {
+                    "path": "unsafe_preemptions_after",
+                    "equals": 0
+                  },
+                  {
+                    "path": "unsafe_preemptions_delta",
+                    "equals": 0
+                  },
+                  {
+                    "path": "clock_trace_length",
+                    "equals": 25
+                  },
+                  {
+                    "path": "clock_trace.0",
+                    "equals": 0
+                  },
+                  {
+                    "path": "clock_trace.1",
+                    "equals": 1000
+                  },
+                  {
+                    "path": "clock_trace.2",
+                    "equals": 1500
+                  },
+                  {
+                    "path": "clock_trace.3",
+                    "equals": 1800
+                  },
+                  {
+                    "path": "clock_trace.4",
+                    "equals": 2000
+                  },
+                  {
+                    "path": "clock_trace.6",
+                    "equals": 2200
+                  },
+                  {
+                    "path": "clock_trace.9",
+                    "equals": 3000
                   }
                 ]
               }

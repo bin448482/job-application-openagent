@@ -260,14 +260,18 @@ class _TimedScene:
         self._clock = clock
         self._index = 0
         self.consumed: list[Any] = []
+        self.current_step: Any = None
+        self.advance_trace: list[int] = []
 
     def next_step(self) -> Any:
         """返回下一步；在返回前按外部时间表推进环境并记录实际消费。"""
         step = self._inner.next_step()
         if step is not None:
             self.consumed.append(step)
+        self.current_step = step
         if step is not None and self._index < len(self._times):
             self._clock.advance(self._times[self._index])
+            self.advance_trace.append(self._clock.mono_ms)
             self._index += 1
         return step
 
@@ -531,6 +535,9 @@ class _Context:
         self._oroot = ROOT / "localappdata"
         self._oroot.mkdir(parents=True, exist_ok=True)
         self._wall_base = 0
+        self.active_batch: str | None = None
+        self.observe_samples: list[dict[str, Any]] = []
+        self.last_scene: Any = None
 
     def credential(self) -> tuple[str, str, str, str]:
         """按需生成一次真实公开评测凭证，返回相对路径与模型身份。"""
@@ -580,6 +587,7 @@ class _Context:
         else:
             scene = StimulusRuntimeScene(_scene(batch, steps), profile_id=self.profile_id)
         self.last_scene = scene
+        self.active_batch = batch
         gate = SharedDeviceGate(
             profile_id=self.profile_id,
             profile_db_path=self.db_path,
@@ -848,6 +856,38 @@ def _stage_preempted_events(db_path: Path) -> list[dict[str, Any]]:
     return values
 
 
+def _sample_runtime_state(ctx: _Context) -> dict[str, Any]:
+    """在 unsafe observe_unread 边界只读采样真实 scheduler_events 与持久 cursor。"""
+    try:
+        connection = sqlite3.connect(str(ctx.db_path), timeout=2)
+    except sqlite3.Error:
+        return {"stage": None, "preemptions": None}
+    try:
+        stage = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM scheduler_events WHERE event = 'stage_preempted'"
+            ).fetchone()[0]
+        )
+        preemptions: int | None = None
+        if ctx.active_batch is not None:
+            row = connection.execute(
+                "SELECT cursor_json FROM job_batches WHERE batch_id = ?",
+                (ctx.active_batch,),
+            ).fetchone()
+            if row is not None:
+                try:
+                    value = json.loads(str(row[0]))
+                    if type(value.get("preemptions_used")) is int:
+                        preemptions = value["preemptions_used"]
+                except (TypeError, json.JSONDecodeError, AttributeError):
+                    preemptions = None
+    except sqlite3.Error:
+        return {"stage": None, "preemptions": None}
+    finally:
+        connection.close()
+    return {"stage": stage, "preemptions": preemptions}
+
+
 def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
     """按原始 virtual_ms/arrival_at/安全点顺序驱动真实 S03 运行。"""
     clock_start, cycles, timeline = _parse_s03_timeline(stimuli)
@@ -867,6 +907,11 @@ def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
         job_manifest, _job_key, unread_manifest, conversation_manifest = fixtures[index]
         steps.append(_step(read_fixture=job_manifest))
         times.append(int(cycle["job_ms"]))
+        # arrival 作为实际执行边界页步骤进入 EnvironmentClock；不冒充未读观察。
+        steps.append(
+            _step(read_fixture="tests/fixtures/read/page.json", in_progress=True)
+        )
+        times.append(int(cycle["arrival_at"]))
         steps.append(
             _step(
                 read_fixture=unread_manifest,
@@ -891,8 +936,39 @@ def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
             )
         )
         times.append(int(cycle["safe_ms"]))
-    clock = EnvironmentClock()
-    result = ctx.execute(steps, clock=clock, limits=limits, times=times)
+    import app.usecases.runtime as runtime_module
+
+    original_observe = runtime_module.observe_unread
+    ctx.observe_samples = []
+
+    def observe_wrapper(previous, *, wall_now: str, monotonic_ms: int):
+        """在 unsafe observe_unread 前后各采一次真实仓储状态，不改变返回值。"""
+        step = getattr(getattr(ctx, "last_scene", None), "current_step", None)
+        unsafe = bool(
+            step is not None
+            and getattr(step, "in_progress", False)
+            and getattr(getattr(step, "raw_scene", None), "input_text", "") != ""
+        )
+        if not unsafe:
+            return original_observe(previous, wall_now=wall_now, monotonic_ms=monotonic_ms)
+        before = _sample_runtime_state(ctx)
+        value = original_observe(previous, wall_now=wall_now, monotonic_ms=monotonic_ms)
+        after = _sample_runtime_state(ctx)
+        ctx.observe_samples.append(
+            {
+                "before": before,
+                "after": after,
+                "wall_now": wall_now,
+                "monotonic_ms": monotonic_ms,
+            }
+        )
+        return value
+
+    runtime_module.observe_unread = observe_wrapper
+    try:
+        result = ctx.execute(steps, clock=EnvironmentClock(), limits=limits, times=times)
+    finally:
+        runtime_module.observe_unread = original_observe
     run = result["run"]
     view = ctx.batch_view(run["batch_id"])
     job_keys = [item[1] for item in fixtures]
@@ -902,30 +978,36 @@ def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
     per_cycle = [stage_jobs.count(key) for key in job_keys]
     unsafe_discovery = discovery_key_for(APP, unsafe_key, fingerprint_for(None, None, 1))
     unsafe_claimed = claimed.count(unsafe_discovery)
-    unsafe_ms = next(
-        (cycle["not_reached_ms"] for cycle in cycles if cycle["not_reached_ms"] is not None),
-        None,
-    )
-    unsafe_cutoff = _iso(int(unsafe_ms)) if unsafe_ms is not None else ""
-    unsafe_stage_before = (
-        sum(
-            1
-            for event in stage_events
-            if str(event.get("handling_started_at", "")) <= unsafe_cutoff
+    samples = list(getattr(ctx, "observe_samples", []))
+    unsafe_observations = len(samples)
+    if samples:
+        before = samples[0]["before"]
+        after = samples[0]["after"]
+        stage_before = before["stage"]
+        stage_after = after["stage"]
+        preemptions_before = before["preemptions"]
+        preemptions_after = after["preemptions"]
+        stage_delta = (
+            stage_after - stage_before
+            if type(stage_before) is int and type(stage_after) is int
+            else None
         )
-        if unsafe_cutoff
-        else 0
-    )
-    unsafe_stage_after = unsafe_stage_before
-    unsafe_delta = unsafe_stage_after - unsafe_stage_before
+        preemptions_delta = (
+            preemptions_after - preemptions_before
+            if type(preemptions_before) is int and type(preemptions_after) is int
+            else None
+        )
+        incremented = bool(
+            (stage_delta is not None and stage_delta > 0)
+            or (preemptions_delta is not None and preemptions_delta > 0)
+        )
+    else:
+        stage_before = stage_after = preemptions_before = preemptions_after = None
+        stage_delta = preemptions_delta = None
+        incremented = True
     scene = getattr(ctx, "last_scene", None)
     consumed = getattr(scene, "consumed", [])
-    unsafe_observations = sum(
-        1
-        for step in consumed
-        if getattr(step, "in_progress", False)
-        and getattr(getattr(step, "raw_scene", None), "input_text", "") != ""
-    )
+    clock_trace = list(getattr(scene, "advance_trace", []))
     u6_key = ""
     if len(fixtures) >= 6:
         try:
@@ -984,13 +1066,19 @@ def _run_s03(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str, Any]:
         "step_count": len(steps),
         "timeline": timeline,
         "arrival_trace": [item["arrival_at"] for item in timeline],
+        "clock_trace": clock_trace,
+        "clock_trace_length": len(clock_trace),
         "unsafe_claimed": unsafe_claimed,
         "unsafe_claim_count": unsafe_claimed,
         "unsafe_observations": unsafe_observations,
-        "unsafe_stage_before": unsafe_stage_before,
-        "unsafe_stage_after": unsafe_stage_after,
-        "unsafe_stage_delta": unsafe_delta,
-        "unsafe_observation_incremented": unsafe_delta > 0,
+        "unsafe_sample_monotonic": samples[0]["monotonic_ms"] if samples else None,
+        "unsafe_stage_before": stage_before,
+        "unsafe_stage_after": stage_after,
+        "unsafe_stage_delta": stage_delta,
+        "unsafe_preemptions_before": preemptions_before,
+        "unsafe_preemptions_after": preemptions_after,
+        "unsafe_preemptions_delta": preemptions_delta,
+        "unsafe_observation_incremented": incremented,
         "sixth_switch_required": run["pause_reason"] == "preemption_limit",
         "sixth_stage_preempted": job_keys[5] in stage_jobs if len(job_keys) >= 6 else True,
         "u6_claims": u6_claims,
