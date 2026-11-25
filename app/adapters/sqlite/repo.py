@@ -1316,13 +1316,30 @@ class SqliteStore:
 
     @_store_operation("last_action_state")
     def last_action_state(self, task_key: str) -> str | None:
-        """只读返回任务最近动作状态，供安全点独立判定已提交。"""
+        """只读返回任务最近动作状态；会话键按真实发现关联，不用全局最近动作。
+
+        职位键直接匹配持久 `task_key`；会话键经由 `hr_discoveries` 的
+        `conversation_key` 关联到实际发现任务键，避免把另一任务的最近动作
+        当作本任务证据。空键仅保留“是否存在任何动作”的保守探测。
+        """
         if task_key:
-            row = self._connection.execute(
-                "SELECT state FROM action_records WHERE app = ? AND task_key = ? "
-                "ORDER BY created_at DESC, action_key DESC LIMIT 1",
-                (APP, task_key),
-            ).fetchone()
+            if is_job_task_key(task_key):
+                row = self._connection.execute(
+                    "SELECT state FROM action_records WHERE app = ? AND task_key = ? "
+                    "ORDER BY created_at DESC, action_key DESC LIMIT 1",
+                    (APP, task_key),
+                ).fetchone()
+            elif is_conversation_key(APP, task_key):
+                row = self._connection.execute(
+                    "SELECT ar.state FROM action_records ar "
+                    "JOIN hr_discoveries d ON d.app = ar.app "
+                    "AND d.\"key\" = ar.discovery_task_key "
+                    "WHERE ar.app = ? AND d.conversation_key = ? "
+                    "ORDER BY ar.created_at DESC, ar.action_key DESC LIMIT 1",
+                    (APP, task_key),
+                ).fetchone()
+            else:
+                return None
         else:
             row = self._connection.execute(
                 "SELECT state FROM action_records WHERE app = ? "

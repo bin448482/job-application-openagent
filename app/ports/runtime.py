@@ -70,6 +70,8 @@ class SceneStep:
     device_calls: int = 0
     conversation_fixture: str | None = None
     job_fixture: str | None = None
+    # 定向核对使用的独立 M3 原始输入引用；缺省表示当前场景没有采集能力。
+    targeted_read_fixture: str | None = None
     decision: DecisionStimulus | None = None
     # 兼容旧调用方的刺激字段；生产用例不把这些当作最终判决。
     wall_now: str = "1970-01-01T00:00:00.000Z"
@@ -206,7 +208,7 @@ class RuntimeStorePort(Protocol):
         ...
 
     def last_action_state(self, task_key: str) -> str | None:
-        """只读返回该任务最近一条动作状态；无动作返回 None。"""
+        """只读返回该任务最近动作状态；会话键按真实发现关联，无动作返回 None。"""
         ...
 
     def queued_new_message_keys(self) -> tuple[str, ...]:

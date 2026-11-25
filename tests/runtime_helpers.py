@@ -486,7 +486,11 @@ def seed_new_message(
 
 
 def make_job_fixture(root: Path, label: str) -> tuple[str, str]:
-    """复制 job_detail fixture 并替换标题/公司/薪资，返回 manifest 与职位键。"""
+    """复制 job_list fixture 并替换标题/公司/薪资，返回单卡列表 manifest 与职位键。
+
+    安全点要求真实回到列表，因此职位场景的主读取使用列表页；同一 manifest
+    也可作为 `job_fixture` 复核目标身份，不再用完整职位详情冒充列表。
+    """
     import shutil
     from app.domain.models import canonical_hash
     from app.domain.reading import job_identity_hash_for, job_key_from_identity
@@ -496,10 +500,24 @@ def make_job_fixture(root: Path, label: str) -> tuple[str, str]:
     salary = "20-30K"
     target = root / "tests" / "fixtures" / "runtime" / f"job-{label}"
     target.mkdir(parents=True, exist_ok=True)
-    for name in ("profile.json", "job_detail.xml", "job_detail.json"):
+    for name in ("profile.json", "job_list.xml", "job_list.json"):
         shutil.copyfile(ROOT / "tests/fixtures/read" / name, target / name)
-    path = target / "job_detail.xml"
+    path = target / "job_list.xml"
     text = path.read_text(encoding="utf-8")
+    second = (
+        '      <node clickable="true" class="android.widget.LinearLayout" '
+        'bounds="[0,500][1080,800]">\n'
+        '        <node text="合成岗位乙" resource-id="com.hpbr.bosszhipin:id/tv_position_name" '
+        'class="android.widget.TextView" bounds="[40,520][600,580]" />\n'
+        '        <node text="15-20K" resource-id="com.hpbr.bosszhipin:id/tv_salary_statue" '
+        'class="android.widget.TextView" bounds="[620,520][900,580]" />\n'
+        '        <node text="合成公司乙" resource-id="com.hpbr.bosszhipin:id/tv_company_name" '
+        'class="android.widget.TextView" bounds="[40,590][600,640]" />\n'
+        "      </node>\n"
+    )
+    if second not in text:
+        raise AssertionError("job list fixture shape changed")
+    text = text.replace(second, "")
     text = (
         text.replace("合成岗位甲", title)
         .replace("合成公司甲", company)
@@ -507,4 +525,4 @@ def make_job_fixture(root: Path, label: str) -> tuple[str, str]:
     )
     path.write_text(text, encoding="utf-8")
     key = job_key_from_identity(job_identity_hash_for(title, company, salary))
-    return f"tests/fixtures/runtime/job-{label}/job_detail.json", key
+    return f"tests/fixtures/runtime/job-{label}/job_list.json", key

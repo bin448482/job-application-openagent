@@ -48,6 +48,8 @@ _STEP_KEYS = {
     "raw_scene",
     "bridge_response",
 }
+# 定向核对引用是可选原始输入，旧场景刺激无需补齐该键。
+_OPTIONAL_STEP_KEYS = {"targeted_read_fixture"}
 _RAW_SCENE_KEYS = {
     "input_text",
     "confirmation_title",
@@ -87,7 +89,9 @@ class StimulusRuntimeScene:
 
     def _parse_step(self, value: object) -> SceneStep:
         """把一条刺激对象解析为严格场景步骤。"""
-        if not isinstance(value, dict) or set(value) - _STEP_KEYS:
+        if not isinstance(value, dict) or set(value) - (
+            _STEP_KEYS | _OPTIONAL_STEP_KEYS
+        ):
             raise ValueError("runtime step is invalid")
         if _FORBIDDEN_KEYS & set(value):
             raise ValueError("runtime step is invalid")
@@ -157,10 +161,16 @@ class StimulusRuntimeScene:
             if item is not None and (not isinstance(item, str) or not item):
                 raise ValueError(f"{name} is invalid")
         read_result = self._read_result(value, wall_now)
+        targeted_read_fixture = value.get("targeted_read_fixture")
+        if targeted_read_fixture is not None and (
+            not isinstance(targeted_read_fixture, str) or not targeted_read_fixture
+        ):
+            raise ValueError("runtime targeted read fixture is invalid")
         return SceneStep(
             read_fixture=read_fixture,
             conversation_fixture=conversation_fixture,
             job_fixture=job_fixture,
+            targeted_read_fixture=targeted_read_fixture,
             raw_scene=raw_scene,
             wall_now=wall_now,
             monotonic_ms=value["monotonic_ms"],  # type: ignore[arg-type]

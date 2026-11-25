@@ -25,7 +25,7 @@ from app.domain.runtime import BudgetLimits
 from app.ports.runtime import RawScene
 from app.usecases import policy as policy_usecases
 from app.usecases.policy_eval import RepositorySnapshot
-from app.usecases.runtime import _safe_scene, execute_run
+from app.usecases.runtime import derive_safe_point, execute_run
 from tests import policy_helpers
 from tests import runtime_helpers as helpers
 
@@ -82,25 +82,33 @@ class SafePointEvidenceTests(unittest.TestCase):
             "00000000-0000-4000-8000-0000000000aa",
         )
 
-    def _safe(self, **kwargs: object) -> tuple[object, ...]:
-        """调用唯一安全点派生函数。"""
+    def _safe(self, **kwargs: object) -> object:
+        """调用唯一安全点派生入口。"""
         raw = kwargs.pop(
             "raw",
             RawScene("", None, 0, "synthetic-ime-default"),
         )
         store = kwargs.pop("store", _FakeStore())
-        return _safe_scene(
+        read_results = kwargs.pop("read_results", (self.result,))
+        task_key = kwargs.pop("task_key", None)
+        if task_key is None and read_results:
+            first = read_results[0]
+            value = getattr(first, "value", None)
+            cards = getattr(value, "cards", None)
+            if cards:
+                task_key = cards[0].job_key
+        return derive_safe_point(
             store=store,
             batch_id=helpers.BATCH,
-            task_key="",
-            read_results=kwargs.pop("read_results", (self.result,)),
+            task_key=task_key,
+            read_results=read_results,
             raw=raw,
         )
 
     def test_each_condition_independently_false(self) -> None:
-        """逐项改变真实读取/现场/仓储证据时对应条件为假。"""
+        """纯领域假仓储可逐项置假；真实仓储的第五/六项蕴含另测。"""
         base = self._safe()
-        self.assertTrue(all(base))
+        self.assertTrue(base.is_safe())  # type: ignore[attr-defined]
         cases = {
             "list_returned": {"read_results": ()},
             "input_empty": {"raw": RawScene("草稿", None, 0)},
@@ -110,28 +118,26 @@ class SafePointEvidenceTests(unittest.TestCase):
             "action_state_committed": {"store": _FakeStore(last_state="unknown")},
             "checkpoint_committed": {"store": _FakeStore(checkpoint=False)},
         }
-        for index, name in enumerate(
-            (
-                "list_returned",
-                "input_empty",
-                "confirmation_closed",
-                "no_inflight_command",
-                "no_pending_action",
-                "action_state_committed",
-                "checkpoint_committed",
-            )
+        for name in (
+            "list_returned",
+            "input_empty",
+            "confirmation_closed",
+            "no_inflight_command",
+            "no_pending_action",
+            "action_state_committed",
+            "checkpoint_committed",
         ):
             with self.subTest(name=name):
                 value = self._safe(**cases[name])
-                self.assertFalse(value[index])
+                self.assertFalse(getattr(value, name))
 
     def test_pending_and_last_action_are_independent(self) -> None:
         """有 pending 但最近动作已提交时两条件可一假一真。"""
         value = self._safe(
             store=_FakeStore(pending=[{"state": "pending"}], last_state="performed")
         )
-        self.assertFalse(value[4])
-        self.assertTrue(value[5])
+        self.assertFalse(value.no_pending_action)  # type: ignore[attr-defined]
+        self.assertTrue(value.action_state_committed)  # type: ignore[attr-defined]
 
     def test_non_actionable_page_is_not_list_returned(self) -> None:
         """不可行动页面即使有结果也不算安全点第一项。"""
@@ -146,7 +152,9 @@ class SafePointEvidenceTests(unittest.TestCase):
             source="fixture",
             confidence="low",
         )
-        self.assertFalse(self._safe(read_results=(failed,))[0])
+        self.assertFalse(
+            self._safe(read_results=(failed,), task_key=None).list_returned  # type: ignore[attr-defined]
+        )
 
 
 class RuntimeExecuteTests(unittest.TestCase):
