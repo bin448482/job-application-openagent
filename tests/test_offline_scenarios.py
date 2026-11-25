@@ -1233,6 +1233,30 @@ class M6SevenVariantTests(unittest.TestCase):
         step = self.assets.oracles["variants"][ref]["acceptance"]["steps"][0]
         return {item["path"]: item.get("equals") for item in step["stdout_paths"]}
 
+    def _envelope(self, payload: dict, case: str) -> dict:
+        """按真实 M6 CLI 输出补齐 status/case 协议封套。"""
+        return {"status": "ok", "case": case, **payload}
+
+    def _assert_business_reject(
+        self, payload: dict, ref: str, case: str, expected_paths: tuple[str, ...]
+    ) -> None:
+        """断言负控由预期业务路径拒绝，且不是缺 status/case 的协议误拒。"""
+        differences = compare_step(
+            self._envelope(payload, case),
+            self.assets.oracles["variants"][ref]["acceptance"]["steps"][0],
+        )
+        self.assertNotEqual(differences, [])
+        protocol = [
+            item
+            for item in differences
+            if "缺少输出路径 status" in item or "缺少输出路径 case" in item
+        ]
+        self.assertEqual(protocol, [], differences)
+        self.assertTrue(
+            any(any(path in item for item in differences) for path in expected_paths),
+            differences,
+        )
+
     def test_s01_safe_point_uses_real_detection_and_clock(self) -> None:
         """检测切页是独立刺激；delay 改变实际 handling/waited，旧 oracle 拒绝。"""
         payload = self._run_case(
@@ -1277,7 +1301,12 @@ class M6SevenVariantTests(unittest.TestCase):
         self.assertEqual(changed["handling_started_ms"], 20320)
         self.assertEqual(changed["waited_ms"], 10320)
         self.assertEqual(changed["detection_ms"], 300)
-        self.assertNotEqual(compare_step(changed, oracle["steps"][0]), [])
+        self._assert_business_reject(
+            changed,
+            "SC-S01/safe_point_preempts",
+            "safe_point_preempts",
+            ("handling_started_ms", "waited_ms", "detection_ms", "clock_trace"),
+        )
         arrival_only = copy.deepcopy(stimuli)
         arrival_only["events"][1]["arrival_at"] = 7000
         tmp, root = action_helpers.temp_project()
@@ -1334,7 +1363,17 @@ class M6SevenVariantTests(unittest.TestCase):
             m6_probe.ROOT = original_root
             tmp.cleanup()
         self.assertEqual(changed["first_observed_ms"], 1200)
-        self.assertNotEqual(compare_step(changed, oracle["steps"][0]), [])
+        self._assert_business_reject(
+            changed,
+            "SC-S01/arrival_after_commit",
+            "arrival_after_commit",
+            (
+                "first_observed_ms",
+                "handling_started_ms",
+                "first_observation_call_ms",
+                "first_observed_at_normal_check",
+            ),
+        )
 
     def test_s08_consumes_third_window_without_observe(self) -> None:
         """第三时窗确实被消费且零观察调用；刷新/到达变异改变真实轨迹。"""
@@ -1418,9 +1457,23 @@ class M6SevenVariantTests(unittest.TestCase):
             else:
                 missing = result
         self.assertEqual(changed_refresh["second_hook_first_observed_at"], 1100)
-        self.assertNotEqual(compare_step(changed_refresh, oracle["steps"][0]), [])
+        self._assert_business_reject(
+            changed_refresh,
+            "SC-S08/three_hooks",
+            "three_hooks",
+            (
+                "second_hook_first_observed_at",
+                "visible_at_refresh_preempts",
+                "clock_trace",
+            ),
+        )
         self.assertEqual(changed_arrival["second_hook_first_observed_at"], 1000)
-        self.assertNotEqual(compare_step(changed_arrival, oracle["steps"][0]), [])
+        self._assert_business_reject(
+            changed_arrival,
+            "SC-S08/three_hooks",
+            "three_hooks",
+            ("second_arrival_at", "no_arrival_latency_claim"),
+        )
         self.assertEqual(visible["third_window_first_observed_ms"], 2000)
         self.assertEqual(visible["third_window_observe_calls"], 1)
         self.assertFalse(visible["third_arrival_claimed"])
@@ -1433,7 +1486,17 @@ class M6SevenVariantTests(unittest.TestCase):
             "tests/fixtures/m6/read-s08-third-arrival/unread.json",
         )
         self.assertEqual(visible["third_arrival_product_state"], "absent")
-        self.assertNotEqual(compare_step(visible, oracle["steps"][0]), [])
+        self._assert_business_reject(
+            visible,
+            "SC-S08/three_hooks",
+            "three_hooks",
+            (
+                "third_window_first_observed_ms",
+                "third_window_observe_calls",
+                "third_refresh_consumed_payload",
+                "third_refresh_selected_fixture",
+            ),
+        )
         self.assertFalse(missing["third_arrival_event_consumed"])
         self.assertFalse(missing["third_arrival_payload_present"])
         self.assertFalse(missing["third_refresh_inbox_present"])
@@ -1446,7 +1509,16 @@ class M6SevenVariantTests(unittest.TestCase):
         self.assertIsNone(missing["third_window_first_observed_ms"])
         self.assertEqual(missing["third_window_observe_calls"], 0)
         self.assertEqual(missing["stage_preempted_count"], 2)
-        self.assertNotEqual(compare_step(missing, oracle["steps"][0]), [])
+        self._assert_business_reject(
+            missing,
+            "SC-S08/three_hooks",
+            "three_hooks",
+            (
+                "third_arrival_event_consumed",
+                "third_arrival_payload_present",
+                "third_refresh_inbox_present",
+            ),
+        )
 
     def test_s02_converged_retry_real_lifecycle_and_checkpoint_order(self) -> None:
         """pending/unknown 真实收敛后重跑；未决仍保锁并拒绝，检查点先于切换。"""
@@ -1484,13 +1556,23 @@ class M6SevenVariantTests(unittest.TestCase):
         self.assertEqual(compare_step(payload, oracle["steps"][0]), [])
         corrupted = copy.deepcopy(payload)
         corrupted["all_true_checkpoint_before_stage"] = False
-        self.assertNotEqual(compare_step(corrupted, oracle["steps"][0]), [])
+        self._assert_business_reject(
+            corrupted,
+            "SC-S02/all_true",
+            "safe_point_converged",
+            ("all_true_checkpoint_before_stage",),
+        )
         reversed_order = copy.deepcopy(payload)
         reversed_order["all_true_checkpoint_event_id"] = (
             payload["all_true_stage_event_id"] + 1
         )
         reversed_order["all_true_checkpoint_stage_delta"] = -1
-        self.assertNotEqual(compare_step(reversed_order, oracle["steps"][0]), [])
+        self._assert_business_reject(
+            reversed_order,
+            "SC-S02/all_true",
+            "safe_point_converged",
+            ("all_true_checkpoint_stage_delta",),
+        )
 
     def test_s02_list_semantics_separates_unknown_and_recognized_pages(self) -> None:
         """真实 M3 页面：unknown 不算 list；会话/职位详情/主页面当前算 list。"""
