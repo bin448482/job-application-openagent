@@ -259,12 +259,25 @@ def _authorization(
 
 @contextmanager
 def _synthetic_device(device: _Device) -> Iterator[None]:
-    """把 ADB 子进程与 Job 创建替换为合成边界；进程账本仍为真实实现。"""
+    """把 ADB 子进程与 Job 创建替换为合成边界；进程账本仍为真实实现。
+
+    同时给原始 `subprocess.Popen.__init__` 加计数包装，实际测量边界窗口内是否
+    有代码绕过替换去启动真实进程；计数在退出窗口时归入 `device`。
+    """
     original_popen = subprocess.Popen
+    original_init = original_popen.__init__
+    real_attempts = [0]
+
+    def counting_init(self: object, *args: object, **kwargs: object) -> None:
+        """记录一次真实 Popen 构造后按原实现启动。"""
+        real_attempts[0] += 1
+        original_init(self, *args, **kwargs)  # type: ignore[arg-type]
+
     original_create = ProcessFamilyBound.__dict__["create"]
     original_real = command_module._is_real_process
     original_now = actions_module._utc_now
     subprocess.Popen = device.popen  # type: ignore[assignment]
+    original_popen.__init__ = counting_init  # type: ignore[method-assign]
     ProcessFamilyBound.create = classmethod(lambda cls: _Bound())  # type: ignore[assignment]
     command_module._is_real_process = lambda process: True  # type: ignore[assignment]
     actions_module._utc_now = lambda: NOW  # type: ignore[assignment]
@@ -272,9 +285,11 @@ def _synthetic_device(device: _Device) -> Iterator[None]:
         yield
     finally:
         subprocess.Popen = original_popen  # type: ignore[assignment]
+        original_popen.__init__ = original_init  # type: ignore[method-assign]
         ProcessFamilyBound.create = original_create  # type: ignore[assignment]
         command_module._is_real_process = original_real  # type: ignore[assignment]
         actions_module._utc_now = original_now  # type: ignore[assignment]
+        device.real_popen_attempts += real_attempts[0]
 
 
 def _os_root(root: Path) -> Path:
@@ -315,7 +330,7 @@ LOG_FIELDS = frozenset(
 def _log_projection(
     log: ProcessLog, *, forbidden_values: tuple[str, ...] = ()
 ) -> dict[str, Any]:
-    """从原始 JSONL 独立构造日志投影：字段白名单、敏感载荷、分类与闭合。"""
+    """从原始 JSONL 独立构造日志投影：字段白名单、敏感载荷、逐命令分类与闭合。"""
     try:
         raw = log.path.read_text(encoding="utf-8")
     except OSError:
@@ -332,6 +347,10 @@ def _log_projection(
     events: list[dict[str, Any]] = []
     schema_violations = 0
     reasons: dict[str, list[str]] = {}
+    reasons_by_command: dict[str, list[str]] = {}
+    association_errors = 0
+    open_commands: list[str] = []
+    finishing: str | None = None
     for line in raw.splitlines():
         if not line.strip():
             continue
@@ -345,6 +364,7 @@ def _log_projection(
             continue
         if set(row) - LOG_FIELDS:
             schema_violations += 1
+        command = row.get("command")
         event = {
             "stage": row.get("stage"),
             "operation": row.get("operation"),
@@ -352,20 +372,54 @@ def _log_projection(
             "reason_code": row.get("reason_code"),
             "error_category": row.get("error_category"),
             "correlation": row.get("correlation_id"),
+            "command": command,
         }
         events.append(event)
-        if event["result"] == "failed" and event["operation"]:
-            reasons.setdefault(str(event["operation"]), []).append(
-                f"{event['reason_code']}:{event['error_category']}"
-            )
-    finish_results = [
-        str(item["result"])
-        for item in events
-        if item["operation"] == "action_finish_command"
+        result = event["result"]
+        operation = event["operation"]
+        if result == "failed" and operation:
+            reason = f"{event['reason_code']}:{event['error_category']}"
+            reasons.setdefault(str(operation), []).append(reason)
+            if command is not None:
+                reasons_by_command.setdefault(str(command), []).append(reason)
+        # 逐命令顺序：perform started 开一条命令，有 command 标签的 finish started/
+        # 终态必须对应当前命令，perform 终态按同一标签闭合；共享采集等没有标签的
+        # finish 只计入聚合，不伪造命令关联。错命令/配错 finish 计入 unpaired。
+        label = None if command is None else str(command)
+        if operation == "perform" and label is not None:
+            if result == "started":
+                open_commands.append(label)
+            elif result in {"ok", "failed", "undetermined"}:
+                if not open_commands or open_commands[-1] != label:
+                    association_errors += 1
+                else:
+                    open_commands.pop()
+        elif operation == "action_finish_command" and label is not None:
+            if result == "started":
+                if not open_commands or open_commands[-1] != label:
+                    association_errors += 1
+                    finishing = None
+                else:
+                    finishing = label
+            elif result in {"ok", "failed", "undetermined"}:
+                if finishing != label:
+                    association_errors += 1
+                finishing = None
+    finish_events = [
+        item for item in events if item["operation"] == "action_finish_command"
     ]
-    started = finish_results.count("started")
-    ok = finish_results.count("ok")
-    failed = finish_results.count("failed")
+    started = sum(1 for item in finish_events if item["result"] == "started")
+    ok = sum(1 for item in finish_events if item["result"] == "ok")
+    failed = sum(1 for item in finish_events if item["result"] == "failed")
+    finish_by_command: dict[str, dict[str, int]] = {}
+    for item in finish_events:
+        label = "" if item["command"] is None else str(item["command"])
+        bucket = finish_by_command.setdefault(
+            label, {"started": 0, "ok": 0, "failed": 0}
+        )
+        result = item["result"]
+        if result in bucket:
+            bucket[result] += 1
     return {
         "events": events,
         "schema_violations": schema_violations,
@@ -377,9 +431,11 @@ def _log_projection(
             "started": started,
             "ok": ok,
             "failed": failed,
-            "unpaired": abs(started - ok - failed),
+            "unpaired": abs(started - ok - failed) + association_errors,
         },
+        "finish_by_command": finish_by_command,
         "reasons": reasons,
+        "reasons_by_command": reasons_by_command,
     }
 
 
@@ -427,7 +483,9 @@ def _attach_log(result: dict[str, Any], log: ProcessLog) -> None:
     result["log_schema_violations"] = summary["schema_violations"]
     result["log_sensitive_hits"] = summary["sensitive_hits"]
     result["log_finish"] = summary["finish"]
+    result["log_finish_by_command"] = summary["finish_by_command"]
     result["log_reasons"] = summary["reasons"]
+    result["log_reasons_by_command"] = summary["reasons_by_command"]
 
 
 def _gate_view(gate: SharedDeviceGate) -> dict[str, Any] | None:
@@ -464,12 +522,19 @@ def _task_row(db_path: Path) -> dict[str, Any] | None:
 
 
 def _ledger_summary(directory: Path) -> dict[str, Any]:
-    """只读统计真实命令账本文件/行/阶段，不返回 PID 或键值。"""
+    """只读统计真实命令账本文件/行/阶段，不返回 PID 或键值。
+
+    真实 begin 只认固定 `{"begin":true}` 标记；PID 行不代替 begin。闭合要求
+    单文件、has begin、真实 begin==complete、无 unresolved、每条 complete 都
+    有先前 begin，且 pid 只出现在已开始的命令内。坏行/错序保持未闭合。
+    """
     files = sorted(directory.glob("*.jsonl")) if directory.is_dir() else []
     begin = 0
     complete = 0
     unresolved = 0
     pids = 0
+    order_errors = 0
+    open_commands = 0
     for path in files:
         for line in path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
@@ -479,24 +544,47 @@ def _ledger_summary(directory: Path) -> dict[str, Any]:
             except json.JSONDecodeError:
                 unresolved += 1
                 continue
-            if item.get("pid") is not None:
-                pids += 1
-            if item.get("complete") is True:
-                complete += 1
-            elif item.get("started") is True or item.get("pid") is not None:
-                begin += 1
+            if not isinstance(item, dict):
+                unresolved += 1
+                continue
             if item.get("unresolved") is True:
                 unresolved += 1
+                continue
+            if item.get("begin") is True:
+                begin += 1
+                open_commands += 1
+                continue
+            if item.get("complete") is True:
+                complete += 1
+                if open_commands <= 0:
+                    order_errors += 1
+                else:
+                    open_commands -= 1
+                continue
+            if "pid" in item:
+                pid = item.get("pid")
+                if type(pid) is not int or pid <= 0:
+                    unresolved += 1
+                    continue
+                pids += 1
+                if open_commands <= 0:
+                    order_errors += 1
+                continue
+            unresolved += 1
     return {
         "files": len(files),
         "begin": begin,
         "complete": complete,
         "unresolved": unresolved,
         "pids": pids,
+        "order_errors": order_errors,
         "closed": len(files) == 1
+        and begin > 0
         and begin == complete
         and unresolved == 0
-        and begin > 0,
+        and order_errors == 0
+        and open_commands == 0
+        and pids > 0,
     }
 
 
@@ -542,6 +630,7 @@ class _Device:
         self.irreversible = 0
         self.failed_after_irreversible = False
         self._next_pid = 7000
+        self.real_popen_attempts = 0
 
     def popen(self, args: list[str], **kwargs: object) -> "_Proc":
         """返回一个按参数提供输出的合成进程。"""
@@ -971,7 +1060,7 @@ def _run_action_case(case: str, stimuli: Mapping[str, Any], root: Path) -> dict[
                 "served_xml": len(boundary_device.served_xml),
                 "raised": boundary.get("raised"),
                 "real_popen_restored": subprocess.Popen is _BASELINE_POPEN,
-                "real_popen_attempts": 0,
+                "real_popen_attempts": boundary_device.real_popen_attempts,
             }
             _attach_log(result, log)
             return result
