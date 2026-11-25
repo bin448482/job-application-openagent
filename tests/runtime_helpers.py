@@ -247,7 +247,10 @@ def write_scenario(
 
 
 def _refresh_conversation_observations(root: Path, fixture_rel: str) -> None:
-    """在 CLI 合成运行前把场景引用的会话 manifest 采样时间更新为当前墙钟。"""
+    """在 CLI 合成运行前把场景引用的会话 manifest 采样时间更新为当前墙钟。
+
+    坏 JSON/不可读路径不在这里报错，原样留给 CLI 夹具校验拒绝。
+    """
     from datetime import datetime, timezone
 
     from app.domain.models import format_utc
@@ -255,7 +258,10 @@ def _refresh_conversation_observations(root: Path, fixture_rel: str) -> None:
     path = (root / fixture_rel).resolve()
     if root.resolve() not in path.parents or not path.is_file():
         return
-    spec = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        spec = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
     steps = spec.get("steps") if isinstance(spec, dict) else None
     if not isinstance(steps, list):
         return
@@ -269,13 +275,19 @@ def _refresh_conversation_observations(root: Path, fixture_rel: str) -> None:
         candidate = (root / rel).resolve()
         if root.resolve() not in candidate.parents or not candidate.is_file():
             continue
-        manifest = json.loads(candidate.read_text(encoding="utf-8"))
+        try:
+            manifest = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
         if not isinstance(manifest, dict) or "observed_at" not in manifest:
             continue
         manifest["observed_at"] = observed_at
-        candidate.write_text(
-            json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
-        )
+        try:
+            candidate.write_text(
+                json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+            )
+        except OSError:
+            continue
 
 
 def execute(
@@ -289,9 +301,15 @@ def execute(
     model_id: str | None = None,
     model_config_hash: str | None = None,
     confirm_device: bool = True,
+    refresh_conversations: bool = False,
 ) -> tuple[int, dict[str, object] | None, str]:
-    """运行 run execute CLI，返回退出码、JSON 与 stderr。"""
-    _refresh_conversation_observations(root, fixture_rel)
+    """运行 run execute CLI，返回退出码、JSON 与 stderr。
+
+    默认不改任何原始时间输入；只有显式 `refresh_conversations=True` 的阳性
+    采集用例才在运行前把会话采样时间更新为当前墙钟。
+    """
+    if refresh_conversations:
+        _refresh_conversation_observations(root, fixture_rel)
     argv = [
         "run",
         "execute",

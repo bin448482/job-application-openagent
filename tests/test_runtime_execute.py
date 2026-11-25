@@ -173,9 +173,14 @@ class RuntimeExecuteTests(unittest.TestCase):
         self.temp.cleanup()
 
     def _execute(
-        self, fixture_rel: str, *, mode: str = "draft_only", os_root: Path | None = None
+        self,
+        fixture_rel: str,
+        *,
+        mode: str = "draft_only",
+        os_root: Path | None = None,
+        refresh_conversations: bool = False,
     ):
-        """按当前凭证运行一次 execute。"""
+        """按当前凭证运行一次 execute；阳性采集用例可显式刷新会话采样时间。"""
         return helpers.execute(
             self.root,
             os_root or self.os_root,
@@ -185,6 +190,7 @@ class RuntimeExecuteTests(unittest.TestCase):
             provider=self.provider,
             model_id=self.model_id,
             model_config_hash=self.config_hash,
+            refresh_conversations=refresh_conversations,
         )
 
     def _counts(self) -> dict[str, int]:
@@ -213,7 +219,7 @@ class RuntimeExecuteTests(unittest.TestCase):
         rel = helpers.write_scenario(
             self.root, "tests/fixtures/runtime/preempt.json", steps=steps
         )
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         run = payload["result"]["run"]  # type: ignore[index]
         self.assertEqual(run["processed"], 2)
@@ -239,7 +245,7 @@ class RuntimeExecuteTests(unittest.TestCase):
         rel = helpers.write_scenario(
             self.root, "tests/fixtures/runtime/new-message.json", steps=steps
         )
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         run = payload["result"]["run"]  # type: ignore[index]
         self.assertEqual(run["processed"], 2)
@@ -309,7 +315,7 @@ class RuntimeExecuteTests(unittest.TestCase):
                 )
             ],
         )
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         run = payload["result"]["run"]  # type: ignore[index]
         self.assertEqual(run["processed"], 1)
@@ -481,7 +487,7 @@ class RuntimeExecuteTests(unittest.TestCase):
                 )
             ],
         )
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         run = payload["result"]["run"]  # type: ignore[index]
         self.assertEqual(run["drafts"], [])
@@ -526,7 +532,7 @@ class RuntimeExecuteTests(unittest.TestCase):
                 )
             ],
         )
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         self.assertEqual(payload["result"]["run"]["pause_reason"], "semantic_block")  # type: ignore[index]
         connection = sqlite3.connect(str(profile_runtime_path(self.root, "demo")))
@@ -610,7 +616,7 @@ class RuntimeExecuteTests(unittest.TestCase):
                     )
                 ],
             )
-            code, payload, stderr = self._execute(rel)
+            code, payload, stderr = self._execute(rel, refresh_conversations=True)
             self.assertEqual(code, 0, (payload, stderr))
             run = payload["result"]["run"]  # type: ignore[index]
             if index == 1:
@@ -637,7 +643,7 @@ class RuntimeExecuteTests(unittest.TestCase):
                 )
             ],
         )
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         run = payload["result"]["run"]  # type: ignore[index]
         self.assertEqual(len(run["drafts"]), 1)
@@ -680,7 +686,7 @@ class RuntimeExecuteTests(unittest.TestCase):
                     )
                 ],
             )
-            code, payload, stderr = self._execute(rel)
+            code, payload, stderr = self._execute(rel, refresh_conversations=True)
             self.assertEqual(code, 0, (payload, stderr))
             run = payload["result"]["run"]  # type: ignore[index]
             if index == 0:
@@ -705,7 +711,7 @@ class RuntimeExecuteTests(unittest.TestCase):
                 )
             ],
         )
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         connection = sqlite3.connect(str(profile_runtime_path(self.root, "demo")))
         try:
@@ -716,7 +722,7 @@ class RuntimeExecuteTests(unittest.TestCase):
         finally:
             connection.close()
         helpers.seed_discovery(self.root, key, unread_count=2)
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         run = payload["result"]["run"]  # type: ignore[index]
         self.assertEqual(run["drafts"], [])
@@ -739,7 +745,7 @@ class RuntimeExecuteTests(unittest.TestCase):
                 )
             ],
         )
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         connection = sqlite3.connect(str(profile_runtime_path(self.root, "demo")))
         try:
@@ -753,7 +759,7 @@ class RuntimeExecuteTests(unittest.TestCase):
         finally:
             connection.close()
         helpers.seed_discovery(self.root, key, unread_count=2)
-        code, payload, stderr = self._execute(rel)
+        code, payload, stderr = self._execute(rel, refresh_conversations=True)
         self.assertEqual(code, 0, (payload, stderr))
         run = payload["result"]["run"]  # type: ignore[index]
         self.assertEqual(run["decisions_reused"], 0)
