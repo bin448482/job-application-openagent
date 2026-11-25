@@ -26,8 +26,13 @@ from app.adapters.simulated.runtime import (
 from app.adapters.sqlite.device_gate import SharedDeviceGate
 from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtime_path
 from app.adapters.sqlite.repo import SqliteStore
-from app.domain.models import APP, ReadResult, canonical_hash, parse_utc
-from app.domain.reading import FieldEvidence, PageSnapshot
+from app.domain.models import APP, Lease, ReadResult, canonical_hash, parse_utc
+from app.domain.reading import (
+    FieldEvidence,
+    PageSnapshot,
+    job_identity_hash_for,
+    job_key_from_identity,
+)
 from app.domain.runtime import BudgetLimits
 from app.ports.runtime import RawScene
 from app.ports.store import StoreError
@@ -118,6 +123,40 @@ class _SwitchRead(FixtureM3Read):
         return super().read(relative)
 
 
+class _CountingRead(FixtureM3Read):
+    """统计每个原始引用实际被真实解析读取的次数。"""
+
+    def __init__(self, project_root: Path) -> None:
+        """初始化分路径计数。"""
+        super().__init__(project_root)
+        self.counts: dict[str, int] = {}
+
+    def read(self, relative: str):
+        """计数后走真实 M3 解析。"""
+        self.counts[relative] = self.counts.get(relative, 0) + 1
+        return super().read(relative)
+
+
+class _AdvancingBridge:
+    """包裹真实合成 bridge，只在原始 transport 调用期间推进可信时钟。"""
+
+    def __init__(self, inner: object, clock: _Clock, ms: int) -> None:
+        """保存真实 bridge 与需要计费的 transport 耗时。"""
+        self._inner = inner
+        self._clock = clock
+        self._ms = ms
+
+    def descriptor(self):
+        """委托真实 bridge 描述符。"""
+        return self._inner.descriptor()  # type: ignore[attr-defined]
+
+    def complete(self, **kwargs: object) -> str:
+        """先推进环境时钟，再委托真实原始响应。"""
+        self._clock.advance(self._ms)
+        return self._inner.complete(**kwargs)  # type: ignore[attr-defined]
+
+
+
 
 class _RuntimeCase(unittest.TestCase):
     """提供临时 profile/门禁/真实仓储与 execute_run 组合根。"""
@@ -171,6 +210,8 @@ class _RuntimeCase(unittest.TestCase):
         on_boundary: object | None = None,
         limits: BudgetLimits | None = None,
         process_log: ProcessLog | None = None,
+        bridge_factory: object | None = None,
+        store_hook: object | None = None,
     ) -> dict[str, object]:
         """经真实 M3 解析、唯一 decide、真实 profile/gate/仓储运行一次。"""
         active = clock or _Clock()
@@ -189,15 +230,27 @@ class _RuntimeCase(unittest.TestCase):
         scene = StimulusRuntimeScene(spec, profile_id="demo")
         owner = self.owner
 
+        def default_bridge(stimulus: object) -> SyntheticDecisionBridge:
+            """为当前步骤构造合成 bridge transport，由唯一 decide 校验。"""
+            return SyntheticDecisionBridge(
+                stimulus,
+                provider_id=self.provider,
+                model_id=self.model_id,
+                model_config_hash=self.config_hash,
+            )
+
         def open_store() -> SqliteStore:
             """在共享门禁已持有、profile 已打开后打开唯一运行仓储。"""
-            return SqliteStore(
+            store = SqliteStore(
                 self.path,
                 profile_id="demo",
                 local_host=owner.host,
                 monotonic=lambda: active.wall_ms() / 1000.0,
                 require_runtime=True,
             )
+            if store_hook is not None:
+                return store_hook(store)  # type: ignore[operator,no-any-return]
+            return store
 
         result = execute_run(
             base_files=base_files,
@@ -211,12 +264,7 @@ class _RuntimeCase(unittest.TestCase):
             now=active.now(),
             scene=scene,
             read=read or FixtureM3Read(self.root),
-            bridge_factory=lambda stimulus: SyntheticDecisionBridge(
-                stimulus,
-                provider_id=self.provider,
-                model_id=self.model_id,
-                model_config_hash=self.config_hash,
-            ),
+            bridge_factory=bridge_factory or default_bridge,  # type: ignore[arg-type]
             snapshot=RepositorySnapshot(FilePolicyRepository(self.root), _pack_rel),
             open_store=open_store,
             limits=limits or BudgetLimits(),
@@ -266,6 +314,92 @@ class _RuntimeCase(unittest.TestCase):
         finally:
             connection.close()
         return None if row is None else json.loads(row[0])
+
+    def _two_job_list(
+        self, name: str, label_a: str, label_b: str
+    ) -> tuple[str, str, str]:
+        """生成含两张真实职位卡的单页 job_list，返回 manifest 与两个职位键。"""
+        manifest_a, key_a = helpers.make_job_fixture(self.root, label_a)
+        manifest_b, key_b = helpers.make_job_fixture(self.root, label_b)
+        blocks: list[str] = []
+        for manifest in (manifest_a, manifest_b):
+            xml = (self.root / manifest).parent.joinpath("job_list.xml").read_text(
+                encoding="utf-8"
+            )
+            start = xml.index('      <node clickable="true"')
+            end = xml.index("      </node>", start) + len("      </node>")
+            blocks.append(xml[start:end])
+        public = (ROOT / "tests/fixtures/read/job_list.xml").read_text(encoding="utf-8")
+        header = public[: public.index('      <node clickable="true"')]
+        footer = public[public.index("    </node>\n  </node>\n</hierarchy>"):]
+        target = self.root / "tests/fixtures/runtime" / name
+        target.mkdir(parents=True, exist_ok=True)
+        for item in ("profile.json", "job_list.json"):
+            shutil.copyfile(ROOT / "tests/fixtures/read" / item, target / item)
+        (target / "job_list.xml").write_text(
+            header + blocks[0] + "\n" + blocks[1] + "\n" + footer,
+            encoding="utf-8",
+        )
+        return f"tests/fixtures/runtime/{name}/job_list.json", key_a, key_b
+
+    def _many_page_conversation(self, name: str, pages: int) -> str:
+        """生成引用 pages 份真实会话页 XML 的 conversation manifest（完整遍历）。"""
+        target = self.root / "tests/fixtures/runtime" / name
+        target.mkdir(parents=True, exist_ok=True)
+        for item in ("profile.json", "conversation.json"):
+            shutil.copyfile(ROOT / "tests/fixtures/read" / item, target / item)
+        template = (ROOT / "tests/fixtures/read/conversation-0.xml").read_text(
+            encoding="utf-8"
+        )
+        first = template.index(
+            '      <node resource-id="com.hpbr.bosszhipin:id/chat_message_row"'
+        )
+        second = template.index(
+            '      <node resource-id="com.hpbr.bosszhipin:id/chat_message_row"',
+            first + 1,
+        )
+        suffix = template[template.index("    </node>\n  </node>\n</hierarchy>"):]
+        prefix = template[:second]
+        paths: list[str] = []
+        for index in range(pages):
+            page = (
+                prefix.replace("合成消息甲", f"合成消息{index}")
+                .replace("10:00", f"10:{index % 60:02d}")
+                .replace("msg-1", f"msg-page-{index}")
+                + suffix
+            )
+            file_name = f"conversation_{index:03d}.xml"
+            (target / file_name).write_text(page, encoding="utf-8")
+            paths.append(file_name)
+        manifest = json.loads((target / "conversation.json").read_text(encoding="utf-8"))
+        manifest["hierarchy_paths"] = paths
+        manifest["coverage_proof"] = {
+            "kind": "full_traversal",
+            "top_proven": True,
+            "bottom_proven": True,
+        }
+        (target / "conversation.json").write_text(
+            json.dumps(manifest, ensure_ascii=False), encoding="utf-8"
+        )
+        return f"tests/fixtures/runtime/{name}/conversation.json"
+
+    def _slow_copy(self, manifest_rel: str, name: str) -> str:
+        """复制同一合成职位 manifest 到独立路径，供只在该次读取推进时钟。"""
+        source = (self.root / manifest_rel).parent
+        target = self.root / "tests/fixtures/runtime" / name
+        shutil.copytree(source, target)
+        return f"tests/fixtures/runtime/{name}/{Path(manifest_rel).name}"
+
+    def _task_events(self) -> list[str]:
+        """只读返回 M1 任务事件名，供续租/终态时序断言。"""
+        connection = sqlite3.connect(str(self.path))
+        try:
+            rows = connection.execute(
+                "SELECT event FROM events ORDER BY event_id"
+            ).fetchall()
+        finally:
+            connection.close()
+        return [str(row[0]) for row in rows]
 
     def _seed_discovery(self, label: str) -> tuple[str, str]:
         """通过真实 M3 取值与生产 upsert 写入同身份未读发现。"""
@@ -748,8 +882,8 @@ class TargetedReadTests(_RuntimeCase):
         self.assertEqual(run["processed"], 1)
         self.assertEqual(len(run["drafts"]), 1)
         self.assertEqual(run["drafts"][0]["task_key"], key)  # type: ignore[index]
-        # 初始未读 + 会话 + 一次定向 = 3 次真实读取。
-        self.assertEqual(run["remaining_budget"]["device_calls"], 197)  # type: ignore[index]
+        # 初始未读 1 + 两页会话 2 + 一次定向 1 = 4 次真实原始响应/命令。
+        self.assertEqual(run["remaining_budget"]["device_calls"], 196)  # type: ignore[index]
         verified = [item for item in self._events() if item[0] == "unread_verified"]
         self.assertEqual(len(verified), 1)
         payload = verified[0][1]
@@ -941,6 +1075,62 @@ class TargetedReadTests(_RuntimeCase):
         self.assertNotIn("unread.xml", text)
 
 
+class CommandBudgetTests(_RuntimeCase):
+    """S06：预算按实际消费的原始页面/低层命令数扣减，不用场景预填计数。"""
+
+    def _run_case(self, pages: int) -> tuple[dict[str, object], str]:
+        """seed 一个 queued new_message，执行含 pages 页真实会话采集的一步。"""
+        label = f"rawconv{pages}"
+        key = helpers.seed_new_message(self.root, label)
+        conversation = self._many_page_conversation(f"conv-{pages}", pages)
+        rel = self._scenario(
+            f"conv-{pages}",
+            [
+                self._step(
+                    read_fixture="tests/fixtures/read/page.json",
+                    conversation_fixture=conversation,
+                    decision=helpers.decision_stimulus(),
+                )
+            ],
+            batch_id=f"00000000-0000-4000-8000-{pages:012d}",
+        )
+        return self._execute(rel, clock=_Clock()), key
+
+    def test_199_commands_allows_one_task(self) -> None:
+        """1 主读取 + 198 会话页 = 199 命令，仍可开始一条新消息任务。"""
+        run, _key = self._run_case(198)
+        self.assertEqual(run["processed"], 1)
+        self.assertIsNone(run["pause_reason"])
+        self.assertEqual(run["remaining_budget"]["device_calls"], 1)  # type: ignore[index]
+
+    def test_200_commands_stops_at_equality(self) -> None:
+        """1 + 199 = 200 命令等于上限，不再开始新任务。"""
+        run, _key = self._run_case(199)
+        self.assertEqual(run["processed"], 0)
+        self.assertEqual(run["pause_reason"], "budget_exhausted")
+        self.assertEqual(run["remaining_budget"]["device_calls"], 0)  # type: ignore[index]
+
+    def test_201_commands_records_negative_overrun(self) -> None:
+        """1 + 200 = 201 命令超过上限，保留 -1 设备调用超支。"""
+        run, _key = self._run_case(200)
+        self.assertEqual(run["processed"], 0)
+        self.assertEqual(run["pause_reason"], "budget_exhausted")
+        self.assertEqual(run["remaining_budget"]["device_calls"], -1)  # type: ignore[index]
+        self.assertTrue(
+            any(item["kind"] == "device_calls" for item in run["overruns"])
+        )
+
+    def test_250_commands_preserve_inflight_overrun(self) -> None:
+        """1 + 249 = 250 命令的在途超支保留 -50，不被归零。"""
+        run, _key = self._run_case(249)
+        self.assertEqual(run["processed"], 0)
+        self.assertEqual(run["pause_reason"], "budget_exhausted")
+        self.assertEqual(run["remaining_budget"]["device_calls"], -50)  # type: ignore[index]
+        self.assertTrue(
+            any(item["kind"] == "device_calls" for item in run["overruns"])
+        )
+
+
 class ArrivalAndStartBoundaryTests(_RuntimeCase):
     """G3：checkpoint→refresh→安全点→真实开始边界与 arrival/first_observed 分离。"""
 
@@ -1015,6 +1205,170 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
             self._cursor()["first_observed_at"],  # type: ignore[index]
             clock.wall_at(10_250),
         )
+
+    def test_job_selection_consumes_persisted_cursor_and_skips_visited(self) -> None:
+        """两卡列表连续刷新用真实游标选择未访问职位；重排后不重复已 done。"""
+        manifest_ab, key_a, key_b = self._two_job_list(
+            "cursor-ab", "cursor-a", "cursor-b"
+        )
+        manifest_ba, _swap_b, _swap_a = self._two_job_list(
+            "cursor-ba", "cursor-b", "cursor-a"
+        )
+        rel = self._scenario(
+            "cursor-order",
+            [
+                self._step(read_fixture=manifest_ab),
+                self._step(read_fixture=manifest_ab),
+                self._step(read_fixture=manifest_ba),
+            ],
+            batch_id="00000000-0000-4000-8000-0000000000c5",
+        )
+        run = self._execute(rel, clock=_Clock())
+        self.assertEqual(run["pause_reason"], None)
+        self.assertEqual(run["processed"], 2)
+        self.assertEqual(self._job_state(key_a), "done")
+        self.assertEqual(self._job_state(key_b), "done")
+        cursor = self._cursor("00000000-0000-4000-8000-0000000000c5")
+        self.assertEqual(
+            set(cursor["visited_keys"]),  # type: ignore[index]
+            {key_a, key_b},
+        )
+
+    def test_job_finish_uses_current_wall_after_slow_detail_read(self) -> None:
+        """职位详情读取耗时 1001ms 后，finish 用当前墙钟收敛为 done，不报 clock_changed。"""
+        job, key = helpers.make_job_fixture(self.root, "slowjob")
+        slow = self._slow_copy(job, "slowjob-copy")
+        rel = self._scenario(
+            "slow-job",
+            [self._step(read_fixture=job, job_fixture=slow)],
+        )
+        clock = _Clock()
+        read = _AdvancingRead(self.root, clock, slow, 1_001)
+        run = self._execute(rel, clock=clock, read=read)
+        self.assertEqual(run["pause_reason"], None)
+        self.assertEqual(run["processed"], 1)
+        self.assertEqual(self._job_state(key), "done")
+
+    def test_job_renew_and_finish_use_current_wall_after_20s_read(self) -> None:
+        """详情读取跨 20 秒时用当前墙钟 renew 并以最新 Lease finish，终态后零续租。"""
+        for elapsed in (20_000, 21_000):
+            label = f"renew{elapsed}"
+            job, key = helpers.make_job_fixture(self.root, label)
+            slow = self._slow_copy(job, f"{label}-copy")
+            rel = self._scenario(
+                f"renew-{label}",
+                [self._step(read_fixture=job, job_fixture=slow)],
+                batch_id=f"00000000-0000-4000-8000-{elapsed:012d}",
+            )
+            clock = _Clock()
+            read = _AdvancingRead(self.root, clock, slow, elapsed)
+            before = self._task_events().count("lease_renewed")
+            run = self._execute(rel, clock=clock, read=read)
+            self.assertEqual(run["pause_reason"], None, label)
+            self.assertEqual(run["processed"], 1, label)
+            self.assertEqual(self._job_state(key), "done", label)
+            self.assertEqual(
+                self._task_events().count("lease_renewed") - before, 1, label
+            )
+
+    def test_decision_finish_uses_current_wall_after_slow_bridge(self) -> None:
+        """唯一 decide 的桥 transport 耗时 25 秒后，完成仍用当前墙钟收敛为 done。"""
+        manifest, key = self._seed_discovery("slowdecide")
+        conversation = "tests/fixtures/runtime/read-slowdecide/conversation.json"
+        rel = self._scenario(
+            "slow-decide",
+            [
+                self._step(
+                    read_fixture=manifest,
+                    conversation_fixture=conversation,
+                    decision=helpers.decision_stimulus(),
+                )
+            ],
+        )
+        clock = _Clock()
+
+        def factory(stimulus: object) -> _AdvancingBridge:
+            """包裹真实合成 bridge，只在 transport 调用期间推进可信时钟。"""
+            inner = SyntheticDecisionBridge(
+                stimulus,  # type: ignore[arg-type]
+                provider_id=self.provider,
+                model_id=self.model_id,
+                model_config_hash=self.config_hash,
+            )
+            return _AdvancingBridge(inner, clock, 25_000)
+
+        run = self._execute(rel, clock=clock, bridge_factory=factory)
+        self.assertEqual(run["pause_reason"], None)
+        self.assertEqual(run["processed"], 1)
+        self.assertEqual(len(run["drafts"]), 1)
+        self.assertEqual(self._discovery_state(key), "done")
+
+    def _job_state(self, key: str) -> str:
+        """只读返回职位任务状态。"""
+        connection = sqlite3.connect(str(self.path))
+        try:
+            row = connection.execute(
+                "SELECT state FROM jobs WHERE job_key = ?", (key,)
+            ).fetchone()
+        finally:
+            connection.close()
+        self.assertIsNotNone(row)
+        return str(row[0])
+
+    def _discovery_state(self, key: str) -> str:
+        """只读返回会话发现的终态。"""
+        connection = sqlite3.connect(str(self.path))
+        try:
+            row = connection.execute(
+                "SELECT state FROM hr_discoveries WHERE conversation_key = ?",
+                (key,),
+            ).fetchone()
+        finally:
+            connection.close()
+        self.assertIsNotNone(row)
+        return str(row[0])
+
+    def test_nonce_change_between_start_and_next_command_blocks_read(self) -> None:
+        """真实 start 后任务 nonce 被外部改变时，下一条详情采集命令零启动。"""
+        job, key = helpers.make_job_fixture(self.root, "nonce")
+        slow = self._slow_copy(job, "nonce-copy")
+        rel = self._scenario(
+            "nonce-command",
+            [self._step(read_fixture=job, job_fixture=slow)],
+        )
+        read = _CountingRead(self.root)
+
+        class NonceChangingStore:
+            """委托真实 SqliteStore，仅在该测试的 start 后改变持久 nonce。"""
+
+            def __init__(self, inner: object) -> None:
+                """保存真实仓储。"""
+                self._inner = inner
+
+            def __getattr__(self, name: str):
+                """其余能力完全委托真实仓储。"""
+                return getattr(self._inner, name)
+
+            def start_job(self, lease: Lease, now: str) -> Lease:
+                """真实 start 成功后模拟另一进程改变任务 nonce。"""
+                result = self._inner.start_job(lease, now)  # type: ignore[attr-defined]
+                connection = self._inner._connection  # type: ignore[attr-defined]
+                connection.execute(
+                    "UPDATE jobs SET nonce = ? WHERE job_key = ?",
+                    (str(uuid.uuid4()), lease.key),
+                )
+                connection.commit()
+                return result
+
+        run = self._execute(
+            rel,
+            clock=_Clock(),
+            read=read,
+            store_hook=lambda inner: NonceChangingStore(inner),
+        )
+        self.assertEqual(run["pause_reason"], "precondition_failed")
+        self.assertEqual(read.counts.get(slow, 0), 0)
+        self.assertEqual(self._job_state(key), "running")
 
     def test_s01_actual_start_samples_after_detection_gap(self) -> None:
         """安全点 20020、真实开始 20200，wait 10200；安全点前零切换。"""

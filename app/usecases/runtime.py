@@ -507,7 +507,7 @@ def _decision_for(
         store.record_runtime_event(
             batch_id,
             "decision_reused",
-            now=now,
+            now=clock(),
             task_key=lease.key if lease.key.startswith("boss:job:") else None,
             payload={"draft_id": draft["draft_id"]},
         )
@@ -566,7 +566,7 @@ def _decision_for(
         sub_intents=sub_intents,
         policy_tier=tier,
         reply=reply,
-        now=now,
+        now=clock(),
     )
     store.save_runtime_decision(
         subject_key=task.key,
@@ -580,7 +580,7 @@ def _decision_for(
         intent=intent,
         sub_intents=sub_intents,
         policy_tier=tier,
-        now=now,
+        now=clock(),
     )
     return {
         "draft": saved,
@@ -741,17 +741,18 @@ def _handle_job(
     task: TaskCandidate,
     primary: object,
     owner: Owner,
-    now_value: str,
     monotonic_ms: Callable[[], int],
+    clock: Callable[[], str],
+    gate: SharedDeviceGatePort,
     limits: BudgetLimits,
     overruns: list[dict[str, object]],
     on_started: Callable[[], None] | None = None,
 ) -> tuple[BatchCursor, str | None, bool]:
     """认领/开始/收敛职位；必须由实际 M3 页面包含该 task.key。"""
-    lease = store.claim_job(batch_id, owner, now_value, task.key)
+    lease = store.claim_job(batch_id, owner, clock(), task.key)
     if lease is None:
         return cursor, None, False
-    lease = store.start_job(lease, now_value)
+    lease = store.start_job(lease, clock())
     if on_started is not None:
         on_started()
     started_mono = monotonic_ms()
@@ -770,9 +771,13 @@ def _handle_job(
         and value.complete
     )
     if not actionable or not target_present:
-        store.finish_semantic_block(lease, now_value, "identity_ambiguous")
+        store.finish_semantic_block(lease, clock(), "identity_ambiguous")
         return cursor.visit_job(task.key), "semantic_block", True
     if step.job_fixture is not None:
+        # 每条后续采集命令前复核共享门禁与当前完整任务/Lease 身份；nonce 变化即零启动。
+        gate.verify(now=clock())
+        if not store.require_running(lease, now=clock()):
+            return cursor, "precondition_failed", True
         detail = read.read(step.job_fixture)
         detail_ok, detail_reason = is_actionable(detail)
         detail_value = detail.value if getattr(detail, "status", None) == "ok" else None
@@ -786,13 +791,13 @@ def _handle_job(
             detail_present = False
         if not detail_ok or not detail_present:
             store.finish_semantic_block(
-                lease, now_value, detail_reason or "incomplete_snapshot"
+                lease, clock(), detail_reason or "incomplete_snapshot"
             )
             return cursor.visit_job(task.key), "semantic_block", True
     elapsed = max(0, monotonic_ms() - started_mono)
     if elapsed >= 20_000:
-        lease = store.renew_job(lease, now_value)
-    store.finish_job(lease, now_value, "done", None)
+        lease = store.renew_job(lease, clock())
+    store.finish_job(lease, clock(), "done", None)
     if elapsed >= limits.job_seconds * 1000:
         overruns.append(
             {
@@ -826,7 +831,6 @@ def _handle_discovery(
     provider_id: str,
     model_id: str,
     model_config_hash: str,
-    now_value: str,
     clock: Callable[[], str],
     process_log: ProcessLog | None,
     acceptance: dict[str, object] | None = None,
@@ -836,11 +840,11 @@ def _handle_discovery(
 ) -> tuple[BatchCursor, str | None, bool, dict[str, object] | None]:
     """认领发现，经 M3 门禁与唯一 decide 后收敛；未决不标 done。"""
     lease = store.claim(
-        "boss", task.kind, owner, now_value, conversation_key=task.key
+        "boss", task.kind, owner, clock(), conversation_key=task.key
     )
     if lease is None:
         return cursor, None, False, None
-    lease = store.start(lease, now_value)
+    lease = store.start(lease, clock())
     if on_started is not None:
         on_started()
     cursor = replace(cursor, budget=cursor.budget.spend_candidate())
@@ -863,19 +867,19 @@ def _handle_discovery(
         )
     if not actionable or not target_present:
         if task.kind == "new_message":
-            store.finish_semantic_block(lease, now_value, "identity_ambiguous")
+            store.finish_semantic_block(lease, clock(), "identity_ambiguous")
             return cursor, "semantic_block", True, None
         code = "unread_unverified"
         if getattr(primary, "status", None) == "failed":
             code = str(getattr(primary, "reason_code", "wrong_page"))
-            store.finish(lease, now_value, "failed", code, primary)  # type: ignore[arg-type]
+            store.finish(lease, clock(), "failed", code, primary)  # type: ignore[arg-type]
             return cursor, "precondition_failed", True, None
-        store.finish_semantic_block(lease, now_value, "unread_unverified")
+        store.finish_semantic_block(lease, clock(), "unread_unverified")
         return cursor, "unread_unverified", True, None
     if not isinstance(conversation, Conversation) or (
         conversation.conversation_key != task.key
     ):
-        store.finish_semantic_block(lease, now_value, "unread_unverified")
+        store.finish_semantic_block(lease, clock(), "unread_unverified")
         return cursor, "unread_unverified", True, None
     conv_ok = (
         conversation.read_complete
@@ -883,13 +887,13 @@ def _handle_discovery(
         and conversation.latest_inbound_key is not None
     )
     if not conv_ok:
-        store.finish_semantic_block(lease, now_value, "unread_unverified")
+        store.finish_semantic_block(lease, clock(), "unread_unverified")
         return cursor, "unread_unverified", True, None
     ledger: dict[str, object] | None = None
     needs_human = False
     if step.decision is not None:
-        gate.verify(now=now_value)
-        lease = store.renew(lease, now_value)
+        gate.verify(now=clock())
+        lease = store.renew(lease, clock())
         try:
             outcome = _decision_for(
                 store=store,
@@ -909,7 +913,7 @@ def _handle_discovery(
                 provider_id=provider_id,
                 model_id=model_id,
                 model_config_hash=model_config_hash,
-                now=now_value,
+                now=clock(),
                 clock=clock,
                 process_log=process_log,
                 acceptance=acceptance,
@@ -919,7 +923,7 @@ def _handle_discovery(
             needs_human = bool(outcome.get("needs_human"))
             if needs_human:
                 store.finish_semantic_block(
-                    lease, now_value, "human_review_required"
+                    lease, clock(), "human_review_required"
                 )
                 return cursor, "semantic_block", True, ledger
         except DecisionRunError as error:
@@ -932,7 +936,7 @@ def _handle_discovery(
                 "decision_timeout",
             }:
                 reason = "invalid_decision"
-            store.finish_semantic_block(lease, now_value, reason)
+            store.finish_semantic_block(lease, clock(), reason)
             return cursor, "semantic_block", True, {
                 "draft": None,
                 "reused": False,
@@ -943,7 +947,7 @@ def _handle_discovery(
         if task.kind == "new_message" and conversation_result is not None
         else primary
     )
-    store.finish(lease, now_value, "done", None, proof)  # type: ignore[arg-type]
+    store.finish(lease, clock(), "done", None, proof)  # type: ignore[arg-type]
     return cursor, None, True, ledger
 
 
@@ -1228,7 +1232,7 @@ def execute_run(
                     pause_reason = "clock_changed"
                     store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
                     break
-                gate.verify(now=now_value)
+                gate.verify(now=active_clock())
                 _account(targeted_before - last_boundary)
                 last_boundary = targeted_before
                 current_mono = targeted_before
@@ -1361,6 +1365,15 @@ def execute_run(
             task = selection.task
             if task is None:
                 break
+            if task.kind == "job":
+                ordered = tuple(candidate.key for candidate in candidates.jobs)
+                chosen = cursor.next_job(ordered)
+                if chosen is None:
+                    # 当前可见职位都已在真实游标中访问过；等待下一次刷新或结束。
+                    previous_check_mono = observed_mono
+                    continue
+                if chosen != task.key:
+                    task = TaskCandidate("job", chosen)
             _notify("before_safe_point")
             safe = derive_safe_point(
                 store=store,
@@ -1388,7 +1401,7 @@ def execute_run(
             store.enqueue_jobs(
                 batch_id,
                 tuple(candidate.key for candidate in candidates.jobs),
-                now_value,
+                active_clock(),
             )
             _notify("before_claim")
             gate.verify(now=active_clock())
@@ -1439,8 +1452,9 @@ def execute_run(
                     task=task,
                     primary=primary,
                     owner=owner,
-                    now_value=now_value,
                     monotonic_ms=active_mono,
+                    clock=active_clock,
+                    gate=gate,
                     limits=limits,
                     overruns=overruns,
                     on_started=_capture_start,
@@ -1466,7 +1480,6 @@ def execute_run(
                     provider_id=provider_id or "",
                     model_id=model_id or "",
                     model_config_hash=model_config_hash or "",
-                    now_value=now_value,
                     clock=active_clock,
                     process_log=process_log,
                     acceptance=acceptance,
@@ -1509,7 +1522,7 @@ def execute_run(
                     store.record_runtime_event(
                         batch_id,
                         "stage_preempted",
-                        now=start_at,
+                        now=active_clock(),
                         payload=event,
                     )
                     cursor = cursor.record_preemption()
@@ -1524,7 +1537,7 @@ def execute_run(
             last_kind = task.kind
             if task_pause is not None:
                 pause_reason = task_pause
-                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                store.pause_batch(batch_id, cursor, pause_reason, now=active_clock())
                 break
         store.record_runtime_event(
             batch_id,

@@ -779,7 +779,7 @@ class RuntimeExecuteTests(unittest.TestCase):
         self.assertEqual(run["remaining_budget"]["device_calls"], 199)
 
     def test_negative_overrun_uses_actual_reads(self) -> None:
-        """实际两次 M3 读取可越过小预算并保留负超支证据。"""
+        """实际三次原始响应命令（未读+两页会话）可越过小预算并保留负超支。"""
         manifest, key = helpers.make_unread_fixture(self.root, "overrun")
         conversation = "tests/fixtures/runtime/read-overrun/conversation.json"
         helpers.seed_discovery(self.root, key)
@@ -844,7 +844,7 @@ class RuntimeExecuteTests(unittest.TestCase):
         )
         run = result["run"]
         self.assertEqual(run["pause_reason"], "budget_exhausted")
-        self.assertEqual(run["remaining_budget"]["device_calls"], -1)
+        self.assertEqual(run["remaining_budget"]["device_calls"], -2)
         self.assertTrue(
             any(item["kind"] == "device_calls" for item in run["overruns"])
         )

@@ -375,8 +375,28 @@ class FixtureM3Read:
             raise ValueError("read fixture is invalid")
         if not path.is_file():
             raise ValueError("read fixture is invalid")
-        self._calls += 1
-        return load_and_read_fixture(path, str(uuid.uuid4()))
+        # 低层采集命令数来自本次实际引用的原始响应文件（XML 层级与截图 raw），
+        # 不是场景预填计数，也不是一次 read 固定记 1。
+        commands = 0
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            manifest = {}
+        hierarchy = manifest.get("hierarchy_paths") if isinstance(manifest, dict) else None
+        if isinstance(hierarchy, list):
+            for item in hierarchy:
+                if isinstance(item, str):
+                    raw = (path.parent / item)
+                    if raw.is_file():
+                        commands += 1
+        pixel = manifest.get("pixel") if isinstance(manifest, dict) else None
+        if isinstance(pixel, dict):
+            raw_ref = pixel.get("raw_path")
+            if isinstance(raw_ref, str) and (path.parent / raw_ref).is_file():
+                commands += 1
+        result = load_and_read_fixture(path, str(uuid.uuid4()))
+        self._calls += commands
+        return result
 
     def take_device_calls(self) -> int:
         """返回实际执行的 M3 读取次数并清零。"""
