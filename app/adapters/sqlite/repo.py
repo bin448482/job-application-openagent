@@ -1278,6 +1278,57 @@ class SqliteStore:
             )
         return {"batch_id": batch_id, "state": "paused", "reason_code": reason_code}
 
+    @_store_operation("pause_batch")
+    def safety_stop_after_clock_change(
+        self,
+        batch_id: str,
+        cursor: BatchCursor,
+        reason_code: str,
+        *,
+        now: str,
+    ) -> dict[str, object]:
+        """时钟异常后的专用安全停止：保存最后可靠游标/预算，不续租/不改时钟锚点。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None:
+            raise StoreError("invalid_input")
+        if (
+            not isinstance(cursor, BatchCursor)
+            or cursor.batch_id != batch_id
+            or reason_code != "clock_changed"
+        ):
+            raise StoreError("invalid_input")
+        del now_dt
+        with self._write():
+            row = self._connection.execute(
+                "SELECT profile_id FROM job_batches WHERE batch_id = ?",
+                (batch_id,),
+            ).fetchone()
+            if row is None or str(row["profile_id"]) != self.profile_id:
+                raise StoreError("invalid_input")
+            self._connection.execute(
+                "UPDATE job_batches SET cursor_json = ?, state = 'paused', "
+                "pause_reason = ?, updated_at = ? WHERE batch_id = ?",
+                (
+                    json.dumps(cursor.to_json(), sort_keys=True),
+                    reason_code,
+                    now,
+                    batch_id,
+                ),
+            )
+            self._insert_scheduler_event(
+                batch_id=batch_id,
+                task_key=None,
+                event="round_paused",
+                reason_code=reason_code,
+                created_at=now,
+                payload={
+                    "preemptions_used": cursor.preemptions_used,
+                    "remaining_budget": cursor.budget.to_json(),
+                    "safety_stop": True,
+                },
+            )
+        return {"batch_id": batch_id, "state": "paused", "reason_code": reason_code}
+
     @_store_operation("record_runtime_event")
     def record_runtime_event(
         self,

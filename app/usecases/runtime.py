@@ -41,6 +41,7 @@ from app.domain.runtime import (
     BatchCursor,
     BudgetLimits,
     PreemptionObservation,
+    PAUSE_REASONS,
     SafePoint,
     SAFE_POINT_FIELDS,
     SceneCandidates,
@@ -60,11 +61,14 @@ from app.ports.policy import PolicyError, PolicyIssue
 from app.ports.profile import ProfileStorePort
 from app.ports.runtime import (
     RawScene,
+    RuntimeCommandContext,
+    RuntimeCommandControlError,
     RuntimeReadPort,
     RuntimeScenePort,
     RuntimeStorePort,
     SceneStep,
 )
+from app.ports.store import StoreError
 from app.process_log import ProcessLog
 from app.profile_open import open_profile_store
 from app.usecases.acceptance import check_acceptance
@@ -731,6 +735,52 @@ def _spend(
     return updated
 
 
+class _LeaseCommandContext:
+    """在每条真实命令前后复核 Lease 并按 20 秒保存最新续租结果。"""
+
+    def __init__(
+        self,
+        *,
+        store: RuntimeStorePort,
+        gate: SharedDeviceGatePort,
+        clock: Callable[[], str],
+        monotonic_ms: Callable[[], int],
+        lease: Lease,
+    ) -> None:
+        """保存当前 Lease 与可信时钟。"""
+        self._store = store
+        self._gate = gate
+        self._clock = clock
+        self._monotonic = monotonic_ms
+        self.lease = lease
+        self._last_renew_mono = monotonic_ms()
+
+    def before(self) -> None:
+        """命令启动前复核共享门禁与当前任务完整 Lease/nonce。"""
+        try:
+            self._gate.verify(now=self._clock())
+            running = self._store.require_running(self.lease, now=self._clock())
+        except StoreError as error:
+            raise RuntimeCommandControlError(error.reason_code) from None
+        except Exception:
+            raise RuntimeCommandControlError("device_gate_mismatch") from None
+        if not running:
+            raise RuntimeCommandControlError("stale_lease")
+
+    def after(self, *, failed: bool) -> None:
+        """命令结束后按独立可信时钟检查 20 秒并保存最新 Lease。"""
+        if failed:
+            return
+        current = self._monotonic()
+        if current - self._last_renew_mono < 20_000:
+            return
+        try:
+            self.lease = self._store.renew_job(self.lease, self._clock())
+        except StoreError as error:
+            raise RuntimeCommandControlError(error.reason_code) from None
+        self._last_renew_mono = current
+
+
 def _handle_job(
     *,
     store: RuntimeStorePort,
@@ -778,7 +828,29 @@ def _handle_job(
         gate.verify(now=clock())
         if not store.require_running(lease, now=clock()):
             return cursor, "precondition_failed", True
-        detail = read.read(step.job_fixture)
+        bind = getattr(read, "bind_command_context", None)
+        context: _LeaseCommandContext | None = None
+        if callable(bind):
+            context = _LeaseCommandContext(
+                store=store,
+                gate=gate,
+                clock=clock,
+                monotonic_ms=monotonic_ms,
+                lease=lease,
+            )
+            bind(context)
+        try:
+            detail = read.read(step.job_fixture)
+        except RuntimeCommandControlError as error:
+            reason = error.reason_code
+            if reason not in PAUSE_REASONS:
+                reason = "precondition_failed"
+            return cursor, reason, True
+        finally:
+            if callable(bind):
+                bind(None)
+        if context is not None:
+            lease = context.lease
         detail_ok, detail_reason = is_actionable(detail)
         detail_value = detail.value if getattr(detail, "status", None) == "ok" else None
         if isinstance(detail_value, JobList):
@@ -1142,7 +1214,9 @@ def execute_run(
                 monotonic_now_ms=current_mono,
             ):
                 pause_reason = "clock_changed"
-                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                store.safety_stop_after_clock_change(
+                    batch_id, cursor, pause_reason, now=now_value
+                )
                 break
             _account(current_mono - last_boundary)
             last_boundary = current_mono
@@ -1230,7 +1304,9 @@ def execute_run(
                     monotonic_now_ms=targeted_before,
                 ):
                     pause_reason = "clock_changed"
-                    store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                    store.safety_stop_after_clock_change(
+                        batch_id, cursor, pause_reason, now=now_value
+                    )
                     break
                 gate.verify(now=active_clock())
                 _account(targeted_before - last_boundary)
@@ -1414,7 +1490,9 @@ def execute_run(
                 monotonic_now_ms=claim_mono,
             ):
                 pause_reason = "clock_changed"
-                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                store.safety_stop_after_clock_change(
+                    batch_id, cursor, pause_reason, now=now_value
+                )
                 break
             _account(claim_mono - last_boundary)
             last_boundary = claim_mono
@@ -1496,6 +1574,20 @@ def execute_run(
             if started and type(started_mono) is int:
                 _account(started_mono - last_boundary)
                 last_boundary = started_mono
+            post_calls = (
+                read.take_device_calls()
+                if hasattr(read, "take_device_calls")
+                else 0
+            )
+            cursor = _spend(
+                cursor,
+                device_calls=post_calls,
+                limits=limits,
+                overruns=overruns,
+            )
+            end_mono = active_mono()
+            _account(end_mono - last_boundary)
+            last_boundary = end_mono
             if started:
                 processed += 1
                 last_task_key = task.key
@@ -1530,24 +1622,22 @@ def execute_run(
                     first_observed = None
                 store.save_checkpoint(batch_id, cursor, now=active_clock())
                 _notify("after_checkpoint")
-            end_mono = active_mono()
-            _account(end_mono - last_boundary)
-            last_boundary = end_mono
             previous_check_mono = current_mono
             last_kind = task.kind
             if task_pause is not None:
                 pause_reason = task_pause
                 store.pause_batch(batch_id, cursor, pause_reason, now=active_clock())
                 break
-        store.record_runtime_event(
-            batch_id,
-            "run_finished",
-            now=active_clock(),
-            reason_code=pause_reason,
-            payload={"processed": processed, "preemptions": len(preemptions)},
-        )
-        if pause_reason is None:
-            store.complete_batch(batch_id, cursor, active_clock())
+        if pause_reason != "clock_changed":
+            store.record_runtime_event(
+                batch_id,
+                "run_finished",
+                now=active_clock(),
+                reason_code=pause_reason,
+                payload={"processed": processed, "preemptions": len(preemptions)},
+            )
+            if pause_reason is None:
+                store.complete_batch(batch_id, cursor, active_clock())
         converged = pause_reason in {
             None,
             "budget_exhausted",

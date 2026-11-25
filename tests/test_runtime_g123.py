@@ -15,6 +15,10 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
+from unittest.mock import patch
+
+from app.adapters.adb.runtime_read import AdbRuntimeRead
+from app.adapters.adb.screen import AdbScreenReader
 from app.adapters.boss.read import load_and_read_fixture
 from app.adapters.files.evals import FileEvalStore
 from app.adapters.files.policy import FilePolicyRepository
@@ -212,6 +216,7 @@ class _RuntimeCase(unittest.TestCase):
         process_log: ProcessLog | None = None,
         bridge_factory: object | None = None,
         store_hook: object | None = None,
+        store_monotonic: object | None = None,
     ) -> dict[str, object]:
         """经真实 M3 解析、唯一 decide、真实 profile/gate/仓储运行一次。"""
         active = clock or _Clock()
@@ -241,11 +246,12 @@ class _RuntimeCase(unittest.TestCase):
 
         def open_store() -> SqliteStore:
             """在共享门禁已持有、profile 已打开后打开唯一运行仓储。"""
+            monotonic = store_monotonic or (lambda: active.wall_ms() / 1000.0)
             store = SqliteStore(
                 self.path,
                 profile_id="demo",
                 local_host=owner.host,
-                monotonic=lambda: active.wall_ms() / 1000.0,
+                monotonic=monotonic,
                 require_runtime=True,
             )
             if store_hook is not None:
@@ -1034,6 +1040,68 @@ class TargetedReadTests(_RuntimeCase):
         self.assertNotIn("unread.xml", text)
 
 
+class AdbRuntimeReadCommandTests(_RuntimeCase):
+    """S06：唯一 AdbRuntimeRead 经真实 AdbScreenReader/run_adb 统计实际创建命令。"""
+
+    class _Gate:
+        """满足 ScreenPort 的共享门禁替身。"""
+
+        def __init__(self) -> None:
+            """记录复核次数。"""
+            self.verifies = 0
+
+        def require_available(self) -> None:
+            """始终可用。"""
+            return
+
+        def verify(self) -> None:
+            """记录一次命令前复核。"""
+            self.verifies += 1
+
+        def release(self) -> None:
+            """无占用需要释放。"""
+            return
+
+    class _FakePopen:
+        """只模拟一次已创建命令，不启动真实进程。"""
+
+        def __init__(self, output: str) -> None:
+            """保存固定输出与模拟 PID。"""
+            self.pid = 5000 + len(output)
+            self.returncode = 0
+            self._output = output
+            self.killed = False
+
+        def communicate(self, timeout=None):
+            """返回固定输出。"""
+            del timeout
+            return (self._output, "")
+
+        def kill(self) -> None:
+            """记录清理。"""
+            self.killed = True
+
+    def test_adb_runtime_read_counts_actual_spawns_only(self) -> None:
+        """单页真实 dump+cat 计 2 次实际创建，解析仍走真实 M3。"""
+        page_xml = (ROOT / "tests/fixtures/read/page.xml").read_text(
+            encoding="utf-8"
+        )
+        gate = self._Gate()
+        adapter = AdbRuntimeRead(
+            self.root,
+            AdbScreenReader(None, gate=gate),
+            "synthetic-serial",
+        )
+        with patch(
+            "app.adapters.adb.command.subprocess.Popen",
+            side_effect=[self._FakePopen("dumped"), self._FakePopen(page_xml)],
+        ):
+            result = adapter.read("tests/fixtures/read/page.json")
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(adapter.take_device_calls(), 2)
+        self.assertEqual(gate.verifies, 2)
+
+
 class ArrivalAndStartBoundaryTests(_RuntimeCase):
     """G3：checkpoint→refresh→安全点→真实开始边界与 arrival/first_observed 分离。"""
 
@@ -1147,7 +1215,12 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
         )
         clock = _Clock()
         read = _AdvancingRead(self.root, clock, slow, 1_001)
-        run = self._execute(rel, clock=clock, read=read)
+        run = self._execute(
+            rel,
+            clock=clock,
+            read=read,
+            store_monotonic=lambda: clock.mono() / 1000.0,
+        )
         self.assertEqual(run["pause_reason"], None)
         self.assertEqual(run["processed"], 1)
         self.assertEqual(self._job_state(key), "done")
@@ -1273,6 +1346,49 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
         self.assertEqual(read.counts.get(slow, 0), 0)
         self.assertEqual(self._job_state(key), "running")
 
+    def test_after_checkpoint_observes_settled_elapsed_and_command_counts(self) -> None:
+        """任务完成后先结算耗时/命令再提交检查点，after_checkpoint 读到已充电游标。"""
+        job, _key = helpers.make_job_fixture(self.root, "settle")
+        slow = self._slow_copy(job, "settle-copy")
+        rel = self._scenario(
+            "settle-checkpoint",
+            [self._step(read_fixture=job, job_fixture=slow)],
+        )
+        clock = _Clock()
+        read = _AdvancingRead(self.root, clock, slow, 21_000)
+        seen: dict[str, object] = {}
+
+        def boundary(name: str) -> None:
+            """在真实 checkpoint 提交后经独立连接读取持久游标。"""
+            if name != "after_checkpoint":
+                return
+            connection = sqlite3.connect(str(self.path))
+            try:
+                row = connection.execute(
+                    "SELECT cursor_json FROM job_batches WHERE batch_id = ?",
+                    (BATCH,),
+                ).fetchone()
+            finally:
+                connection.close()
+            seen.update(json.loads(row[0]))
+
+        run = self._execute(
+            rel,
+            clock=clock,
+            read=read,
+            on_boundary=boundary,
+            store_monotonic=lambda: clock.mono() / 1000.0,
+        )
+        self.assertIsNone(run["pause_reason"])
+        self.assertEqual(seen["remaining_budget"]["seconds"], 879)  # type: ignore[index]
+        self.assertEqual(seen["remaining_budget"]["device_calls"], 198)  # type: ignore[index]
+        self.assertEqual(
+            run["remaining_budget"]["seconds"], 879  # type: ignore[index]
+        )
+        self.assertEqual(
+            run["remaining_budget"]["device_calls"], 198  # type: ignore[index]
+        )
+
     def test_s01_actual_start_samples_after_detection_gap(self) -> None:
         """安全点 20020、真实开始 20200，wait 10200；安全点前零切换。"""
         rel, _key = self._job_then_unread("s01")
@@ -1354,13 +1470,34 @@ class ArrivalAndStartBoundaryTests(_RuntimeCase):
                 seen["advanced"] = True
                 clock.advance_mono_only(5_000)
 
-        run = self._execute(rel, clock=clock, on_boundary=boundary)
+        run = self._execute(
+            rel,
+            clock=clock,
+            on_boundary=boundary,
+            store_monotonic=lambda: clock.mono() / 1000.0,
+        )
         self.assertEqual(run["pause_reason"], "clock_changed")
         self.assertEqual(run["preemptions"], [])
         self.assertFalse(
             [item for item in self._events() if item[0] == "stage_preempted"]
         )
         self.assertEqual(run["processed"], 1)
+        connection = sqlite3.connect(str(self.path))
+        try:
+            state, reason, cursor_json = connection.execute(
+                "SELECT state, pause_reason, cursor_json FROM job_batches "
+                "WHERE batch_id = ?",
+                (BATCH,),
+            ).fetchone()
+        finally:
+            connection.close()
+        self.assertEqual(state, "paused")
+        self.assertEqual(reason, "clock_changed")
+        persisted = json.loads(cursor_json)
+        self.assertEqual(
+            persisted["remaining_budget"]["seconds"],
+            run["remaining_budget"]["seconds"],
+        )
 
     def test_budget_exhaustion_at_before_claim_blocks_start(self) -> None:
         """安全点后新增耗时耗尽本轮预算时不再 claim，也不写抢占。"""
