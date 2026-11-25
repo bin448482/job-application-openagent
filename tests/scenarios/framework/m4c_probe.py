@@ -582,14 +582,17 @@ def _gate_race(request: Mapping[str, Any]) -> dict[str, Any]:
         )
     except DeviceGateError as error:
         shared = None
-        for _attempt in range(20):
+        for _attempt in range(80):
             try:
                 shared = gate.inspect()
-                break
             except DeviceGateError as inspect_error:
                 if inspect_error.reason_code != "device_gate_io_error":
                     raise
-                time.sleep(0.025)
+                shared = None
+            if shared is not None:
+                break
+            # 胜者事务尚未提交时可能暂时读不到行；有界等待后仍无行才如实报告。
+            time.sleep(0.025)
         return {
             "status": "ok",
             "outcome": "busy" if error.reason_code == "device_busy" else error.reason_code,
