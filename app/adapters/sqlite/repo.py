@@ -1331,6 +1331,32 @@ class SqliteStore:
             ).fetchone()
         return None if row is None else str(row["state"])
 
+    @_store_operation("queued_new_message_keys")
+    def queued_new_message_keys(self) -> tuple[str, ...]:
+        """只读返回同 profile 中仍 queued 的 M2 新消息会话键，按会话去重。"""
+        if self.profile_id is None:
+            return ()
+        rows = self._connection.execute(
+            "SELECT nm.conversation_key FROM hr_discoveries nm "
+            "WHERE nm.app = ? AND nm.kind = 'new_message' AND nm.state = 'queued' "
+            "AND nm.conversation_key IS NOT NULL "
+            "AND NOT EXISTS ("
+            "SELECT 1 FROM hr_discoveries u "
+            "WHERE u.app = nm.app AND u.conversation_key = nm.conversation_key "
+            "AND u.kind = 'unread' "
+            "AND u.state IN ('queued', 'leased', 'running', 'done') "
+            "AND u.updated_at >= nm.created_at"
+            ") "
+            "ORDER BY nm.created_at, nm.conversation_key",
+            (APP,),
+        ).fetchall()
+        keys: list[str] = []
+        for row in rows:
+            key = str(row["conversation_key"])
+            if is_conversation_key(APP, key) and key not in keys:
+                keys.append(key)
+        return tuple(keys)
+
     @_store_operation("save_draft")
     def save_draft(
         self,

@@ -275,6 +275,7 @@ OPERATIONS = frozenset(
         "checkpoint_status",
         "find_draft_by_identity",
         "last_action_state",
+        "queued_new_message_keys",
         "enqueue_jobs",
         "claim_job",
         "start_job",

@@ -9,7 +9,13 @@ from pathlib import Path
 from typing import Callable
 
 from app.adapters.sqlite.session import ProfileSessionLease
-from app.domain.models import Lease, Owner, canonical_hash, parse_utc
+from app.domain.models import (
+    Lease,
+    Owner,
+    canonical_hash,
+    is_conversation_key,
+    parse_utc,
+)
 from app.domain.policy import (
     PolicyPack,
     build_envelope,
@@ -195,13 +201,16 @@ def _candidates(
     *,
     hints: SceneCandidates | None,
     unread_unknown: bool,
+    queued_new_messages: tuple[str, ...] = (),
 ) -> SceneCandidates:
-    """只从实际 M3 值类型派生候选；兼容 hints 不参与调度/计数。"""
+    """只从实际 M3 值类型与已持久化 M2 新消息发现派生候选；hints 不参与。"""
     del hints
     unread: list[TaskCandidate] = []
     jobs: list[TaskCandidate] = []
+    new_messages: list[TaskCandidate] = []
     seen_unread: set[str] = set()
     seen_jobs: set[str] = set()
+    seen_new: set[str] = set()
     for value in read_results:
         if isinstance(value, UnreadRead):
             for row in value.rows:
@@ -221,6 +230,14 @@ def _candidates(
             if value.job_key not in seen_jobs:
                 jobs.append(TaskCandidate("job", value.job_key))
                 seen_jobs.add(value.job_key)
+    for key in queued_new_messages:
+        if (
+            is_conversation_key("boss", key)
+            and key not in seen_unread
+            and key not in seen_new
+        ):
+            new_messages.append(TaskCandidate("new_message", key))
+            seen_new.add(key)
     signal_without_target = any(
         isinstance(value, UnreadRead)
         and value.unread_state == "present"
@@ -236,7 +253,7 @@ def _candidates(
     )
     return SceneCandidates(
         unread=tuple(unread),
-        new_messages=(),
+        new_messages=tuple(new_messages),
         jobs=tuple(jobs),
         cleanup=(),
         unread_unknown=unread_unknown or unknown_state,
@@ -735,6 +752,7 @@ def _handle_discovery(
     process_log: ProcessLog | None,
     acceptance: dict[str, object] | None = None,
     acceptance_recheck: Callable[[], dict[str, object] | None] | None = None,
+    conversation_result: object | None = None,
 ) -> tuple[BatchCursor, str | None, bool, dict[str, object] | None]:
     """认领发现，经 M3 门禁与唯一 decide 后收敛；未决不标 done。"""
     lease = store.claim(
@@ -751,12 +769,20 @@ def _handle_discovery(
     )
     value = primary.value if getattr(primary, "status", None) == "ok" else None
     target_present = False
-    if isinstance(value, UnreadRead) and actionable:
+    if task.kind == "new_message":
+        target_present = (
+            isinstance(conversation, Conversation)
+            and conversation.conversation_key == task.key
+        )
+    elif isinstance(value, UnreadRead) and actionable:
         target_present = any(
             row.conversation_key == task.key and row.state == "present"
             for row in value.rows
         )
     if not actionable or not target_present:
+        if task.kind == "new_message":
+            store.finish_semantic_block(lease, now_value, "identity_ambiguous")
+            return cursor, "semantic_block", True, None
         code = "unread_unverified"
         if getattr(primary, "status", None) == "failed":
             code = str(getattr(primary, "reason_code", "wrong_page"))
@@ -830,7 +856,12 @@ def _handle_discovery(
                 "reused": False,
                 "decision_reason": reason,
             }
-    store.finish(lease, now_value, "done", None, primary)  # type: ignore[arg-type]
+    proof = (
+        conversation_result
+        if task.kind == "new_message" and conversation_result is not None
+        else primary
+    )
+    store.finish(lease, now_value, "done", None, proof)  # type: ignore[arg-type]
     return cursor, None, True, ledger
 
 
@@ -1031,12 +1062,14 @@ def execute_run(
             candidates = _candidates(
                 results,
                 hints=step.candidates,
-                unread_unknown=(
-                    any(
-                        getattr(item, "status", None) in {"failed", "undetermined"}
-                        for item in results
-                    )
-                    or step.candidates.unread_unknown
+                unread_unknown=any(
+                    getattr(item, "status", None) in {"failed", "undetermined"}
+                    for item in results
+                ),
+                queued_new_messages=(
+                    store.queued_new_message_keys()
+                    if hasattr(store, "queued_new_message_keys")
+                    else ()
                 ),
             )
             if step.in_progress:
@@ -1119,6 +1152,18 @@ def execute_run(
             )
             gate.verify(now=active_clock())
             task_ledger: dict[str, object] | None = None
+            conversation_result = (
+                next(
+                    (
+                        item
+                        for item in raw_results
+                        if getattr(item, "value", None) is conversation
+                    ),
+                    None,
+                )
+                if conversation is not None
+                else None
+            )
             if task.kind == "job":
                 cursor, task_pause, started = _handle_job(
                     store=store,
@@ -1160,6 +1205,7 @@ def execute_run(
                     process_log=process_log,
                     acceptance=acceptance,
                     acceptance_recheck=_recheck_acceptance,
+                    conversation_result=conversation_result,
                 )
                 if task_ledger is not None:
                     if task_ledger.get("reused"):

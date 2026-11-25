@@ -216,6 +216,129 @@ class RuntimeExecuteTests(unittest.TestCase):
         self.assertGreaterEqual(run["preemptions"][0]["waited_ms"], 0)
         self.assertEqual(stderr, "")
 
+    def test_actual_m2_new_message_precedes_job(self) -> None:
+        """实际 M2 解析+upsert 的 queued new_message 在职位前处理。"""
+        key = helpers.seed_new_message(self.root, "actual")
+        job_manifest, _job_key = helpers.make_job_fixture(self.root, "newmsg-job")
+        steps = [
+            helpers.step(
+                read_fixture="tests/fixtures/read/job_list.json",
+                conversation_fixture="tests/fixtures/read/conversation.json",
+                decision=helpers.decision_stimulus(),
+            ),
+            helpers.step(read_fixture=job_manifest, job_fixture=job_manifest),
+        ]
+        rel = helpers.write_scenario(
+            self.root, "tests/fixtures/runtime/new-message.json", steps=steps
+        )
+        code, payload, stderr = self._execute(rel)
+        self.assertEqual(code, 0, (payload, stderr))
+        run = payload["result"]["run"]  # type: ignore[index]
+        self.assertEqual(run["processed"], 2)
+        self.assertEqual(len(run["drafts"]), 1)
+        self.assertEqual(run["drafts"][0]["task_key"], key)
+        connection = sqlite3.connect(str(profile_runtime_path(self.root, "demo")))
+        try:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT state FROM hr_discoveries WHERE kind = 'new_message'"
+                ).fetchone()[0],
+                "done",
+            )
+            self.assertGreater(
+                connection.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE state = 'done'"
+                ).fetchone()[0],
+                0,
+            )
+        finally:
+            connection.close()
+
+    def test_new_message_hint_only_is_not_a_task(self) -> None:
+        """没有实际 M2 发现时，兼容 new_messages 提示不产生任务/草稿。"""
+        key = helpers.m3_unread_key()
+        rel = helpers.write_scenario(
+            self.root,
+            "tests/fixtures/runtime/new-message-hint.json",
+            steps=[
+                helpers.step(
+                    read_fixture="tests/fixtures/read/page.json",
+                    new_messages=(key,),
+                    decision=helpers.decision_stimulus(),
+                )
+            ],
+        )
+        code, payload, stderr = self._execute(rel)
+        self.assertEqual(code, 0, (payload, stderr))
+        run = payload["result"]["run"]  # type: ignore[index]
+        self.assertEqual(run["processed"], 0)
+        self.assertEqual(run["drafts"], [])
+        connection = sqlite3.connect(str(profile_runtime_path(self.root, "demo")))
+        try:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM hr_discoveries WHERE kind = 'new_message'"
+                ).fetchone()[0],
+                0,
+            )
+        finally:
+            connection.close()
+
+    def test_unread_precedes_same_conversation_new_message(self) -> None:
+        """同会话未读优先，且处理未读后不再把旧 queued new_message 当新任务。"""
+        key = helpers.m3_unread_key()
+        new_key = helpers.seed_new_message(self.root, "coexist")
+        helpers.seed_discovery(self.root, key, unread_count=1)
+        self.assertEqual(new_key, key)
+        rel = helpers.write_scenario(
+            self.root,
+            "tests/fixtures/runtime/unread-new-message.json",
+            steps=[
+                helpers.step(
+                    read_fixture="tests/fixtures/read/unread.json",
+                    conversation_fixture="tests/fixtures/read/conversation.json",
+                    decision=helpers.decision_stimulus(),
+                )
+            ],
+        )
+        code, payload, stderr = self._execute(rel)
+        self.assertEqual(code, 0, (payload, stderr))
+        run = payload["result"]["run"]  # type: ignore[index]
+        self.assertEqual(run["processed"], 1)
+        self.assertEqual(len(run["drafts"]), 1)
+        self.assertEqual(run["drafts"][0]["task_key"], key)
+        from app.adapters.sqlite.repo import SqliteStore
+
+        store = SqliteStore(
+            profile_runtime_path(self.root, "demo"),
+            profile_id="demo",
+            require_runtime=True,
+        )
+        try:
+            self.assertEqual(store.queued_new_message_keys(), ())
+        finally:
+            store.close()
+
+    def test_new_message_without_actual_conversation_is_blocked(self) -> None:
+        """queued 记录不能替代同键实际 M3 会话证据。"""
+        helpers.seed_new_message(self.root, "no-conversation")
+        rel = helpers.write_scenario(
+            self.root,
+            "tests/fixtures/runtime/new-message-no-conv.json",
+            steps=[
+                helpers.step(
+                    read_fixture="tests/fixtures/read/page.json",
+                    decision=helpers.decision_stimulus(),
+                )
+            ],
+        )
+        code, payload, stderr = self._execute(rel)
+        self.assertEqual(code, 0, (payload, stderr))
+        run = payload["result"]["run"]  # type: ignore[index]
+        self.assertEqual(run["processed"], 1)
+        self.assertEqual(run["drafts"], [])
+        self.assertEqual(run["pause_reason"], "semantic_block")
+
     def test_fake_job_hint_is_not_authority(self) -> None:
         """兼容 jobs hint 不在真实读取中时不得产生职位候选或 done。"""
         fake = job_key("fake-hint")
@@ -268,6 +391,25 @@ class RuntimeExecuteTests(unittest.TestCase):
             os_root=self.os_root,
         )
         self.assertIsNone(gate.inspect())
+
+    def test_unread_unknown_hint_alone_does_not_pause(self) -> None:
+        """完全相同 page 读取下，仅切换兼容 unknown 提示不改变结果。"""
+        rel = helpers.write_scenario(
+            self.root,
+            "tests/fixtures/runtime/unknown-hint.json",
+            steps=[
+                helpers.step(
+                    read_fixture="tests/fixtures/read/page.json",
+                    unread_unknown=True,
+                    verification="still_unknown",
+                )
+            ],
+        )
+        code, payload, stderr = self._execute(rel)
+        self.assertEqual(code, 0, (payload, stderr))
+        run = payload["result"]["run"]  # type: ignore[index]
+        self.assertEqual(run["processed"], 0)
+        self.assertIsNone(run["pause_reason"])
 
     def test_unknown_unread_requires_one_verification_then_pauses(self) -> None:
         """实际 M3 未读为 unknown 时先一次定向核对；仍未知暂停且不取职位。"""

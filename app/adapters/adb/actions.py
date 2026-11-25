@@ -290,15 +290,25 @@ class AdbActionExecutor:
                 raise ActionExecutionError("executor_interrupted", clicked=False)
 
         apply_available_before = False
+        apply_completed_before = False
         apply_completed_after = False
         apply_point: tuple[int, int] | None = None
         if plan.action_kind == "apply_job":
-            apply_available_before, apply_completed_after, apply_point = _apply_control(
+            apply_available_before, apply_completed_before, apply_point = _apply_control(
                 before_xml, target, plan.identity_labels
             )
-            if not (identity_unique and apply_available_before and apply_point):
+            if not (
+                identity_unique
+                and apply_available_before
+                and not apply_completed_before
+                and apply_point
+            ):
                 return self._preflight_failure(
-                    plan, before_xml, ime_current=ime_current
+                    plan,
+                    before_xml,
+                    ime_current=ime_current,
+                    apply_available_before=apply_available_before,
+                    apply_completed_before=apply_completed_before,
                 )
 
         clicked = False
@@ -498,6 +508,7 @@ class AdbActionExecutor:
             attachment_name_matched=attachment_name_matched,
             contact_slot_available=contact_slot_available,
             apply_available_before=apply_available_before,
+            apply_completed_before=apply_completed_before,
             apply_completed_after=apply_completed_after,
         )
 
@@ -508,6 +519,8 @@ class AdbActionExecutor:
         *,
         ime_current: str | None,
         input_box_empty: bool | None = None,
+        apply_available_before: bool = False,
+        apply_completed_before: bool = False,
     ) -> ActionObservation:
         """前置不成立时不发不可逆命令，保留真实 before 现场。"""
         before_texts = _node_texts(before_xml)
@@ -526,6 +539,8 @@ class AdbActionExecutor:
             target_present_after=False,
             attachment_name_matched=False,
             contact_slot_available=False,
+            apply_available_before=apply_available_before,
+            apply_completed_before=apply_completed_before,
             force_input_box_empty=input_box_empty,
         )
 
@@ -575,6 +590,7 @@ class AdbActionExecutor:
         attachment_name_matched: bool,
         contact_slot_available: bool,
         apply_available_before: bool = False,
+        apply_completed_before: bool = False,
         apply_completed_after: bool = False,
         force_input_box_empty: bool | None = None,
     ) -> ActionObservation:
@@ -647,6 +663,7 @@ class AdbActionExecutor:
             anchor_present_after=bool(plan.anchor_label)
             and plan.anchor_label in after_texts,
             apply_available_before=apply_available_before,
+            apply_completed_before=apply_completed_before,
             apply_completed_after=apply_completed_after,
         )
 

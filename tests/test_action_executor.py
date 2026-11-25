@@ -2642,3 +2642,78 @@ class ApplyExecutorRawXmlTests(unittest.TestCase):
         self.assertEqual(outcome.evidence.outcome, "not_performed")
         self.assertEqual(outcome.evidence.reason_code, "precondition_failed")
         self.assertFalse(any("tap" in call for call in calls))
+
+    def test_raw_xml_preexisting_done_has_zero_taps(self) -> None:
+        """before 已存在已申请时，在不可逆 tap 前受控拒绝。"""
+        before = (
+            '<hierarchy><node text="合成岗位甲"><node text="合成公司甲" />'
+            '<node text="合成职位甲" />'
+            '<node text="立即申请" clickable="true" bounds="[700,2100][1040,2300]" />'
+            '<node text="已申请" clickable="false" bounds="[700,1800][1040,1900]" />'
+            '</node></hierarchy>'
+        )
+        calls: list[list[str]] = []
+        executor = _ObservationExecutor(serial="<serial>", gate=FakeGate())
+        plan_value = ActionPlan(
+            action_key="boss:boss:job:" + canonical_hash({"job": "done"}) + ":apply",
+            action_kind="apply_job",
+            target_key="boss:job:" + canonical_hash({"job": "done"}),
+            conversation_key="boss:job:" + canonical_hash({"job": "done"}),
+            body_text=None,
+            attachment_name=None,
+            target_label="合成岗位甲",
+            anchor_label=None,
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=0,
+            tap_points=((1, 1),),
+            identity_labels=("合成公司甲", "合成职位甲"),
+        )
+        runner = self._run((before, before), calls)
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(plan_value)
+        self.assertTrue(observation.apply_completed_before)
+        self.assertFalse(observation.clicked)
+        outcome = derive_action_outcome(observation)
+        self.assertEqual(outcome.evidence.outcome, "not_performed")
+        self.assertEqual(outcome.evidence.effect, "none")
+        self.assertEqual(outcome.evidence.reason_code, "precondition_failed")
+        self.assertFalse(any("tap" in call for call in calls))
+
+    def test_raw_xml_clicked_without_fresh_done_is_unknown(self) -> None:
+        """已点击但 after 未出现新鲜完成时 unknown/result_unverified。"""
+        before = (
+            '<hierarchy><node text="合成岗位甲"><node text="合成公司甲" />'
+            '<node text="合成职位甲" />'
+            '<node text="立即申请" clickable="true" bounds="[700,2100][1040,2300]" />'
+            '</node></hierarchy>'
+        )
+        after = before.replace(
+            "</hierarchy>", '<node text="合成无关时钟1" /></hierarchy>'
+        )
+        calls: list[list[str]] = []
+        executor = _ObservationExecutor(serial="<serial>", gate=FakeGate())
+        plan_value = ActionPlan(
+            action_key="boss:boss:job:" + canonical_hash({"job": "no-fresh"}) + ":apply",
+            action_kind="apply_job",
+            target_key="boss:job:" + canonical_hash({"job": "no-fresh"}),
+            conversation_key="boss:job:" + canonical_hash({"job": "no-fresh"}),
+            body_text=None,
+            attachment_name=None,
+            target_label="合成岗位甲",
+            anchor_label=None,
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=0,
+            tap_points=((1, 1),),
+            identity_labels=("合成公司甲", "合成职位甲"),
+        )
+        runner = self._run((before, after), calls)
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(plan_value)
+        self.assertFalse(observation.apply_completed_before)
+        self.assertTrue(observation.clicked)
+        outcome = derive_action_outcome(observation)
+        self.assertEqual(outcome.evidence.outcome, "unknown")
+        self.assertEqual(outcome.evidence.reason_code, "result_unverified")
+        self.assertTrue(any("tap" in call for call in calls))

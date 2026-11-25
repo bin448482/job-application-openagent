@@ -211,6 +211,7 @@ class ActionObservation:
     target_present_after: bool
     anchor_present_after: bool
     apply_available_before: bool = False
+    apply_completed_before: bool = False
     apply_completed_after: bool = False
 
 
@@ -403,6 +404,7 @@ def validate_observation(observation: object) -> None:
         "target_present_after",
         "anchor_present_after",
         "apply_available_before",
+        "apply_completed_before",
         "apply_completed_after",
     ):
         _require_bool(name, getattr(observation, name))
@@ -436,7 +438,11 @@ def _precondition_ok(observation: ActionObservation) -> bool:
             and observation.target_present_before
         )
     if kind == "apply_job":
-        return observation.identity_unique and observation.apply_available_before
+        return (
+            observation.identity_unique
+            and observation.apply_available_before
+            and not observation.apply_completed_before
+        )
     return False
 
 
@@ -481,6 +487,7 @@ def _performed_effect(observation: ActionObservation) -> str | None:
         if (
             observation.identity_unique
             and observation.apply_available_before
+            and not observation.apply_completed_before
             and observation.apply_completed_after
         ):
             return "applied"

@@ -209,6 +209,10 @@ class RuntimeStorePort(Protocol):
         """只读返回该任务最近一条动作状态；无动作返回 None。"""
         ...
 
+    def queued_new_message_keys(self) -> tuple[str, ...]:
+        """只读返回同一 profile 中已持久化且仍 queued 的 M2 新消息会话键。"""
+        ...
+
     def save_draft(self, **kwargs: object) -> dict[str, object]:
         """保存本机草稿。"""
         ...

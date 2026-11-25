@@ -408,6 +408,83 @@ def make_unknown_unread_fixture(root: Path, label: str) -> tuple[str, str]:
     )
 
 
+def make_new_message_fixture(
+    root: Path, label: str, *, profile_id: str = "demo"
+) -> tuple[str, str]:
+    """复制 M2 合成传感器夹具，形成实际解析可产生的 new_message 候选。"""
+    import shutil
+
+    target = root / "tests" / "fixtures" / "sensor" / f"newmsg-{label}"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("profile.json", "positive.xml"):
+        shutil.copyfile(ROOT / "tests" / "fixtures" / "sensor" / name, target / name)
+    profile_path = target / "profile.json"
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    profile["profile_id"] = profile_id
+    profile_path.write_text(json.dumps(profile, ensure_ascii=False), encoding="utf-8")
+    xml_path = target / "positive.xml"
+    text = xml_path.read_text(encoding="utf-8")
+    text = (
+        text.replace("合成联系人", "合成联系人甲")
+        .replace("合成公司", "合成公司甲")
+        .replace("合成职位", "合成职位甲")
+        .replace(
+            '      <node text="1" class="android.widget.TextView" '
+            'bounds="[900,40][960,90]" />\n',
+            "",
+        )
+    )
+    xml_path.write_text(text, encoding="utf-8")
+    key = conversation_key("合成联系人甲", "合成公司甲", "合成职位甲")
+    manifest = {
+        "profile_path": "profile.json",
+        "xml_paths": ["positive.xml"],
+        "app_version": "14.200.0-synthetic",
+        "observed_at": "2026-11-24T00:00:00.000Z",
+        "baseline_rows": [
+            {
+                "conversation_key": key,
+                "preview_hash": canonical_hash({"old": "preview"}),
+                "time_hint": "09:00",
+            }
+        ],
+        "coverage_proof": {
+            "kind": "viewport",
+            "top_proven": False,
+            "bottom_proven": False,
+        },
+    }
+    manifest_path = target / "new_message.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+    return f"tests/fixtures/sensor/newmsg-{label}/new_message.json", key
+
+
+def seed_new_message(
+    root: Path, label: str, *, profile_id: str = "demo"
+) -> str:
+    """通过实际 M2 解析与生产 upsert 写入 queued new_message，返回会话键。"""
+    import uuid
+
+    from app.adapters.boss.list import load_and_parse_snapshot
+    from app.adapters.sqlite.repo import SqliteStore
+    from app.usecases.sense import persist_and_aggregate
+
+    manifest, key = make_new_message_fixture(root, label, profile_id=profile_id)
+    result = load_and_parse_snapshot(root / manifest, str(uuid.uuid4()))
+    if result.status != "ok":
+        raise AssertionError(result.reason_code)
+    store = SqliteStore(
+        profile_runtime_path(root, profile_id),
+        profile_id=profile_id,
+        require_runtime=True,
+    )
+    try:
+        persist_and_aggregate(store, result)
+    finally:
+        store.close()
+    return key
+
+
 def make_job_fixture(root: Path, label: str) -> tuple[str, str]:
     """复制 job_detail fixture 并替换标题/公司/薪资，返回 manifest 与职位键。"""
     import shutil
