@@ -7,9 +7,12 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sqlite3
 import struct
+import subprocess
+import sys
 import unittest
 import uuid
 from dataclasses import replace
@@ -2763,21 +2766,54 @@ class S05ReopenControlTests(_RuntimeCase):
     def _child(
         self, name: str, batch: str, steps: list[dict[str, object]]
     ) -> dict[str, object]:
-        """在独立 CLI 进程中重开同一 profile/batch 并返回 run 结果。"""
+        """在真正独立 OS 进程中重开同一 profile/batch 并返回 run 结果。"""
         rel = self._scenario(name, steps, batch_id=batch)
-        code, payload, stderr = helpers.execute(
-            self.root,
-            self.os_root,
-            rel,
-            mode="draft_only",
-            credential_rel=self.credential,
-            provider=self.provider,
-            model_id=self.model_id,
-            model_config_hash=self.config_hash,
+        script = (
+            "import sys\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "import app.cli.main as m\n"
+            "m.PROJECT_ROOT = Path(sys.argv[1])\n"
+            "Path(sys.argv[1], 'child.pid').write_text(str(os.getpid()))\n"
+            "os_root = Path(sys.argv[2])\n"
+            "argv = sys.argv[3:]\n"
+            "raise SystemExit(m.main(argv, os_root=os_root))\n"
         )
-        self.assertEqual(code, 0, (payload, stderr))
-        self.assertEqual(stderr, "")
-        self.assertEqual(payload["status"], "ok")  # type: ignore[index]
+        argv = [
+            "run",
+            "execute",
+            "--pack",
+            "prompts/local/demo",
+            "--mode",
+            "draft_only",
+            "--fixture",
+            rel,
+            "--confirm-device",
+            "--credential",
+            self.credential,
+            "--provider",
+            self.provider,
+            "--model-id",
+            self.model_id,
+            "--model-config-hash",
+            self.config_hash,
+        ]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(ROOT)
+        proc = subprocess.run(
+            [sys.executable, "-c", script, str(self.root), str(self.os_root)] + argv,
+            cwd=str(self.root),
+            env=env,
+            capture_output=True,
+            encoding="utf-8",
+            timeout=180,
+        )
+        self.assertEqual(proc.returncode, 0, (proc.stdout, proc.stderr))
+        self.assertEqual(proc.stderr, "")
+        child_pid = int((self.root / "child.pid").read_text(encoding="utf-8"))
+        self.assertNotEqual(child_pid, os.getpid())
+        payload = json.loads(proc.stdout.strip())
+        self.assertEqual(payload["status"], "ok")
         return payload["result"]["run"]  # type: ignore[index]
 
     def test_reopen_preserves_budget_and_skips_visited_first_card(self) -> None:
