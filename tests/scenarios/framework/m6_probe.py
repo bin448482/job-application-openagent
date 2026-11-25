@@ -2153,8 +2153,6 @@ def _run_s02_unconverged(ctx: _Context, stimuli: Mapping[str, Any]) -> dict[str,
         "action_state_after": action_state,
         "run_rejection": run_rejection,
         "run_scene_reads": len(scene_reads),
-        "run_model_calls": 0,
-        "run_actions_performed": 0,
     }
 
 

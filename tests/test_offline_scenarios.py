@@ -1706,8 +1706,6 @@ class M6UnconvergedIsolationTests(unittest.TestCase):
         self.assertEqual(payload["action_state_after"], "pending")
         self.assertEqual(payload["run_rejection"], "device_quarantined")
         self.assertEqual(payload["run_scene_reads"], 0)
-        self.assertEqual(payload["run_model_calls"], 0)
-        self.assertEqual(payload["run_actions_performed"], 0)
 
 
 class M1DriverBoundaryTests(unittest.TestCase):
