@@ -25,7 +25,7 @@ from app.domain.models import (
 from tests import action_helpers, policy_helpers
 
 ROOT = Path(__file__).resolve().parents[1]
-NOW = "2026-11-25T10:00:00.000Z"
+NOW = "2026-11-24T00:00:00.000Z"
 BATCH = "00000000-0000-4000-8000-0000000000aa"
 
 

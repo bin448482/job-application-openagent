@@ -11,6 +11,7 @@ from typing import Callable
 
 from app.adapters.sqlite.session import ProfileSessionLease
 from app.domain.models import (
+    APP,
     Lease,
     Owner,
     ReadResult,
@@ -954,6 +955,15 @@ def _handle_discovery(
         store.finish_semantic_block(lease, clock(), "unread_unverified")
         return cursor, "unread_unverified", True, None
     previous_snapshot = getattr(conversation_result, "snapshot_id", None)
+    previous_profile = (
+        conversation.profile_id if isinstance(conversation, Conversation) else None
+    )
+    previous_observed = (
+        conversation_result.observed_at
+        if conversation_result is not None
+        and hasattr(conversation_result, "observed_at")
+        else None
+    )
     if step.decision is not None and step.conversation_fixture is not None:
         bind = getattr(read, "bind_command_context", None)
         context: _LeaseCommandContext | None = None
@@ -962,7 +972,8 @@ def _handle_discovery(
                 store=store,
                 gate=gate,
                 clock=clock,
-                monotonic_ms=monotonic_ms,                lease=lease,
+                monotonic_ms=monotonic_ms,
+                lease=lease,
             )
             bind(context)
         try:
@@ -977,15 +988,43 @@ def _handle_discovery(
                 bind(None)
         if context is not None:
             lease = context.lease
-        if (
-            reread.status != "ok"
-            or not isinstance(reread.value, Conversation)
-            or reread.value.conversation_key != task.key
-            or (
-                previous_snapshot is not None
-                and reread.snapshot_id == previous_snapshot
+        valid = (
+            reread.status == "ok"
+            and isinstance(reread.value, Conversation)
+            and reread.value.app == APP
+            and reread.value.conversation_key == task.key
+            and reread.snapshot_id is not None
+            and (
+                previous_snapshot is None
+                or reread.snapshot_id != previous_snapshot
             )
-        ):
+            and (
+                previous_profile is None
+                or reread.value.profile_id == previous_profile
+            )
+            and reread.value.read_complete
+            and reread.value.inbound_state == "known"
+            and reread.value.latest_inbound_key is not None
+        )
+        if valid:
+            try:
+                now_dt = parse_utc(clock())
+                observed_dt = parse_utc(reread.observed_at)
+                if previous_observed is not None:
+                    previous_dt = parse_utc(previous_observed)
+                    if observed_dt < previous_dt or observed_dt > now_dt:
+                        valid = False
+                    elif observed_dt > previous_dt:
+                        delta = (now_dt - observed_dt).total_seconds()
+                        if delta > 5:
+                            valid = False
+                else:
+                    delta = (now_dt - observed_dt).total_seconds()
+                    if delta < 0 or delta > 5:
+                        valid = False
+            except ValueError:
+                valid = False
+        if not valid:
             store.finish_semantic_block(lease, clock(), "unread_unverified")
             return cursor, "unread_unverified", True, None
         conversation = reread.value
