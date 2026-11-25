@@ -873,10 +873,10 @@ class SqliteStore:
             ).fetchone()
             if row is None or str(row["profile_id"]) != self.profile_id:
                 raise StoreError("invalid_input")
-            if str(row["state"]) == "paused":
+            if str(row["state"]) in {"paused", "completed"}:
                 self._connection.execute(
                     "UPDATE job_batches SET state = 'active', pause_reason = NULL, "
-                    "updated_at = ? WHERE batch_id = ? AND state = 'paused'",
+                    "updated_at = ? WHERE batch_id = ? AND state IN ('paused', 'completed')",
                     (now, batch_id),
                 )
                 self._insert_scheduler_event(
@@ -891,6 +891,30 @@ class SqliteStore:
                     "SELECT * FROM job_batches WHERE batch_id = ?", (batch_id,)
                 ).fetchone()
         return self._batch_payload(row)
+
+    @_store_operation("complete_batch")
+    def complete_batch(
+        self, batch_id: str, cursor: BatchCursor, now: str
+    ) -> dict[str, object]:
+        """正常安全结束：保存游标并把批次置 completed，不重置预算/历史。"""
+        now_dt = self._prepare_now(now)
+        if self.profile_id is None or not isinstance(cursor, BatchCursor):
+            raise StoreError("invalid_input")
+        if cursor.batch_id != batch_id:
+            raise StoreError("invalid_input")
+        self._check_clock(now_dt)
+        with self._write():
+            row = self._connection.execute(
+                "SELECT profile_id FROM job_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if row is None or str(row["profile_id"]) != self.profile_id:
+                raise StoreError("invalid_input")
+            self._connection.execute(
+                "UPDATE job_batches SET cursor_json = ?, state = 'completed', "
+                "pause_reason = NULL, updated_at = ? WHERE batch_id = ?",
+                (json.dumps(cursor.to_json(), sort_keys=True), now, batch_id),
+            )
+        return {"batch_id": batch_id, "state": "completed"}
 
     @_store_operation("checkpoint_status")
     def checkpoint_status(self, batch_id: str) -> dict[str, object]:
@@ -1289,6 +1313,23 @@ class SqliteStore:
                 created_at=now,
                 payload=payload or {},
             )
+
+    @_store_operation("last_action_state")
+    def last_action_state(self, task_key: str) -> str | None:
+        """只读返回任务最近动作状态，供安全点独立判定已提交。"""
+        if task_key:
+            row = self._connection.execute(
+                "SELECT state FROM action_records WHERE app = ? AND task_key = ? "
+                "ORDER BY created_at DESC, action_key DESC LIMIT 1",
+                (APP, task_key),
+            ).fetchone()
+        else:
+            row = self._connection.execute(
+                "SELECT state FROM action_records WHERE app = ? "
+                "ORDER BY created_at DESC, action_key DESC LIMIT 1",
+                (APP,),
+            ).fetchone()
+        return None if row is None else str(row["state"])
 
     @_store_operation("save_draft")
     def save_draft(
@@ -2810,6 +2851,8 @@ class SqliteStore:
     def _select_task_row(self, key: str) -> sqlite3.Row | None:
         """按任务键前缀读取发现行或职位行，避免跨类型误取。"""
         if is_job_task_key(key):
+            if self.profile_id is None:
+                raise StoreError("invalid_input")
             return self._connection.execute(
                 "SELECT * FROM jobs WHERE app = ? AND job_key = ?",
                 (APP, key),

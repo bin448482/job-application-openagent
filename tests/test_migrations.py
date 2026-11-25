@@ -342,6 +342,42 @@ class MigrationTests(unittest.TestCase):
             connection.close()
 
 
+    def test_same_transaction_fk_failure_rolls_back_and_reopen(self) -> None:
+        """同一事务先成功写父行再 FK 失败，全部回滚；重新打开仍为空。"""
+        path = self.directory / "tx-rollback.sqlite3"
+        initialize_database(path)
+        connection = sqlite3.connect(str(path))
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "INSERT INTO hr_conversations(app, key, identity_hash) VALUES "
+                "('boss', 'boss:conv:' || ?, ?)",
+                ("a" * 64, "a" * 64),
+            )
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute(
+                    "INSERT INTO hr_discoveries(app, key, conversation_key, kind, "
+                    "fingerprint, source_names_json, snapshot_id, state, created_at, updated_at) "
+                    "VALUES ('boss', 'boss:discovery:' || ?, 'boss:conv:' || ?, 'unread', "
+                    "'f', '[\"row_badge\"]', '00000000-0000-4000-8000-000000000001', "
+                    "'queued', 'now', 'now')",
+                    ("b" * 64, "c" * 64),
+                )
+            connection.rollback()
+        finally:
+            connection.close()
+        reopened = sqlite3.connect(str(path))
+        try:
+            self.assertEqual(
+                reopened.execute("SELECT COUNT(*) FROM hr_conversations").fetchone()[0], 0
+            )
+            self.assertEqual(
+                reopened.execute("SELECT COUNT(*) FROM hr_discoveries").fetchone()[0], 0
+            )
+        finally:
+            reopened.close()
+
     def test_lease_state_foreign_key_rollback_and_active_unique(self) -> None:
         """SQL CHECK/FK/RESTRICT/active 唯一索引的真实正负控与行保持。"""
         path = self.directory / "constraints.sqlite3"

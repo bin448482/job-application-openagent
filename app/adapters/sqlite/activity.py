@@ -81,6 +81,7 @@ class ProfilePolicyActivity:
         if (
             pending["blocked"]
             or pending.get("actions")
+            or pending.get("queued_jobs")
             or pending.get("batches")
         ):
             return "unknown"

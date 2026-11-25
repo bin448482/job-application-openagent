@@ -14,8 +14,11 @@ from app.domain.policy import (
     PolicyPack,
     build_envelope,
     compute_base_hash,
+    compute_pack_hash,
     effective_limits,
     render_request,
+    resolve_policy_tier,
+    v1_policy_tier,
 )
 from app.domain.profile import select_profile_facts
 from app.domain.reading import Conversation, JobDetail, JobList, PageSnapshot, UnreadRead
@@ -158,18 +161,21 @@ def _safe_scene(
     raw: RawScene,
 ) -> tuple[object, ...]:
     """从真实读取类型、仓储检查点/pending 与原始现场派生七条件。"""
-    del task_key
-    page_ok = any(
-        (
-            isinstance(value, UnreadRead)
-            or isinstance(value, JobList)
-            or isinstance(value, JobDetail)
-            or isinstance(value, PageSnapshot)
+    page_ok = False
+    for result in read_results:
+        actionable, _reason = (
+            is_actionable(result) if hasattr(result, "status") else (False, None)
         )
-        and getattr(value, "coverage", "viewport") in {"viewport", "all"}
-        for value in read_results
-    )
+        if not actionable:
+            continue
+        value = result.value if getattr(result, "status", None) == "ok" else None
+        if isinstance(value, (UnreadRead, JobList, JobDetail, PageSnapshot)):
+            if getattr(value, "coverage", "viewport") in {"viewport", "all"}:
+                page_ok = True
+                break
     pending = store.pending_actions("boss")
+    state_probe = getattr(store, "last_action_state", None)
+    last_state = state_probe(task_key) if callable(state_probe) else "unknown"
     checkpoint = store.checkpoint_status(batch_id)
     safe = (
         page_ok,
@@ -177,7 +183,7 @@ def _safe_scene(
         raw.confirmation_title is None,
         raw.inflight_commands == 0,
         not pending,
-        not pending,
+        last_state in {None, "performed", "not_performed"},
         checkpoint["last_checkpoint_id"] is not None
         and int(checkpoint["checkpoint_events"]) > 0,
     )
@@ -190,11 +196,10 @@ def _candidates(
     hints: SceneCandidates | None,
     unread_unknown: bool,
 ) -> SceneCandidates:
-    """从实际 M3 值类型派生候选，并保留显式外部提示；缺失不当零。"""
+    """只从实际 M3 值类型派生候选；兼容 hints 不参与调度/计数。"""
+    del hints
     unread: list[TaskCandidate] = []
     jobs: list[TaskCandidate] = []
-    new_messages: list[TaskCandidate] = list(hints.new_messages) if hints else []
-    cleanup: list[TaskCandidate] = list(hints.cleanup) if hints else []
     seen_unread: set[str] = set()
     seen_jobs: set[str] = set()
     for value in read_results:
@@ -216,15 +221,6 @@ def _candidates(
             if value.job_key not in seen_jobs:
                 jobs.append(TaskCandidate("job", value.job_key))
                 seen_jobs.add(value.job_key)
-    if hints is not None:
-        for candidate in hints.unread:
-            if candidate.key not in seen_unread:
-                unread.append(candidate)
-                seen_unread.add(candidate.key)
-        for candidate in hints.jobs:
-            if candidate.key not in seen_jobs:
-                jobs.append(candidate)
-                seen_jobs.add(candidate.key)
     signal_without_target = any(
         isinstance(value, UnreadRead)
         and value.unread_state == "present"
@@ -234,34 +230,38 @@ def _candidates(
         )
         for value in read_results
     )
+    unknown_state = any(
+        isinstance(value, UnreadRead) and value.unread_state == "unknown"
+        for value in read_results
+    )
     return SceneCandidates(
         unread=tuple(unread),
-        new_messages=tuple(new_messages),
+        new_messages=(),
         jobs=tuple(jobs),
-        cleanup=tuple(cleanup),
-        unread_unknown=unread_unknown
-        or bool(hints.unread_unknown if hints else False),
-        unread_signal_without_target=signal_without_target
-        or bool(hints.unread_signal_without_target if hints else False),
+        cleanup=(),
+        unread_unknown=unread_unknown or unknown_state,
+        unread_signal_without_target=signal_without_target,
     )
 
 
 def _read_target(
     read: RuntimeReadPort, step: SceneStep
-) -> tuple[tuple[object, ...], object, object | None]:
-    """读取可见页面与可选会话；失败结果保留给门禁判断。"""
-    results: list[object] = []
+) -> tuple[tuple[object, ...], object, object | None, tuple[object, ...]]:
+    """读取可见页面与可选会话；返回值与原始 ReadResult 分开。"""
+    values: list[object] = []
+    raw: list[object] = []
     primary = read.read(step.read_fixture)
-    results.append(primary.value if primary.status == "ok" else primary)
+    raw.append(primary)
+    if primary.status == "ok":
+        values.append(primary.value)
     conversation = None
     if step.conversation_fixture is not None:
         conv_result = read.read(step.conversation_fixture)
+        raw.append(conv_result)
         if conv_result.status == "ok":
             conversation = conv_result.value
-            results.append(conversation)
-        else:
-            results.append(conv_result)
-    return tuple(results), primary, conversation
+            values.append(conversation)
+    return tuple(values), primary, conversation, tuple(raw)
 
 
 def _inbound_for(conversation: Conversation | None) -> str | None:
@@ -282,6 +282,7 @@ def _decision_for(
     lease: Lease,
     task: TaskCandidate,
     conversation: Conversation,
+    primary: object,
     step: SceneStep,
     pack: PolicyPack,
     base_files: dict[str, str],
@@ -296,6 +297,8 @@ def _decision_for(
     now: str,
     clock: Callable[[], str],
     process_log: ProcessLog | None,
+    acceptance: dict[str, object] | None = None,
+    acceptance_recheck: Callable[[], dict[str, object] | None] | None = None,
 ) -> dict[str, object]:
     """经唯一 build/render/decide 路径生成或复用可重审草稿。"""
     inbound = _inbound_for(conversation)
@@ -322,8 +325,30 @@ def _decision_for(
     )
     rendered = render_request(base_files, pack, envelope, now=now)
     facts_hash = _facts_hash(selected)
+    evidence_hash = canonical_hash(
+        {
+            "conversation_key": conversation.conversation_key,
+            "latest_inbound_key": conversation.latest_inbound_key,
+            "messages": [
+                {
+                    "kind": message.kind,
+                    "direction": message.direction,
+                    "content_hash": message.content_hash,
+                    "stable_identity_hash": message.stable_identity_hash,
+                    "message_key": message.message_key,
+                    "time_hint": message.time_hint,
+                }
+                for message in conversation.messages
+            ],
+        }
+    )
     input_hash = canonical_hash(
-        {"prompt_hash": rendered.prompt_hash, "facts_hash": facts_hash}
+        {
+            "provider_id": provider_id,
+            "prompt_hash": rendered.prompt_hash,
+            "facts_hash": facts_hash,
+            "evidence_hash": evidence_hash,
+        }
     )
     memory = store.find_runtime_decision(
         subject_key=task.key,
@@ -346,6 +371,35 @@ def _decision_for(
         facts_hash=facts_hash,
     )
     if memory is not None and draft is not None:
+        current_base, current_pack_files = snapshot.reload()
+        if (
+            compute_base_hash(current_base) != base_hash
+            or compute_pack_hash(current_pack_files) != pack.pack_hash
+        ):
+            raise DecisionRunError(
+                "policy_changed", submitted=False, attempts=0, submissions=0
+            )
+        current_lease = ProfileSessionLease(
+            store,
+            lease,
+            profile_id=pack.profile_id,
+            gate=gate,
+            profile_db_path=Path(profile_db_path),
+            clock=clock,
+        )
+        if current_lease.current_expiry() is None:
+            raise DecisionRunError(
+                "authorization_required", submitted=False, attempts=0, submissions=0
+            )
+        if acceptance_recheck is not None:
+            if acceptance_recheck() != acceptance:
+                raise DecisionRunError(
+                    "policy_changed", submitted=False, attempts=0, submissions=0
+                )
+        _validate_cached_semantics(
+            memory, draft, pack=pack, intent=str(memory["intent"]),
+            sub_intents=tuple(str(item) for item in memory["sub_intents"]),
+        )
         if not _draft_valid(draft, pack=pack, facts=selected):
             raise DecisionRunError(
                 "invalid_decision", submitted=False, attempts=0, submissions=0
@@ -440,6 +494,57 @@ def _decision_for(
         "reused": False,
         "needs_human": tier == "C" and intent in {"needs_human", "uncertain"},
     }
+
+
+def _validate_cached_semantics(
+    memory: dict[str, object],
+    draft: dict[str, object],
+    *,
+    pack: PolicyPack,
+    intent: str,
+    sub_intents: tuple[str, ...],
+) -> None:
+    """用当前 pack 重算档位/词表/硬下限；损坏但一致的两侧也不放行。"""
+    if intent not in {
+        "rejected",
+        "declined",
+        "interested",
+        "needs_human",
+        "uncertain",
+    } or any(
+        item
+        not in {
+            "greeting",
+            "resume_request",
+            "job_question",
+            "interview",
+            "salary",
+            "jd_request",
+            "sensitive",
+            "non_text",
+            "ambiguous",
+        }
+        for item in sub_intents
+    ):
+        raise DecisionRunError(
+            "invalid_decision", submitted=False, attempts=0, submissions=0
+        )
+    try:
+        expected_tier = resolve_policy_tier(
+            pack,
+            intent,
+            list(sub_intents),
+            None,
+            v1_policy_tier(),
+        )
+    except ValueError:
+        raise DecisionRunError(
+            "invalid_decision", submitted=False, attempts=0, submissions=0
+        ) from None
+    if memory.get("policy_tier") != expected_tier or draft.get("policy_tier") != expected_tier:
+        raise DecisionRunError(
+            "invalid_decision", submitted=False, attempts=0, submissions=0
+        )
 
 
 def _draft_valid(
@@ -541,29 +646,53 @@ def _handle_job(
     cursor: BatchCursor,
     step: SceneStep,
     task: TaskCandidate,
+    primary: object,
     owner: Owner,
     now_value: str,
     monotonic_ms: Callable[[], int],
     limits: BudgetLimits,
     overruns: list[dict[str, object]],
 ) -> tuple[BatchCursor, str | None, bool]:
-    """认领/开始/收敛职位；只在实际 start 后计 processed。"""
+    """认领/开始/收敛职位；必须由实际 M3 页面包含该 task.key。"""
     lease = store.claim_job(batch_id, owner, now_value, task.key)
     if lease is None:
         return cursor, None, False
     lease = store.start_job(lease, now_value)
     started_mono = monotonic_ms()
+    actionable, reason = (
+        is_actionable(primary) if hasattr(primary, "status") else (False, "not_ok")
+    )
+    value = primary.value if getattr(primary, "status", None) == "ok" else None
+    target_present = (
+        isinstance(value, JobList)
+        and actionable
+        and any(card.job_key == task.key for card in value.cards)
+    ) or (
+        isinstance(value, JobDetail)
+        and actionable
+        and value.job_key == task.key
+        and value.complete
+    )
+    if not actionable or not target_present:
+        store.finish_semantic_block(lease, now_value, "identity_ambiguous")
+        return cursor.visit_job(task.key), "semantic_block", True
     if step.job_fixture is not None:
-        result = read.read(step.job_fixture)
-        actionable, reason = is_actionable(result)
-        if not actionable or not isinstance(result.value, (JobList, JobDetail)):
-            store.finish_job(
-                lease, now_value, "failed", reason or "incomplete_snapshot"
+        detail = read.read(step.job_fixture)
+        detail_ok, detail_reason = is_actionable(detail)
+        detail_value = detail.value if getattr(detail, "status", None) == "ok" else None
+        if isinstance(detail_value, JobList):
+            detail_present = any(
+                card.job_key == task.key for card in detail_value.cards
             )
-            return cursor.visit_job(task.key), "precondition_failed", True
-        if isinstance(result.value, JobDetail) and result.value.job_key != task.key:
-            store.finish_job(lease, now_value, "failed", "identity_ambiguous")
-            return cursor.visit_job(task.key), "precondition_failed", True
+        elif isinstance(detail_value, JobDetail):
+            detail_present = detail_value.job_key == task.key and detail_value.complete
+        else:
+            detail_present = False
+        if not detail_ok or not detail_present:
+            store.finish_semantic_block(
+                lease, now_value, detail_reason or "incomplete_snapshot"
+            )
+            return cursor.visit_job(task.key), "semantic_block", True
     elapsed = max(0, monotonic_ms() - started_mono)
     if elapsed >= 20_000:
         lease = store.renew_job(lease, now_value)
@@ -604,6 +733,8 @@ def _handle_discovery(
     now_value: str,
     clock: Callable[[], str],
     process_log: ProcessLog | None,
+    acceptance: dict[str, object] | None = None,
+    acceptance_recheck: Callable[[], dict[str, object] | None] | None = None,
 ) -> tuple[BatchCursor, str | None, bool, dict[str, object] | None]:
     """认领发现，经 M3 门禁与唯一 decide 后收敛；未决不标 done。"""
     lease = store.claim(
@@ -658,6 +789,7 @@ def _handle_discovery(
                 lease=lease,
                 task=task,
                 conversation=conversation,
+                primary=primary,
                 step=step,
                 pack=pack,
                 base_files=base_files,
@@ -672,6 +804,8 @@ def _handle_discovery(
                 now=now_value,
                 clock=clock,
                 process_log=process_log,
+                acceptance=acceptance,
+                acceptance_recheck=acceptance_recheck,
             )
             ledger = outcome
             needs_human = bool(outcome.get("needs_human"))
@@ -749,6 +883,19 @@ def execute_run(
     active_clock = clock if clock is not None else clock_impl
     active_mono = monotonic_ms if monotonic_ms is not None else _monotonic_default
 
+    def _recheck_acceptance() -> dict[str, object] | None:
+        """缓存命中时重新读取当前验收，不沿用本轮起始快照。"""
+        return _acceptance(
+            mode=mode,
+            eval_store=eval_store,
+            credential_rel=credential_rel,
+            provider_id=provider_id,
+            model_id=model_id,
+            model_config_hash=model_config_hash,
+            base_files=base_files,
+            pack=pack,
+        )
+
     gate.acquire(
         profile_id=pack.profile_id,
         profile_db_path=profile_db_path,
@@ -776,13 +923,13 @@ def execute_run(
             step = scene.next_step()
             observed = None
             if step is not None:
-                results, _primary, _conv = _read_target(read, step)
+                results, _primary, _conv, raw_results = _read_target(read, step)
                 candidates = _candidates(results, hints=step.candidates if step else None, unread_unknown=False)
                 safe = _safe_scene(
                     store=_ReadOnlyStore(),
                     batch_id="00000000-0000-4000-8000-000000000000",
                     task_key="",
-                    read_results=results,
+                    read_results=raw_results,
                     raw=step.raw_scene,
                 )
                 observed = {
@@ -814,7 +961,7 @@ def execute_run(
         if not isinstance(batch_id, str):
             raise PolicyError("invalid_input", [_issue("batch", "missing")])
         batch = store.ensure_batch(batch_id, limits, active_clock())
-        if batch.get("state") == "paused":
+        if batch.get("state") in {"paused", "completed"}:
             batch = store.resume_batch(batch_id, active_clock())
         cursor = batch["cursor"]
         assert isinstance(cursor, BatchCursor)
@@ -865,10 +1012,15 @@ def execute_run(
                 pause_reason = "budget_exhausted"
                 store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
                 break
-            results, primary, conversation = _read_target(read, step)
+            results, primary, conversation, raw_results = _read_target(read, step)
+            calls = (
+                read.take_device_calls()
+                if hasattr(read, "take_device_calls")
+                else 0
+            )
             cursor = _spend(
                 cursor,
-                device_calls=step.device_calls,
+                device_calls=calls,
                 limits=limits,
                 overruns=overruns,
             )
@@ -879,9 +1031,12 @@ def execute_run(
             candidates = _candidates(
                 results,
                 hints=step.candidates,
-                unread_unknown=any(
-                    getattr(item, "status", None) in {"failed", "undetermined"}
-                    for item in results
+                unread_unknown=(
+                    any(
+                        getattr(item, "status", None) in {"failed", "undetermined"}
+                        for item in results
+                    )
+                    or step.candidates.unread_unknown
                 ),
             )
             if step.in_progress:
@@ -889,28 +1044,11 @@ def execute_run(
                     first_observed = observe_unread(
                         first_observed,
                         wall_now=now_value,
-                        monotonic_ms=step.monotonic_ms,
+                        monotonic_ms=current_mono,
                     )
                     cursor = cursor.with_first_observed(now_value)
-                previous_check_mono = step.monotonic_ms
+                previous_check_mono = current_mono
                 continue
-            safe_tuple = _safe_scene(
-                store=store,
-                batch_id=batch_id,
-                task_key="",
-                read_results=results,
-                raw=step.raw_scene,
-            )
-            safe = SafePoint(*safe_tuple)  # type: ignore[arg-type]
-            if not safe.is_safe():
-                pause_reason = "precondition_failed"
-                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
-                break
-            switching_unread = bool(candidates.unread) and last_kind == "job"
-            if switching_unread and cursor.budget.remaining_preemptions <= 0:
-                pause_reason = "preemption_limit"
-                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
-                break
             selection = select_task(
                 candidates,
                 switching_from_job=last_kind == "job",
@@ -947,6 +1085,23 @@ def execute_run(
                 pause_reason = selection.pause_reason
                 store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
                 break
+            safe_tuple = _safe_scene(
+                store=store,
+                batch_id=batch_id,
+                task_key="",
+                read_results=raw_results,
+                raw=step.raw_scene,
+            )
+            safe = SafePoint(*safe_tuple)  # type: ignore[arg-type]
+            if not safe.is_safe():
+                pause_reason = "precondition_failed"
+                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                break
+            switching_unread = bool(candidates.unread) and last_kind == "job"
+            if switching_unread and cursor.budget.remaining_preemptions <= 0:
+                pause_reason = "preemption_limit"
+                store.pause_batch(batch_id, cursor, pause_reason, now=now_value)
+                break
             task = selection.task
             if task is None:
                 break
@@ -954,7 +1109,7 @@ def execute_run(
                 first_observed = observe_unread(
                     first_observed,
                     wall_now=now_value,
-                    monotonic_ms=step.monotonic_ms,
+                    monotonic_ms=current_mono,
                 )
                 cursor = cursor.with_first_observed(now_value)
             store.enqueue_jobs(
@@ -972,6 +1127,7 @@ def execute_run(
                     cursor=cursor,
                     step=step,
                     task=task,
+                    primary=primary,
                     owner=owner,
                     now_value=now_value,
                     monotonic_ms=active_mono,
@@ -1002,6 +1158,8 @@ def execute_run(
                     now_value=now_value,
                     clock=active_clock,
                     process_log=process_log,
+                    acceptance=acceptance,
+                    acceptance_recheck=_recheck_acceptance,
                 )
                 if task_ledger is not None:
                     if task_ledger.get("reused"):
@@ -1020,11 +1178,11 @@ def execute_run(
                         trigger="unread_count>0",
                         first=first_observed,
                         handling_started_at=now_value,
-                        handling_started_monotonic_ms=step.monotonic_ms,
+                        handling_started_monotonic_ms=current_mono,
                     )
                     if previous_check_mono is not None:
                         event["detection_ms"] = detection_interval_ms(
-                            previous_check_mono, step.monotonic_ms
+                            previous_check_mono, current_mono
                         )
                     store.record_runtime_event(
                         batch_id,
@@ -1036,7 +1194,7 @@ def execute_run(
                     preemptions.append(event)
                     first_observed = None
                 store.save_checkpoint(batch_id, cursor, now=active_clock())
-            previous_check_mono = step.monotonic_ms
+            previous_check_mono = current_mono
             last_kind = task.kind
             if task_pause is not None:
                 pause_reason = task_pause
@@ -1049,6 +1207,8 @@ def execute_run(
             reason_code=pause_reason,
             payload={"processed": processed, "preemptions": len(preemptions)},
         )
+        if pause_reason is None:
+            store.complete_batch(batch_id, cursor, active_clock())
         converged = pause_reason in {
             None,
             "budget_exhausted",
@@ -1111,6 +1271,11 @@ class _ReadOnlyStore:
         """read_only 不创建检查点，因此 checkpoint 条件为 false。"""
         del batch_id
         return {"last_checkpoint_id": None, "checkpoint_events": 0}
+
+    def last_action_state(self, task_key: str) -> str | None:
+        """read_only 不读取业务动作表，保守报告无最近动作。"""
+        del task_key
+        return None
 
 
 def _wall_ms(value: str) -> int:

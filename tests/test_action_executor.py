@@ -2546,3 +2546,99 @@ class ScriptedExecutorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ApplyExecutorRawXmlTests(unittest.TestCase):
+    """真实 AdbActionExecutor 经原始 XML 发现 apply 控件与前后差分。"""
+
+    def _run(self, texts, calls):
+        """按 cat 阶段返回原始 XML 的合成 adb runner。"""
+        state = {"cat": 0}
+
+        def runner(args, **kwargs):
+            """返回指定阶段 XML，不连接真实设备。"""
+            calls.append(list(args))
+            if "uiautomator" in args:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+            if "cat" in args:
+                index = state["cat"]
+                state["cat"] = index + 1
+                return subprocess.CompletedProcess(
+                    args=args, returncode=0, stdout=texts[min(index, 1)], stderr=""
+                )
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+        return runner
+
+    def test_raw_xml_apply_control_and_before_after_change(self) -> None:
+        """控件证据来自 XML；caller tap 坐标不参与，after 已申请判 applied。"""
+        before = (
+            '<hierarchy><node text="合成岗位甲"><node text="合成公司甲" />'
+            '<node text="立即申请" clickable="true" bounds="[700,2100][1040,2300]" />'
+            '</node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node text="合成岗位甲"><node text="合成公司甲" />'
+            '<node text="已申请" clickable="false" bounds="[700,2100][1040,2300]" />'
+            '</node></hierarchy>'
+        )
+        calls: list[list[str]] = []
+        gate = FakeGate()
+        executor = _ObservationExecutor(serial="<serial>", gate=gate)
+        action_key = "boss:boss:job:" + canonical_hash({"job": "raw"}) + ":apply"
+        plan_value = ActionPlan(
+            action_key=action_key,
+            action_kind="apply_job",
+            target_key="boss:job:" + canonical_hash({"job": "raw"}),
+            conversation_key="boss:job:" + canonical_hash({"job": "raw"}),
+            body_text=None,
+            attachment_name=None,
+            target_label="合成岗位甲",
+            anchor_label=None,
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=0,
+            tap_points=((1, 1),),
+            identity_labels=("合成公司甲",),
+        )
+        runner = self._run((before, after), calls)
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(plan_value)
+        self.assertTrue(observation.apply_available_before)
+        self.assertTrue(observation.apply_completed_after)
+        self.assertEqual(derive_action_outcome(observation).evidence.effect, "applied")
+        tap_calls = [call for call in calls if "tap" in call]
+        self.assertEqual(tap_calls[0][-2:], ["870", "2200"])
+
+    def test_raw_xml_missing_apply_control_has_zero_taps(self) -> None:
+        """before 子树没有显式申请控件时零点击，caller tap_points 不得替代。"""
+        before = (
+            '<hierarchy><node text="合成岗位甲"><node text="合成公司甲" />'
+            '<node text="职位详情" bounds="[700,2100][1040,2300]" />'
+            '</node></hierarchy>'
+        )
+        calls: list[list[str]] = []
+        executor = _ObservationExecutor(serial="<serial>", gate=FakeGate())
+        plan_value = ActionPlan(
+            action_key="boss:boss:job:" + canonical_hash({"job": "raw-none"}) + ":apply",
+            action_kind="apply_job",
+            target_key="boss:job:" + canonical_hash({"job": "raw-none"}),
+            conversation_key="boss:job:" + canonical_hash({"job": "raw-none"}),
+            body_text=None,
+            attachment_name=None,
+            target_label="合成岗位甲",
+            anchor_label=None,
+            ime_component=None,
+            ime_original=None,
+            irreversible_tap_index=0,
+            tap_points=((1, 1),),
+            identity_labels=("合成公司甲",),
+        )
+        runner = self._run((before, before), calls)
+        with patch("subprocess.run", side_effect=runner):
+            observation = executor.execute(plan_value)
+        self.assertFalse(observation.apply_available_before)
+        self.assertFalse(observation.clicked)
+        outcome = derive_action_outcome(observation)
+        self.assertEqual(outcome.evidence.outcome, "not_performed")
+        self.assertEqual(outcome.evidence.reason_code, "precondition_failed")
+        self.assertFalse(any("tap" in call for call in calls))

@@ -112,6 +112,30 @@ class RuntimeStoreTests(unittest.TestCase):
         self.store.close()
         self._tmp.cleanup()
 
+    def test_plain_m1_rejects_job_lease_before_sql(self) -> None:
+        """普通 M1 库遇到 job-key 租约在缺表 SQL 前固定 invalid_input。"""
+        from app.adapters.sqlite.schema import initialize_database
+        from app.domain.models import Lease
+
+        path = self.root / "plain-m1.sqlite3"
+        initialize_database(path)
+        host = canonical_hash({"host": "plain"})
+        store = SqliteStore(path, local_host=host)
+        try:
+            job = "boss:job:" + canonical_hash({"job": "plain"})
+            lease = Lease(
+                app=APP,
+                key=job,
+                owner=Owner(str(uuid.uuid4()), 4242, host),
+                nonce=str(uuid.uuid4()),
+                expires_at=now_utc(),
+            )
+            with self.assertRaises(StoreError) as caught:
+                store.start_job(lease, now_utc())
+            self.assertEqual(caught.exception.reason_code, "invalid_input")
+        finally:
+            store.close()
+
     def test_checkpoint_failure_rolls_back_cursor_and_event(self) -> None:
         """检查点事件写失败时游标更新与事件一起回滚。"""
         self.store.ensure_batch(self.batch, BudgetLimits(), now_utc())

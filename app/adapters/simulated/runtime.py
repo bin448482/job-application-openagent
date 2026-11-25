@@ -351,6 +351,7 @@ class FixtureM3Read:
     def __init__(self, project_root: Path) -> None:
         """保存项目根；路径解析拒绝绝对路径与越界。"""
         self._root = Path(project_root).resolve()
+        self._calls = 0
 
     def read(self, relative: str) -> ReadResult:
         """读取并解析 M3 fixture；路径/格式错误映射固定失败。"""
@@ -364,7 +365,14 @@ class FixtureM3Read:
             raise ValueError("read fixture is invalid")
         if not path.is_file():
             raise ValueError("read fixture is invalid")
+        self._calls += 1
         return load_and_read_fixture(path, str(uuid.uuid4()))
+
+    def take_device_calls(self) -> int:
+        """返回实际执行的 M3 读取次数并清零。"""
+        calls = self._calls
+        self._calls = 0
+        return calls
 
 
 class SyntheticDecisionBridge:

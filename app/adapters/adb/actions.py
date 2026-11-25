@@ -187,7 +187,7 @@ class AdbActionExecutor:
         contact_slot_available = _slot_available(
             before_xml, target, plan.action_kind, labels
         )
-        if plan.action_kind != "send_text" and plan.irreversible_tap_index == 0:
+        if plan.action_kind not in {"send_text", "apply_job"} and plan.irreversible_tap_index == 0:
             return self._preflight_failure(
                 plan, before_xml, ime_current=plan.ime_original
             )
@@ -289,11 +289,27 @@ class AdbActionExecutor:
             if plan.action_kind == "send_resume" and not plan.attachment_name:
                 raise ActionExecutionError("executor_interrupted", clicked=False)
 
+        apply_available_before = False
+        apply_completed_after = False
+        apply_point: tuple[int, int] | None = None
+        if plan.action_kind == "apply_job":
+            apply_available_before, apply_completed_after, apply_point = _apply_control(
+                before_xml, target, plan.identity_labels
+            )
+            if not (identity_unique and apply_available_before and apply_point):
+                return self._preflight_failure(
+                    plan, before_xml, ime_current=ime_current
+                )
+
         clicked = False
         attachment_verified = False
         try:
             if plan.action_kind == "send_text":
                 self._tap(plan, 0, before_command=before_command)
+                clicked = True
+            elif plan.action_kind == "apply_job":
+                x, y = apply_point  # type: ignore[misc]
+                self._tap_point(x, y, before_command=before_command)
                 clicked = True
             else:
                 for index in range(len(plan.tap_points)):
@@ -441,6 +457,11 @@ class AdbActionExecutor:
             ) from None
 
         after_texts = _node_texts(after_xml)
+        if plan.action_kind == "apply_job":
+            _available_after, done_after, _ = _apply_control(
+                after_xml, target, plan.identity_labels
+            )
+            apply_completed_after = done_after
         if plan.action_kind == "delete_conversation":
             list_complete = list_complete and _list_complete(after_xml, anchor)
             protections_clear = protections_clear and not any(
@@ -476,6 +497,8 @@ class AdbActionExecutor:
             target_present_after=bool(target) and target in after_texts,
             attachment_name_matched=attachment_name_matched,
             contact_slot_available=contact_slot_available,
+            apply_available_before=apply_available_before,
+            apply_completed_after=apply_completed_after,
         )
 
     def _preflight_failure(
@@ -551,6 +574,8 @@ class AdbActionExecutor:
         target_present_after: bool,
         attachment_name_matched: bool,
         contact_slot_available: bool,
+        apply_available_before: bool = False,
+        apply_completed_after: bool = False,
         force_input_box_empty: bool | None = None,
     ) -> ActionObservation:
         """构造只含动作目标差分事实的观察，不使用全局提示当本次效果。"""
@@ -621,6 +646,8 @@ class AdbActionExecutor:
             target_present_after=target_present_after,
             anchor_present_after=bool(plan.anchor_label)
             and plan.anchor_label in after_texts,
+            apply_available_before=apply_available_before,
+            apply_completed_after=apply_completed_after,
         )
 
     def _switch_ime(
@@ -681,6 +708,22 @@ class AdbActionExecutor:
             [self._adb, "-s", self._serial, "shell", "input", "tap", str(x), str(y)],
             clicked=clicked_before or is_irreversible,
             phase="clicked" if is_irreversible else "input",
+            command="adb_action_tap",
+            before_command=before_command,
+        )
+
+    def _tap_point(
+        self,
+        x: int,
+        y: int,
+        *,
+        before_command: Callable[[], None] | None,
+    ) -> None:
+        """点击显式控件坐标；只用于已证明的 apply 控件，不接受调用方 tap。"""
+        self._run(
+            [self._adb, "-s", self._serial, "shell", "input", "tap", str(x), str(y)],
+            clicked=True,
+            phase="clicked",
             command="adb_action_tap",
             before_command=before_command,
         )
@@ -984,6 +1027,42 @@ def _parse_texts(xml_text: str) -> list[str]:
         for node in root.iter("node")
         if node.get("text")
     ]
+
+
+APPLY_ACTION_TEXTS = ("立即申请", "申请职位", "投递简历")
+APPLY_DONE_TEXTS = ("已申请", "继续沟通")
+
+
+def _apply_control(
+    xml_text: str, target: str, identity_labels: tuple[str, ...]
+) -> tuple[bool, bool, tuple[int, int] | None]:
+    """从目标子树识别显式申请控件与已完成状态；返回可用/完成/坐标。"""
+    node = _target_node(xml_text, target, identity_labels)
+    if node is None:
+        return False, False, None
+    controls: list[ET.Element] = []
+    done = False
+    for child in node.iter("node"):
+        text = (child.get("text") or "").strip()
+        desc = (child.get("content-desc") or "").strip()
+        if text in APPLY_DONE_TEXTS or desc in APPLY_DONE_TEXTS:
+            done = True
+        if text in APPLY_ACTION_TEXTS or desc in APPLY_ACTION_TEXTS:
+            controls.append(child)
+    clickable = [
+        child
+        for child in controls
+        if (child.get("clickable") or "").lower() == "true"
+    ]
+    if len(clickable) != 1:
+        return False, done, None
+    bounds = _support_parse_bounds(clickable[0])
+    if bounds is None:
+        return False, done, None
+    left, top, right, bottom = bounds
+    if right <= left or bottom <= top:
+        return False, done, None
+    return True, done, ((left + right) // 2, (top + bottom) // 2)
 
 
 def _node_texts(xml_text: str) -> list[str]:

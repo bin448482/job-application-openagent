@@ -376,3 +376,58 @@ def make_unread_fixture(root: Path, label: str) -> tuple[str, str]:
         f"tests/fixtures/runtime/read-{label}/unread.json",
         conversation_key(contact, company, position),
     )
+
+
+def make_unknown_unread_fixture(root: Path, label: str) -> tuple[str, str]:
+    """复制 M3 unread fixture 并移除角标，使实际读取得到 unknown 未读状态。"""
+    import shutil
+
+    contact = f"合成联系人{label}"
+    company = f"合成公司{label}"
+    position = f"合成职位{label}"
+    target = root / "tests" / "fixtures" / "runtime" / f"unknown-{label}"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("profile.json", "unread.xml", "unread.json"):
+        shutil.copyfile(ROOT / "tests" / "fixtures" / "read" / name, target / name)
+    path = target / "unread.xml"
+    text = path.read_text(encoding="utf-8")
+    text = (
+        text.replace("合成联系人甲", contact)
+        .replace("合成公司甲", company)
+        .replace("合成职位甲", position)
+        .replace(
+            '        <node text="1" class="android.widget.TextView" '
+            'bounds="[20,220][80,280]" />\n',
+            "",
+        )
+    )
+    path.write_text(text, encoding="utf-8")
+    return (
+        f"tests/fixtures/runtime/unknown-{label}/unread.json",
+        conversation_key(contact, company, position),
+    )
+
+
+def make_job_fixture(root: Path, label: str) -> tuple[str, str]:
+    """复制 job_detail fixture 并替换标题/公司/薪资，返回 manifest 与职位键。"""
+    import shutil
+    from app.domain.models import canonical_hash
+    from app.domain.reading import job_identity_hash_for, job_key_from_identity
+
+    title = f"合成岗位{label}"
+    company = f"合成公司{label}"
+    salary = "20-30K"
+    target = root / "tests" / "fixtures" / "runtime" / f"job-{label}"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("profile.json", "job_detail.xml", "job_detail.json"):
+        shutil.copyfile(ROOT / "tests/fixtures/read" / name, target / name)
+    path = target / "job_detail.xml"
+    text = path.read_text(encoding="utf-8")
+    text = (
+        text.replace("合成岗位甲", title)
+        .replace("合成公司甲", company)
+        .replace("20-30K", salary)
+    )
+    path.write_text(text, encoding="utf-8")
+    key = job_key_from_identity(job_identity_hash_for(title, company, salary))
+    return f"tests/fixtures/runtime/job-{label}/job_detail.json", key

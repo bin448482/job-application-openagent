@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 import uuid
@@ -18,6 +19,7 @@ from app.adapters.sqlite.profile_store import SqliteProfileStore, profile_runtim
 from app.adapters.sqlite.repo import SqliteStore
 from app.domain.actions import (
     ActionAuthorization,
+    ActionIdentity,
     ApplyQuotaContract,
     action_key_for,
 )
@@ -326,6 +328,90 @@ class ApplyActionEndToEndTests(unittest.TestCase):
                 now=utc_now(),
                 apply_allowance=1,
             )
+
+    def test_perform_action_with_adb_executor_raw_xml(self) -> None:
+        """控件与前后差分来自真实 XML/合成子进程/真实账本；caller tap 不参与。"""
+        from unittest.mock import patch
+
+        from app.adapters.adb.actions import AdbActionExecutor
+
+        before = (
+            '<hierarchy><node text="合成岗位甲"><node text="合成公司甲" />'
+            '<node text="合成职位甲" />'
+            '<node text="立即申请" clickable="true" bounds="[700,2100][1040,2300]" />'
+            '</node></hierarchy>'
+        )
+        after = (
+            '<hierarchy><node text="合成岗位甲"><node text="合成公司甲" />'
+            '<node text="合成职位甲" />'
+            '<node text="已申请" clickable="false" bounds="[700,2100][1040,2300]" />'
+            '</node></hierarchy>'
+        )
+        with tempfile.TemporaryDirectory(
+            dir=helpers.ROOT, prefix=".m6-apply-xml-"
+        ) as directory:
+            root = Path(directory)
+            for index, text in enumerate((before, after)):
+                (root / f"phase-{index}.xml").write_text(text, encoding="utf-8")
+            script = root / "synthetic_adb.py"
+            script.write_text(
+                "import pathlib, sys\n"
+                "root = pathlib.Path(__file__).resolve().parent\n"
+                "args = sys.argv[1:]\n"
+                "if 'cat' in args:\n"
+                "    counter = root / 'cat-count'\n"
+                "    try:\n"
+                "        index = int(counter.read_text('utf-8'))\n"
+                "    except Exception:\n"
+                "        index = 0\n"
+                "    counter.write_text(str(index + 1), 'utf-8')\n"
+                "    sys.stdout.write((root / ('phase-%d.xml' % min(index, 1)))"
+                ".read_text('utf-8'))\n",
+                encoding="utf-8",
+            )
+            ledger_dir = root / "ledger"
+            lease = self._lease()
+            action_key = action_key_for("apply_job", app=APP, message_key=self.job)
+            executor = AdbActionExecutor(
+                serial=str(script),
+                gate=self.gate,
+                adb=sys.executable,
+                command_store=CommandIdentityStore(ledger_dir),
+                child_scan=lambda pid: [],
+            )
+            with patch("app.adapters.adb.actions._utc_now", side_effect=utc_now):
+                result = perform_action(
+                    store=self.store,
+                    gate=self.gate,
+                    authorization=self._authorization(action_key, task=lease.key),
+                    lease=lease,
+                    action_kind="apply_job",
+                    action_key=action_key,
+                    target_key=self.job,
+                    conversation_key=self.job,
+                    body_text=None,
+                    attachment_name=None,
+                    identity=ActionIdentity("合成岗位甲", "合成公司甲", "合成职位甲"),
+                    anchor_label=None,
+                    ime_component=None,
+                    tap_points=((1, 1),),
+                    current_base_hash=canonical_hash({"synthetic": "pack"}),
+                    current_pack_hash=canonical_hash({"synthetic": "pack"}),
+                    daily_sends=1,
+                    reply_cooldown_seconds=0,
+                    profile_db_path=str(self.path),
+                    executor=executor,
+                    now=utc_now(),
+                    apply_quota=self._quota(action_key, task=lease.key),
+                )
+            ledger = CommandIdentityStore(ledger_dir)
+            self.assertNotEqual(ledger.identities(action_key), [])
+        self.assertEqual(result["state"], "performed")
+        self.assertEqual(result["evidence"]["effect"], "applied")  # type: ignore[index]
+        self.assertIsNone(result["card"])
+        stored = self.store.get_action(action_key)
+        assert stored is not None
+        self.assertEqual(stored["effect"], "applied")
 
 
 if __name__ == "__main__":

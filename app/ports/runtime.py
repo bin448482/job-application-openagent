@@ -114,6 +114,10 @@ class RuntimeReadPort(Protocol):
         """读取并解析一个 M3 fixture；不得读取 expected/答案。"""
         ...
 
+    def take_device_calls(self) -> int:
+        """返回自上次调用以来实际发生的设备读取/命令数。"""
+        ...
+
 
 class RuntimeStorePort(Protocol):
     """批次游标、职位任务、草稿与决策记忆的最小持久化能力。"""
@@ -125,7 +129,11 @@ class RuntimeStorePort(Protocol):
         ...
 
     def resume_batch(self, batch_id: str, now: str) -> dict[str, object]:
-        """把已暂停批次原子转回 active，保留游标与预算。"""
+        """把 paused/completed 批次原子转回 active，保留游标与预算。"""
+        ...
+
+    def complete_batch(self, batch_id: str, cursor: BatchCursor, now: str) -> dict[str, object]:
+        """把安全结束的批次标记 completed，保留可恢复游标与预算。"""
         ...
 
     def load_batch(self, batch_id: str) -> dict[str, object] | None:
@@ -195,6 +203,10 @@ class RuntimeStorePort(Protocol):
         self, lease: Lease, now: str, reason_code: str
     ) -> str:
         """仅语义未决时阻塞任务并释放安全设备行。"""
+        ...
+
+    def last_action_state(self, task_key: str) -> str | None:
+        """只读返回该任务最近一条动作状态；无动作返回 None。"""
         ...
 
     def save_draft(self, **kwargs: object) -> dict[str, object]:
